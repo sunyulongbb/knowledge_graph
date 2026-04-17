@@ -1257,6 +1257,28 @@
               <div id="cleanDelResult" class="clean-tool-result" style="display:none;"></div>
             </div>
 
+            <div class="clean-tool-section">
+              <div class="clean-tool-header">
+                <i class="fa-solid fa-tag"></i>
+                <span>批量设置目标节点类型</span>
+              </div>
+              <div class="clean-tool-body">
+                <select id="cleanAssignTypePropSelect" style="flex:1 1 220px;min-width:160px;height:36px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface-0);color:var(--fg);padding:6px 8px;font-size:13px;">
+                  <option value="">选择属性…</option>
+                </select>
+                <input id="cleanAssignTargetTypeInput" list="cleanAssignTargetTypeList" type="text" placeholder="输入目标节点类型" style="flex:1 1 240px;min-width:180px;height:36px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface-0);color:var(--fg);padding:6px 8px;font-size:13px;" />
+                <datalist id="cleanAssignTargetTypeList"></datalist>
+                <button id="btnCleanAssignTargetType" class="btn" type="button" style="white-space:nowrap;background:#2563eb;color:#fff;border-color:#2563eb;">
+                  <i class="fa-solid fa-play"></i>
+                  <span style="margin-left:4px">设置类型</span>
+                </button>
+              </div>
+              <div style="font-size:12px;color:var(--muted);margin-top:8px;">
+                仅对关系属性（wikibase-entityid）有效。会将目标节点设置为该类型，同时同步本体关联与属性模型。
+              </div>
+              <div id="cleanAssignResult" class="clean-tool-result" style="display:none;"></div>
+            </div>
+
             <div id="cleanTaskList" class="clean-task-list"></div>
           </div>
 
@@ -5881,7 +5903,7 @@
               console.warn("refreshCleanTasks failed", err);
             }
           });
-          try { loadCleanAttrProperties(); loadCleanDelProperties(); } catch {}
+          try { loadCleanAttrProperties(); loadCleanDelProperties(); loadCleanAssignTypeProperties(); loadCleanAssignTargetTypes(); } catch {}
           if (cleanTaskName) {
             requestAnimationFrame(() => {
               try {
@@ -7273,6 +7295,124 @@
             cleanDelPropSelect.appendChild(opt);
           });
         } catch (e) { console.error("load del properties failed", e); }
+      }
+
+      // ── 批量设置目标节点类型工具 ──
+      const cleanAssignTypePropSelect = document.getElementById("cleanAssignTypePropSelect");
+      const cleanAssignTargetTypeInput = document.getElementById("cleanAssignTargetTypeInput");
+      const cleanAssignTargetTypeList = document.getElementById("cleanAssignTargetTypeList");
+      const btnCleanAssignTargetType = document.getElementById("btnCleanAssignTargetType");
+      const cleanAssignResult = document.getElementById("cleanAssignResult");
+
+      async function loadCleanAssignTypeProperties() {
+        if (!cleanAssignTypePropSelect) return;
+        try {
+          const url = new URL("/api/kb/properties", window.location.origin);
+          if (typeof window.appendCurrentDbParam === "function") {
+            const scoped = window.appendCurrentDbParam(url);
+            if (scoped instanceof URL) url.search = scoped.search;
+          }
+          const resp = await fetch(url);
+          if (!resp.ok) return;
+          const data = await resp.json();
+          const items = Array.isArray(data.items) ? data.items : Array.isArray(data) ? data : [];
+          cleanAssignTypePropSelect.innerHTML = '<option value="">选择属性…</option>';
+          items
+            .filter(p => {
+              const datatype = (p.datatype || "").toString().toLowerCase();
+              const valuetype = (p.valuetype || "").toString().toLowerCase();
+              return datatype === "wikibase-entityid" || valuetype === "wikibase-entityid";
+            })
+            .forEach(p => {
+              const opt = document.createElement("option");
+              opt.value = p.id;
+              opt.textContent = (p.label || p.name || p.id) + (p.datatype ? ` (${p.datatype})` : "");
+              cleanAssignTypePropSelect.appendChild(opt);
+            });
+        } catch (e) { console.error("load relation properties for target type assignment failed", e); }
+      }
+
+      async function loadCleanAssignTargetTypes() {
+        if (!cleanAssignTargetTypeList) return;
+        try {
+          const url = new URL("/api/kb/classes", window.location.origin);
+          if (typeof window.appendCurrentDbParam === "function") {
+            const scoped = window.appendCurrentDbParam(url);
+            if (scoped instanceof URL) url.search = scoped.search;
+          }
+          url.searchParams.set("q", "");
+          const resp = await fetch(url);
+          if (!resp.ok) return;
+          const classes = await resp.json();
+          const options = [];
+          if (Array.isArray(classes)) {
+            classes.forEach((cls) => {
+              if (!cls || !cls.name) return;
+              options.push(cls.name);
+            });
+          }
+          if (!options.length) {
+            const fallbackUrl = new URL("/api/kb/node-types", window.location.origin);
+            if (typeof window.appendCurrentDbParam === "function") {
+              const scoped = window.appendCurrentDbParam(fallbackUrl);
+              if (scoped instanceof URL) fallbackUrl.search = scoped.search;
+            }
+            const fallbackResp = await fetch(fallbackUrl);
+            if (fallbackResp.ok) {
+              const types = await fallbackResp.json();
+              if (Array.isArray(types)) {
+                types.forEach((typeName) => {
+                  if (!typeName || typeof typeName !== "string") return;
+                  const normalized = typeName.toString().trim();
+                  if (normalized) options.push(normalized);
+                });
+              }
+            }
+          }
+          cleanAssignTargetTypeList.innerHTML = "";
+          Array.from(new Set(options)).forEach((typeName) => {
+            const opt = document.createElement("option");
+            opt.value = typeName;
+            cleanAssignTargetTypeList.appendChild(opt);
+          });
+        } catch (e) { console.error("load target type suggestions failed", e); }
+      }
+
+      if (btnCleanAssignTargetType) {
+        btnCleanAssignTargetType.addEventListener("click", async () => {
+          const propId = cleanAssignTypePropSelect ? cleanAssignTypePropSelect.value : "";
+          if (!propId) { alert("请选择属性"); return; }
+          const targetType = cleanAssignTargetTypeInput
+            ? cleanAssignTargetTypeInput.value.trim()
+            : "";
+          if (!targetType) { alert("请输入目标节点类型"); return; }
+          const propLabel = cleanAssignTypePropSelect.selectedOptions[0]?.textContent || propId;
+          const msg = `将属性「${propLabel}」的目标节点设置为类型「${targetType}」，并同步本体/属性模型，确定执行？`;
+          if (!confirm(msg)) return;
+          btnCleanAssignTargetType.disabled = true;
+          if (cleanAssignResult) { cleanAssignResult.style.display = ""; cleanAssignResult.textContent = "执行中…"; }
+          try {
+            let url = "/api/kb/clean/assign-target-node-type";
+            if (typeof window.appendCurrentDbParam === "function") url = window.appendCurrentDbParam(url);
+            const resp = await fetch(url, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ property_id: propId, target_type: targetType }),
+            });
+            if (!resp.ok) throw new Error("HTTP " + resp.status);
+            const result = await resp.json();
+            if (cleanAssignResult) {
+              cleanAssignResult.textContent = `匹配 ${result.matched} 条属性，发现 ${result.targetNodes} 个目标节点，设置 ${result.updatedNodes} 个节点类型`;
+            }
+            if (typeof loadTablePage === "function") { try { await loadTablePage({ resetPage: false }); } catch {} }
+            try { loadCleanAssignTypeProperties(); loadCleanAssignTargetTypes(); } catch {}
+          } catch (e) {
+            console.error(e);
+            if (cleanAssignResult) cleanAssignResult.textContent = "执行失败：" + (e.message || e);
+          } finally {
+            btnCleanAssignTargetType.disabled = false;
+          }
+        });
       }
 
       if (btnCleanDelAttr) {

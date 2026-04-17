@@ -11,6 +11,7 @@ import {
   getNextNumericNodeId,
   parseStoredAttributeValues,
   attributeValuesContainEntityId,
+  extractEntityId,
 } from "../utils.ts";
 
 type EntityAttributeValue = {
@@ -376,6 +377,7 @@ export async function handleCoreKbRoutes(
         new Set([
           ...parsePropertyTypes(prop.types),
           ...(sourceType ? [sourceType] : []),
+          ...(targetType ? [targetType] : []),
         ]),
       );
 
@@ -1800,6 +1802,110 @@ export async function handleCoreKbRoutes(
     } catch (e) {
       console.error(e);
       return new Response("Error deleting attr and targets", { status: 500 });
+    }
+  }
+
+  if (
+    url.pathname === "/api/kb/clean/assign-target-node-type" &&
+    method === "POST"
+  ) {
+    try {
+      const body = (await req.json()) as any;
+      const propertyId = body.property_id;
+      const targetType = (body.target_type || "").toString().trim();
+      if (!propertyId)
+        return new Response("Missing property_id", { status: 400 });
+      if (!targetType)
+        return new Response("Missing target_type", { status: 400 });
+
+      const attrs = hasProjectScope
+        ? (db
+            .query(
+              `SELECT a.id, a.node_id, a.value, a.datatype FROM attributes a
+             JOIN nodes n ON a.node_id = n.id
+             WHERE a.key = ? AND ${scopedClause().replace("project_id", "n.project_id")}`,
+            )
+            .all(propertyId, scopedProjectId) as any[])
+        : (db
+            .query(
+              "SELECT id, node_id, value, datatype FROM attributes WHERE key = ?",
+            )
+            .all(propertyId) as any[]);
+
+      const targetNodeIds = new Set<string>();
+      for (const attr of attrs) {
+        const values = parseStoredAttributeValues(
+          attr.value,
+          attr.datatype || "string",
+        );
+        for (const value of values) {
+          const targetId = extractEntityId(value);
+          if (targetId) targetNodeIds.add(targetId);
+        }
+      }
+
+      let updatedNodes = 0;
+      const classId = ensureClassRecord(targetType);
+      const ontologyId = ensureOntologyRecord(targetType);
+
+      for (const targetId of targetNodeIds) {
+        const node = hasProjectScope
+          ? (db
+              .query(
+                `SELECT id, type FROM nodes WHERE id = ? AND ${scopedClause()}`,
+              )
+              .get(targetId, scopedProjectId) as any)
+          : (db
+              .query("SELECT id, type FROM nodes WHERE id = ?")
+              .get(targetId) as any);
+        if (!node?.id) continue;
+        const currentType = (node.type || "").toString().trim();
+        if (currentType !== targetType) {
+          db.run(
+            "UPDATE nodes SET type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            [targetType, targetId],
+          );
+          updatedNodes++;
+        }
+        if (classId) assignNodeClass(targetId, classId);
+      }
+
+      if (ontologyId) linkOntologyProperty(ontologyId, propertyId);
+      syncRelationPropertyModel(propertyId, "", targetType);
+
+      return Response.json({
+        success: true,
+        matched: attrs.length,
+        targetNodes: targetNodeIds.size,
+        updatedNodes,
+      });
+    } catch (e) {
+      console.error(e);
+      return new Response("Error assigning target node type", { status: 500 });
+    }
+  }
+
+  if (url.pathname === "/api/kb/node-types" && method === "GET") {
+    try {
+      const rows = hasProjectScope
+        ? (db
+            .query(
+              `SELECT DISTINCT type FROM nodes WHERE ${scopedClause()} AND type IS NOT NULL AND TRIM(type) <> ''`,
+            )
+            .all(scopedProjectId) as any[])
+        : (db
+            .query(
+              "SELECT DISTINCT type FROM nodes WHERE type IS NOT NULL AND TRIM(type) <> ''",
+            )
+            .all() as any[]);
+      const types = rows
+        .map((row) => row?.type || row?.TYPE || "")
+        .filter((type) => typeof type === "string" && type.toString().trim())
+        .map((type) => type.toString().trim());
+      return Response.json(Array.from(new Set(types)));
+    } catch (e) {
+      console.error(e);
+      return new Response("Error loading node types", { status: 500 });
     }
   }
 
