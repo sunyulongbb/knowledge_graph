@@ -7,7 +7,7 @@ import { serveStaticRoute } from "./src/server/static.ts";
 import { handleWikiRoutes } from "./src/server/routes/wiki.ts";
 import { handleChatRoutes } from "./src/server/routes/chat.ts";
 
-const port = parseInt(process.env.PORT || "80");
+const port = parseInt(process.env.PORT || "8080");
 
 const server = Bun.serve({
   port: port,
