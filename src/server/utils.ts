@@ -580,6 +580,20 @@ export function extractEntityId(value: any): string {
   return "";
 }
 
+export function attributeValuesContainEntityId(
+  raw: any,
+  datatype = "string",
+  targetId: string,
+): boolean {
+  if (!targetId || typeof targetId !== "string") return false;
+  const values = parseStoredAttributeValues(raw, datatype);
+  for (const value of values) {
+    const candidateId = extractEntityId(value);
+    if (candidateId === targetId) return true;
+  }
+  return false;
+}
+
 export function normalizeEntityAttributeValues(
   values: any[],
 ): EntityAttributeValue[] {

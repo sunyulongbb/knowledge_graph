@@ -10,6 +10,7 @@ import {
   ensureAttributeRecord,
   getNextNumericNodeId,
   parseStoredAttributeValues,
+  attributeValuesContainEntityId,
 } from "../utils.ts";
 
 type EntityAttributeValue = {
@@ -1640,10 +1641,22 @@ export async function handleCoreKbRoutes(
           // 删除该节点自身的属性
           db.run("DELETE FROM attributes WHERE node_id = ?", [nodeId]);
           // 删除其他节点引用该节点的关系属性（清理入边）
-          db.run(
-            "DELETE FROM attributes WHERE datatype = 'wikibase-entityid' AND value LIKE ?",
-            [`%${nodeId}%`],
-          );
+          const incomingAttrs = db
+            .query(
+              "SELECT id, value, datatype FROM attributes WHERE datatype = 'wikibase-entityid' AND value LIKE ?",
+            )
+            .all(`%"${nodeId}"%`) as any[];
+          for (const incoming of incomingAttrs) {
+            if (
+              attributeValuesContainEntityId(
+                incoming.value,
+                incoming.datatype,
+                nodeId,
+              )
+            ) {
+              db.run("DELETE FROM attributes WHERE id = ?", [incoming.id]);
+            }
+          }
           db.run("DELETE FROM entity_classes WHERE entity_id = ?", [nodeId]);
           db.run("DELETE FROM nodes WHERE id = ?", [nodeId]);
           deletedNodes++;
@@ -1727,10 +1740,22 @@ export async function handleCoreKbRoutes(
         // 删除该节点自身的属性
         db.run("DELETE FROM attributes WHERE node_id = ?", [nodeId]);
         // 删除其他节点引用该节点的关系属性（清理入边）
-        db.run(
-          "DELETE FROM attributes WHERE datatype = 'wikibase-entityid' AND value LIKE ?",
-          [`%${nodeId}%`],
-        );
+        const incomingAttrs = db
+          .query(
+            "SELECT id, value, datatype FROM attributes WHERE datatype = 'wikibase-entityid' AND value LIKE ?",
+          )
+          .all(`%"${nodeId}"%`) as any[];
+        for (const incoming of incomingAttrs) {
+          if (
+            attributeValuesContainEntityId(
+              incoming.value,
+              incoming.datatype,
+              nodeId,
+            )
+          ) {
+            db.run("DELETE FROM attributes WHERE id = ?", [incoming.id]);
+          }
+        }
         db.run("DELETE FROM entity_classes WHERE entity_id = ?", [nodeId]);
         db.run("DELETE FROM nodes WHERE id = ?", [nodeId]);
         deletedNodes++;
