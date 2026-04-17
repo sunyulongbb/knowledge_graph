@@ -1592,11 +1592,13 @@ export async function handleCoreKbRoutes(
             // 实体引用类型，提取 label
             const label = v.label_zh || v.label || v.name || "";
             if (label.trim()) newAliases.push(label.trim());
-            // 收集目标节点 ID
+            // 收集目标节点 ID，跳过自引用属性（node 指向自身）
             if (deleteTargets) {
               const eid = v.id || v["entity-id"] || "";
-              if (eid && typeof eid === "string" && eid.trim()) {
-                targetNodeIds.add(eid.trim());
+              const targetId = typeof eid === "string" ? eid.trim() : "";
+              const sourceId = String(attr.node_id || "").trim();
+              if (targetId && targetId !== sourceId) {
+                targetNodeIds.add(targetId);
               }
             }
           }
