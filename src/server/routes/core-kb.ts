@@ -896,6 +896,7 @@ export async function handleCoreKbRoutes(
         valueNodes: [] as Array<{ id: string; name: string; property: string }>,
       };
 
+      const entityType = (body?.entityType ?? "").toString().trim();
       const targetResult = ensureNodeByName(targetName, {
         description: targetDescription,
         ...(hasProjectScope ? { projectId: scopedProjectId } : {}),
@@ -903,6 +904,16 @@ export async function handleCoreKbRoutes(
       summary.targetId = targetResult.node.id;
       if (targetResult.created) summary.createdNodes += 1;
       else summary.reusedNodes += 1;
+      let entityOntologyId: string | null = null;
+      if (entityType) {
+        db.run(
+          "UPDATE nodes SET type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+          [entityType, targetResult.node.id],
+        );
+        const entityClassId = ensureClassRecord(entityType);
+        if (entityClassId) assignNodeClass(targetResult.node.id, entityClassId);
+        entityOntologyId = ensureOntologyRecord(entityType);
+      }
 
       const targetNameLower = targetName.toLowerCase();
       for (const attr of attributes) {
@@ -919,6 +930,9 @@ export async function handleCoreKbRoutes(
           .toString()
           .trim();
         if (!propertyId) continue;
+        if (entityOntologyId) {
+          linkOntologyProperty(entityOntologyId, propertyId);
+        }
 
         const entityAttributeValues: EntityAttributeValue[] = [];
         for (const rawValue of attr.values) {
@@ -1136,6 +1150,16 @@ export async function handleCoreKbRoutes(
                     .toString()
                     .trim();
                   if (!propertyId) continue;
+                  const entityType = (payload?.entityType ?? "")
+                    .toString()
+                    .trim();
+                  if (entityType) {
+                    const classId = ensureClassRecord(entityType);
+                    if (classId) assignNodeClass(targetResult.node.id, classId);
+                    const ontologyId = ensureOntologyRecord(entityType);
+                    if (ontologyId)
+                      linkOntologyProperty(ontologyId, propertyId);
+                  }
                   const entityAttributeValues: EntityAttributeValue[] = [];
                   for (const rawValue of attr.values) {
                     let normalizedValue = rawValue.toString().trim();
@@ -1214,6 +1238,10 @@ export async function handleCoreKbRoutes(
                       `UPDATE nodes SET ${setClauses}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
                       [...Object.values(updateFields), targetId],
                     );
+                  }
+                  if (payload.entityType) {
+                    const classId = ensureClassRecord(payload.entityType);
+                    if (classId) assignNodeClass(targetId, classId);
                   }
                 }
 
