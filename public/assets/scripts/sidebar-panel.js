@@ -1,4 +1,17 @@
 ﻿(function () {
+  // 设置按钮事件监听
+  document.addEventListener('DOMContentLoaded', function () {
+    const btn = document.getElementById('btnAppSettings');
+    if (btn) {
+      btn.onclick = function () {
+        if (window.openAppSettingsModal) window.openAppSettingsModal();
+      };
+    }
+    // 页面加载时刷新头部展示
+    if (window.updateAppHeaderFromSettings) window.updateAppHeaderFromSettings();
+  });
+})();
+(function () {
   // --- Project sidebar logic ---
   async function loadProjectsToSidebar() {
     const wrap = document.querySelector(".project-list");
@@ -812,7 +825,7 @@
   }
 
   // Update header project display (avatar + name)
-  function updateHeaderProjectInfo(dbId, title, image) {
+  function updateHeaderProjectInfo(dbId, title, image, desc) {
     try {
       const wrap = document.getElementById("headerProject");
       const avatar = document.getElementById("headerProjectAvatar");
@@ -827,7 +840,7 @@
       }
       const safeTitle = title || dbId;
       nameEl.textContent = safeTitle;
-      nameEl.title = safeTitle;
+      wrap.title = desc ? `${safeTitle} — ${desc}` : safeTitle;
       try {
         avatar.textContent = "";
       } catch (e) {}
