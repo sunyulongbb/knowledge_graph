@@ -451,7 +451,7 @@ main {
 
 /* quick helpers to set the sidebar width via CSS variable */
 .kb-split.sidebar-collapsed {
-  --sidebar-width: var(--sidebar-width-collapsed);
+  --sidebar-width: 0;
 }
 .kb-split.sidebar-expanded {
   --sidebar-width: var(--sidebar-width-expanded);
@@ -585,17 +585,19 @@ main {
 
 /* collapsed sidebar */
 .project-sidebar.collapsed {
-  width: var(--sidebar-width-collapsed);
-  min-width: var(--sidebar-width-collapsed);
-  padding: 8px 6px;
+  width: 0;
+  min-width: 0;
+  padding: 0;
+  border-right: none;
+  overflow: hidden;
 }
 .project-sidebar.collapsed .project-list {
-  gap: 8px;
+  display: none;
 }
 .project-sidebar.collapsed .project-list .project-entry {
-  width: var(--sidebar-entry-collapsed);
-  height: var(--sidebar-entry-collapsed);
-  padding: 4px;
+  width: 0;
+  height: 0;
+  padding: 0;
 }
 .project-sidebar.collapsed .project-list .project-entry.selected {
   box-shadow: 0 8px 18px rgba(79, 70, 229, 0.09);

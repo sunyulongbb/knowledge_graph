@@ -1393,15 +1393,23 @@
         } catch (err) {}
       });
     }
-    // header project click opens project selection modal
+    // header project click toggles sidebar collapse/expand
     try {
       const headerProj = document.getElementById("headerProject");
       if (headerProj) {
         headerProj.style.cursor = "pointer";
+        headerProj.title = "单击此处收起/展开侧边栏";
         headerProj.addEventListener("click", (e) => {
           e.preventDefault();
           try {
-            showDbSelectModal(true);
+            const sidebarEl = document.getElementById("projectSidebar");
+            if (!sidebarEl) return;
+            const collapsed = sidebarEl.classList.contains("collapsed");
+            if (window.setSidebarCollapsed) {
+              window.setSidebarCollapsed(!collapsed, false);
+            } else if (typeof setSidebarCollapsed === "function") {
+              setSidebarCollapsed(!collapsed, false);
+            }
           } catch (err) {}
         });
       }
