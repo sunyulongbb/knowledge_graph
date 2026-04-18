@@ -1529,28 +1529,8 @@
               } catch (err) {}
             });
           }
-          // If the pointer leaves the entire sidebar area, collapse the full sidebar (if expanded)
-          sidebar.addEventListener("mouseleave", (e) => {
-            try {
-              // do not auto-collapse if focus is inside sidebar
-              if (sidebar.contains(document.activeElement)) return;
-              if (sidebar.classList.contains("expanded")) {
-                try {
-                  setSidebarCollapsed(true, false);
-                } catch (err) {}
-              }
-              try {
-                sidebar.classList.remove("hover-expanded");
-              } catch (err) {}
-              try {
-                sidebar.classList.remove("no-sidebar-transition");
-                if (split) split.classList.remove("no-sidebar-transition");
-              } catch (err) {}
-              try {
-                updateSidebarLabelMode();
-              } catch (e) {}
-            } catch (err) {}
-          });
+          // Disable auto-collapse when pointer leaves sidebar area.
+          // The sidebar should remain in its current expanded/collapsed state until explicitly toggled.
         }
       } catch (err) {}
     }

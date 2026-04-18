@@ -423,10 +423,12 @@ main {
 .kb-split {
   display: grid;
   /* Project sidebar (variable) + left form + center + right panel + user sidebar */
-  grid-template-columns: var(--sidebar-width, 72px) 340px 1fr 360px var(
-      --sidebar-width,
-      72px
-    );
+  grid-template-columns:
+    var(--sidebar-width, 72px)
+    minmax(220px, 1fr)
+    minmax(420px, 3fr)
+    minmax(220px, 1fr)
+    var(--sidebar-width, 72px);
   transition: grid-template-columns var(--sidebar-transition);
   will-change: grid-template-columns;
   gap: 12px;
