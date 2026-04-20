@@ -425,7 +425,7 @@
     <header>
       <div class="header-bar">
         <div class="header-brand" style="display:flex;align-items:center;gap:10px;">
-          <div id="headerProject" style="display:none;align-items:center;gap:8px;min-width:0;">
+          <div id="headerProject" style="align-items:center;gap:8px;min-width:0;">
             <span id="headerProjectAvatar" style="width:28px;height:28px;border-radius:6px;background:#e0e7ef;background-size:cover;background-position:center;border:1px solid var(--border);display:inline-block;flex-shrink:0;"></span>
             <span id="headerProjectName" style="font-weight:600;color:var(--fg);font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;display:inline-block;">&nbsp;</span>
           </div>
@@ -8747,6 +8747,17 @@
                 });
                 nodeContextMenu.appendChild(item);
               };
+
+              addItem('查看详情', () => {
+                if (!node) return;
+                const nodeId = node.id();
+                if (!nodeId) return;
+                try {
+                  setViewMode('detail', { targetNodeId: nodeId });
+                } catch (e) {
+                  console.error('跳转到知识详情页失败', e);
+                }
+              });
 
               addItem('上传节点图像', () => {
                 if (!node) return;
