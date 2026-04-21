@@ -2242,6 +2242,7 @@ export async function handleCoreKbRoutes(
       const source = body.source;
       const target = body.target;
       const type = body.type || "related";
+      const label = body.label || type;
 
       let targetId = target;
       if (targetId.startsWith("entity/"))
@@ -2260,7 +2261,7 @@ export async function handleCoreKbRoutes(
 
       const propRec = ensurePropertyRecord(
         type,
-        type,
+        label,
         undefined,
         hasProjectScope ? { projectId: scopedProjectId } : {},
       );
@@ -2275,12 +2276,15 @@ export async function handleCoreKbRoutes(
         .query("SELECT * FROM attributes WHERE node_id = ? AND key = ?")
         .get(source, propId) as any;
 
+      const displayLabel = (propRec && propRec.name) ? propRec.name : propId;
+
       return Response.json(
         formatEdge({
           id: attr.id + ":" + targetId,
           source,
           target: targetId,
           type: propId,
+          label: displayLabel,
           data: JSON.stringify({ isAttribute: true }),
         }),
       );

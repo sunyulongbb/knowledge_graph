@@ -169,23 +169,33 @@ export function formatEdge(row: any) {
     extraData = JSON.parse(row.data || "{}");
   } catch {}
 
-  let label = row.type;
+  let label = row.label || row.type;
   try {
     let prop = db
       .query("SELECT name FROM properties WHERE id = ?")
       .get(row.type) as any;
 
-    if (
-      (!prop || !prop.name) &&
-      typeof row.type === "string" &&
-      row.type.startsWith("P")
-    ) {
-      const stripped = row.type.substring(1);
-      const propStripped = db
-        .query("SELECT name FROM properties WHERE id = ?")
-        .get(stripped) as any;
-      if (propStripped && propStripped.name) {
-        prop = propStripped;
+    if ((!prop || !prop.name) && typeof row.type === "string") {
+      if (row.type.startsWith("P")) {
+        const stripped = row.type.substring(1);
+        const propStripped = db
+          .query("SELECT name FROM properties WHERE id = ?")
+          .get(stripped) as any;
+        if (propStripped && propStripped.name) {
+          prop = propStripped;
+        }
+      }
+
+      if ((!prop || !prop.name) && typeof row.type === "string") {
+        const canonicalType = canonicalizePropertyKey(row.type);
+        if (canonicalType && canonicalType !== row.type) {
+          const propCanonical = db
+            .query("SELECT name FROM properties WHERE id = ?")
+            .get(canonicalType) as any;
+          if (propCanonical && propCanonical.name) {
+            prop = propCanonical;
+          }
+        }
       }
     }
 

@@ -8282,6 +8282,7 @@
               async function selectPropertyForEdge(propId, propName) {
                 if (!pendingEdgeData) return;
                 const { sourceId, targetId, addedEdge } = pendingEdgeData;
+                const selectionLabel = propName || propId;
                 
                 try {
                   const url = new URL('/api/kb/relations/create', window.location.origin);
@@ -8291,7 +8292,8 @@
                     body: JSON.stringify({
                       source: sourceId,
                       target: targetId,
-                      type: propId
+                      type: propId,
+                      label: propName
                     })
                   });
                   
@@ -8299,10 +8301,12 @@
                   
                   const result = await resp.json();
                   
+                  const edgeLabel = result.label || selectionLabel;
+                  
                   // 如果有临时边，更新它；否则创建新边
                   if (addedEdge) {
                     addedEdge.data('id', result.id || addedEdge.id());
-                    addedEdge.data('label', result.label || propName);
+                    addedEdge.data('label', edgeLabel);
                   } else {
                     // 手动添加边到图中
                     window.kbCy.add({
@@ -8311,7 +8315,7 @@
                         id: result.id || `edge_${sourceId}_${targetId}_${Date.now()}`,
                         source: sourceId,
                         target: targetId,
-                        label: result.label || propName
+                        label: edgeLabel
                       }
                     });
                   }
