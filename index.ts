@@ -46,7 +46,7 @@ const server = Bun.serve({
       const chatRes = await handleChatRoutes(req, url, method);
       if (chatRes) return chatRes;
 
-      const staticResponse = await serveStaticRoute(url.pathname);
+      const staticResponse = await serveStaticRoute(req, url.pathname);
       if (staticResponse) return staticResponse;
 
       const coreKbRes = await handleCoreKbRoutes(req, url, method);

@@ -601,14 +601,86 @@
       if (wikiTopVideo) {
         wikiTopVideo.innerHTML = "";
         const videoUrl = (doc && doc.video) || "";
-        if (videoUrl) {
+        const trimmedVideoUrl = typeof videoUrl === "string" ? videoUrl.trim() : "";
+        if (trimmedVideoUrl) {
+          const resolvedUrl = (() => {
+            try {
+              return new URL(trimmedVideoUrl, window.location.origin).toString();
+            } catch {
+              return trimmedVideoUrl;
+            }
+          })();
+
           const videoEl = document.createElement("video");
           videoEl.controls = true;
-          videoEl.src = videoUrl;
+          videoEl.preload = "metadata";
+          videoEl.playsInline = true;
+          videoEl.setAttribute("playsinline", "");
+          videoEl.setAttribute("webkit-playsinline", "");
+          videoEl.style.display = "block";
+          videoEl.style.width = "100%";
           videoEl.style.maxWidth = "100%";
+          videoEl.style.height = "auto";
           videoEl.style.borderRadius = "12px";
           videoEl.style.marginTop = "8px";
+          videoEl.style.background = "#000";
+          videoEl.style.cursor = "pointer";
+          videoEl.setAttribute("controlsList", "nodownload");
+          if (doc && typeof doc.image === "string" && doc.image.trim()) {
+            videoEl.poster = doc.image.trim();
+          }
+
+          const sourceEl = document.createElement("source");
+          sourceEl.src = resolvedUrl;
+          const extMatch = resolvedUrl.split("?")[0].match(/\.([a-z0-9]+)$/i);
+          if (extMatch) {
+            sourceEl.type = `video/${extMatch[1].toLowerCase()}`;
+          }
+          videoEl.appendChild(sourceEl);
+          videoEl.load();
+
+          const hint = document.createElement("div");
+          hint.textContent = "点击播放/暂停";
+          hint.style.marginTop = "4px";
+          hint.style.fontSize = "12px";
+          hint.style.color = "var(--muted)";
+
+          videoEl.addEventListener("click", async () => {
+            try {
+              if (videoEl.paused) {
+                await videoEl.play();
+              } else {
+                videoEl.pause();
+              }
+            } catch (err) {
+              console.warn("视频播放切换失败", err);
+            }
+          });
+          videoEl.addEventListener("error", (event) => {
+            console.warn("详情页视频播放错误", event);
+            const fallback = document.createElement("div");
+            fallback.style.padding = "16px";
+            fallback.style.border = "1px solid var(--border)";
+            fallback.style.borderRadius = "12px";
+            fallback.style.background = "var(--surface-1)";
+            fallback.style.color = "var(--muted)";
+            fallback.textContent = "视频加载失败，点击打开原始文件。";
+            const linkEl = document.createElement("a");
+            linkEl.href = resolvedUrl;
+            linkEl.target = "_blank";
+            linkEl.rel = "noreferrer noopener";
+            linkEl.textContent = "打开视频";
+            linkEl.style.display = "inline-block";
+            linkEl.style.marginTop = "8px";
+            linkEl.style.color = "var(--link)";
+            fallback.appendChild(document.createElement("br"));
+            fallback.appendChild(linkEl);
+            wikiTopVideo.innerHTML = "";
+            wikiTopVideo.appendChild(fallback);
+          });
+
           wikiTopVideo.appendChild(videoEl);
+          wikiTopVideo.appendChild(hint);
           wikiTopVideo.style.display = "block";
         } else {
           wikiTopVideo.style.display = "none";

@@ -1,4 +1,6 @@
 import { db, getProjectByIdentifier } from "../db.ts";
+import { mkdirSync, writeFileSync } from "fs";
+import { resolve } from "path";
 import {
   formatNode,
   formatAttribute,
@@ -40,6 +42,9 @@ export async function handleCoreKbRoutes(
       ? `${prefix}project_id = ?`
       : `${prefix}project_id IS NULL`;
   };
+  const NODE_VIDEO_UPLOADS_DIR = resolve(import.meta.dir, "..", "..", "..", "uploads", "node-videos");
+  mkdirSync(NODE_VIDEO_UPLOADS_DIR, { recursive: true });
+
   const entryTaskScopeParams = () => (hasProjectScope ? [scopedProjectId] : []);
   const mapEntryTaskRow = (row: any) => {
     let schema = [];
@@ -1383,6 +1388,34 @@ export async function handleCoreKbRoutes(
     } catch (err) {
       console.error(err);
       return new Response("Relation batch import failed", { status: 500 });
+    }
+  }
+
+  if (url.pathname === "/api/kb/upload-video" && method === "POST") {
+    try {
+      const formData = await req.formData();
+      const file = formData.get("file") as File | null;
+      if (!file) {
+        return new Response("No file uploaded", { status: 400 });
+      }
+      const ext = file.name.split(".").pop()?.toLowerCase() || "mp4";
+      const allowedExts = ["mp4", "webm", "mov", "avi", "mkv", "ogg", "mpeg"];
+      if (!allowedExts.includes(ext)) {
+        return new Response("Invalid video file type", { status: 400 });
+      }
+      const maxSize = 300 * 1024 * 1024;
+      if (typeof file.size === "number" && file.size > maxSize) {
+        return new Response("视频文件过大，请上传不超过 300MB 的视频。", { status: 413 });
+      }
+      const filename = `${crypto.randomUUID()}.${ext}`;
+      const filePath = resolve(NODE_VIDEO_UPLOADS_DIR, filename);
+      const arrayBuffer = await file.arrayBuffer();
+      writeFileSync(filePath, Buffer.from(arrayBuffer));
+      const fileUrl = `/static/uploads/node-videos/${filename}`;
+      return Response.json({ ok: true, url: fileUrl });
+    } catch (e) {
+      console.error(e);
+      return new Response("Error uploading video", { status: 500 });
     }
   }
 

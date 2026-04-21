@@ -186,6 +186,35 @@
         line-height: 1.4;
       }
 
+      #detailPanel {
+        box-sizing: border-box;
+        max-width: 100%;
+        overflow-x: hidden;
+      }
+      #wikiTop {
+        width: 100%;
+        box-sizing: border-box;
+      }
+      #wikiTopVideo {
+        width: 100%;
+        max-width: 100%;
+        max-height: 60vh;
+        overflow: hidden;
+      }
+      #wikiTopVideo video {
+        width: 100%;
+        max-width: 100%;
+        max-height: 60vh;
+        height: auto;
+        display: block;
+        border-radius: 12px;
+        object-fit: contain;
+      }
+      #wikiTopVideo > div {
+        width: 100%;
+        max-width: 100%;
+      }
+
       .ontology-workspace {
         display: grid;
         grid-template-columns: 280px minmax(0, 1fr);
@@ -1741,9 +1770,10 @@
             <div id="status" style="display:none"><div class="spinner" style="display:none"></div><span></span></div>
             <!-- Top search bar -->
             <div class="vis-topbar">
-              <div class="vis-search-wrap">
+              <div class="vis-search-wrap" style="position:relative;">
                 <i class="fa-solid fa-magnifying-glass vis-search-icon"></i>
                 <input id="visSearch" type="text" class="vis-search-input" placeholder="搜索节点…" autocomplete="off" />
+                <div id="visSearchDropdown" class="vis-search-dropdown" style="display:none;"></div>
               </div>
               <button id="cy_btnSettings" class="vis-topbar-btn" title="筛选设置">
                 <i class="fa-solid fa-sliders"></i>
@@ -7661,7 +7691,8 @@
           const shouldReplaceAll =
             opts.replace === true ||
             (window.kbViewMode === "vis" &&
-              window.kbVisRestrictToOneHop !== false);
+              window.kbVisRestrictToOneHop === true &&
+              opts.replace !== false);
           // normalize id to include entity/ prefix
           const fullId = ensureEntityIdPrefix(nodeId);
           const url = new URL("/api/kb/node/graph", window.location.origin);
@@ -9334,40 +9365,221 @@
       (function initVisPanelControls() {
         // Search nodes
         const visSearchInput = document.getElementById('visSearch');
+        const visSearchDropdown = document.getElementById('visSearchDropdown');
+        let visSearchSelectedIndex = -1;
+        let visSearchItems = [];
+        let visSearchDebounceTimer = null;
+
+        function clearVisSearchDropdown() {
+          if (!visSearchDropdown) return;
+          visSearchDropdown.innerHTML = '';
+          visSearchDropdown.style.display = 'none';
+          visSearchSelectedIndex = -1;
+          visSearchItems = [];
+        }
+
+        function setVisSearchDropdownActive(index) {
+          if (!visSearchDropdown) return;
+          const children = Array.from(visSearchDropdown.children);
+          children.forEach((child, idx) => {
+            const active = idx === index;
+            child.classList.toggle('active', active);
+            child.style.background = active ? 'rgba(255,255,255,0.08)' : 'transparent';
+          });
+          visSearchSelectedIndex = index;
+        }
+
+        async function fetchVisSearchSuggestions(query) {
+          if (!query) {
+            clearVisSearchDropdown();
+            return;
+          }
+          const url = new URL('/api/kb/entity_search', window.location.origin);
+          url.searchParams.set('q', query);
+          url.searchParams.set('limit', '8');
+          if (typeof window.appendCurrentDbParam === 'function') {
+            const scopedUrl = window.appendCurrentDbParam(url);
+            if (scopedUrl instanceof URL) {
+              url.search = scopedUrl.search;
+            }
+          }
+          try {
+            const resp = await fetch(url.toString());
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            const data = await resp.json();
+            const nodes = Array.isArray(data.nodes) ? data.nodes : [];
+            renderVisSearchDropdown(nodes);
+          } catch (err) {
+            console.error('graph search suggestions failed', err);
+            clearVisSearchDropdown();
+          }
+        }
+
+        function renderVisSearchDropdown(nodes) {
+          if (!visSearchDropdown) return;
+          visSearchDropdown.innerHTML = '';
+          visSearchItems = Array.isArray(nodes) ? nodes : [];
+          if (!visSearchItems.length) {
+            clearVisSearchDropdown();
+            return;
+          }
+          visSearchDropdown.style.position = 'absolute';
+          visSearchDropdown.style.top = '100%';
+          visSearchDropdown.style.left = '0';
+          visSearchDropdown.style.right = '0';
+          visSearchDropdown.style.zIndex = '3000';
+          visSearchDropdown.style.background = 'rgba(20, 22, 29, 0.98)';
+          visSearchDropdown.style.border = '1px solid rgba(255,255,255,0.08)';
+          visSearchDropdown.style.borderRadius = '10px';
+          visSearchDropdown.style.boxShadow = '0 16px 40px rgba(0,0,0,0.24)';
+          visSearchDropdown.style.maxHeight = '320px';
+          visSearchDropdown.style.overflowY = 'auto';
+          visSearchDropdown.style.padding = '4px 0';
+          visSearchItems.forEach((node, idx) => {
+            const item = document.createElement('div');
+            item.className = 'vis-search-item';
+            item.tabIndex = -1;
+            item.dataset.index = String(idx);
+            item.style.padding = '10px 14px';
+            item.style.cursor = 'pointer';
+            item.style.display = 'flex';
+            item.style.flexDirection = 'column';
+            item.style.gap = '2px';
+            item.style.transition = 'background-color 0.12s ease';
+            item.style.color = '#f8f9fa';
+            item.addEventListener('mouseenter', () => setVisSearchDropdownActive(idx));
+            item.addEventListener('click', (e) => {
+              e.stopPropagation();
+              selectVisSearchItem(idx);
+            });
+            const title = document.createElement('div');
+            title.className = 'vis-search-item-title';
+            title.style.fontSize = '13px';
+            title.style.fontWeight = '600';
+            title.style.color = '#ffffff';
+            title.textContent = node.label_zh || node.label || node.name || node.id || '未知节点';
+            const subtitle = document.createElement('div');
+            subtitle.className = 'vis-search-item-subtitle';
+            subtitle.style.fontSize = '12px';
+            subtitle.style.color = 'rgba(255,255,255,0.65)';
+            subtitle.style.overflow = 'hidden';
+            subtitle.style.textOverflow = 'ellipsis';
+            subtitle.style.whiteSpace = 'nowrap';
+            subtitle.textContent = node.id || '';
+            item.appendChild(title);
+            item.appendChild(subtitle);
+            visSearchDropdown.appendChild(item);
+          });
+          visSearchDropdown.style.display = 'block';
+          setVisSearchDropdownActive(0);
+        }
+
+        async function selectVisSearchItem(index) {
+          if (!visSearchItems || !visSearchItems[index]) return;
+          const node = visSearchItems[index];
+          const rawNodeId = (node.id || node._id || '').toString().trim();
+          if (!rawNodeId) return;
+          clearVisSearchDropdown();
+          if (visSearchInput) {
+            visSearchInput.value = node.label_zh || node.label || node.name || '';
+          }
+          try {
+            if (!window.kbCy) return;
+            if (typeof clearNeighborFilter === 'function') clearNeighborFilter();
+            const nodeId = rawNodeId;
+            const imageUrl = node.image || node.avatar || node.icon || node.img || node.logo || '';
+            const existing = window.kbCy.getElementById(nodeId);
+            if (existing && !existing.empty()) {
+              if (imageUrl && !existing.data('image')) {
+                existing.data('image', imageUrl);
+              }
+              return;
+            }
+            const pan = window.kbCy.pan ? window.kbCy.pan() : { x: 0, y: 0 };
+            const zoom = window.kbCy.zoom ? window.kbCy.zoom() : 1;
+            const position = {
+              x: pan.x + (window.kbCy.width ? (window.kbCy.width() || 600) : 600) / 2 / zoom,
+              y: pan.y + (window.kbCy.height ? (window.kbCy.height() || 400) : 400) / 2 / zoom,
+            };
+            window.kbCy.batch(() => {
+              window.kbCy.add({
+                group: 'nodes',
+                data: {
+                  id: nodeId,
+                  label: node.label_zh || node.label || node.name || rawNodeId,
+                  name: node.name || node.label || node.label_zh || rawNodeId,
+                  image: imageUrl,
+                },
+                position,
+              });
+            });
+          } catch (err) {
+            console.error('selectVisSearchItem failed', err);
+          }
+        }
+
         if (visSearchInput) {
           visSearchInput.addEventListener('input', () => {
-            const q = (visSearchInput.value || '').trim().toLowerCase();
+            const text = (visSearchInput.value || '').trim();
+            const q = text.toLowerCase();
             if (!window.kbCy) return;
             window.kbCy.nodes().forEach(n => {
               const label = (n.data('label') || n.data('name') || '').toLowerCase();
               const id = (n.data('id') || '').toLowerCase();
-              if (!q) { n.show(); return; }
+              if (!q) {
+                n.show();
+                n.removeClass('highlight');
+                return;
+              }
               if (label.includes(q) || id.includes(q)) {
-                n.show(); n.addClass('highlight');
+                n.show();
+                n.addClass('highlight');
               } else {
                 n.removeClass('highlight');
               }
             });
-            if (!q) window.kbCy.nodes().removeClass('highlight');
+            if (!q) {
+              window.kbCy.nodes().removeClass('highlight');
+            }
+            if (visSearchDebounceTimer) clearTimeout(visSearchDebounceTimer);
+            visSearchDebounceTimer = window.setTimeout(() => {
+              fetchVisSearchSuggestions(text);
+            }, 220);
           });
+
           visSearchInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
+            if (!visSearchDropdown || visSearchDropdown.style.display === 'none') return;
+            const maxIndex = visSearchItems.length - 1;
+            if (e.key === 'ArrowDown') {
               e.preventDefault();
-              const q = (visSearchInput.value || '').trim().toLowerCase();
-              if (!window.kbCy || !q) return;
-              const match = window.kbCy.nodes().filter(n => {
-                const label = (n.data('label') || n.data('name') || '').toLowerCase();
-                return label.includes(q);
-              }).first();
-              if (match && match.length) {
-                focusNode(match.id());
-                enterEditById(match.id());
+              const next = visSearchSelectedIndex < maxIndex ? visSearchSelectedIndex + 1 : 0;
+              setVisSearchDropdownActive(next);
+              return;
+            }
+            if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              const prev = visSearchSelectedIndex > 0 ? visSearchSelectedIndex - 1 : maxIndex;
+              setVisSearchDropdownActive(prev);
+              return;
+            }
+            if (e.key === 'Enter') {
+              if (visSearchSelectedIndex >= 0 && visSearchItems.length > 0) {
+                e.preventDefault();
+                selectVisSearchItem(visSearchSelectedIndex);
               }
+            }
+            if (e.key === 'Escape') {
+              clearVisSearchDropdown();
+            }
+          });
+
+          document.addEventListener('click', (event) => {
+            const target = event.target;
+            if (visSearchDropdown && visSearchInput && !visSearchDropdown.contains(target) && target !== visSearchInput) {
+              clearVisSearchDropdown();
             }
           });
         }
-
-        // Refresh button - 默认刷新选中节点的一层关系
         const cyBtnRefresh = document.getElementById('cy_btnRefresh');
         if (cyBtnRefresh) cyBtnRefresh.addEventListener('click', () => {
           const selId = ensureEntityIdPrefix(
@@ -9376,7 +9588,8 @@
             (document.getElementById('fId')?.value || '').trim() || ''
           );
           if (selId) {
-            loadNodeNeighborhood(selId, { replace: true });
+            if (typeof clearNeighborFilter === 'function') clearNeighborFilter();
+            loadNodeNeighborhood(selId, { replace: false });
           }
         });
 
@@ -9693,6 +9906,28 @@
         return await resp.json();
       }
 
+      async function apiPostForm(url, formData) {
+        let finalUrl = url;
+        if (typeof window.appendCurrentDbParam === "function") {
+          finalUrl = window.appendCurrentDbParam(url);
+        }
+        const resp = await fetch(finalUrl, {
+          method: "POST",
+          body: formData,
+        });
+        if (!resp.ok) {
+          let detail = "";
+          try {
+            const j = await resp.json();
+            detail = j.detail || j.error || "";
+          } catch {}
+          throw new Error(
+            "HTTP " + resp.status + (detail ? ": " + detail : "")
+          );
+        }
+        return await resp.json();
+      }
+
       function normalizeListValue(value) {
         if (!value && value !== 0) return [];
         const toCleanArray = (items) =>
@@ -9979,10 +10214,21 @@
           let videoData = undefined;
           let posterData = undefined;
           if (videoFile) {
+            const maxVideoSize = 300 * 1024 * 1024;
+            if (videoFile.size > maxVideoSize) {
+              addMsg.textContent = "视频文件过大，请上传不超过 300MB 的视频。";
+              return;
+            }
             addMsg.textContent = "正在提取视频关键帧…";
             posterData = await captureVideoPoster(videoFile);
-            addMsg.textContent = "正在读取视频文件…";
-            videoData = await readFileAsDataUrl(videoFile);
+            addMsg.textContent = "正在上传视频文件…";
+            const uploadForm = new FormData();
+            uploadForm.append("file", videoFile);
+            const uploadResp = await apiPostForm("/api/kb/upload-video", uploadForm);
+            if (!uploadResp || !uploadResp.url) {
+              throw new Error("视频上传失败");
+            }
+            videoData = uploadResp.url;
           }
           const baseBody = {
             name,
