@@ -1018,6 +1018,32 @@
     });
   }
 
+  function handlePastedImage(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      if (attrImagePreviewImg) attrImagePreviewImg.src = ev.target.result;
+      if (attrImagePreview) attrImagePreview.style.display = "block";
+      if (attrImageFileName) attrImageFileName.textContent = file.name || "clipboard-image";
+      if (attrValueImageUrl) attrValueImageUrl.value = ev.target.result;
+      if (attrImageStateText)
+        attrImageStateText.textContent = `已从剪贴板加载: ${file.name || "剪贴板图像"}`;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function handleClipboardPaste(event) {
+    if (!event.clipboardData) return;
+    const items = Array.from(event.clipboardData.items || []);
+    const imageItem = items.find((item) => item.type.startsWith("image/"));
+    if (!imageItem) return;
+    event.preventDefault();
+    const file = imageItem.getAsFile();
+    if (!file) return;
+    clearImageUpload();
+    handlePastedImage(file);
+  }
+
   // When user manually types/pastes a URL, update preview
   if (attrValueImageUrl) {
     attrValueImageUrl.addEventListener("input", () => {
@@ -1031,6 +1057,7 @@
         if (attrImagePreviewImg) attrImagePreviewImg.src = "";
       }
     });
+    attrValueImageUrl.addEventListener("paste", handleClipboardPaste);
   }
 
   if (attrEntitySearchInput) {

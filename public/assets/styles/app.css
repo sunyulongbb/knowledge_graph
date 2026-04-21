@@ -2386,7 +2386,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
+  padding: 8px 12px;
   font-size: 13px;
   font-weight: 600;
   color: var(--fg);
@@ -2434,7 +2434,7 @@ body {
   transform: rotate(180deg);
 }
 .wd-section-body {
-  padding: 0 16px 14px;
+  padding: 0 12px 10px;
   overflow: hidden;
   transition:
     max-height 0.3s ease,
@@ -2452,16 +2452,16 @@ body {
 .wd-form {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 .wd-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 .wd-field-row {
   display: flex;
-  gap: 10px;
+  gap: 8px;
 }
 .wd-field-label {
   font-size: 12px;
@@ -2499,7 +2499,7 @@ body {
 /* Buttons */
 .wd-form-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
   flex-wrap: nowrap;
   padding-top: 4px;
@@ -2544,6 +2544,20 @@ body {
 }
 .wd-btn-secondary:hover {
   background: var(--surface-2, rgba(0, 0, 0, 0.06));
+}
+
+#attrForm .wd-form-actions .wd-btn-primary,
+#attrForm .wd-form-actions .wd-btn-secondary,
+#attrForm .wd-form-actions .wd-btn-outline,
+#attrForm .wd-form-actions .wd-btn-icon {
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
+#attrForm .wd-form-actions .wd-btn-icon {
+  width: 30px;
+  height: 30px;
 }
 .wd-btn-outline {
   display: inline-flex;
@@ -2595,14 +2609,14 @@ body {
 
 /* Property picker */
 .wd-prop-picker {
-  margin-bottom: 12px;
-  padding-bottom: 12px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--border);
 }
 .wd-prop-search-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 6px;
+  gap: 4px;
   align-items: center;
   margin-bottom: 6px;
 }
@@ -2649,8 +2663,8 @@ body {
   font-size: 12px;
   color: var(--accent);
   font-weight: 500;
-  padding: 6px 10px;
-  margin-bottom: 8px;
+  padding: 5px 8px;
+  margin-bottom: 6px;
   background: rgba(79, 70, 229, 0.05);
   border-radius: 6px;
   border-left: 3px solid var(--accent);
@@ -2665,12 +2679,12 @@ body {
 .wd-attr-form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 .wd-value-wrap {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 .wd-value-wrap > .wd-field-label {
   font-size: 11px;
@@ -2678,12 +2692,13 @@ body {
   letter-spacing: 0.06em;
   color: var(--muted);
   opacity: 0.8;
+  margin-bottom: 0;
 }
 .wd-dtype-groups {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 10px;
+  gap: 8px;
+  padding: 8px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: color-mix(in srgb, var(--surface-1) 75%, transparent);
@@ -2709,9 +2724,9 @@ body {
 .wd-qualifier-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin-top: 2px;
-  padding: 7px 10px;
+  padding: 6px 8px;
   background: rgba(79, 70, 229, 0.03);
   border: 1px dashed rgba(79, 70, 229, 0.2);
   border-radius: 6px;
@@ -2732,6 +2747,8 @@ body {
   border: none;
   padding: 4px 0;
   font-size: 12px;
+  width: 100%;
+  min-width: 0;
 }
 .wd-qualifier-row .wd-input:focus {
   box-shadow: none;
@@ -3049,6 +3066,39 @@ body {
   border-color: var(--accent);
   outline: 2px solid rgba(79, 70, 229, 0.22);
   outline-offset: 0;
+}
+
+#attrForm {
+  width: 100%;
+  max-width: 100%;
+  gap: 8px;
+}
+
+#attrForm input,
+#attrForm select,
+#attrForm textarea,
+#attrForm .wd-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+#attrForm .wd-dtype-row,
+#attrForm .wd-inline-row,
+#attrForm .wd-prop-search-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+#attrForm .wd-dtype-row > *,
+#attrForm .wd-inline-row > *,
+#attrForm .wd-prop-search-row > * {
+  min-width: 0;
+}
+
+#attrForm .wd-dtype-groups {
+  width: 100%;
 }
 
 #relForm {
