@@ -448,11 +448,11 @@
       </div>
     </div>
           <a id="btnViewEntry" class="nav-item" role="tab" aria-selected="false" title="录入页面" aria-label="录入页面" href="#"><span class="nav-label">录入</span></a>
+          <a id="btnViewAttr" class="nav-item" role="tab" aria-selected="false" title="本体管理" aria-label="本体管理" href="#"><span class="nav-label">本体</span></a>
           <a id="btnViewTable" class="nav-item" role="tab" aria-selected="true" title="知识视图" aria-label="知识视图" href="#"><span class="nav-label">知识</span></a>
           <a id="btnViewVis" class="nav-item" role="tab" aria-selected="false" title="关联视图" aria-label="关联视图" href="#"><span class="nav-label">关联</span></a>
           <a id="btnViewClean" class="nav-item" role="tab" aria-selected="false" title="数据清洗" aria-label="数据清洗" href="#"><span class="nav-label">清洗</span></a>
-          <a id="btnViewAttr" class="nav-item" role="tab" aria-selected="false" title="本体管理" aria-label="本体管理" href="#"><span class="nav-label">本体</span></a>
-                    <a id="btnViewChat" class="nav-item" role="tab" aria-selected="false" title="智能聊天" aria-label="智能聊天" href="#"><span class="nav-label">智能体</span></a>
+          <a id="btnViewChat" class="nav-item" role="tab" aria-selected="false" title="智能聊天" aria-label="智能聊天" href="#"><span class="nav-label">智能体</span></a>
           <div class="nav-underline" aria-hidden="true"></div>
           </nav>
         </div>
@@ -1691,10 +1691,6 @@
               </button>
               <button id="cy_btnRefresh" class="vis-topbar-btn" title="刷新图谱">
                 <i class="fa-solid fa-arrows-rotate"></i>
-              </button>
-              <button id="cy_btnLoadAll" class="vis-topbar-btn" title="加载全部节点和关系">
-                <i class="fa-solid fa-diagram-project"></i>
-                <span style="font-size:12px;margin-left:4px">全部</span>
               </button>
             </div>
             <!-- Main canvas area with left/right toolbars -->
@@ -9245,10 +9241,6 @@
             loadNodeNeighborhood(selId, { replace: true });
           }
         });
-
-        // Load All button - 加载全部节点和关系
-        const cyBtnLoadAll = document.getElementById('cy_btnLoadAll');
-        if (cyBtnLoadAll) cyBtnLoadAll.addEventListener('click', () => { loadGraph(); });
 
         // Empty state buttons
         const cyBtnLoadSnippet = document.getElementById('cy_btnLoadSnippet');
