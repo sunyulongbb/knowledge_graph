@@ -204,8 +204,8 @@
       #wikiTopVideo video {
         width: 100%;
         max-width: 100%;
+        height: 100%;
         max-height: 60vh;
-        height: auto;
         display: block;
         border-radius: 12px;
         object-fit: contain;
@@ -213,6 +213,101 @@
       #wikiTopVideo > div {
         width: 100%;
         max-width: 100%;
+      }
+      #wikiTopMedia {
+        width: 100%;
+        max-width: 100%;
+        height: 60vh;
+        max-height: 60vh;
+        overflow: hidden;
+        position: relative;
+      }
+      .detail-carousel-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        border-radius: 12px;
+        background: var(--surface-1);
+      }
+      .detail-carousel-slides {
+        display: flex;
+        width: 100%;
+        height: 100%;
+        transition: transform 0.25s ease;
+      }
+      .detail-carousel-slide {
+        min-width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+      }
+      .detail-carousel-slide img {
+        max-width: 100%;
+        max-height: 100%;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+        border-radius: 12px;
+        display: block;
+        background: var(--surface-0);
+      }
+      .detail-carousel-caption {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        padding: 10px 14px;
+        background: rgba(0, 0, 0, 0.4);
+        color: #fff;
+        font-size: 13px;
+        line-height: 1.4;
+        backdrop-filter: blur(8px);
+      }
+      .detail-carousel-prev,
+      .detail-carousel-next {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        background: rgba(0, 0, 0, 0.4);
+        border: none;
+        color: #fff;
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        z-index: 10;
+      }
+      .detail-carousel-prev {
+        left: 12px;
+      }
+      .detail-carousel-next {
+        right: 12px;
+      }
+      .detail-carousel-dots {
+        position: absolute;
+        left: 50%;
+        bottom: 12px;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 6px;
+        z-index: 10;
+      }
+      .detail-carousel-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.6);
+        cursor: pointer;
+      }
+      .detail-carousel-dot.active {
+        background: #fff;
       }
 
       .ontology-workspace {
@@ -1929,6 +2024,7 @@
                   class="desc"
                   style="color: var(--muted)"
                 ></div>
+                <div id="wikiTopMedia" style="display:none; margin-top: 10px;"></div>
                 <div id="wikiTopVideo" style="display:none; margin-top: 10px;"></div>
               </div>
               <div style="display: flex; gap: 12px; align-items: flex-start">

@@ -260,14 +260,20 @@
   }
 
   function renderWikiMediaGrid(items) {
+    const topMedia = document.getElementById("wikiTopMedia");
     const grid = document.getElementById("wikiMediaGrid");
-    if (!grid) return;
-    grid.innerHTML = "";
-    const cards = [];
-    if (!Array.isArray(items) || !items.length) {
+    if (grid) {
       grid.style.display = "none";
+      grid.innerHTML = "";
+    }
+    if (!topMedia) return;
+    topMedia.innerHTML = "";
+    if (!Array.isArray(items) || !items.length) {
+      topMedia.style.display = "none";
       return;
     }
+
+    const entries = [];
     for (const it of items) {
       if (!it) continue;
       const title = (
@@ -289,9 +295,8 @@
           } catch {}
         }
       }
+
       const values = Array.isArray(rawVal) ? rawVal : [rawVal];
-      const imageUrls = [];
-      const textValues = [];
       for (const val of values) {
         if (val === null || typeof val === "undefined") continue;
         const stringValue = String(val).trim();
@@ -299,59 +304,104 @@
         try {
           const imgs = extractImageUrls(stringValue, true);
           if (imgs && imgs.length) {
-            imgs.forEach((u) => imageUrls.push(u));
-            continue;
+            for (const src of imgs) {
+              entries.push({ url: src, label: title });
+            }
           }
         } catch {}
-        textValues.push(stringValue);
-      }
-      if (imageUrls.length) {
-        for (const src of imageUrls) {
-          const card = document.createElement("div");
-          card.className = "wiki-media-card";
-          const img = document.createElement("img");
-          img.src = src;
-          img.alt = title;
-          img.onclick = () => window.open(src, "_blank");
-          card.appendChild(img);
-          const body = document.createElement("div");
-          body.className = "wiki-media-card-body";
-          const header = document.createElement("div");
-          header.className = "wiki-media-card-header";
-          header.textContent = title;
-          body.appendChild(header);
-          if (textValues.length) {
-            const textEl = document.createElement("div");
-            textEl.className = "wiki-media-card-text";
-            textEl.textContent = textValues.join("\n");
-            body.appendChild(textEl);
-          }
-          card.appendChild(body);
-          cards.push(card);
-        }
-      } else if (textValues.length) {
-        const card = document.createElement("div");
-        card.className = "wiki-media-card";
-        const body = document.createElement("div");
-        body.className = "wiki-media-card-body";
-        const header = document.createElement("div");
-        header.className = "wiki-media-card-header";
-        header.textContent = title;
-        body.appendChild(header);
-        const textEl = document.createElement("div");
-        textEl.className = "wiki-media-card-text";
-        textEl.textContent = textValues.join("\n");
-        body.appendChild(textEl);
-        card.appendChild(body);
-        cards.push(card);
       }
     }
-    if (!cards.length) {
-      grid.style.display = "none";
+
+    if (!entries.length) {
+      topMedia.style.display = "none";
       return;
     }
-    cards.forEach((card) => grid.appendChild(card));
-    grid.style.display = "grid";
+
+    const carousel = document.createElement("div");
+    carousel.className = "detail-carousel-container";
+    const slides = document.createElement("div");
+    slides.className = "detail-carousel-slides";
+
+    entries.forEach((entry, index) => {
+      const slide = document.createElement("div");
+      slide.className = "detail-carousel-slide";
+      const img = document.createElement("img");
+      img.src = entry.url;
+      img.alt = entry.label || `Image ${index + 1}`;
+      img.onclick = () => window.open(entry.url, "_blank");
+      slide.appendChild(img);
+      if (entry.label) {
+        const caption = document.createElement("div");
+        caption.className = "detail-carousel-caption";
+        caption.textContent = entry.label;
+        slide.appendChild(caption);
+      }
+      slides.appendChild(slide);
+    });
+
+    carousel.appendChild(slides);
+
+    let currentIndex = 0;
+    const slideCount = entries.length;
+
+    function updateTransform() {
+      const offset = currentIndex * carousel.clientWidth;
+      slides.style.transform = `translate3d(-${offset}px, 0, 0)`;
+    }
+
+    function goToSlide(index) {
+      if (index < 0) index = slideCount - 1;
+      if (index >= slideCount) index = 0;
+      currentIndex = index;
+      updateTransform();
+      const dots = carousel.querySelectorAll(".detail-carousel-dot");
+      dots.forEach((dot, i) => dot.classList.toggle("active", i === currentIndex));
+    }
+
+    if (slideCount > 1) {
+      const prevBtn = document.createElement("button");
+      prevBtn.className = "detail-carousel-prev";
+      prevBtn.innerHTML = "&#10094;";
+      prevBtn.onclick = (e) => {
+        e.stopPropagation();
+        goToSlide(currentIndex - 1);
+      };
+
+      const nextBtn = document.createElement("button");
+      nextBtn.className = "detail-carousel-next";
+      nextBtn.innerHTML = "&#10095;";
+      nextBtn.onclick = (e) => {
+        e.stopPropagation();
+        goToSlide(currentIndex + 1);
+      };
+
+      const dots = document.createElement("div");
+      dots.className = "detail-carousel-dots";
+      entries.forEach((_, i) => {
+        const dot = document.createElement("span");
+        dot.className = `detail-carousel-dot ${i === 0 ? "active" : ""}`;
+        dot.onclick = (e) => {
+          e.stopPropagation();
+          goToSlide(i);
+        };
+        dots.appendChild(dot);
+      });
+
+      carousel.appendChild(prevBtn);
+      carousel.appendChild(nextBtn);
+      carousel.appendChild(dots);
+
+      const imgs = slides.querySelectorAll("img");
+      imgs.forEach((img) => {
+        if (!img.complete) {
+          img.addEventListener("load", () => updateTransform());
+        }
+      });
+    }
+
+    topMedia.appendChild(carousel);
+    topMedia.style.display = "";
+    requestAnimationFrame(() => updateTransform());
   }
 
   function getAttributeLabel(attr) {
