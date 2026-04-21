@@ -344,6 +344,11 @@
       tr.appendChild(tdIdx);
 
       const tdName = document.createElement("td");
+      const nameWrapper = document.createElement("div");
+      nameWrapper.style.display = "inline-flex";
+      nameWrapper.style.alignItems = "center";
+      nameWrapper.style.gap = "6px";
+
       const nameLink = document.createElement("a");
       nameLink.textContent = n.label_zh || n.label || "";
       nameLink.style.color = "var(--link)";
@@ -379,7 +384,30 @@
         } catch {}
       });
 
-      tdName.appendChild(nameLink);
+      nameWrapper.appendChild(nameLink);
+      if (n.link) {
+        try {
+          const externalLink = document.createElement("a");
+          externalLink.href = n.link;
+          externalLink.target = "_blank";
+          externalLink.rel = "noreferrer noopener";
+          externalLink.title = "外部链接";
+          externalLink.style.display = "inline-flex";
+          externalLink.style.alignItems = "center";
+          externalLink.style.justifyContent = "center";
+          externalLink.style.color = "var(--link)";
+          externalLink.style.textDecoration = "none";
+          externalLink.style.fontSize = "0.9rem";
+          externalLink.style.marginLeft = "4px";
+          externalLink.innerHTML = '<i class="fa-solid fa-link"></i>';
+          externalLink.addEventListener("click", (e) => {
+            e.stopPropagation();
+          });
+          nameWrapper.appendChild(externalLink);
+        } catch {}
+      }
+
+      tdName.appendChild(nameWrapper);
       tr.appendChild(tdName);
 
       tr.addEventListener("click", (e) => {

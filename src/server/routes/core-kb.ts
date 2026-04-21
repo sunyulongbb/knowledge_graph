@@ -1398,10 +1398,12 @@ export async function handleCoreKbRoutes(
       const aliases = JSON.stringify(body.aliases || []);
       const tags = JSON.stringify(body.tags || []);
       const image = typeof body.image === "string" ? body.image.trim() : "";
+      const link = typeof body.link === "string" ? body.link.trim() : "";
+      const video = typeof body.video === "string" ? body.video.trim() : "";
 
       db.run(
-        "INSERT INTO nodes (id, name, type, description, aliases, tags, image, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        [id, name, type, desc, aliases, tags, image, scopedProjectId],
+        "INSERT INTO nodes (id, name, type, description, aliases, tags, image, link, video, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [id, name, type, desc, aliases, tags, image, link, video, scopedProjectId],
       );
 
       const newNode = hasProjectScope
@@ -1451,6 +1453,14 @@ export async function handleCoreKbRoutes(
       if (body.image !== undefined) {
         updates.push("image = ?");
         params.push(body.image || "");
+      }
+      if (body.link !== undefined) {
+        updates.push("link = ?");
+        params.push(body.link ? body.link.trim() : "");
+      }
+      if (body.video !== undefined) {
+        updates.push("video = ?");
+        params.push(body.video ? body.video.trim() : "");
       }
 
       if (updates.length > 0) {

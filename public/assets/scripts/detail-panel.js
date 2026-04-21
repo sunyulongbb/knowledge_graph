@@ -516,7 +516,31 @@
       if (tagList) tagList.innerHTML = "";
       const title =
         (doc && (doc.label_zh || doc.label || doc._key)) || "未知实体";
-      setText(document.getElementById("wikiTopTitle"), title);
+      const wikiTopTitleEl = document.getElementById("wikiTopTitle");
+      if (wikiTopTitleEl) {
+        setText(wikiTopTitleEl, title);
+        const existingLinkEl = document.getElementById("wikiTopLink");
+        if (existingLinkEl) existingLinkEl.remove();
+        const linkUrl = (doc && (doc.link || doc.url || ""))
+          ? (doc.link || doc.url || "").toString().trim()
+          : "";
+        if (linkUrl) {
+          const linkEl = document.createElement("a");
+          linkEl.id = "wikiTopLink";
+          linkEl.href = linkUrl;
+          linkEl.target = "_blank";
+          linkEl.rel = "noreferrer noopener";
+          linkEl.title = "外部链接";
+          linkEl.style.display = "inline-flex";
+          linkEl.style.alignItems = "center";
+          linkEl.style.justifyContent = "center";
+          linkEl.style.marginLeft = "8px";
+          linkEl.style.fontSize = "1rem";
+          linkEl.style.color = "var(--link)";
+          linkEl.innerHTML = '<i class="fa-solid fa-link"></i>';
+          wikiTopTitleEl.appendChild(linkEl);
+        }
+      }
 
       // Render classes as tags
       const wikiClasses = document.getElementById("wikiClasses");
@@ -573,6 +597,23 @@
         document.getElementById("wikiTopDesc"),
         (doc && (doc.desc_zh || doc.description)) || "",
       );
+      const wikiTopVideo = document.getElementById("wikiTopVideo");
+      if (wikiTopVideo) {
+        wikiTopVideo.innerHTML = "";
+        const videoUrl = (doc && doc.video) || "";
+        if (videoUrl) {
+          const videoEl = document.createElement("video");
+          videoEl.controls = true;
+          videoEl.src = videoUrl;
+          videoEl.style.maxWidth = "100%";
+          videoEl.style.borderRadius = "12px";
+          videoEl.style.marginTop = "8px";
+          wikiTopVideo.appendChild(videoEl);
+          wikiTopVideo.style.display = "block";
+        } else {
+          wikiTopVideo.style.display = "none";
+        }
+      }
       document.getElementById("wikiTop").style.display = "";
       // collect images
       const imageEntries = [];

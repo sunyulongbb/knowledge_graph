@@ -130,6 +130,16 @@ export function formatNode(row: any) {
     }
   }
 
+  const link =
+    (typeof row.link === "string" && row.link.trim() && row.link.trim()) ||
+    (typeof extraData.link === "string" && extraData.link.trim() && extraData.link.trim()) ||
+    (typeof extraData.url === "string" && extraData.url.trim() && extraData.url.trim()) ||
+    "";
+  const video =
+    (typeof row.video === "string" && row.video.trim() && row.video.trim()) ||
+    (typeof extraData.video === "string" && extraData.video.trim() && extraData.video.trim()) ||
+    "";
+
   return {
     ...extraData,
     id: row.id,
@@ -148,6 +158,8 @@ export function formatNode(row: any) {
     classLabel: classLabel,
     classes: classes,
     image: image,
+    link,
+    video,
   };
 }
 

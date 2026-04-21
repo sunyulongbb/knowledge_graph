@@ -104,6 +104,7 @@
       const tableList = nodes.map((item) => ({
         label_zh: item.label || "",
         id: item.id || "",
+        link: item.link || "",
       }));
 
       window.kbTableNodes = tableList;

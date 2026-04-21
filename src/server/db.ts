@@ -250,6 +250,8 @@ function ensureSharedTables() {
       tags TEXT,
       data TEXT,
       image TEXT,
+      link TEXT,
+      video TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
@@ -257,6 +259,8 @@ function ensureSharedTables() {
   runSafe("ALTER TABLE nodes ADD COLUMN wiki_md TEXT");
   runSafe("ALTER TABLE nodes ADD COLUMN project_id INTEGER");
   runSafe("ALTER TABLE nodes ADD COLUMN image TEXT");
+  runSafe("ALTER TABLE nodes ADD COLUMN link TEXT");
+  runSafe("ALTER TABLE nodes ADD COLUMN video TEXT");
   runSafe(
     "UPDATE nodes SET wiki_md = description WHERE (wiki_md IS NULL OR wiki_md = '') AND description IS NOT NULL AND description <> ''",
   );

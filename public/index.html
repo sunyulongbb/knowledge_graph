@@ -694,8 +694,11 @@
                 <img id="entityDisplayImage" alt="节点图像" style="display:none;" />
               </div>
               <div class="wd-entity-header-meta">
-                <div class="wd-entity-header-title-row">
+                <div class="wd-entity-header-title-row" style="align-items:center; gap:8px; display:flex; flex-wrap:wrap;">
                   <h2 id="entityDisplayName" class="wd-entity-name">新建实体</h2>
+                  <a id="entityDisplayLink" class="wd-entity-link" href="#" target="_blank" rel="noreferrer noopener" title="外部链接" style="display:none;color:var(--link);font-size:0.9rem;">
+                    <i class="fa-solid fa-link"></i>
+                  </a>
                   <span id="entityIdBadge" class="wd-entity-id-badge" style="display:none"></span>
                 </div>
                 <p id="entityDisplayDesc" class="wd-entity-desc">点击此处添加描述</p>
@@ -726,6 +729,15 @@
                 <div class="wd-field">
                   <label class="wd-field-label" for="fDesc">描述</label>
                   <input id="fDesc" type="text" class="wd-input" placeholder="简要描述" />
+                </div>
+                <div class="wd-field">
+                  <label class="wd-field-label" for="fLink">外部链接</label>
+                  <input id="fLink" type="url" class="wd-input" placeholder="https://example.com" />
+                </div>
+                <div class="wd-field">
+                  <label class="wd-field-label" for="fVideo">视频</label>
+                  <input id="fVideo" type="file" accept="video/*" class="wd-input" />
+                  <div id="fVideoHint" class="wd-msg" style="margin-top:4px;font-size:12px;color:var(--muted);">上传视频后会自动提取关键帧并保存为节点图片。</div>
                 </div>
                 <div class="wd-field">
                   <label class="wd-field-label" for="fAliases">别名</label>
@@ -1887,6 +1899,7 @@
                   class="desc"
                   style="color: var(--muted)"
                 ></div>
+                <div id="wikiTopVideo" style="display:none; margin-top: 10px;"></div>
               </div>
               <div style="display: flex; gap: 12px; align-items: flex-start">
                 <article id="wikiContent" style="flex: 1; min-width: 0">
@@ -9648,6 +9661,8 @@
       const fId = document.getElementById("fId");
       const fName = document.getElementById("fName");
       const fDesc = document.getElementById("fDesc");
+      const fLink = document.getElementById("fLink");
+      const fVideo = document.getElementById("fVideo");
       const fAliases = document.getElementById("fAliases");
       const fTags = document.getElementById("fTags");
       const addMsg = document.getElementById("addMsg");
@@ -9717,11 +9732,89 @@
         if (typeof value !== "string") return normalizeListValue(value);
         return normalizeListValue(value);
       }
+
+      function readFileAsDataUrl(file) {
+        return new Promise((resolve, reject) => {
+          if (!file || !(file instanceof File)) {
+            reject(new Error("未提供文件"));
+            return;
+          }
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error("读取文件失败"));
+          reader.readAsDataURL(file);
+        });
+      }
+
+      async function captureVideoPoster(file) {
+        return new Promise((resolve, reject) => {
+          if (!file || !(file instanceof File)) {
+            reject(new Error("未提供视频文件"));
+            return;
+          }
+          const url = URL.createObjectURL(file);
+          const video = document.createElement("video");
+          video.preload = "metadata";
+          video.muted = true;
+          video.playsInline = true;
+          video.src = url;
+          video.crossOrigin = "anonymous";
+
+          const cleanup = () => {
+            video.src = "";
+            URL.revokeObjectURL(url);
+          };
+
+          const captureFrame = () => {
+            try {
+              const canvas = document.createElement("canvas");
+              canvas.width = video.videoWidth || 320;
+              canvas.height = video.videoHeight || 180;
+              const ctx = canvas.getContext("2d");
+              if (!ctx) {
+                throw new Error("无法创建画布上下文");
+              }
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+              const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+              cleanup();
+              resolve(dataUrl);
+            } catch (err) {
+              cleanup();
+              reject(err);
+            }
+          };
+
+          const handleSeeked = () => {
+            captureFrame();
+          };
+
+          const handleLoadedMetadata = () => {
+            const seekTime = Math.min(0.5, video.duration || 0.1);
+            video.currentTime = Math.max(0.01, seekTime);
+          };
+
+          video.addEventListener("loadedmetadata", handleLoadedMetadata, { once: true });
+          video.addEventListener("seeked", handleSeeked, { once: true });
+          video.addEventListener("error", (event) => {
+            cleanup();
+            reject(new Error("视频加载失败"));
+          }, { once: true });
+
+          // Fallback if seeked does not fire
+          setTimeout(() => {
+            if (video.readyState >= 2) {
+              captureFrame();
+            }
+          }, 1500);
+        });
+      }
       const fType = document.getElementById("fType");
       function resetFormToAdd() {
         fId.value = "";
         fName.value = "";
         fDesc.value = "";
+        if (fLink) fLink.value = "";
+        if (fVideo) fVideo.value = "";
         fAliases.value = "";
         fTags.value = "";
         if (fType) fType.value = "";
@@ -9733,11 +9826,16 @@
           const eName = document.getElementById('entityDisplayName');
           const eDesc = document.getElementById('entityDisplayDesc');
           const eBadge = document.getElementById('entityIdBadge');
+          const eLink = document.getElementById('entityDisplayLink');
           const eAliases = document.getElementById('entityDisplayAliases');
           const eImageWrap = document.getElementById('entityDisplayImageWrap');
           const eImage = document.getElementById('entityDisplayImage');
           if (eName) eName.textContent = '新建实体';
           if (eDesc) eDesc.textContent = '点击此处添加描述';
+          if (eLink) {
+            eLink.href = '#';
+            eLink.style.display = 'none';
+          }
           if (eBadge) eBadge.style.display = 'none';
           if (eAliases) eAliases.style.display = 'none';
           if (eImage) {
@@ -9787,6 +9885,9 @@
         fAliases.value = toListString(aliasSource);
         const tagSource = node?.tags ?? node?.tag_list ?? [];
         fTags.value = toListString(tagSource);
+        if (fLink) fLink.value = (node?.link || node?.url || "")?.toString().trim();
+        if (fLink) fLink.value = (node?.link || node?.url || "")?.toString().trim();
+        if (fVideo) fVideo.value = "";
         if (fType) fType.value = node?.type || "";
         btnSubmit.innerHTML = '<i class="fa-solid fa-floppy-disk"></i><span>保存修改</span>';
         btnCancelEdit.style.display = "";
@@ -9799,6 +9900,17 @@
           const eAliasVals = document.getElementById('entityAliasValues');
           if (eName) eName.textContent = nameVal || '未命名实体';
           if (eDesc) eDesc.textContent = descVal || '暂无描述';
+          const eLink = document.getElementById('entityDisplayLink');
+          const linkUrl = (node?.link || node?.url || "")?.toString().trim();
+          if (eLink) {
+            if (linkUrl) {
+              eLink.href = linkUrl;
+              eLink.style.display = '';
+            } else {
+              eLink.href = '#';
+              eLink.style.display = 'none';
+            }
+          }
           const eImageWrap = document.getElementById('entityDisplayImageWrap');
           const eImage = document.getElementById('entityDisplayImage');
           const imageUrl = node?.image || node?.img || node?.icon || node?.logo || node?.avatar || '';
@@ -9853,6 +9965,8 @@
         addMsg.textContent = "";
         const name = (fName.value || "").trim();
         const description = (fDesc.value || "").trim();
+        const link = fLink ? (fLink.value || "").trim() : "";
+        const videoFile = fVideo?.files?.[0];
         const aliases = parseListInput(fAliases.value || "");
         const tags = parseListInput(fTags.value || "");
         if (!name) {
@@ -9862,9 +9976,27 @@
         try {
           const isEdit = !!(fId.value && fId.value.trim());
           const nodeType = fType ? (fType.value || "").trim() : "";
+          let videoData = undefined;
+          let posterData = undefined;
+          if (videoFile) {
+            addMsg.textContent = "正在提取视频关键帧…";
+            posterData = await captureVideoPoster(videoFile);
+            addMsg.textContent = "正在读取视频文件…";
+            videoData = await readFileAsDataUrl(videoFile);
+          }
+          const baseBody = {
+            name,
+            description,
+            link,
+            aliases,
+            tags,
+            type: nodeType || null,
+            ...(posterData ? { image: posterData } : {}),
+            ...(videoData ? { video: videoData } : {}),
+          };
           const body = isEdit
-            ? { id: fId.value.trim(), name, description, aliases, tags, type: nodeType || null }
-            : { name, description, aliases, tags, type: nodeType || null };
+            ? { id: fId.value.trim(), ...baseBody }
+            : baseBody;
           addMsg.textContent = isEdit ? "保存中…" : "提交中…";
           const url = isEdit ? "/api/kb/nodes/update" : "/api/kb/nodes";
           const res = await apiPost(url, body);
@@ -9911,6 +10043,7 @@
                   classLabel: nodeData.classLabel,
                   description: nodeData.description || description,
                   image: nodeData.image || '',
+                  link: nodeData.link || '',
                 }
               };
               
@@ -9967,6 +10100,7 @@
                 if (nd.classLabel) ele.data('classLabel', nd.classLabel);
                 if (nd.color) ele.data('color', nd.color);
                 if (nd.image !== undefined) ele.data('image', nd.image || '');
+                if (nd.link !== undefined) ele.data('link', nd.link || '');
               }
             } catch (err) {
               console.error('更新图中节点失败:', err);
