@@ -1024,22 +1024,6 @@
                 >
                   <i class="fa-solid fa-trash"></i>
                 </button>
-                <button
-                  id="btnClearAllNodes"
-                  class="btn icon"
-                  title="清空所有节点"
-                  aria-label="清空所有节点"
-                >
-                  <i class="fa-solid fa-eraser"></i>
-                </button>
-                <button
-                  id="btnClearAllRelations"
-                  class="btn icon"
-                  title="清空所有关系"
-                  aria-label="清空所有关系"
-                >
-                  <i class="fa-solid fa-link-slash"></i>
-                </button>
               </div>
             </div>
             <div class="tbl-wrap">
@@ -9527,10 +9511,14 @@
           const eDesc = document.getElementById('entityDisplayDesc');
           const eBadge = document.getElementById('entityIdBadge');
           const eAliases = document.getElementById('entityDisplayAliases');
+          const eImageWrap = document.getElementById('entityDisplayImageWrap');
+          const eImage = document.getElementById('entityDisplayImage');
           if (eName) eName.textContent = '新建实体';
           if (eDesc) eDesc.textContent = '点击此处添加描述';
           if (eBadge) eBadge.style.display = 'none';
           if (eAliases) eAliases.style.display = 'none';
+          if (eImage) eImage.src = '';
+          if (eImageWrap) eImageWrap.style.display = 'none';
         } catch {}
         // remove highlight
         try {

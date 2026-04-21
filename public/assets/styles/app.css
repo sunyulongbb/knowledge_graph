@@ -5,7 +5,7 @@
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(0,0,0,0.18);
+  background: rgba(0, 0, 0, 0.18);
   z-index: 9999;
   display: flex;
   align-items: center;
@@ -14,7 +14,7 @@
 .modal-content {
   background: #fff;
   border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
   padding: 32px 28px 24px 28px;
   min-width: 320px;
   max-width: 92vw;
@@ -57,7 +57,7 @@
   max-width: 80px;
   max-height: 80px;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 /* Extracted from public/index.html to reduce template coupling */
 
@@ -2143,12 +2143,7 @@ body {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: linear-gradient(
-    140deg,
-    rgba(79, 70, 229, 0.08) 0%,
-    rgba(37, 99, 235, 0.06) 38%,
-    transparent 72%
-  );
+  background: none;
   pointer-events: none;
 }
 
@@ -2162,22 +2157,13 @@ body {
 }
 
 :root[data-theme="dark"] .editor-panel {
-  background: linear-gradient(
-    160deg,
-    rgba(30, 41, 59, 0.94) 0%,
-    rgba(15, 23, 42, 0.96) 60%
-  );
+  background: rgba(15, 23, 42, 0.92);
   border-color: rgba(148, 163, 184, 0.26);
   box-shadow: 0 24px 48px rgba(2, 6, 23, 0.62);
 }
 
 :root[data-theme="dark"] .editor-panel::before {
-  background: radial-gradient(
-    circle at 12% 8%,
-    rgba(79, 70, 229, 0.32) 0%,
-    rgba(37, 99, 235, 0.14) 42%,
-    transparent 78%
-  );
+  background: none;
   opacity: 1;
 }
 
@@ -2284,10 +2270,16 @@ body {
 .wd-entity-header {
   padding: 14px 16px 10px;
   border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
 }
 .wd-entity-header-top {
   display: flex;
-  align-items: baseline;
+  align-items: center;
+  justify-content: center;
   gap: 10px;
   flex-wrap: wrap;
 }
@@ -2302,14 +2294,7 @@ body {
   word-break: break-word;
 }
 .wd-entity-id-badge {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--muted);
-  background: var(--surface-1);
-  padding: 2px 8px;
-  border-radius: 99px;
-  white-space: nowrap;
-  flex-shrink: 0;
+  display: none;
 }
 .wd-entity-desc {
   margin: 4px 0 0;
