@@ -240,6 +240,120 @@
     return "";
   }
 
+  function isMediaAttrItem(item) {
+    if (!item) return false;
+    const dtype = String(item.datatype || item.datavalue?.type || "").trim();
+    const rawName = (
+      item.property_label_zh ||
+      item.property_label ||
+      item.property ||
+      item.label_zh ||
+      item.label ||
+      item.name ||
+      ""
+    ).toString().trim();
+    const name = rawName.toLowerCase();
+    if (dtype === "commonsMedia") return true;
+    if (name.includes("媒体") || name.includes("media")) return true;
+    if (name.includes("图像") || name.includes("image")) return true;
+    return false;
+  }
+
+  function renderWikiMediaGrid(items) {
+    const grid = document.getElementById("wikiMediaGrid");
+    if (!grid) return;
+    grid.innerHTML = "";
+    const cards = [];
+    if (!Array.isArray(items) || !items.length) {
+      grid.style.display = "none";
+      return;
+    }
+    for (const it of items) {
+      if (!it) continue;
+      const title = (
+        it.property_label_zh ||
+        it.property_label ||
+        it.property ||
+        it.label_zh ||
+        it.label ||
+        it.name ||
+        "媒体"
+      ).toString();
+      let rawVal = typeof it.value !== "undefined" ? it.value : it.val || it.text || it.description || it.value_raw || it.data || "";
+      if (typeof rawVal === "string") {
+        const trimmed = rawVal.trim();
+        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) rawVal = parsed;
+          } catch {}
+        }
+      }
+      const values = Array.isArray(rawVal) ? rawVal : [rawVal];
+      const imageUrls = [];
+      const textValues = [];
+      for (const val of values) {
+        if (val === null || typeof val === "undefined") continue;
+        const stringValue = String(val).trim();
+        if (!stringValue) continue;
+        try {
+          const imgs = extractImageUrls(stringValue, true);
+          if (imgs && imgs.length) {
+            imgs.forEach((u) => imageUrls.push(u));
+            continue;
+          }
+        } catch {}
+        textValues.push(stringValue);
+      }
+      if (imageUrls.length) {
+        for (const src of imageUrls) {
+          const card = document.createElement("div");
+          card.className = "wiki-media-card";
+          const img = document.createElement("img");
+          img.src = src;
+          img.alt = title;
+          img.onclick = () => window.open(src, "_blank");
+          card.appendChild(img);
+          const body = document.createElement("div");
+          body.className = "wiki-media-card-body";
+          const header = document.createElement("div");
+          header.className = "wiki-media-card-header";
+          header.textContent = title;
+          body.appendChild(header);
+          if (textValues.length) {
+            const textEl = document.createElement("div");
+            textEl.className = "wiki-media-card-text";
+            textEl.textContent = textValues.join("\n");
+            body.appendChild(textEl);
+          }
+          card.appendChild(body);
+          cards.push(card);
+        }
+      } else if (textValues.length) {
+        const card = document.createElement("div");
+        card.className = "wiki-media-card";
+        const body = document.createElement("div");
+        body.className = "wiki-media-card-body";
+        const header = document.createElement("div");
+        header.className = "wiki-media-card-header";
+        header.textContent = title;
+        body.appendChild(header);
+        const textEl = document.createElement("div");
+        textEl.className = "wiki-media-card-text";
+        textEl.textContent = textValues.join("\n");
+        body.appendChild(textEl);
+        card.appendChild(body);
+        cards.push(card);
+      }
+    }
+    if (!cards.length) {
+      grid.style.display = "none";
+      return;
+    }
+    cards.forEach((card) => grid.appendChild(card));
+    grid.style.display = "grid";
+  }
+
   function getAttributeLabel(attr) {
     if (!attr || typeof attr !== "object") return "";
     return (
@@ -628,14 +742,21 @@
               } catch {}
             }
           } catch (e) {}
+          const mediaAttrItems = Array.isArray(attrItems)
+            ? attrItems.filter(isMediaAttrItem)
+            : [];
+          const detailAttrItems = Array.isArray(attrItems)
+            ? attrItems.filter((it) => !isMediaAttrItem(it))
+            : [];
           const detailAttrListEl = document.getElementById("detailAttrList");
           if (detailAttrListEl) {
             // renderAttrList checks container.id === 'detailAttrList' to enable readOnly mode
-            renderAttrList(detailAttrListEl, attrItems, fullId);
-            if (attrItems && attrItems.length > 0) {
-              propCount += attrItems.length;
+            renderAttrList(detailAttrListEl, detailAttrItems, fullId);
+            if (detailAttrItems && detailAttrItems.length > 0) {
+              propCount += detailAttrItems.length;
             }
           }
+          renderWikiMediaGrid(mediaAttrItems);
         } catch (e) {
           console.error("renderAttrList (detail) failed", e);
         }
@@ -852,6 +973,7 @@
     const view = document.getElementById("wikiView");
     const edit = document.getElementById("wikiEditInline");
     const btnEdit = document.getElementById("btnEditWiki");
+    const btnSaveTop = document.getElementById("btnSaveWikiInlineTop");
     const btnCancel = document.getElementById("btnCancelWikiInline");
     const btnSave = document.getElementById("btnSaveWikiInline");
     const infobox = document.getElementById("wikiInfobox");
@@ -874,16 +996,77 @@
         }
       } catch (e) {}
       if (btnEdit) btnEdit.style.display = "none";
+      if (btnSaveTop) btnSaveTop.style.display = "inline-flex";
       if (btnCancel) btnCancel.style.display = "inline-flex";
       if (btnSave) btnSave.style.display = "inline-flex";
 
       // Initialize EasyMDE if not already initialized
       if (typeof EasyMDE !== "undefined" && !window.easyMDE) {
+        if (!window.easyMDEPasteImages) {
+          window.easyMDEPasteImages = {};
+          window.easyMDEPasteImageIndex = 1;
+        }
+
+        window.easyMDERenderPasteImages = (text) => {
+          if (!text) return text;
+          return text.replace(/!\[([^\]]*)\]\(((__easyMDE_paste_image_\d+__)|data:image\/[^)]+)\)/g, (match, alt, key) => {
+            if (key.startsWith("__easyMDE_paste_image_")) {
+              const dataUrl = window.easyMDEPasteImages?.[key];
+              return dataUrl ? `![${alt}](${dataUrl})` : match;
+            }
+            return match;
+          });
+        };
+
+        window.applyEasyMDEPasteImageWidgets = (cm) => {
+          if (!cm || !cm.getDoc) return;
+          const doc = cm.getDoc();
+          const text = doc.getValue();
+          const regex = /!\[([^\]]*)\]\(((__easyMDE_paste_image_\d+__)|data:image\/[^)]+)\)/g;
+          const existingMarks = doc.getAllMarks ? doc.getAllMarks() : [];
+          existingMarks.forEach((mark) => {
+            if (mark.__easyMDEPasteImageWidget) {
+              mark.clear();
+            }
+          });
+          let match;
+          while ((match = regex.exec(text)) !== null) {
+            const alt = match[1];
+            const key = match[2];
+            let src = key;
+            if (key.startsWith("__easyMDE_paste_image_")) {
+              src = window.easyMDEPasteImages?.[key];
+            }
+            if (!src) continue;
+            const start = doc.posFromIndex(match.index);
+            const end = doc.posFromIndex(match.index + match[0].length);
+            const img = document.createElement("img");
+            img.src = src;
+            img.alt = alt || "pasted image";
+            img.style.width = "100%";
+            img.style.height = "auto";
+            img.style.display = "block";
+            const mark = cm.markText(start, end, {
+              replacedWith: img,
+              handleMouseEvents: true,
+            });
+            mark.__easyMDEPasteImageWidget = true;
+          }
+        };
+
         window.easyMDE = new EasyMDE({
           element: document.getElementById("wikiMdInline"),
           spellChecker: false,
           autosave: {
             enabled: false,
+          },
+          previewRender: (plainText, preview) => {
+            const html = window.easyMDERenderPasteImages(plainText);
+            if (typeof marked !== "undefined") {
+              return marked.parse(html);
+            }
+            if (preview) preview.innerHTML = html;
+            return html;
           },
           toolbar: [
             "bold",
@@ -908,16 +1091,75 @@
           minHeight: "400px",
           maxHeight: "900px",
         });
+
+        try {
+          const cm = window.easyMDE.codemirror;
+          const inputField = cm.getInputField && cm.getInputField();
+          if (inputField) {
+            inputField.addEventListener("paste", async (event) => {
+              const clipboardData = event.clipboardData || window.clipboardData;
+              if (!clipboardData) return;
+              const items = Array.from(clipboardData.items || []);
+              const imageItem = items.find((item) => item.type && item.type.startsWith("image/"));
+              if (!imageItem) return;
+              event.preventDefault();
+              const file = imageItem.getAsFile();
+              if (!file) return;
+
+              const reader = new FileReader();
+              reader.onload = () => {
+                const dataUrl = reader.result;
+                if (!dataUrl) return;
+                const doc = cm.getDoc();
+                const cursor = doc.getCursor();
+                const imageKey = `__easyMDE_paste_image_${window.easyMDEPasteImageIndex++}__`;
+                window.easyMDEPasteImages[imageKey] = dataUrl;
+                const markdownImage = `![pasted image](${imageKey})`;
+                doc.replaceRange(markdownImage, cursor);
+                try {
+                  const start = cursor;
+                  const end = doc.posFromIndex(doc.indexFromPos(cursor) + markdownImage.length);
+                  const img = document.createElement("img");
+                  img.src = dataUrl;
+                  img.alt = "pasted image";
+                  img.style.width = "100%";
+                  img.style.height = "auto";
+                  img.style.maxHeight = "400px";
+                  img.style.display = "block";
+                  cm.markText(start, end, {
+                    replacedWith: img,
+                    handleMouseEvents: true,
+                  });
+                } catch (innerErr) {
+                  console.warn("EasyMDE paste image widget failed", innerErr);
+                }
+              };
+              reader.readAsDataURL(file);
+            });
+          }
+
+          if (typeof cm.on === "function") {
+            cm.on("changes", () => {
+              setTimeout(() => {
+                window.applyEasyMDEPasteImageWidgets(cm);
+              }, 0);
+            });
+          }
+        } catch (err) {
+          console.warn("EasyMDE image paste handler init failed", err);
+        }
       }
       // Refresh EasyMDE to ensure it renders correctly
       setTimeout(() => {
         if (window.easyMDE) {
           window.easyMDE.codemirror.refresh();
+          window.applyEasyMDEPasteImageWidgets(window.easyMDE.codemirror);
           // Sync value from textarea if needed, though EasyMDE usually does this on init
           // But if we updated textarea while hidden, we might need to push it
           const ta = document.getElementById("wikiMdInline");
           if (ta && ta.value !== window.easyMDE.value()) {
             window.easyMDE.value(ta.value);
+            window.applyEasyMDEPasteImageWidgets(window.easyMDE.codemirror);
           }
         }
       }, 100);
@@ -932,6 +1174,7 @@
         }
       } catch (e) {}
       if (btnEdit) btnEdit.style.display = "inline-flex";
+      if (btnSaveTop) btnSaveTop.style.display = "none";
       if (btnCancel) btnCancel.style.display = "none";
       if (btnSave) btnSave.style.display = "none";
     }
@@ -1177,6 +1420,7 @@
         document.getElementById("wikiMdInline").value = mdContent;
         if (window.easyMDE) {
           window.easyMDE.value(mdContent);
+          window.applyEasyMDEPasteImageWidgets(window.easyMDE.codemirror);
         }
       } catch {}
       try {
@@ -1213,6 +1457,12 @@
     let md = "";
     if (window.easyMDE) {
       md = window.easyMDE.value();
+      if (window.easyMDEPasteImages) {
+        md = md.replace(/!\[([^\]]*)\]\((__easyMDE_paste_image_\d+__)\)/g, (match, alt, key) => {
+          const dataUrl = window.easyMDEPasteImages[key];
+          return dataUrl ? `![${alt}](${dataUrl})` : match;
+        });
+      }
     } else {
       md = document.getElementById("wikiMdInline").value;
     }
@@ -1403,6 +1653,17 @@
       const btnSave = document.getElementById("btnSaveWikiInline");
       if (btnSave)
         btnSave.addEventListener("click", async () => {
+          const id =
+            window.kbSelectedRowId ||
+            (document.getElementById("fId") &&
+              document.getElementById("fId").value) ||
+            "";
+          if (!id) return alert("未选择实体");
+          await saveWikiInline(id, "zh");
+        });
+      const btnSaveTop = document.getElementById("btnSaveWikiInlineTop");
+      if (btnSaveTop)
+        btnSaveTop.addEventListener("click", async () => {
           const id =
             window.kbSelectedRowId ||
             (document.getElementById("fId") &&

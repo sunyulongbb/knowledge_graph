@@ -140,10 +140,50 @@
         background: var(--surface-0);
         color: var(--fg);
       }
+      .editor-preview img,
+      .editor-preview-side img {
+        width: 100%;
+        height: auto;
+        display: block;
+      }
       .editor-preview-side {
         background: var(--surface-0);
         color: var(--fg);
         border-color: var(--border-strong);
+      }
+      .wiki-media-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 12px;
+      }
+      .wiki-media-card {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        background: var(--surface-1);
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+      }
+      .wiki-media-card img {
+        width: 100%;
+        height: auto;
+        display: block;
+        object-fit: cover;
+      }
+      .wiki-media-card-body {
+        padding: 10px;
+      }
+      .wiki-media-card-header {
+        font-size: 13px;
+        font-weight: 700;
+        margin-bottom: 6px;
+        color: var(--fg);
+      }
+      .wiki-media-card-text {
+        font-size: 12px;
+        color: var(--muted);
+        white-space: pre-wrap;
+        word-break: break-word;
+        line-height: 1.4;
       }
 
       .ontology-workspace {
@@ -1806,7 +1846,7 @@
           >
             <div id="detailInner" style="font-size: 14px; color: var(--fg)">
               <!-- 编辑百科 按钮，放在详情面板右上角 -->
-              <div class="detail-actions">
+              <div class="detail-actions" style="display: flex; align-items: center; gap: 8px;">
                 <button
                   id="btnToc"
                   class="btn icon"
@@ -1823,6 +1863,15 @@
                   aria-label="编辑百科"
                 >
                   <i class="fa-solid fa-pen-to-square"></i>
+                </button>
+                <button
+                  id="btnSaveWikiInlineTop"
+                  class="btn icon"
+                  title="保存百科"
+                  aria-label="保存百科"
+                  style="display: none; background: var(--accent); color: #fff; border-color: var(--accent);"
+                >
+                  <i class="fa-solid fa-floppy-disk"></i>
                 </button>
                 <div id="tocPopup" class="toc-popup" style="display: none;"></div>
               </div>
@@ -1876,6 +1925,11 @@
                   <div id="wikiView" style="font-size: 14px; line-height: 1.6">
                     加载详情中…
                   </div>
+                  <div
+                    id="wikiMediaGrid"
+                    class="wiki-media-grid"
+                    style="display: none; margin-top: 12px"
+                  ></div>
                   <!-- Inline wiki edit area (copied/adapted from kb_detail.html) -->
                   <div
                     id="wikiEditInline"
