@@ -1419,8 +1419,11 @@ export async function handleCoreKbRoutes(
   if (url.pathname === "/api/kb/nodes/update" && method === "POST") {
     try {
       const body = (await req.json()) as any;
-      const id = body.id;
+      let id = body.id;
       if (!id) return new Response("Missing id", { status: 400 });
+      if (typeof id === "string" && id.startsWith("entity/")) {
+        id = id.slice("entity/".length);
+      }
 
       const updates = [];
       const params = [];
@@ -1464,6 +1467,9 @@ export async function handleCoreKbRoutes(
             .query(`SELECT * FROM nodes WHERE id = ? AND ${scopedClause()}`)
             .get(id, scopedProjectId)
         : db.query("SELECT * FROM nodes WHERE id = ?").get(id);
+      if (!updatedNode) {
+        return new Response("Node not found", { status: 404 });
+      }
       if (body.type !== undefined) {
         syncAllPropertyTypesForNode(id);
       }

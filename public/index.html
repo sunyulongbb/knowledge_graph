@@ -650,8 +650,8 @@
           <!-- Entity header (Wikidata-style) -->
           <div id="entityHeader" class="wd-entity-header">
             <div class="wd-entity-header-top">
-              <div id="entityDisplayImageWrap" class="wd-entity-avatar-wrap" style="display:none;">
-                <img id="entityDisplayImage" alt="节点图像" />
+              <div id="entityDisplayImageWrap" class="wd-entity-avatar-wrap empty">
+                <img id="entityDisplayImage" alt="节点图像" style="display:none;" />
               </div>
               <div class="wd-entity-header-meta">
                 <div class="wd-entity-header-title-row">
@@ -7636,8 +7636,10 @@
 
           if (shouldReplaceAll) {
             try {
-              window.kbCy.elements().remove();
-              window.kbCy.add(elements);
+              window.kbCy.batch(() => {
+                window.kbCy.elements().remove();
+                window.kbCy.add(elements);
+              });
               window.kbCy
                 .layout(
                   getCoseLayoutOpts({
@@ -8021,7 +8023,19 @@
       async function loadGraph(prefetchedData) {
         showGraphLoading(true, '加载图谱数据…');
         try {
-          // 加载当前项目的所有节点和关系
+          // 关联视图默认只加载选中节点的一层关系，避免一次性载入全部关系
+          if (!prefetchedData && window.kbViewMode === 'vis') {
+            const selectedNodeId = ensureEntityIdPrefix(
+              (window.kbActiveVisNodeId || '').trim() ||
+              (window.kbSelectedRowId || '').trim() ||
+              (document.getElementById('fId')?.value || '').trim() ||
+              ''
+            );
+            if (selectedNodeId) {
+              await loadNodeNeighborhood(selectedNodeId, { replace: true });
+              return;
+            }
+          }
           const data = prefetchedData || await fetchGraph();
           
           const nodesRaw = data.nodes || (data.elements && data.elements.nodes) || [];
@@ -8812,14 +8826,18 @@
               if (!eImageWrap || !eImage) return;
               if (imageUrl) {
                 eImage.src = imageUrl;
-                eImageWrap.style.display = '';
-                eImage.onerror = () => {
-                  eImageWrap.style.display = 'none';
-                };
+                eImage.style.display = '';
+                eImageWrap.classList.remove('empty');
               } else {
                 eImage.src = '';
-                eImageWrap.style.display = 'none';
+                eImage.style.display = 'none';
+                eImageWrap.classList.add('empty');
               }
+              eImageWrap.style.display = '';
+              eImage.onerror = () => {
+                eImageWrap.classList.add('empty');
+                eImage.style.display = 'none';
+              };
             }
 
             async function saveNodeImageAttribute(node, imageDataUrl) {
@@ -8998,6 +9016,50 @@
               reader.readAsDataURL(file);
             });
 
+            const entityDisplayImageWrap = document.getElementById('entityDisplayImageWrap');
+            if (entityDisplayImageWrap) {
+              entityDisplayImageWrap.addEventListener('dblclick', () => {
+                let currentNode = null;
+                const selectedId = (
+                  window.kbSelectedNodeId ||
+                  window.kbCurrentNodeId ||
+                  window.kbActiveDetailRouteId ||
+                  window.kbActiveDetailNodeId ||
+                  window.kbSelectedRowId ||
+                  (window.kbSelectedRowIds && Array.from(window.kbSelectedRowIds)[0]) ||
+                  window.kbActiveVisNodeId ||
+                  document.getElementById('fId')?.value ||
+                  ''
+                ).trim();
+                if (selectedId && window.kbCy && typeof window.kbCy.getElementById === 'function') {
+                  currentNode = window.kbCy.getElementById(selectedId);
+                }
+                if (!currentNode && selectedId && !window.kbCy) {
+                  currentNode = {
+                    _data: {},
+                    id() { return selectedId; },
+                    data(key, value) {
+                      if (arguments.length === 0) return this._data;
+                      if (arguments.length === 1) return this._data[key];
+                      this._data[key] = value;
+                      return this;
+                    },
+                    style() { return this; },
+                    updateStyle() { return this; },
+                    trigger() { return this; },
+                  };
+                }
+                if (!currentNode || (typeof currentNode.empty === 'function' && currentNode.empty())) {
+                  return;
+                }
+                currentContextNode = currentNode;
+                nodeImageUploadInput.value = '';
+                nodeImageUploadInput.click();
+              });
+              entityDisplayImageWrap.dataset.imageUploadInitialized = 'true';
+              entityDisplayImageWrap.style.cursor = 'pointer';
+            }
+
             document.addEventListener('click', (event) => {
               if (!nodeContextMenu.contains(event.target)) {
                 hideNodeContextMenu();
@@ -9066,8 +9128,10 @@
               } catch (e) {}
             });
           } else {
-            window.kbCy.elements().remove();
-            window.kbCy.add(arr);
+            window.kbCy.batch(() => {
+              window.kbCy.elements().remove();
+              window.kbCy.add(arr);
+            });
             window.kbCy.layout(getCoseLayoutOpts({ animate: false, randomize: true })).run();
           }
           try {
@@ -9419,6 +9483,112 @@
         }
       })();
 
+      // 初始化左侧实体图像双击上传（适用于知识页和关联页）
+      (function initEntityImageUpload() {
+        const imageWrap = document.getElementById('entityDisplayImageWrap');
+        if (!imageWrap || imageWrap.dataset.imageUploadInitialized === 'true') return;
+
+        let currentContextNode = null;
+        let imageUploadInput = document.getElementById('kb-entity-image-upload-input');
+        if (!imageUploadInput) {
+          imageUploadInput = document.createElement('input');
+          imageUploadInput.id = 'kb-entity-image-upload-input';
+          imageUploadInput.type = 'file';
+          imageUploadInput.accept = 'image/*';
+          imageUploadInput.style.display = 'none';
+          document.body.appendChild(imageUploadInput);
+        }
+
+        function getSelectedNodeId() {
+          const ids = [
+            window.kbSelectedNodeId,
+            window.kbCurrentNodeId,
+            window.kbActiveDetailRouteId,
+            window.kbActiveDetailNodeId,
+            window.kbSelectedRowId,
+            window.kbActiveVisNodeId,
+            document.getElementById('fId')?.value,
+            document.getElementById('entityIdBadge')?.textContent,
+          ];
+          for (const id of ids) {
+            if (id && String(id).trim()) return String(id).trim();
+          }
+          if (window.kbSelectedRowIds && window.kbSelectedRowIds.size) {
+            return Array.from(window.kbSelectedRowIds)[0];
+          }
+          return '';
+        }
+
+        async function saveEntityImage(nodeId, dataUrl) {
+          const fullId = typeof ensureEntityIdPrefix === 'function' ? ensureEntityIdPrefix(nodeId) : nodeId;
+          try {
+            await apiPost('/api/kb/nodes/update', { id: fullId, image: dataUrl });
+            const eImage = document.getElementById('entityDisplayImage');
+            const eImageWrap = document.getElementById('entityDisplayImageWrap');
+            if (eImage) {
+              eImage.src = dataUrl;
+              eImage.style.display = '';
+              eImage.onerror = () => {
+                if (eImageWrap) eImageWrap.classList.add('empty');
+                if (eImage) eImage.style.display = 'none';
+              };
+            }
+            if (eImageWrap) {
+              eImageWrap.style.display = '';
+              eImageWrap.classList.remove('empty');
+            }
+            if (window.kbCy && typeof window.kbCy.getElementById === 'function') {
+              const node = window.kbCy.getElementById(fullId);
+              if (node && (!node.empty || typeof node.empty !== 'function' || !node.empty())) {
+                try { node.data('image', dataUrl); } catch {}
+                try { node.style('background-image', dataUrl); } catch {}
+                try { node.updateStyle(); } catch {}
+              }
+            }
+            if (typeof window.loadAttributes === 'function') {
+              await window.loadAttributes(fullId);
+            }
+            if (typeof window.syncCyNodeImage === 'function') {
+              await window.syncCyNodeImage(fullId);
+            }
+            if (window.kbCy) {
+              try { window.kbCy.resize(); } catch {}
+            }
+          } catch (err) {
+            console.error('节点图像上传失败:', err);
+            alert('节点图像上传失败: ' + (err?.message || err));
+          }
+        }
+
+        imageUploadInput.addEventListener('change', async () => {
+          const file = imageUploadInput.files && imageUploadInput.files[0];
+          if (!file) return;
+          const nodeId = getSelectedNodeId();
+          if (!nodeId) return;
+          const reader = new FileReader();
+          reader.onload = async () => {
+            const dataUrl = reader.result;
+            if (typeof dataUrl === 'string') {
+              await saveEntityImage(nodeId, dataUrl);
+            }
+          };
+          reader.onerror = () => {
+            alert('读取图片失败');
+          };
+          reader.readAsDataURL(file);
+        });
+
+        imageWrap.addEventListener('dblclick', () => {
+          const selectedId = getSelectedNodeId();
+          if (!selectedId) return;
+          currentContextNode = selectedId;
+          imageUploadInput.value = '';
+          imageUploadInput.click();
+        });
+        imageWrap.dataset.imageUploadInitialized = 'true';
+        imageWrap.style.cursor = 'pointer';
+      })();
+
       // Add node form submit handler
       const form = document.getElementById("nodeForm");
       const fId = document.getElementById("fId");
@@ -9516,8 +9686,14 @@
           if (eDesc) eDesc.textContent = '点击此处添加描述';
           if (eBadge) eBadge.style.display = 'none';
           if (eAliases) eAliases.style.display = 'none';
-          if (eImage) eImage.src = '';
-          if (eImageWrap) eImageWrap.style.display = 'none';
+          if (eImage) {
+            eImage.src = '';
+            eImage.style.display = 'none';
+          }
+          if (eImageWrap) {
+            eImageWrap.style.display = '';
+            eImageWrap.classList.add('empty');
+          }
         } catch {}
         // remove highlight
         try {
@@ -9575,14 +9751,18 @@
           if (eImage && eImageWrap) {
             if (imageUrl) {
               eImage.src = imageUrl;
-              eImageWrap.style.display = '';
-              eImage.onerror = () => {
-                eImageWrap.style.display = 'none';
-              };
+              eImage.style.display = '';
+              eImageWrap.classList.remove('empty');
             } else {
               eImage.src = '';
-              eImageWrap.style.display = 'none';
+              eImage.style.display = 'none';
+              eImageWrap.classList.add('empty');
             }
+            eImageWrap.style.display = '';
+            eImage.onerror = () => {
+              eImageWrap.classList.add('empty');
+              eImage.style.display = 'none';
+            };
           }
           if (eBadge) {
             if (id) {

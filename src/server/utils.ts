@@ -3,6 +3,7 @@ import { db } from "./db.ts";
 // ── Formatters ───────────────────────────────────────────────────────────────
 
 export function formatNode(row: any) {
+  if (!row) return null;
   let aliases = [] as any[];
   let tags = [] as any[];
   let extraData = {} as Record<string, any>;

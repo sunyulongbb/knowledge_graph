@@ -2299,6 +2299,27 @@ body {
   object-fit: cover;
   display: block;
 }
+.wd-entity-avatar-wrap.empty {
+  background: var(--surface-0);
+  border: 1px dashed var(--border-strong);
+  position: relative;
+}
+.wd-entity-avatar-wrap.empty::after {
+  content: "双击上传";
+  color: var(--muted);
+  font-size: 12px;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 8px;
+  white-space: pre-wrap;
+}
+.wd-entity-avatar-wrap:hover {
+  opacity: 0.96;
+}
 .wd-entity-header-meta {
   flex: 1 1 auto;
   min-width: 0;
