@@ -650,13 +650,17 @@
           <!-- Entity header (Wikidata-style) -->
           <div id="entityHeader" class="wd-entity-header">
             <div class="wd-entity-header-top">
-              <h2 id="entityDisplayName" class="wd-entity-name">新建实体</h2>
-              <span id="entityIdBadge" class="wd-entity-id-badge" style="display:none"></span>
+              <div id="entityDisplayImageWrap" class="wd-entity-avatar-wrap" style="display:none;">
+                <img id="entityDisplayImage" alt="节点图像" />
+              </div>
+              <div class="wd-entity-header-meta">
+                <div class="wd-entity-header-title-row">
+                  <h2 id="entityDisplayName" class="wd-entity-name">新建实体</h2>
+                  <span id="entityIdBadge" class="wd-entity-id-badge" style="display:none"></span>
+                </div>
+                <p id="entityDisplayDesc" class="wd-entity-desc">点击此处添加描述</p>
+              </div>
             </div>
-            <div id="entityDisplayImageWrap" style="display:none; margin: 10px 0 0;">
-              <img id="entityDisplayImage" alt="节点图像" style="max-width: 220px; max-height: 180px; width: auto; height: auto; border-radius: 12px; box-shadow: 0 12px 24px rgba(15,23,42,0.08);" />
-            </div>
-            <p id="entityDisplayDesc" class="wd-entity-desc">点击此处添加描述</p>
             <div id="entityDisplayAliases" class="wd-entity-aliases" style="display:none">
               <span class="wd-alias-label">也称为：</span>
               <span id="entityAliasValues" class="wd-alias-values"></span>
@@ -1027,37 +1031,6 @@
               </div>
             </div>
             <div class="tbl-wrap">
-              <div
-                id="tblPagination"
-                style="
-                  margin-bottom: 8px;
-                  display: flex;
-                  align-items: center;
-                  gap: 8px;
-                  justify-content: flex-end;
-                "
-              >
-                <button id="btnPrevPage" class="btn" type="button">
-                  上一页
-                </button>
-                <span id="tblPageInfo" style="font-size: 12px"></span>
-                <button id="btnNextPage" class="btn" type="button">
-                  下一页
-                </button>
-                <label for="tblSort" class="muted" style="font-size: 12px"
-                  >排序：</label
-                >
-                <select id="tblSort" class="kb-select sm">
-                  <option value="id" selected>按编号</option>
-                  <option value="modified_desc">按更新时间</option>
-                </select>
-                <select id="tblPageSize" class="kb-select sm">
-                  <option value="10">10条/页</option>
-                  <option value="20" selected>20条/页</option>
-                  <option value="50">50条/页</option>
-                  <option value="100">100条/页</option>
-                </select>
-              </div>
               <table class="tbl" id="tblNodes">
                 <thead>
                   <tr>
@@ -1070,6 +1043,40 @@
                 </thead>
                 <tbody></tbody>
               </table>
+            </div>
+            <div
+              id="tblPagination"
+              style="
+                margin: 12px auto 0;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                justify-content: center;
+                flex-wrap: wrap;
+                max-width: 100%;
+                flex: 0 0 auto;
+              "
+            >
+              <button id="btnPrevPage" class="btn" type="button">
+                上一页
+              </button>
+              <span id="tblPageInfo" style="font-size: 12px"></span>
+              <button id="btnNextPage" class="btn" type="button">
+                下一页
+              </button>
+              <label for="tblSort" class="muted" style="font-size: 12px"
+                >排序：</label
+              >
+              <select id="tblSort" class="kb-select sm">
+                <option value="id" selected>按编号</option>
+                <option value="modified_desc">按更新时间</option>
+              </select>
+              <select id="tblPageSize" class="kb-select sm">
+                <option value="10">10条/页</option>
+                <option value="20" selected>20条/页</option>
+                <option value="50">50条/页</option>
+                <option value="100">100条/页</option>
+              </select>
             </div>
           </div>
           <!-- 本体管理面板 -->
