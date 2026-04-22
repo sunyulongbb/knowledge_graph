@@ -2233,8 +2233,37 @@
   let _propPickerSearchTimer = null;
   let _propPickerCurrentTypeLabel = "";
 
+  function ensureSelectedPropInPicker() {
+    if (!attrPropPickerList) return;
+    const selectedPropId = (window.kbSelectedSchemaPropId || "").trim();
+    if (!selectedPropId) return;
+    const options = Array.from(attrPropPickerList.options || []);
+    const foundIndex = options.findIndex((opt) => opt.value === selectedPropId);
+    if (foundIndex >= 0) {
+      attrPropPickerList.selectedIndex = foundIndex;
+    }
+  }
+
+  function scrollSelectedPropIntoView() {
+    if (!attrPropPickerList) return;
+    const selectedIndex = attrPropPickerList.selectedIndex;
+    if (
+      selectedIndex >= 0 &&
+      selectedIndex < attrPropPickerList.options.length
+    ) {
+      const selectedOpt = attrPropPickerList.options[selectedIndex];
+      if (selectedOpt && typeof selectedOpt.scrollIntoView === "function") {
+        selectedOpt.scrollIntoView({ block: "nearest" });
+      }
+      const optionHeight = selectedOpt?.offsetHeight || 24;
+      attrPropPickerList.scrollTop = selectedIndex * optionHeight;
+    }
+  }
+
   function openAttrPropDropdown() {
     if (attrPropPicker) attrPropPicker.classList.add("open");
+    ensureSelectedPropInPicker();
+    scrollSelectedPropIntoView();
   }
 
   function closeAttrPropDropdown() {
@@ -2284,7 +2313,9 @@
     const visibleRows = Math.min(Math.max(items.length, 1), 12);
     attrPropPickerList.size = visibleRows;
     const frag = document.createDocumentFragment();
-    items.forEach((it) => {
+    const selectedPropId = (window.kbSelectedSchemaPropId || "").trim();
+    let selectedIndex = -1;
+    items.forEach((it, index) => {
       const opt = document.createElement("option");
       opt.value = it.id || "";
       const uiType =
@@ -2296,9 +2327,26 @@
       opt.dataset.propLabel = nameStr;
       opt.dataset.dtype = it.datatype || "";
       opt.dataset.valuetype = it.valuetype || "";
+      if (selectedPropId && opt.value === selectedPropId) {
+        opt.selected = true;
+        opt.defaultSelected = true;
+        selectedIndex = index;
+      }
       frag.appendChild(opt);
     });
     attrPropPickerList.appendChild(frag);
+    if (selectedIndex >= 0) {
+      attrPropPickerList.value = selectedPropId;
+      attrPropPickerList.selectedIndex = selectedIndex;
+      setTimeout(() => {
+        const selectedOpt = attrPropPickerList.options[selectedIndex];
+        if (selectedOpt && typeof selectedOpt.scrollIntoView === "function") {
+          selectedOpt.scrollIntoView({ block: "nearest" });
+        }
+        const optionHeight = selectedOpt?.offsetHeight || 24;
+        attrPropPickerList.scrollTop = selectedIndex * optionHeight;
+      }, 0);
+    }
   }
 
   // Wire the <select> change event once to trigger property selection
@@ -2584,6 +2632,10 @@
 
   if (attrPropSearchInput) {
     attrPropSearchInput.addEventListener("click", () => {
+      const q = (attrPropSearchInput.value || "").trim();
+      if (!_propPickerCurrentItems.length && q) {
+        searchAndRenderProps(q, { searchAll: true }).catch(console.error);
+      }
       openAttrPropDropdown();
     });
     attrPropSearchInput.addEventListener("input", () => {

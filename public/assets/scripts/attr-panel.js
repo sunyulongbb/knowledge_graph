@@ -17,6 +17,10 @@ if (btnShowAttrForm) {
       attrFormBody.classList.remove("collapsed");
     }
     if (btnShowAttrForm) btnShowAttrForm.style.display = "none";
+    const attrList = byId("attrList");
+    if (attrList && attrFormBody && attrList.parentNode) {
+      attrList.parentNode.insertBefore(attrFormBody, attrList);
+    }
     const header = btnShowAttrForm.closest(".wd-section-header");
     const collapseBtn = header
       ? header.querySelector(".wd-collapse-btn")
@@ -734,11 +738,14 @@ if (btnAttrReset) {
         // Selection/edit behavior only for editable lists (not detail view)
         if (!readOnly) {
           row.addEventListener("click", (e) => {
-            // 进入编辑表单模式
+            // 进入编辑表单模式，并把表单移动到当前点击行下方
             if (attrForm && attrFormBody && btnShowAttrForm) {
               attrFormBody.style.display = "";
               attrFormBody.classList.remove("collapsed");
               btnShowAttrForm.style.display = "none";
+              if (row.parentNode) {
+                row.insertAdjacentElement("afterend", attrFormBody);
+              }
             }
             // 自动填充表单（兼容本地 fillAttrForm）
             try {
