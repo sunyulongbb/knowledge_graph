@@ -152,6 +152,8 @@ if (btnAttrReset) {
   const attrValueEntityId = byId("attrValueEntityId");
   const attrValueEntityNumericId = byId("attrValueEntityNumericId");
   const attrValueQualifier = byId("attrValueQualifier");
+  const btnAttrQualifierToggle = byId("btnAttrQualifierToggle");
+  const attrPropSearchInput = byId("attrPropSearch");
   const attrDatatypeHint = byId("attrDatatypeHint");
   const attrDatatypeGroups = byId("attrDatatypeGroups");
   const attrMsg = byId("attrMsg");
@@ -733,19 +735,21 @@ if (btnAttrReset) {
         if (!readOnly) {
           row.addEventListener("click", (e) => {
             // 进入编辑表单模式
-            if (
-              window.attrForm &&
-              window.attrFormBody &&
-              window.btnShowAttrForm
-            ) {
-              window.attrFormBody.style.display = "";
-              window.btnShowAttrForm.style.display = "none";
+            if (attrForm && attrFormBody && btnShowAttrForm) {
+              attrFormBody.style.display = "";
+              attrFormBody.classList.remove("collapsed");
+              btnShowAttrForm.style.display = "none";
             }
-            // 自动填充表单（假设有 fillAttrForm 方法）
-            if (typeof window.fillAttrForm === "function") {
-              window.fillAttrForm(it);
-            } else {
-              // 简单兼容：只填id
+            // 自动填充表单（兼容本地 fillAttrForm）
+            try {
+              fillAttrForm(nodeId, it, vi);
+            } catch {
+              if (
+                window.fillAttrForm &&
+                typeof window.fillAttrForm === "function"
+              ) {
+                window.fillAttrForm(it);
+              }
               if (window.attrId) window.attrId.value = it.id;
             }
             const idsInOrder = Array.from(
@@ -757,25 +761,30 @@ if (btnAttrReset) {
               idsInOrder.includes(window.kbLastAttrAnchorId)
             ) {
               const start = idsInOrder.indexOf(window.kbLastAttrAnchorId);
-              const end = idsInOrder.indexOf(id);
+              const end = idsInOrder.indexOf(dataId);
               const [a, b] = start < end ? [start, end] : [end, start];
               window.kbSelectedAttrIds.clear();
               idsInOrder
                 .slice(a, b + 1)
                 .forEach((x) => window.kbSelectedAttrIds.add(x));
             } else if (e.ctrlKey || e.metaKey) {
-              if (window.kbSelectedAttrIds.has(id))
-                window.kbSelectedAttrIds.delete(id);
-              else window.kbSelectedAttrIds.add(id);
-              window.kbLastAttrAnchorId = id;
+              if (window.kbSelectedAttrIds.has(dataId))
+                window.kbSelectedAttrIds.delete(dataId);
+              else window.kbSelectedAttrIds.add(dataId);
+              window.kbLastAttrAnchorId = dataId;
             } else {
               window.kbSelectedAttrIds.clear();
-              window.kbSelectedAttrIds.add(id);
-              window.kbLastAttrAnchorId = id;
+              window.kbSelectedAttrIds.add(dataId);
+              window.kbLastAttrAnchorId = dataId;
               // auto-edit single selection
               try {
                 fillAttrForm(nodeId, it, vi);
               } catch {}
+              if (attrPropSearchInput) {
+                setTimeout(() => attrPropSearchInput.focus(), 0);
+              } else if (attrValue) {
+                setTimeout(() => attrValue.focus(), 0);
+              }
             }
             updateAttrSelectionStyles();
             ensureAttrButtonsState();
@@ -839,6 +848,24 @@ if (btnAttrReset) {
     }
   }
 
+  if (btnAttrQualifierToggle) {
+    btnAttrQualifierToggle.addEventListener("click", () => {
+      if (!attrValueQualifier || !attrValueQualifier.parentElement) return;
+      const row = attrValueQualifier.parentElement;
+      const isOpen = row.style.display !== "none" && row.style.display !== "";
+      if (!isOpen) {
+        row.style.display = "flex";
+        btnAttrQualifierToggle.classList.add("active");
+        setTimeout(() => {
+          attrValueQualifier.focus();
+        }, 0);
+      } else {
+        row.style.display = "none";
+        btnAttrQualifierToggle.classList.remove("active");
+      }
+    });
+  }
+
   function resetAttrForm() {
     window.kbEditingValueIndex = -1;
     try {
@@ -858,6 +885,13 @@ if (btnAttrReset) {
     try {
       attrValue.value = "";
     } catch {}
+    if (attrValueQualifier && attrValueQualifier.parentElement) {
+      attrValueQualifier.parentElement.style.display = "none";
+      attrValueQualifier.value = "";
+    }
+    if (btnAttrQualifierToggle) {
+      btnAttrQualifierToggle.classList.remove("active");
+    }
     try {
       attrValueUrl.value = "";
       attrValueDate.value = "";
@@ -880,6 +914,9 @@ if (btnAttrReset) {
 
   function updateDatatypeUI(dtype, valueType) {
     const normalized = mapDatatypeToUi(dtype, valueType) || "string";
+    if (btnAttrQualifierToggle) {
+      btnAttrQualifierToggle.style.display = "inline-flex";
+    }
     // 动态获取 attrDatatypeGroups，确保能正确找到元素
     const groupsContainer = document.getElementById("attrDatatypeGroups");
     const groups = groupsContainer
@@ -915,11 +952,15 @@ if (btnAttrReset) {
   function updateEntitySelectionPreview(label, id) {
     if (!attrEntitySelectedPreview) return;
     if (!id) {
-      attrEntitySelectedPreview.textContent = "当前未选择实体";
+      attrEntitySelectedPreview.style.display = "none";
+      if (attrEntitySearchInput) attrEntitySearchInput.value = "";
       return;
     }
     const text = label ? `${label} (${id})` : id;
-    attrEntitySelectedPreview.textContent = `已选择：${text}`;
+    if (attrEntitySearchInput) {
+      attrEntitySearchInput.value = text;
+    }
+    attrEntitySelectedPreview.style.display = "none";
   }
 
   function renderEntitySearchResults(items) {
@@ -981,9 +1022,7 @@ if (btnAttrReset) {
     attrValueEntityType.value = found?.entity_type || inferEntityTypeFromId(id);
     updateEntitySelectionPreview(label, id);
     if (attrEntitySearchStatus) {
-      attrEntitySearchStatus.textContent = label
-        ? `已选择：${label} (${id})`
-        : `已选择：${id}`;
+      attrEntitySearchStatus.textContent = "";
     }
   }
 
@@ -1093,6 +1132,10 @@ if (btnAttrReset) {
       if (attrEntitySearchStatus)
         attrEntitySearchStatus.textContent = "推荐加载失败";
     }
+  }
+
+  if (typeof window !== "undefined") {
+    window.loadEntitySuggestionsForProperty = loadEntitySuggestionsForProperty;
   }
 
   function clearEntitySearchState() {
@@ -1433,13 +1476,7 @@ if (btnAttrReset) {
 
   // Render attribute value as an HTML string with a span and type-specific class
   function renderAttrValue(dtype, v) {
-    let qualifierHtml = "";
-    if (v && typeof v === "object" && v.qualifier) {
-      qualifierHtml = ` <span class="muted" style="color: var(--muted);">(${escapeHtml(
-        v.qualifier,
-      )})</span>`;
-    }
-
+    // By default, do not render qualifier information in relation table values.
     const getInner = () => {
       try {
         const dt = (dtype || "").toLowerCase();
@@ -1536,21 +1573,15 @@ if (btnAttrReset) {
     attrId.value = it?.id || "";
     attrProp.value = it?.property || "";
     attrPropLabel.value = it?.property_label_zh || "";
+    if (attrPropSearchInput) {
+      attrPropSearchInput.value = it?.property_label_zh || it?.property || "";
+    }
     const dtype = pickUiDatatype(it) || it?.datatype || "string";
     attrType.value = dtype;
     updateDatatypeUI(dtype, it?.datavalue_type || it?.valuetype || "");
 
     if (attrValueQualifier && attrValueQualifier.parentElement) {
-      const supportsQualifier = [
-        "wikibase-entityid",
-        "time",
-        "quantity",
-        "globecoordinate",
-        "monolingualtext",
-      ].includes(dtype);
-      attrValueQualifier.parentElement.style.display = supportsQualifier
-        ? "block"
-        : "none";
+      attrValueQualifier.parentElement.style.display = "none";
     }
 
     let val = it?.value;
@@ -1564,6 +1595,9 @@ if (btnAttrReset) {
       qualifier = val.qualifier || "";
     }
     attrValueQualifier.value = qualifier;
+    if (btnAttrQualifierToggle) {
+      btnAttrQualifierToggle.classList.toggle("active", !!qualifier);
+    }
 
     // map value back to simple inputs
     try {

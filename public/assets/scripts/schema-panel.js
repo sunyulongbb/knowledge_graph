@@ -1465,16 +1465,10 @@
       }
       const attrTypeEl = document.getElementById("attrType");
       if (attrTypeEl) attrTypeEl.value = dtype;
-      if (dtype === "wikibase-entityid") {
-        loadEntitySuggestionsForProperty(pid).catch((err) =>
-          console.error("loadEntitySuggestionsForProperty", err),
-        );
-      } else {
-        attrEntitySearchItems = [];
-        if (attrEntitySearchStatus) attrEntitySearchStatus.textContent = "";
-        if (attrEntitySearchResultsWrap)
-          attrEntitySearchResultsWrap.style.display = "none";
-      }
+      attrEntitySearchItems = [];
+      if (attrEntitySearchStatus) attrEntitySearchStatus.textContent = "";
+      if (attrEntitySearchResultsWrap)
+        attrEntitySearchResultsWrap.style.display = "none";
     } catch (err) {
       console.error("setSelectedSchemaProp suggestions failed", err);
     }
@@ -2100,9 +2094,6 @@
       if (found && (!attrPropLabel.value || !attrPropLabel.value.trim())) {
         attrPropLabel.value = found.label || "";
       }
-      Promise.resolve()
-        .then(() => loadEntitySuggestionsForProperty(v))
-        .catch((err) => console.error("loadEntitySuggestionsForProperty", err));
     } catch {}
   });
   // Also rebuild datalist on focus to keep in sync
@@ -2231,14 +2222,28 @@
   // =====================================================
   // 属性选择器（内嵌在 attrPanel，支持类型属性 + 全局搜索）
   // =====================================================
+  const attrPropPicker = byId("attrPropPicker");
   const attrPropPickerList = byId("attrPropPickerList");
   const attrPropPickerStatus = byId("attrPropPickerStatus");
   const attrPropSearchInput = byId("attrPropSearch");
   const btnAttrPropSearchAll = byId("btnAttrPropSearchAll");
+  const attrValueQualifier = byId("attrValueQualifier");
 
   let _propPickerCurrentItems = []; // items shown for the active type
   let _propPickerSearchTimer = null;
   let _propPickerCurrentTypeLabel = "";
+
+  function openAttrPropDropdown() {
+    if (attrPropPicker) attrPropPicker.classList.add("open");
+  }
+
+  function closeAttrPropDropdown() {
+    if (attrPropPicker) attrPropPicker.classList.remove("open");
+  }
+
+  function isAttrPropDropdownOpen() {
+    return attrPropPicker && attrPropPicker.classList.contains("open");
+  }
 
   function getCurrentTypeLabelForPropertySearch() {
     const fromInput = (fTypeInput?.value || "").trim();
@@ -2333,6 +2338,8 @@
         if (el) el.textContent = `当前属性：${label} (${propId})`;
       } catch {}
       applySchemaSelectionHighlight();
+      closeAttrPropDropdown();
+      if (attrPropSearchInput) attrPropSearchInput.focus();
       // 仅处理实体类型的搜索建议，不重复调用 updateDatatypeUI
       try {
         const uiType =
@@ -2344,22 +2351,40 @@
             : null) ||
           dtype ||
           "string";
-        if (uiType === "wikibase-entityid") {
-          if (typeof loadEntitySuggestionsForProperty === "function") {
-            loadEntitySuggestionsForProperty(propId).catch(console.error);
-          }
-        } else {
-          if (typeof attrEntitySearchItems !== "undefined") {
-            try {
-              attrEntitySearchItems = [];
-            } catch {}
-          }
-          const statusEl = document.getElementById("attrEntitySearchStatus");
-          if (statusEl) statusEl.textContent = "";
-          const wrapEl = document.getElementById("attrEntitySearchResultsWrap");
-          if (wrapEl) wrapEl.style.display = "none";
+        if (typeof attrEntitySearchItems !== "undefined") {
+          try {
+            attrEntitySearchItems = [];
+          } catch {}
+        }
+        const statusEl = document.getElementById("attrEntitySearchStatus");
+        if (statusEl) statusEl.textContent = "";
+        const wrapEl = document.getElementById("attrEntitySearchResultsWrap");
+        if (wrapEl) wrapEl.style.display = "none";
+        if (attrValueQualifier && attrValueQualifier.parentElement) {
+          const qualifierTypes = [
+            "wikibase-entityid",
+            "time",
+            "quantity",
+            "globecoordinate",
+            "monolingualtext",
+          ];
+          attrValueQualifier.parentElement.style.display =
+            qualifierTypes.includes(uiType) ? "block" : "none";
         }
       } catch {}
+    });
+    attrPropPickerList.addEventListener("focus", () => {
+      openAttrPropDropdown();
+    });
+    attrPropPickerList.addEventListener("blur", () => {
+      setTimeout(() => {
+        if (
+          document.activeElement !== attrPropSearchInput &&
+          document.activeElement !== attrPropPickerList
+        ) {
+          closeAttrPropDropdown();
+        }
+      }, 150);
     });
   }
 
@@ -2558,6 +2583,9 @@
   }
 
   if (attrPropSearchInput) {
+    attrPropSearchInput.addEventListener("click", () => {
+      openAttrPropDropdown();
+    });
     attrPropSearchInput.addEventListener("input", () => {
       clearTimeout(_propPickerSearchTimer);
       const q = (attrPropSearchInput.value || "").trim();
@@ -2574,13 +2602,18 @@
             _propPickerCurrentItems,
             `${prefix}${_propPickerCurrentItems.length} 项推荐属性`,
           );
+          openAttrPropDropdown();
         } else {
           renderAttrPropPickerItems([], "");
           if (attrPropPickerStatus)
             attrPropPickerStatus.textContent =
               "设置节点类型后显示推荐属性，或直接搜索";
+          closeAttrPropDropdown();
         }
         return;
+      }
+      if (!_propPickerCurrentItems.length) {
+        openAttrPropDropdown();
       }
       // 先从当前缓存中过滤
       // 默认行为：输入即全局搜索
@@ -2596,6 +2629,16 @@
         if (q)
           searchAndRenderProps(q, { searchAll: true }).catch(console.error);
       }
+    });
+    attrPropSearchInput.addEventListener("blur", () => {
+      setTimeout(() => {
+        if (
+          document.activeElement !== attrPropSearchInput &&
+          document.activeElement !== attrPropPickerList
+        ) {
+          closeAttrPropDropdown();
+        }
+      }, 150);
     });
   }
 
