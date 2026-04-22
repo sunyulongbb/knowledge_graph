@@ -262,9 +262,6 @@ function ensureSharedTables() {
   runSafe("ALTER TABLE nodes ADD COLUMN link TEXT");
   runSafe("ALTER TABLE nodes ADD COLUMN video TEXT");
   runSafe(
-    "UPDATE nodes SET wiki_md = description WHERE (wiki_md IS NULL OR wiki_md = '') AND description IS NOT NULL AND description <> ''",
-  );
-  runSafe(
     "CREATE INDEX IF NOT EXISTS idx_nodes_project_id ON nodes(project_id)",
   );
   runSafe(
@@ -633,7 +630,7 @@ function importLegacyProjectKnowledge() {
             row.name || mappedId,
             row.type || "entity",
             row.description || "",
-            row.wiki_md || row.description || "",
+            row.wiki_md || "",
             row.aliases || "[]",
             row.tags || "[]",
             row.data || "{}",

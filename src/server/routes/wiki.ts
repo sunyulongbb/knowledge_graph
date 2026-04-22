@@ -35,7 +35,7 @@ function normalizeMarkdownTables(md: string) {
 
   for (let i = 0; i < lines.length; i += 1) {
     const current = lines[i] ?? "";
-    const next = i + 1 < lines.length ? lines[i + 1] ?? "" : "";
+    const next = i + 1 < lines.length ? (lines[i + 1] ?? "") : "";
     const isTableStart = isTableLine(current) && isDelimiterLine(next);
     if (isTableStart) {
       if (out.length && (out[out.length - 1] ?? "").trim() !== "") {
@@ -60,11 +60,7 @@ function normalizeMarkdownTables(md: string) {
   return out.join("\n");
 }
 
-export async function handleWikiRoutes(
-  req: Request,
-  url: URL,
-  method: string
-) {
+export async function handleWikiRoutes(req: Request, url: URL, method: string) {
   if (url.pathname === "/api/wiki/page/save" && method === "POST") {
     try {
       const body = (await req.json()) as any;
@@ -94,12 +90,12 @@ export async function handleWikiRoutes(
 
     const dbId = entityId.replace("entity/", "");
     const node = db
-      .query("SELECT wiki_md, description FROM nodes WHERE id = ?")
+      .query("SELECT wiki_md FROM nodes WHERE id = ?")
       .get(dbId) as any;
 
-    const md = node?.wiki_md ?? node?.description ?? "";
+    const md = node?.wiki_md ?? "";
     const normalizedMd = normalizeMarkdownTables(md);
-    const html = await marked.parse(normalizedMd);
+    const html = md ? await marked.parse(normalizedMd) : "";
 
     return Response.json({
       page: {

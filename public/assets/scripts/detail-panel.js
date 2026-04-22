@@ -251,7 +251,9 @@
       item.label ||
       item.name ||
       ""
-    ).toString().trim();
+    )
+      .toString()
+      .trim();
     const name = rawName.toLowerCase();
     if (dtype === "commonsMedia") return true;
     if (name.includes("媒体") || name.includes("media")) return true;
@@ -285,7 +287,15 @@
         it.name ||
         "媒体"
       ).toString();
-      let rawVal = typeof it.value !== "undefined" ? it.value : it.val || it.text || it.description || it.value_raw || it.data || "";
+      let rawVal =
+        typeof it.value !== "undefined"
+          ? it.value
+          : it.val ||
+            it.text ||
+            it.description ||
+            it.value_raw ||
+            it.data ||
+            "";
       if (typeof rawVal === "string") {
         const trimmed = rawVal.trim();
         if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
@@ -330,12 +340,6 @@
       img.alt = entry.label || `Image ${index + 1}`;
       img.onclick = () => window.open(entry.url, "_blank");
       slide.appendChild(img);
-      if (entry.label) {
-        const caption = document.createElement("div");
-        caption.className = "detail-carousel-caption";
-        caption.textContent = entry.label;
-        slide.appendChild(caption);
-      }
       slides.appendChild(slide);
     });
 
@@ -355,7 +359,9 @@
       currentIndex = index;
       updateTransform();
       const dots = carousel.querySelectorAll(".detail-carousel-dot");
-      dots.forEach((dot, i) => dot.classList.toggle("active", i === currentIndex));
+      dots.forEach((dot, i) =>
+        dot.classList.toggle("active", i === currentIndex),
+      );
     }
 
     if (slideCount > 1) {
@@ -571,9 +577,10 @@
         setText(wikiTopTitleEl, title);
         const existingLinkEl = document.getElementById("wikiTopLink");
         if (existingLinkEl) existingLinkEl.remove();
-        const linkUrl = (doc && (doc.link || doc.url || ""))
-          ? (doc.link || doc.url || "").toString().trim()
-          : "";
+        const linkUrl =
+          doc && (doc.link || doc.url || "")
+            ? (doc.link || doc.url || "").toString().trim()
+            : "";
         if (linkUrl) {
           const linkEl = document.createElement("a");
           linkEl.id = "wikiTopLink";
@@ -643,19 +650,35 @@
         });
       }
 
-      setText(
-        document.getElementById("wikiTopDesc"),
-        (doc && (doc.desc_zh || doc.description)) || "",
+      const wikiHtmlPresent = Boolean(data.page?.html || (doc && doc.html));
+      const wikiTopDescEl = document.getElementById("wikiTopDesc");
+      const topDescText = (doc && (doc.desc_zh || doc.description)) || "";
+      const wikiTopMedia = document.getElementById("wikiTopMedia");
+      const hasTopMedia = Boolean(
+        wikiTopMedia && wikiTopMedia.querySelector("img,video,iframe,object"),
       );
+      if (wikiTopDescEl) {
+        if (!wikiHtmlPresent && !hasTopMedia && topDescText) {
+          wikiTopDescEl.textContent = topDescText;
+          wikiTopDescEl.style.display = "";
+        } else {
+          wikiTopDescEl.textContent = "";
+          wikiTopDescEl.style.display = "none";
+        }
+      }
       const wikiTopVideo = document.getElementById("wikiTopVideo");
       if (wikiTopVideo) {
         wikiTopVideo.innerHTML = "";
         const videoUrl = (doc && doc.video) || "";
-        const trimmedVideoUrl = typeof videoUrl === "string" ? videoUrl.trim() : "";
+        const trimmedVideoUrl =
+          typeof videoUrl === "string" ? videoUrl.trim() : "";
         if (trimmedVideoUrl) {
           const resolvedUrl = (() => {
             try {
-              return new URL(trimmedVideoUrl, window.location.origin).toString();
+              return new URL(
+                trimmedVideoUrl,
+                window.location.origin,
+              ).toString();
             } catch {
               return trimmedVideoUrl;
             }
@@ -753,7 +776,7 @@
           imageEntries,
           seenImageUrls,
           doc.image,
-          pickLabelValue(doc.image_caption) || "图像",
+          pickLabelValue(doc.image_caption) || "",
           true,
         );
       if (doc && Array.isArray(doc.images)) {
@@ -794,21 +817,9 @@
           true,
         );
       if (doc && typeof doc.image_url === "string")
-        addImageCandidate(
-          imageEntries,
-          seenImageUrls,
-          doc.image_url,
-          "图像",
-          true,
-        );
+        addImageCandidate(imageEntries, seenImageUrls, doc.image_url, "", true);
       if (doc && typeof doc.imageUrl === "string")
-        addImageCandidate(
-          imageEntries,
-          seenImageUrls,
-          doc.imageUrl,
-          "图像",
-          true,
-        );
+        addImageCandidate(imageEntries, seenImageUrls, doc.imageUrl, "", true);
       if (doc && typeof doc.thumbnailUrl === "string")
         addImageCandidate(
           imageEntries,
@@ -826,7 +837,7 @@
           imageEntries,
           seenImageUrls,
           doc.image,
-          pickLabelValue(doc.image_caption) || "图像",
+          pickLabelValue(doc.image_caption) || "",
           true,
         );
       // attributes -> props: prefer backend attribute list API used by attribute manager
@@ -1073,23 +1084,17 @@
               imgEl.style.display = "block";
               imgEl.style.margin = "0 auto";
               wrapper.appendChild(imgEl);
-              if (nodeDescription) {
-                const descEl = document.createElement("div");
-                descEl.textContent = nodeDescription;
-                descEl.style.fontSize = "12px";
-                descEl.style.color = "var(--muted)";
-                descEl.style.marginTop = "8px";
-                descEl.style.lineHeight = "1.4";
-                wrapper.appendChild(descEl);
-              }
               if (entry.label) {
-                const caption = document.createElement("div");
-                caption.textContent = entry.label;
-                caption.style.fontSize = "12px";
-                caption.style.color = "var(--muted)";
-                caption.style.marginTop = "6px";
-                caption.style.lineHeight = "1.3";
-                wrapper.appendChild(caption);
+                const labelText = String(entry.label).trim();
+                if (labelText && labelText !== "图像") {
+                  const caption = document.createElement("div");
+                  caption.textContent = labelText;
+                  caption.style.fontSize = "12px";
+                  caption.style.color = "var(--muted)";
+                  caption.style.marginTop = "6px";
+                  caption.style.lineHeight = "1.3";
+                  wrapper.appendChild(caption);
+                }
               }
               imgBox.appendChild(wrapper);
             }
@@ -1172,20 +1177,24 @@
 
         window.easyMDERenderPasteImages = (text) => {
           if (!text) return text;
-          return text.replace(/!\[([^\]]*)\]\(((__easyMDE_paste_image_\d+__)|data:image\/[^)]+)\)/g, (match, alt, key) => {
-            if (key.startsWith("__easyMDE_paste_image_")) {
-              const dataUrl = window.easyMDEPasteImages?.[key];
-              return dataUrl ? `![${alt}](${dataUrl})` : match;
-            }
-            return match;
-          });
+          return text.replace(
+            /!\[([^\]]*)\]\(((__easyMDE_paste_image_\d+__)|data:image\/[^)]+)\)/g,
+            (match, alt, key) => {
+              if (key.startsWith("__easyMDE_paste_image_")) {
+                const dataUrl = window.easyMDEPasteImages?.[key];
+                return dataUrl ? `![${alt}](${dataUrl})` : match;
+              }
+              return match;
+            },
+          );
         };
 
         window.applyEasyMDEPasteImageWidgets = (cm) => {
           if (!cm || !cm.getDoc) return;
           const doc = cm.getDoc();
           const text = doc.getValue();
-          const regex = /!\[([^\]]*)\]\(((__easyMDE_paste_image_\d+__)|data:image\/[^)]+)\)/g;
+          const regex =
+            /!\[([^\]]*)\]\(((__easyMDE_paste_image_\d+__)|data:image\/[^)]+)\)/g;
           const existingMarks = doc.getAllMarks ? doc.getAllMarks() : [];
           existingMarks.forEach((mark) => {
             if (mark.__easyMDEPasteImageWidget) {
@@ -1263,7 +1272,9 @@
               const clipboardData = event.clipboardData || window.clipboardData;
               if (!clipboardData) return;
               const items = Array.from(clipboardData.items || []);
-              const imageItem = items.find((item) => item.type && item.type.startsWith("image/"));
+              const imageItem = items.find(
+                (item) => item.type && item.type.startsWith("image/"),
+              );
               if (!imageItem) return;
               event.preventDefault();
               const file = imageItem.getAsFile();
@@ -1281,7 +1292,9 @@
                 doc.replaceRange(markdownImage, cursor);
                 try {
                   const start = cursor;
-                  const end = doc.posFromIndex(doc.indexFromPos(cursor) + markdownImage.length);
+                  const end = doc.posFromIndex(
+                    doc.indexFromPos(cursor) + markdownImage.length,
+                  );
                   const img = document.createElement("img");
                   img.src = dataUrl;
                   img.alt = "pasted image";
@@ -1448,8 +1461,8 @@
       const url = new URL("/api/wiki/page", window.location.origin);
       url.searchParams.set("entityId", entityId);
       url.searchParams.set("lang", lang);
-      // allow backend to auto-create stub if missing
-      url.searchParams.set("create_if_missing", "1");
+      // do not auto-create wiki page from node metadata; avoid syncing node description into markdown
+      url.searchParams.set("create_if_missing", "0");
       const resp = await fetch(url);
       if (!resp.ok) throw new Error("wiki not found");
       const data = await resp.json();
@@ -1621,10 +1634,13 @@
     if (window.easyMDE) {
       md = window.easyMDE.value();
       if (window.easyMDEPasteImages) {
-        md = md.replace(/!\[([^\]]*)\]\((__easyMDE_paste_image_\d+__)\)/g, (match, alt, key) => {
-          const dataUrl = window.easyMDEPasteImages[key];
-          return dataUrl ? `![${alt}](${dataUrl})` : match;
-        });
+        md = md.replace(
+          /!\[([^\]]*)\]\((__easyMDE_paste_image_\d+__)\)/g,
+          (match, alt, key) => {
+            const dataUrl = window.easyMDEPasteImages[key];
+            return dataUrl ? `![${alt}](${dataUrl})` : match;
+          },
+        );
       }
     } else {
       md = document.getElementById("wikiMdInline").value;
