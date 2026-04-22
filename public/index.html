@@ -843,19 +843,15 @@
               </div>
             </div>
             <div id="entityDisplayAliases" class="wd-entity-aliases" style="display:none">
-              <span class="wd-alias-label">也称为：</span>
               <span id="entityAliasValues" class="wd-alias-values"></span>
             </div>
           </div>
 
           <!-- Collapsible node form (hidden by default, shown on edit/create) -->
           <div id="nodeFormSection" class="wd-section" style="display:none;">
-            <div class="wd-section-header" data-toggle="nodeFormBody">
+            <div class="wd-section-header">
               <i class="fa-solid fa-pen-to-square wd-section-icon"></i>
               <span>基本信息</span>
-              <button id="btnToggleNodeForm" type="button" class="wd-collapse-btn" title="收起/展开">
-                <i class="fa-solid fa-chevron-up"></i>
-              </button>
             </div>
             <div id="nodeFormBody" class="wd-section-body">
               <form id="nodeForm" class="wd-form">
@@ -887,13 +883,11 @@
                   </div>
                 </div>
                 <div class="wd-form-actions">
-                  <button id="btnSubmit" class="btn wd-btn-primary" type="submit">
+                  <button id="btnSubmit" class="btn wd-btn-primary" type="submit" title="新增实体" aria-label="新增实体">
                     <i class="fa-solid fa-plus"></i>
-                    <span>新增实体</span>
                   </button>
-                  <button id="btnCancelEdit" class="btn wd-btn-secondary" type="button" style="display:none">
+                  <button id="btnCancelEdit" class="btn wd-btn-secondary" type="button" style="display:none" title="取消编辑" aria-label="取消编辑">
                     <i class="fa-solid fa-xmark"></i>
-                    <span>取消</span>
                   </button>
                   <span id="addMsg" class="wd-msg"></span>
                 </div>
@@ -904,11 +898,10 @@
           <!-- 关系 / 属性区块 (Wikidata-style) -->
           <div id="attrPanel" class="wd-section" style="display:none; flex:1; flex-direction:column;">
             <div class="wd-section-header" data-toggle="attrFormBody">
-              <i class="fa-solid fa-list-check wd-section-icon"></i>
               <span>关系</span>
               <span id="attrCountBadge" class="wd-count-badge">0</span>
-              <button id="btnShowAttrForm" type="button" class="btn wd-btn-primary" style="margin-left:auto;">
-                <i class="fa-solid fa-plus"></i> 新增关系
+              <button id="btnShowAttrForm" type="button" class="btn wd-btn-icon wd-btn-primary" title="新增关系" style="margin-left:auto;">
+                <i class="fa-solid fa-plus"></i>
               </button>
             </div>
             <!-- 编辑/新增表单区，默认隐藏 -->
@@ -10204,7 +10197,9 @@
         fAliases.value = "";
         fTags.value = "";
         if (fType) fType.value = "";
-        btnSubmit.innerHTML = '<i class="fa-solid fa-plus"></i><span>新增实体</span>';
+        btnSubmit.innerHTML = '<i class="fa-solid fa-plus"></i>';
+        btnSubmit.title = '新增实体';
+        btnSubmit.setAttribute('aria-label', '新增实体');
         btnCancelEdit.style.display = "none";
         addMsg.textContent = "";
         // Reset entity header
@@ -10275,7 +10270,9 @@
         if (fLink) fLink.value = (node?.link || node?.url || "")?.toString().trim();
         if (fVideo) fVideo.value = "";
         if (fType) fType.value = node?.type || "";
-        btnSubmit.innerHTML = '<i class="fa-solid fa-floppy-disk"></i><span>保存修改</span>';
+        btnSubmit.innerHTML = '<i class="fa-solid fa-floppy-disk"></i>';
+        btnSubmit.title = '保存修改';
+        btnSubmit.setAttribute('aria-label', '保存修改');
         btnCancelEdit.style.display = "";
         // Update entity header
         try {
@@ -10347,6 +10344,7 @@
               });
               if (aliases.length > maxShow) {
                 const btn = document.createElement('button');
+                btn.type = 'button';
                 btn.textContent = '展开';
                 btn.className = 'wd-alias-expand-btn';
                 btn.style.marginLeft = '6px';
@@ -10355,17 +10353,24 @@
                 btn.style.border = 'none';
                 btn.style.color = 'var(--link)';
                 btn.style.cursor = 'pointer';
-                btn.onclick = function() {
+                let expanded = false;
+                const renderAliases = (showAll) => {
                   eAliasVals.innerHTML = '';
-                  aliases.forEach((al, idx) => {
+                  const list = showAll ? aliases : aliases.slice(0, maxShow);
+                  list.forEach((al, idx) => {
                     const span = document.createElement('span');
                     span.textContent = al;
                     if (idx > 0) span.style.marginLeft = '4px';
                     eAliasVals.appendChild(span);
                   });
-                  btn.remove();
+                  btn.textContent = showAll ? '收起' : '展开';
+                  eAliasVals.appendChild(btn);
                 };
-                eAliasVals.appendChild(btn);
+                btn.onclick = function() {
+                  expanded = !expanded;
+                  renderAliases(expanded);
+                };
+                renderAliases(false);
               }
               eAliases.style.display = '';
             } else {

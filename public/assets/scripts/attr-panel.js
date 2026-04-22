@@ -738,27 +738,6 @@ if (btnAttrReset) {
         // Selection/edit behavior only for editable lists (not detail view)
         if (!readOnly) {
           row.addEventListener("click", (e) => {
-            // 进入编辑表单模式，并把表单移动到当前点击行下方
-            if (attrForm && attrFormBody && btnShowAttrForm) {
-              attrFormBody.style.display = "";
-              attrFormBody.classList.remove("collapsed");
-              btnShowAttrForm.style.display = "none";
-              if (row.parentNode) {
-                row.insertAdjacentElement("afterend", attrFormBody);
-              }
-            }
-            // 自动填充表单（兼容本地 fillAttrForm）
-            try {
-              fillAttrForm(nodeId, it, vi);
-            } catch {
-              if (
-                window.fillAttrForm &&
-                typeof window.fillAttrForm === "function"
-              ) {
-                window.fillAttrForm(it);
-              }
-              if (window.attrId) window.attrId.value = it.id;
-            }
             const idsInOrder = Array.from(
               container.querySelectorAll("div[data-id]"),
             ).map((el) => el.getAttribute("data-id"));
@@ -783,18 +762,35 @@ if (btnAttrReset) {
               window.kbSelectedAttrIds.clear();
               window.kbSelectedAttrIds.add(dataId);
               window.kbLastAttrAnchorId = dataId;
-              // auto-edit single selection
-              try {
-                fillAttrForm(nodeId, it, vi);
-              } catch {}
-              if (attrPropSearchInput) {
-                setTimeout(() => attrPropSearchInput.focus(), 0);
-              } else if (attrValue) {
-                setTimeout(() => attrValue.focus(), 0);
-              }
             }
             updateAttrSelectionStyles();
             ensureAttrButtonsState();
+          });
+          row.addEventListener("dblclick", (e) => {
+            if (attrForm && attrFormBody && btnShowAttrForm) {
+              attrFormBody.style.display = "";
+              attrFormBody.classList.remove("collapsed");
+              btnShowAttrForm.style.display = "none";
+              if (row.parentNode) {
+                row.insertAdjacentElement("afterend", attrFormBody);
+              }
+            }
+            try {
+              fillAttrForm(nodeId, it, vi);
+            } catch {
+              if (
+                window.fillAttrForm &&
+                typeof window.fillAttrForm === "function"
+              ) {
+                window.fillAttrForm(it);
+              }
+              if (window.attrId) window.attrId.value = it.id;
+            }
+            if (attrPropSearchInput) {
+              setTimeout(() => attrPropSearchInput.focus(), 0);
+            } else if (attrValue) {
+              setTimeout(() => attrValue.focus(), 0);
+            }
           });
         }
         frag.appendChild(row);
