@@ -1652,6 +1652,13 @@ header .view-toggle .btn.toggle.active {
   text-align: left;
 }
 
+#propertyTable th:nth-child(4),
+#propertyTable td:nth-child(4),
+#tblNodes th:nth-child(4),
+#tblNodes td:nth-child(4) {
+  text-align: right;
+}
+
 .tbl th {
   color: var(--muted);
   font-weight: 600;
@@ -2247,13 +2254,20 @@ body {
 
 /* Make attribute panel fill remaining space of left column */
 #attrPanel {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
+  display: block !important;
+  flex: none !important;
+  flex-direction: initial !important;
+  min-height: 0;
+}
+
+#attrFormBody {
+  position: relative;
+  z-index: 1;
+  display: block;
 }
 
 #attrList {
-  flex: 1;
+  display: block;
   overflow: auto;
 }
 
@@ -2276,6 +2290,22 @@ body {
   flex-direction: column;
   align-items: stretch;
   gap: 14px;
+}
+.wd-entity-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;
+}
+.wd-entity-header-actions .btn.wd-btn-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  justify-content: center;
+  padding: 0;
+}
+.wd-entity-header-actions .btn.wd-btn-icon i {
+  font-size: 14px;
 }
 .wd-entity-header-top {
   display: flex;
@@ -2326,7 +2356,7 @@ body {
 }
 .wd-entity-header-title-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
 }
@@ -2338,7 +2368,13 @@ body {
   color: var(--fg);
   cursor: text;
   min-width: 0;
-  word-break: break-word;
+  max-width: 100%;
+  display: inline-block;
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: normal;
 }
 .wd-entity-id-badge {
   display: none;
@@ -2645,6 +2681,9 @@ body {
   background: var(--surface-1);
   color: inherit;
   padding: 2px 0;
+  min-height: auto;
+  max-height: none;
+  height: auto;
   cursor: pointer;
   outline: none;
   scrollbar-width: thin;
@@ -2781,7 +2820,7 @@ body {
 
 /* Statement list (Wikidata-style) */
 .wd-statement-list {
-  flex: 1;
+  display: block;
   overflow-y: auto;
   scrollbar-width: thin;
   padding: 0;
@@ -2856,7 +2895,8 @@ body {
   gap: 0;
 }
 #attrList {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   scrollbar-width: thin;
   padding: 4px 16px 8px;

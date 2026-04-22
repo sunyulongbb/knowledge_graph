@@ -105,6 +105,7 @@
         label_zh: item.label || "",
         id: item.id || "",
         link: item.link || "",
+        classLabel: item.classLabel || item.type || "",
       }));
 
       window.kbTableNodes = tableList;
@@ -125,8 +126,8 @@
       const labelHint = tblActiveClassLabel
         ? ` · 分类 ${tblActiveClassLabel}`
         : tblActiveClassId
-        ? ` · 分类 ${tblActiveClassId}`
-        : "";
+          ? ` · 分类 ${tblActiveClassId}`
+          : "";
       if (typeof window.setStatus === "function") {
         window.setStatus(false, `已加载 ${tableList.length} 条${labelHint}`);
       }
@@ -152,7 +153,7 @@
     const initial = getUrlParams();
     if (tblSortSelect && initial.order) {
       const allowedSortValues = Array.from(tblSortSelect.options || []).map(
-        (opt) => opt.value
+        (opt) => opt.value,
       );
       if (allowedSortValues.includes(initial.order)) {
         tblSortSelect.value = initial.order;

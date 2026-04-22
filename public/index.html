@@ -818,12 +818,22 @@
                 <img id="entityDisplayImage" alt="节点图像" style="display:none;" />
               </div>
               <div class="wd-entity-header-meta">
-                <div class="wd-entity-header-title-row" style="align-items:center; gap:8px; display:flex; flex-wrap:wrap;">
-                  <h2 id="entityDisplayName" class="wd-entity-name">新建实体</h2>
-                  <a id="entityDisplayLink" class="wd-entity-link" href="#" target="_blank" rel="noreferrer noopener" title="外部链接" style="display:none;color:var(--link);font-size:0.9rem;">
-                    <i class="fa-solid fa-link"></i>
-                  </a>
-                  <span id="entityIdBadge" class="wd-entity-id-badge" style="display:none"></span>
+                <div class="wd-entity-header-title-row" style="align-items:center; gap:8px; display:flex; flex-wrap:nowrap; width:100%;">
+                  <div style="display:flex; align-items:center; gap:8px; flex-wrap:nowrap;">
+                    <h2 id="entityDisplayName" class="wd-entity-name">新建实体</h2>
+                    <a id="entityDisplayLink" class="wd-entity-link" href="#" target="_blank" rel="noreferrer noopener" title="外部链接" style="display:none;color:var(--link);font-size:0.9rem;">
+                      <i class="fa-solid fa-link"></i>
+                    </a>
+                  </div>
+                  <div class="wd-entity-header-actions">
+                    <button id="btnEntityLink" type="button" class="btn wd-btn-icon" title="设置外部链接">
+                      <i class="fa-solid fa-link"></i>
+                    </button>
+                    <button id="btnEntityVideoUpload" type="button" class="btn wd-btn-icon" title="上传视频">
+                      <i class="fa-solid fa-video"></i>
+                    </button>
+                    <span id="entityIdBadge" class="wd-entity-id-badge" style="display:none"></span>
+                  </div>
                 </div>
                 <p id="entityDisplayDesc" class="wd-entity-desc">点击此处添加描述</p>
               </div>
@@ -852,17 +862,10 @@
                 </div>
                 <div class="wd-field">
                   <label class="wd-field-label" for="fDesc">描述</label>
-                  <input id="fDesc" type="text" class="wd-input" placeholder="简要描述" />
+                  <textarea id="fDesc" class="wd-input" placeholder="简要描述" style="min-height:80px;resize:vertical;"></textarea>
                 </div>
-                <div class="wd-field">
-                  <label class="wd-field-label" for="fLink">外部链接</label>
-                  <input id="fLink" type="url" class="wd-input" placeholder="https://example.com" />
-                </div>
-                <div class="wd-field">
-                  <label class="wd-field-label" for="fVideo">视频</label>
-                  <input id="fVideo" type="file" accept="video/*" class="wd-input" />
-                  <div id="fVideoHint" class="wd-msg" style="margin-top:4px;font-size:12px;color:var(--muted);">上传视频后会自动提取关键帧并保存为节点图片。</div>
-                </div>
+                <input id="fLink" type="url" style="display:none" />
+                <input id="fVideo" type="file" accept="video/*" style="display:none" />
                 <div class="wd-field">
                   <label class="wd-field-label" for="fAliases">别名</label>
                   <input id="fAliases" type="text" class="wd-input" placeholder="用逗号分隔，如：华盛顿, Washington" />
@@ -1215,6 +1218,7 @@
                     </th>
                     <th style="width: 36px">#</th>
                     <th>名称</th>
+                    <th style="width: 140px; text-align: right;">分类</th>
                   </tr>
                 </thead>
                 <tbody></tbody>
@@ -4588,6 +4592,14 @@
           },
           true,
         );
+
+        entryGridInstance.addEventListener("rendercell", (event) => {
+          if (!event || !event.cell || !event.header) return;
+          const headerName = (event.header.name || event.header.title || "").toLowerCase();
+          if (ENTRY_SHEET_TYPE_COLUMN_KEYS.has(headerName)) {
+            event.cell.horizontalAlignment = "right";
+          }
+        });
 
         let activeColumnMenu = null;
         function dismissColumnMenu() {
@@ -9981,6 +9993,36 @@
       const addMsg = document.getElementById("addMsg");
       const btnSubmit = document.getElementById("btnSubmit");
       const btnCancelEdit = document.getElementById("btnCancelEdit");
+      const btnEntityLink = document.getElementById("btnEntityLink");
+      const btnEntityVideoUpload = document.getElementById("btnEntityVideoUpload");
+
+      if (btnEntityLink) {
+        btnEntityLink.addEventListener("click", () => {
+          const currentUrl = fLink ? (fLink.value || "").trim() : "";
+          const newUrl = window.prompt("请输入外部链接", currentUrl);
+          if (newUrl !== null) {
+            const value = newUrl.trim();
+            if (fLink) fLink.value = value;
+            const eLink = document.getElementById("entityDisplayLink");
+            if (eLink) {
+              if (value) {
+                eLink.href = value;
+                eLink.style.display = "";
+              } else {
+                eLink.href = "#";
+                eLink.style.display = "none";
+              }
+            }
+          }
+        });
+      }
+
+      if (btnEntityVideoUpload && fVideo) {
+        btnEntityVideoUpload.addEventListener("click", () => {
+          fVideo.value = "";
+          fVideo.click();
+        });
+      }
 
       async function apiPost(url, body) {
         // 添加当前项目参数
@@ -10144,6 +10186,21 @@
         });
       }
       const fType = document.getElementById("fType");
+      function truncateEntityName(name) {
+        const maxChars = 6;
+        const chars = Array.from(name || "");
+        return chars.length <= maxChars ? name : chars.slice(0, maxChars).join("") + "...";
+      }
+      function updateEntityDisplayName(el, name) {
+        if (!el) return;
+        const fullName = (name || "").trim();
+        el.textContent = truncateEntityName(fullName || "");
+        if (fullName) {
+          el.title = fullName;
+        } else {
+          el.removeAttribute("title");
+        }
+      }
       function resetFormToAdd() {
         fId.value = "";
         fName.value = "";
@@ -10165,7 +10222,7 @@
           const eAliases = document.getElementById('entityDisplayAliases');
           const eImageWrap = document.getElementById('entityDisplayImageWrap');
           const eImage = document.getElementById('entityDisplayImage');
-          if (eName) eName.textContent = '新建实体';
+          if (eName) updateEntityDisplayName(eName, '新建实体');
           if (eDesc) eDesc.textContent = '点击此处添加描述';
           if (eLink) {
             eLink.href = '#';
@@ -10233,7 +10290,7 @@
           const eBadge = document.getElementById('entityIdBadge');
           const eAliases = document.getElementById('entityDisplayAliases');
           const eAliasVals = document.getElementById('entityAliasValues');
-          if (eName) eName.textContent = nameVal || '未命名实体';
+          if (eName) updateEntityDisplayName(eName, nameVal || '未命名实体');
           if (eDesc) eDesc.textContent = descVal || '暂无描述';
           const eLink = document.getElementById('entityDisplayLink');
           const linkUrl = (node?.link || node?.url || "")?.toString().trim();
@@ -10514,7 +10571,7 @@
       // Sync entity header live as user types in the form
       fName.addEventListener('input', () => {
         const el = document.getElementById('entityDisplayName');
-        if (el) el.textContent = fName.value || (fId.value ? '未命名实体' : '新建实体');
+        if (el) updateEntityDisplayName(el, fName.value || (fId.value ? '未命名实体' : '新建实体'));
       });
       fDesc.addEventListener('input', () => {
         const el = document.getElementById('entityDisplayDesc');

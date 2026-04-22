@@ -410,6 +410,13 @@
       tdName.appendChild(nameWrapper);
       tr.appendChild(tdName);
 
+      const tdClass = document.createElement("td");
+      const classification = n.classLabel || n.type || "";
+      tdClass.textContent = classification;
+      tdClass.style.textAlign = "right";
+      if (classification) tdClass.title = classification;
+      tr.appendChild(tdClass);
+
       tr.addEventListener("click", (e) => {
         const target = e.target;
         if (

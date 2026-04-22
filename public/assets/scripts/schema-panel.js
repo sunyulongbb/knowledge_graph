@@ -2171,7 +2171,8 @@
     }
     const options = Array.from(fTypeInput.options || []);
     const existing = options.find(
-      (opt) => (opt.value || "").trim().toLowerCase() === normalized.toLowerCase(),
+      (opt) =>
+        (opt.value || "").trim().toLowerCase() === normalized.toLowerCase(),
     );
     if (!existing) {
       const opt = document.createElement("option");
@@ -2246,10 +2247,11 @@
     if (remembered) return remembered;
     const ontologyId = (window.kbSelectedOntologyId || "").toString().trim();
     if (ontologyId) {
-      const ontology = (Array.isArray(window.kbOntologies) ? window.kbOntologies : []).find(
-        (it) => (it?.id || "") === ontologyId,
-      );
-      if (ontology) return (ontology.label || ontology.name || "").toString().trim();
+      const ontology = (
+        Array.isArray(window.kbOntologies) ? window.kbOntologies : []
+      ).find((it) => (it?.id || "") === ontologyId);
+      if (ontology)
+        return (ontology.label || ontology.name || "").toString().trim();
     }
     const clsId = (window.kbSelectedClassId || "").toString().trim();
     if (!clsId) return "";
@@ -2271,8 +2273,11 @@
         ? "无匹配属性，请尝试其他关键词"
         : "暂无关联属性，请搜索";
       attrPropPickerList.appendChild(opt);
+      attrPropPickerList.size = 1;
       return;
     }
+    const visibleRows = Math.min(Math.max(items.length, 1), 12);
+    attrPropPickerList.size = visibleRows;
     const frag = document.createDocumentFragment();
     items.forEach((it) => {
       const opt = document.createElement("option");
@@ -2368,7 +2373,9 @@
       url.searchParams.set("q", query);
       const searchAll = options?.searchAll !== false;
       if (!searchAll) {
-        const activeOntologyId = (window.kbSelectedOntologyId || "").toString().trim();
+        const activeOntologyId = (window.kbSelectedOntologyId || "")
+          .toString()
+          .trim();
         if (activeOntologyId) {
           url.searchParams.set("ontology_id", activeOntologyId);
           url.searchParams.set("association_mode", "linked");
