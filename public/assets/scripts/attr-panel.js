@@ -37,7 +37,11 @@
         // 兼容：手动刷新展示区为当前节点数据
         var node = window.kbCurrentNodeData;
         var name = node?.label_zh || node?.label || node?.name || "新建实体";
-        var desc = node?.desc_zh || node?.description || node?.desc || "点击此处添加描述";
+        var desc =
+          node?.desc_zh ||
+          node?.description ||
+          node?.desc ||
+          "点击此处添加描述";
         var aliases = node?.aliases_zh || node?.aliases || node?.alias || [];
         var displayName = document.getElementById("entityDisplayName");
         var displayDesc = document.getElementById("entityDisplayDesc");
@@ -46,9 +50,21 @@
         if (displayName) displayName.textContent = name;
         if (displayDesc) displayDesc.textContent = desc;
         if (displayAliases && aliasValues) {
-          var arr = Array.isArray(aliases) ? aliases : (typeof aliases === "string" ? aliases.split(",") : []);
-          arr = arr.map(function(a){return a.trim();}).filter(Boolean);
-          aliasValues.innerHTML = arr.map(function(a){return '<span class="wd-alias-item">'+a+'</span>';}).join("");
+          var arr = Array.isArray(aliases)
+            ? aliases
+            : typeof aliases === "string"
+              ? aliases.split(",")
+              : [];
+          arr = arr
+            .map(function (a) {
+              return a.trim();
+            })
+            .filter(Boolean);
+          aliasValues.innerHTML = arr
+            .map(function (a) {
+              return '<span class="wd-alias-item">' + a + "</span>";
+            })
+            .join("");
           displayAliases.style.display = arr.length ? "" : "none";
         }
       }
