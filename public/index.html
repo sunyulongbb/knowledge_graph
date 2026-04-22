@@ -907,13 +907,15 @@
               <i class="fa-solid fa-list-check wd-section-icon"></i>
               <span>关系</span>
               <span id="attrCountBadge" class="wd-count-badge">0</span>
-              <button id="btnToggleAttrForm" type="button" class="wd-collapse-btn" title="收起/展开添加表单">
-                <i class="fa-solid fa-chevron-up"></i>
+              <button id="btnShowAttrForm" type="button" class="btn wd-btn-primary" style="margin-left:auto;">
+                <i class="fa-solid fa-plus"></i> 新增关系
               </button>
             </div>
-            <div id="attrFormBody" class="wd-section-body">
+            <!-- 展示区：关系列表 -->
+            <div id="attrList" class="wd-statement-list"></div>
+            <!-- 编辑/新增表单区，默认隐藏 -->
+            <div id="attrFormBody" class="wd-section-body" style="display:none;">
               <div class="attr-panel-card wd-statement-form" style="position:relative; z-index:2">
-                <!-- Property picker -->
                 <div id="attrPropPicker" class="wd-prop-picker">
                   <div class="wd-prop-search-row">
                     <div class="wd-prop-search-wrap">
@@ -928,7 +930,6 @@
                   <select id="attrPropPickerList" size="4" class="wd-prop-list"></select>
                 </div>
                 <div class="muted wd-current-prop" id="attrCurrentProp">当前属性：未选择</div>
-                <!-- Attribute value form -->
                 <form id="attrForm" class="wd-attr-form">
                   <input type="hidden" id="attrId" />
                   <input type="hidden" id="attrProp" />
@@ -1029,7 +1030,7 @@
               </div>
             </div>
             <!-- Attribute list (Wikidata relation style) -->
-            <div id="attrList" class="wd-statement-list"></div>
+            <!-- <div id="attrList" class="wd-statement-list"></div> -->
           </div>
         </div>
         <!-- Center: graph / table panel -->

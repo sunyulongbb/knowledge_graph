@@ -1,4 +1,46 @@
-﻿(function () {
+﻿// 关系面板重展示轻编辑模式
+const byId =
+  (window.kbApp &&
+    kbApp.dom &&
+    typeof kbApp.dom.byId === "function" &&
+    kbApp.dom.byId) ||
+  ((id) => document.getElementById(id));
+const attrForm = byId("attrForm");
+const btnShowAttrForm = byId("btnShowAttrForm");
+const attrFormBody = byId("attrFormBody");
+// 默认只展示关系列表，隐藏表单
+if (attrFormBody) attrFormBody.style.display = "none";
+if (btnShowAttrForm) {
+  btnShowAttrForm.addEventListener("click", function () {
+    if (attrFormBody) {
+      attrFormBody.style.display = "";
+      attrFormBody.classList.remove("collapsed");
+    }
+    if (btnShowAttrForm) btnShowAttrForm.style.display = "none";
+    const header = btnShowAttrForm.closest(".wd-section-header");
+    const collapseBtn = header
+      ? header.querySelector(".wd-collapse-btn")
+      : null;
+    if (collapseBtn) collapseBtn.classList.remove("collapsed");
+  });
+}
+if (attrForm) {
+  attrForm.addEventListener("submit", function () {
+    setTimeout(() => {
+      if (attrFormBody) attrFormBody.style.display = "none";
+      if (btnShowAttrForm) btnShowAttrForm.style.display = "";
+    }, 200);
+  });
+}
+// 取消编辑时也隐藏表单，显示新增按钮
+const btnAttrReset = byId("btnAttrReset");
+if (btnAttrReset) {
+  btnAttrReset.addEventListener("click", function () {
+    if (attrFormBody) attrFormBody.style.display = "none";
+    if (btnShowAttrForm) btnShowAttrForm.style.display = "";
+  });
+}
+(function () {
   // 展示/编辑模式切换逻辑
   const entityHeader = document.getElementById("entityHeader");
   const nodeFormSection = document.getElementById("nodeFormSection");
@@ -690,7 +732,22 @@
         // Selection/edit behavior only for editable lists (not detail view)
         if (!readOnly) {
           row.addEventListener("click", (e) => {
-            const id = dataId;
+            // 进入编辑表单模式
+            if (
+              window.attrForm &&
+              window.attrFormBody &&
+              window.btnShowAttrForm
+            ) {
+              window.attrFormBody.style.display = "";
+              window.btnShowAttrForm.style.display = "none";
+            }
+            // 自动填充表单（假设有 fillAttrForm 方法）
+            if (typeof window.fillAttrForm === "function") {
+              window.fillAttrForm(it);
+            } else {
+              // 简单兼容：只填id
+              if (window.attrId) window.attrId.value = it.id;
+            }
             const idsInOrder = Array.from(
               container.querySelectorAll("div[data-id]"),
             ).map((el) => el.getAttribute("data-id"));

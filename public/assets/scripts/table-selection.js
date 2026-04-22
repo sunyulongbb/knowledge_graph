@@ -137,6 +137,16 @@
         }
       }
     } catch {}
+    // --- 自动同步左侧属性/关系面板 ---
+    try {
+      var fId = window.fId || document.getElementById("fId");
+      if (fId && typeof fId === "object") fId.value = id || "";
+      if (id && typeof window.loadAttributes === "function") {
+        window.loadAttributes(id);
+      }
+    } catch (e) {
+      console.warn("自动同步属性面板失败", e);
+    }
   }
 
   function toggleCtrlSelection(id) {
