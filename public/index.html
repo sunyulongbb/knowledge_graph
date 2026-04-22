@@ -222,6 +222,121 @@
         overflow: hidden;
         position: relative;
       }
+      #shortsPanel {
+        box-sizing: border-box;
+      }
+      #shortsList {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        padding: 0;
+        height: calc(100vh - 148px);
+        overflow-y: auto;
+        scroll-snap-type: y mandatory;
+        scroll-behavior: smooth;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+      #shortsList::-webkit-scrollbar {
+        width: 0;
+        height: 0;
+      }
+      .shorts-card {
+        position: relative;
+        height: calc(100vh - 148px);
+        min-height: calc(100vh - 148px);
+        width: 100%;
+        border-radius: 18px;
+        overflow: hidden;
+        background: var(--surface-1);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+        border: 1px solid rgba(255,255,255,0.08);
+        scroll-snap-align: start;
+        scroll-snap-stop: always;
+        display: flex;
+        flex-direction: column;
+      }
+      .shorts-card video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        background: #000;
+      }
+      .shorts-card-meta {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        padding: 14px 16px 18px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.64) 100%);
+      }
+      .shorts-controls {
+        position: absolute;
+        right: 14px;
+        top: 14px;
+        display: inline-flex;
+        flex-direction: column;
+        gap: 10px;
+        z-index: 10;
+      }
+      .shorts-arrow-btn {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        border: 1px solid rgba(255,255,255,0.16);
+        background: rgba(0,0,0,0.52);
+        color: #fff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: transform 0.2s ease, opacity 0.2s ease;
+      }
+      .shorts-arrow-btn:hover {
+        transform: scale(1.05);
+      }
+      .shorts-arrow-btn.hidden,
+      .shorts-arrow-btn:disabled {
+        opacity: 0.24;
+        cursor: default;
+      }
+      .shorts-card-title {
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.4;
+        color: var(--fg);
+      }
+      .shorts-card-label {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .shorts-card-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .shorts-card button {
+        padding: 6px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--surface-0);
+        color: var(--fg);
+        cursor: pointer;
+        font-size: 12px;
+      }
+      .shorts-empty {
+        padding: 24px 18px;
+        border-radius: 16px;
+        background: var(--surface-1);
+        text-align: center;
+        color: var(--muted);
+      }
       .detail-carousel-container {
         position: relative;
         width: 100%;
@@ -1187,6 +1302,14 @@
                   <i class="fa-solid fa-rotate-right"></i>
                 </button>
                 <button
+                  id="btnShortsMode"
+                  class="btn icon"
+                  title="短视频"
+                  aria-label="短视频"
+                >
+                  <i class="fa-solid fa-play"></i>
+                </button>
+                <button
                   id="btnDeleteSelected"
                   class="btn icon"
                   disabled
@@ -1246,6 +1369,23 @@
                 <option value="100">100条/页</option>
               </select>
             </div>
+          </div>
+          <div id="shortsPanel" class="panel" style="display:none; padding: 8px 10px">
+            <div class="panel-header" style="position: relative;">
+              <div class="panel-title">
+                <span>短视频</span>
+                <span id="shortsCount" class="panel-subtitle"></span>
+              </div>
+              <div id="shortsControls" class="shorts-controls">
+                <button id="shortsPrevBtn" type="button" class="shorts-arrow-btn" title="上一条">
+                  <i class="fa-solid fa-chevron-up"></i>
+                </button>
+                <button id="shortsNextBtn" type="button" class="shorts-arrow-btn" title="下一条">
+                  <i class="fa-solid fa-chevron-down"></i>
+                </button>
+              </div>
+            </div>
+            <div id="shortsList"></div>
           </div>
           <!-- 本体管理面板 -->
           <div
@@ -3300,7 +3440,7 @@
 
       let entrySubmitInFlight = false;
 
-  const KB_VIEW_MODES = new Set(["entry", "table", "vis", "attr", "detail", "clean", "chat"]);
+const KB_VIEW_MODES = new Set(["entry", "table", "vis", "attr", "detail", "clean", "chat", "shorts"]);
 
       function normalizeViewModeInput(value) {
         if (!value) return "";
@@ -5924,6 +6064,7 @@
   const isDetail = normalized === "detail";
   const isClean = normalized === "clean";
   const isChat = normalized === "chat";
+  const isShorts = normalized === "shorts";
         if (isClean) {
           startCleanTaskPolling();
         } else {
@@ -5971,6 +6112,7 @@
         // 控制面板显示
   if (entryPanel) entryPanel.style.display = isEntry ? "" : "none";
   if (tablePanel) tablePanel.style.display = isTable ? "" : "none";
+  if (shortsPanel) shortsPanel.style.display = isShorts ? "" : "none";
         if (cywrap) cywrap.style.display = isVis ? "" : "none";
 
         if (attrTablePanel)
@@ -6016,6 +6158,10 @@
           }
           try {
             renderTableList();
+          } catch {}
+        } else if (isShorts) {
+          try {
+            renderShortsList();
           } catch {}
         } else if (isVis) {
           if (hasResolvedVisNode) {
@@ -9983,6 +10129,8 @@
       const btnCancelEdit = document.getElementById("btnCancelEdit");
       const btnEntityLink = document.getElementById("btnEntityLink");
       const btnEntityVideoUpload = document.getElementById("btnEntityVideoUpload");
+      let uploadedVideoUrl = "";
+      let uploadedVideoPoster = "";
 
       if (btnEntityLink) {
         btnEntityLink.addEventListener("click", () => {
@@ -10007,8 +10155,63 @@
 
       if (btnEntityVideoUpload && fVideo) {
         btnEntityVideoUpload.addEventListener("click", () => {
-          fVideo.value = "";
-          fVideo.click();
+          if (fVideo) {
+            fVideo.value = "";
+            uploadedVideoUrl = "";
+            uploadedVideoPoster = "";
+            fVideo.click();
+          }
+        });
+
+        function tryAutoSaveNode() {
+          if (!form) return;
+          const selectedId = fId ? (fId.value || "").trim() : "";
+          const nodeName = fName ? (fName.value || "").trim() : "";
+          if (selectedId || nodeName) {
+            if (addMsg) addMsg.textContent = "视频已上传，正在自动保存...";
+            try {
+              if (typeof form.requestSubmit === "function") {
+                form.requestSubmit();
+              } else {
+                btnSubmit?.click();
+              }
+            } catch (err) {
+              console.warn("自动保存节点失败", err);
+            }
+          }
+        }
+
+        fVideo.addEventListener("change", async () => {
+          if (!fVideo || !fVideo.files || !fVideo.files.length) return;
+          const file = fVideo.files[0];
+          if (!file) return;
+          if (addMsg) addMsg.textContent = "正在上传视频...";
+          try {
+            const maxVideoSize = 300 * 1024 * 1024;
+            if (file.size > maxVideoSize) {
+              throw new Error("视频文件过大，请上传不超过 300MB 的视频。");
+            }
+            const existingImage = document.getElementById("entityDisplayImage")?.src || "";
+            if (existingImage && existingImage.trim()) {
+              uploadedVideoPoster = "";
+            } else {
+              uploadedVideoPoster = await captureVideoPoster(file);
+            }
+            const uploadForm = new FormData();
+            uploadForm.append("file", file);
+            const uploadResp = await apiPostForm("/api/kb/upload-video", uploadForm);
+            if (!uploadResp || !uploadResp.url) {
+              throw new Error("视频上传失败");
+            }
+            uploadedVideoUrl = uploadResp.url;
+            if (addMsg) addMsg.textContent = "视频已上传，正在自动保存...";
+            tryAutoSaveNode();
+          } catch (err) {
+            if (addMsg) addMsg.textContent = err?.message || "视频上传失败";
+            uploadedVideoUrl = "";
+            uploadedVideoPoster = "";
+            console.error("视频上传错误", err);
+          }
         });
       }
 
@@ -10217,6 +10420,8 @@
         fDesc.value = "";
         if (fLink) fLink.value = "";
         if (fVideo) fVideo.value = "";
+        uploadedVideoUrl = "";
+        uploadedVideoPoster = "";
         fAliases.value = "";
         fTags.value = "";
         if (fType) fType.value = "";
@@ -10293,6 +10498,8 @@
         if (fLink) fLink.value = (node?.link || node?.url || "")?.toString().trim();
         if (fLink) fLink.value = (node?.link || node?.url || "")?.toString().trim();
         if (fVideo) fVideo.value = "";
+        uploadedVideoUrl = "";
+        uploadedVideoPoster = "";
         if (fType) fType.value = node?.type || "";
         btnSubmit.innerHTML = '<i class="fa-solid fa-floppy-disk"></i>';
         btnSubmit.title = '保存修改';
@@ -10433,22 +10640,28 @@
           const nodeType = fType ? (fType.value || "").trim() : "";
           let videoData = undefined;
           let posterData = undefined;
+          if (uploadedVideoUrl) {
+            videoData = uploadedVideoUrl;
+            posterData = uploadedVideoPoster;
+          }
           if (videoFile) {
             const maxVideoSize = 300 * 1024 * 1024;
             if (videoFile.size > maxVideoSize) {
               addMsg.textContent = "视频文件过大，请上传不超过 300MB 的视频。";
               return;
             }
-            addMsg.textContent = "正在提取视频关键帧…";
-            posterData = await captureVideoPoster(videoFile);
-            addMsg.textContent = "正在上传视频文件…";
-            const uploadForm = new FormData();
-            uploadForm.append("file", videoFile);
-            const uploadResp = await apiPostForm("/api/kb/upload-video", uploadForm);
-            if (!uploadResp || !uploadResp.url) {
-              throw new Error("视频上传失败");
+            if (!videoData) {
+              addMsg.textContent = "正在提取视频关键帧…";
+              posterData = await captureVideoPoster(videoFile);
+              addMsg.textContent = "正在上传视频文件…";
+              const uploadForm = new FormData();
+              uploadForm.append("file", videoFile);
+              const uploadResp = await apiPostForm("/api/kb/upload-video", uploadForm);
+              if (!uploadResp || !uploadResp.url) {
+                throw new Error("视频上传失败");
+              }
+              videoData = uploadResp.url;
             }
-            videoData = uploadResp.url;
           }
           const baseBody = {
             name,

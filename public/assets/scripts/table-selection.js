@@ -517,6 +517,418 @@
     ensureTableSelectedButtonsState();
   }
 
+  async function renderShortsList() {
+    const shortsPanel = document.getElementById("shortsPanel");
+    const shortsList = document.getElementById("shortsList");
+    const shortsCount = document.getElementById("shortsCount");
+    if (!shortsPanel || !shortsList) return;
+
+    if (window.kbShortsObserver) {
+      try {
+        window.kbShortsObserver.disconnect();
+      } catch {}
+      window.kbShortsObserver = null;
+    }
+
+    let rawList = Array.isArray(window.kbTableNodes) ? window.kbTableNodes : [];
+    if (!rawList.length) {
+      try {
+        if (window.localStorage) {
+          const cached = localStorage.getItem("kbTableNodesCache");
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length) {
+              rawList = parsed;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("load cached kbTableNodes failed", err);
+      }
+    }
+    if (!rawList.length && typeof loadTablePage === "function") {
+      try {
+        await loadTablePage();
+        rawList = Array.isArray(window.kbTableNodes) ? window.kbTableNodes : [];
+      } catch {}
+    }
+
+    const videoItems = rawList
+      .map((item) => ({
+        id: item._id || item.id || "",
+        label: item.label_zh || item.label || "",
+        classLabel: item.classLabel || item.type || "",
+        video: item.video || "",
+        image: item.image || "",
+      }))
+      .filter((item) => item.video && item.video.trim());
+
+    const count = videoItems.length;
+    if (shortsCount) {
+      shortsCount.textContent = count
+        ? `共 ${count} 个短视频`
+        : "暂无可播放视频";
+    }
+    const shortsControls = document.getElementById("shortsControls");
+    if (shortsControls) {
+      shortsControls.style.display = count ? "inline-flex" : "none";
+    }
+
+    const cacheShortsVideos = async () => {
+      if (!count || !("caches" in window)) return;
+      try {
+        const cache = await caches.open("kb-shorts-video-cache-v1");
+        for (const item of videoItems) {
+          let url;
+          try {
+            url = new URL(item.video, window.location.origin).toString();
+          } catch {
+            url = item.video;
+          }
+          if (!url) continue;
+          const cachedResponse = await cache.match(url);
+          if (cachedResponse) continue;
+          try {
+            const response = await fetch(url, {
+              method: "GET",
+              mode: "cors",
+              credentials: "same-origin",
+            });
+            if (response.ok) {
+              await cache.put(url, response.clone());
+            }
+          } catch (err) {
+            console.warn("shorts cache fetch failed", url, err);
+          }
+        }
+      } catch (err) {
+        console.warn("shorts cache init failed", err);
+      }
+    };
+
+    if (count) {
+      if (typeof requestIdleCallback === "function") {
+        requestIdleCallback(cacheShortsVideos);
+      } else {
+        setTimeout(cacheShortsVideos, 500);
+      }
+    }
+
+    shortsList.innerHTML = "";
+    if (!count) {
+      const empty = document.createElement("div");
+      empty.className = "shorts-empty";
+      empty.textContent = "当前节点没有视频，先在节点详情中上传视频后再查看。";
+      shortsList.appendChild(empty);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          const videoEl = entry.target;
+          if (!(videoEl instanceof HTMLVideoElement)) return;
+          const index = videoToIndexMap.get(videoEl);
+          if (entry.intersectionRatio >= 0.55) {
+            videoEl.play().catch(() => {});
+            if (typeof index === "number") {
+              setActiveShortsIndex(index);
+            }
+          } else {
+            videoEl.pause();
+          }
+        });
+      },
+      { threshold: [0.55] },
+    );
+    window.kbShortsObserver = observer;
+
+    const cardElements = [];
+    const videoElements = [];
+    const videoToIndexMap = new Map();
+    let activeShortsIndex = -1;
+
+    const setActiveShortsIndex = (index) => {
+      if (index < 0 || index >= cardCount) return;
+      if (index === activeShortsIndex) return;
+      activeShortsIndex = index;
+      updateNavButtons(index);
+      const targetId = videoItems[index].id;
+      if (targetId) {
+        try {
+          if (window.localStorage) {
+            localStorage.setItem("kbShortsCurrentNode", targetId);
+          }
+        } catch (err) {
+          console.warn("persist shorts current node failed", err);
+        }
+        if (
+          window.kbViewMode === "shorts" &&
+          typeof syncHashForView === "function"
+        ) {
+          syncHashForView("shorts", {
+            replace: true,
+            nodeId: targetId,
+            includeNode: true,
+          });
+        }
+        if (window.kbSelectedRowId !== targetId) {
+          try {
+            setTableSelection(targetId, true);
+          } catch (err) {
+            console.warn("shorts auto-select failed", err);
+          }
+        }
+      }
+    };
+
+    videoItems.forEach((item, idx) => {
+      const card = document.createElement("div");
+      card.className = "shorts-card";
+
+      const videoEl = document.createElement("video");
+      videoEl.muted = true;
+      videoEl.loop = true;
+      videoEl.playsInline = true;
+      videoEl.setAttribute("playsinline", "");
+      videoEl.setAttribute("webkit-playsinline", "");
+      videoEl.setAttribute("controlsList", "nodownload");
+      videoEl.style.cursor = "pointer";
+      videoEl.preload = "metadata";
+      const resolvedUrl = (function () {
+        try {
+          return new URL(item.video, window.location.origin).toString();
+        } catch {
+          return item.video;
+        }
+      })();
+      const src = document.createElement("source");
+      src.src = resolvedUrl;
+      const extMatch = resolvedUrl.split("?")[0].match(/\.([a-z0-9]+)$/i);
+      if (extMatch) {
+        src.type = `video/${extMatch[1].toLowerCase()}`;
+      }
+      videoEl.appendChild(src);
+      if (item.image) {
+        try {
+          const resolvedImage = new URL(
+            item.image,
+            window.location.origin,
+          ).toString();
+          videoEl.poster = resolvedImage;
+        } catch {
+          videoEl.poster = item.image;
+        }
+      }
+      videoEl.addEventListener("click", (event) => {
+        event.preventDefault();
+        if (videoEl.paused) {
+          videoEl.play().catch(() => {});
+        } else {
+          videoEl.pause();
+        }
+      });
+
+      observer.observe(videoEl);
+      videoToIndexMap.set(videoEl, idx);
+      card.appendChild(videoEl);
+      videoElements.push(videoEl);
+      cardElements.push(card);
+
+      const meta = document.createElement("div");
+      meta.className = "shorts-card-meta";
+
+      const title = document.createElement("div");
+      title.className = "shorts-card-title";
+      title.textContent = item.label || item.id || "未命名节点";
+      meta.appendChild(title);
+
+      const label = document.createElement("div");
+      label.className = "shorts-card-label";
+      label.textContent = item.classLabel
+        ? `分类：${item.classLabel}`
+        : "无分类";
+      meta.appendChild(label);
+
+      const actions = document.createElement("div");
+      actions.className = "shorts-card-actions";
+      const detailBtn = document.createElement("button");
+      detailBtn.type = "button";
+      detailBtn.textContent = "查看节点";
+      detailBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const params = new URLSearchParams();
+        if (item.id) params.set("id", item.id);
+        const url =
+          "/kb/detail" + (params.toString() ? "?" + params.toString() : "");
+        window.location.href = url;
+      });
+      actions.appendChild(detailBtn);
+      meta.appendChild(actions);
+      card.appendChild(meta);
+      shortsList.appendChild(card);
+    });
+
+    let wheelLock = false;
+    const scrollDuration = 400;
+    const cardCount = cardElements.length;
+
+    const getCurrentCardIndex = () => {
+      const center = shortsList.scrollTop + shortsList.clientHeight / 2;
+      let bestIndex = 0;
+      let bestDistance = Infinity;
+      cardElements.forEach((card, idx) => {
+        const rect = card.getBoundingClientRect();
+        const top = card.offsetTop;
+        const distance = Math.abs(top - center + card.clientHeight / 2);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestIndex = idx;
+        }
+      });
+      return bestIndex;
+    };
+
+    const scrollToCard = (index) => {
+      if (index < 0 || index >= cardCount) return;
+      wheelLock = true;
+      const targetCard = cardElements[index];
+      if (shortsList && targetCard) {
+        shortsList.scrollTo({
+          top: targetCard.offsetTop,
+          behavior: "smooth",
+        });
+      }
+      setActiveShortsIndex(index);
+      setTimeout(() => {
+        wheelLock = false;
+      }, scrollDuration);
+    };
+
+    const shortsPrevBtn = document.getElementById("shortsPrevBtn");
+    const shortsNextBtn = document.getElementById("shortsNextBtn");
+
+    const updateNavButtons = (index) => {
+      if (!shortsPrevBtn || !shortsNextBtn) return;
+      const hasPrev = index > 0;
+      const hasNext = index < cardCount - 1;
+      shortsPrevBtn.disabled = !hasPrev;
+      shortsNextBtn.disabled = !hasNext;
+      shortsPrevBtn.classList.toggle("hidden", !hasPrev);
+      shortsNextBtn.classList.toggle("hidden", !hasNext);
+    };
+
+    let isInitializingShorts = true;
+    const handleShortsScroll = () => {
+      if (isInitializingShorts) return;
+      const newIndex = getCurrentCardIndex();
+      updateNavButtons(newIndex);
+      setActiveShortsIndex(newIndex);
+    };
+
+    const handleShortsControlClick = (event) => {
+      const target = event.target.closest(".shorts-arrow-btn");
+      if (!target) return;
+      const isPrev = target.id === "shortsPrevBtn";
+      const isNext = target.id === "shortsNextBtn";
+      if (!isPrev && !isNext) return;
+      event.preventDefault();
+      const currentIndex = getCurrentCardIndex();
+      const nextIndex = isPrev
+        ? Math.max(0, currentIndex - 1)
+        : Math.min(cardCount - 1, currentIndex + 1);
+      if (nextIndex !== currentIndex) {
+        scrollToCard(nextIndex);
+      }
+    };
+
+    if (shortsPanel && !shortsPanel.dataset.shortsControlsBound) {
+      shortsPanel.dataset.shortsControlsBound = "1";
+      shortsPanel.addEventListener("click", handleShortsControlClick);
+    }
+
+    shortsList.addEventListener("scroll", handleShortsScroll, {
+      passive: true,
+    });
+
+    shortsList.addEventListener(
+      "wheel",
+      (event) => {
+        if (wheelLock) {
+          event.preventDefault();
+          return;
+        }
+        if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
+        const currentIndex = getCurrentCardIndex();
+        const nextIndex =
+          event.deltaY > 0 ? currentIndex + 1 : currentIndex - 1;
+        if (nextIndex !== currentIndex) {
+          event.preventDefault();
+          scrollToCard(nextIndex);
+        }
+      },
+      { passive: false },
+    );
+
+    let initialNodeId = window.kbSelectedRowId || "";
+    try {
+      if (!initialNodeId && window.localStorage) {
+        const cachedShortsNode = localStorage.getItem("kbShortsCurrentNode");
+        if (cachedShortsNode) {
+          initialNodeId = cachedShortsNode;
+        }
+      }
+    } catch (err) {
+      console.warn("load persisted shorts node failed", err);
+    }
+
+    const normalizeNodeId = (value) => {
+      if (!value) return "";
+      return String(value)
+        .trim()
+        .replace(/^entity\//, "");
+    };
+    const initialNormalizedId = normalizeNodeId(initialNodeId);
+    let initialShortsIndex = videoItems.findIndex((item) => {
+      const itemId = normalizeNodeId(item.id);
+      return (
+        itemId &&
+        (itemId === initialNormalizedId ||
+          initialNormalizedId.endsWith(itemId) ||
+          itemId.endsWith(initialNormalizedId))
+      );
+    });
+    if (initialShortsIndex < 0) initialShortsIndex = 0;
+
+    const originalScrollBehavior = shortsList.style.scrollBehavior;
+    let listWasHidden = false;
+    if (shortsList) {
+      shortsList.style.visibility = "hidden";
+      shortsList.style.scrollBehavior = "auto";
+      listWasHidden = true;
+    }
+
+    if (initialShortsIndex > 0) {
+      setActiveShortsIndex(initialShortsIndex);
+      if (shortsList && cardElements[initialShortsIndex]) {
+        shortsList.scrollTop = cardElements[initialShortsIndex].offsetTop;
+      }
+    } else {
+      updateNavButtons(0);
+      setActiveShortsIndex(0);
+    }
+
+    if (shortsList && cardElements[initialShortsIndex]) {
+      shortsList.scrollTop = cardElements[initialShortsIndex].offsetTop;
+    }
+    if (listWasHidden && shortsList) {
+      shortsList.style.visibility = "";
+      shortsList.style.scrollBehavior = originalScrollBehavior;
+    }
+    isInitializingShorts = false;
+    handleShortsScroll();
+  }
+
   async function deleteSelectedRows() {
     const ids = Array.from(window.kbSelectedRowIds || []);
     if (!ids.length) return;
@@ -559,6 +971,17 @@
     if (!btnDeleteSelected) return;
     btnDeleteSelected.addEventListener("click", deleteSelectedRows);
     ensureTableSelectedButtonsState();
+  }
+
+  function bindShortsButton() {
+    const btnShortsMode = document.getElementById("btnShortsMode");
+    if (!btnShortsMode) return;
+    btnShortsMode.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (typeof setViewMode === "function") {
+        setViewMode("shorts");
+      }
+    });
   }
 
   function bindSelectAll() {
@@ -656,8 +1079,18 @@
   window.openSelectedNodeDetail = openSelectedNodeDetail;
   window.positionTooltip = positionTooltip;
   window.renderTableList = renderTableList;
+  window.renderShortsList = renderShortsList;
+
+  if (window.kbViewMode === "shorts") {
+    try {
+      renderShortsList();
+    } catch (err) {
+      console.warn("shorts page rehydrate failed", err);
+    }
+  }
 
   bindDeleteButton();
+  bindShortsButton();
   bindSelectAll();
   bindClearButtons();
 })();

@@ -106,9 +106,18 @@
         id: item.id || "",
         link: item.link || "",
         classLabel: item.classLabel || item.type || "",
+        video: item.video || "",
+        image: item.image || item.avatar || "",
       }));
 
       window.kbTableNodes = tableList;
+      try {
+        if (window.localStorage) {
+          localStorage.setItem("kbTableNodesCache", JSON.stringify(tableList));
+        }
+      } catch (err) {
+        console.warn("kbTableNodes cache failed", err);
+      }
       tblTotalNodes = data.total || tableList.length;
       updateTblPageInfo();
 
