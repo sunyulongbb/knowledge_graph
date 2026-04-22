@@ -840,6 +840,7 @@
                   </div>
                 </div>
                 <p id="entityDisplayDesc" class="wd-entity-desc">点击此处添加描述</p>
+                <button id="entityDescToggle" type="button" class="wd-desc-toggle" style="display:none;">展开</button>
               </div>
             </div>
             <div id="entityDisplayAliases" class="wd-entity-aliases" style="display:none">
@@ -10188,6 +10189,28 @@
           el.removeAttribute("title");
         }
       }
+      function updateEntityDescToggle() {
+        const descEl = document.getElementById('entityDisplayDesc');
+        const toggleBtn = document.getElementById('entityDescToggle');
+        if (!descEl || !toggleBtn) return;
+        const text = (descEl.textContent || '').trim();
+        if (!text) {
+          descEl.classList.remove('collapsed', 'expanded');
+          toggleBtn.style.display = 'none';
+          return;
+        }
+        const expanded = descEl.classList.contains('expanded');
+        descEl.classList.toggle('collapsed', !expanded);
+        descEl.classList.toggle('expanded', expanded);
+        const needsToggle = descEl.scrollHeight > descEl.clientHeight + 1;
+        if (!needsToggle) {
+          descEl.classList.remove('collapsed', 'expanded');
+          toggleBtn.style.display = 'none';
+          return;
+        }
+        toggleBtn.style.display = '';
+        toggleBtn.textContent = expanded ? '收起' : '展开';
+      }
       function resetFormToAdd() {
         fId.value = "";
         fName.value = "";
@@ -10219,6 +10242,7 @@
           }
           if (eBadge) eBadge.style.display = 'none';
           if (eAliases) eAliases.style.display = 'none';
+          updateEntityDescToggle();
           if (eImage) {
             eImage.src = '';
             eImage.style.display = 'none';
@@ -10377,6 +10401,7 @@
               eAliases.style.display = 'none';
             }
           }
+          updateEntityDescToggle();
         } catch {}
         // Load property picker for this node's type
         try {
@@ -10611,8 +10636,22 @@
       });
       fDesc.addEventListener('input', () => {
         const el = document.getElementById('entityDisplayDesc');
-        if (el) el.textContent = fDesc.value || '点击此处添加描述';
+        if (el) {
+          el.textContent = fDesc.value || '点击此处添加描述';
+          updateEntityDescToggle();
+        }
       });
+      const btnEntityDescToggle = document.getElementById('entityDescToggle');
+      if (btnEntityDescToggle) {
+        btnEntityDescToggle.addEventListener('click', () => {
+          const descEl = document.getElementById('entityDisplayDesc');
+          if (!descEl) return;
+          const expanded = !descEl.classList.contains('expanded');
+          descEl.classList.toggle('expanded', expanded);
+          descEl.classList.toggle('collapsed', !expanded);
+          btnEntityDescToggle.textContent = expanded ? '收起' : '展开';
+        });
+      }
       fAliases.addEventListener('input', () => {
         const el = document.getElementById('entityDisplayAliases');
         const vals = document.getElementById('entityAliasValues');

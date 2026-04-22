@@ -2376,7 +2376,31 @@ body {
   line-height: 1.7;
   cursor: text;
   max-width: 100%;
-  white-space: pre-line;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.wd-entity-desc.collapsed {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
+}
+.wd-entity-desc.expanded {
+  white-space: pre-wrap;
+}
+.wd-desc-toggle {
+  margin: 6px 0 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--link);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.wd-desc-toggle:hover {
+  text-decoration: underline;
 }
 .wd-entity-aliases {
   margin-top: 6px;
