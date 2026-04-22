@@ -574,6 +574,118 @@
       shortsControls.style.display = count ? "inline-flex" : "none";
     }
 
+    const getShortsQueryState = () => {
+      const params = new URLSearchParams(window.location.search || "");
+      const limit = parseInt(params.get("limit") || "20", 10) || 20;
+      const rawPage = parseInt(params.get("page") || "", 10);
+      const rawOffset = parseInt(params.get("offset") || "0", 10) || 0;
+      const page =
+        Number.isInteger(rawPage) && rawPage > 0
+          ? rawPage
+          : Math.floor(rawOffset / limit) + 1;
+      return { params, page, limit };
+    };
+
+    let shortsCurrentPage = Number(
+      window.kbTablePage || getShortsQueryState().page || 1,
+    );
+    const shortsPageSize = Number(
+      window.kbTablePageSize || getShortsQueryState().limit || 20,
+    );
+    let shortsTotalNodes = Number(window.kbTableTotalNodes || 0) || 0;
+    let shortsLoadingMore = false;
+
+    const buildShortsSearchUrl = (page) => {
+      const params = new URLSearchParams(window.location.search || "");
+      params.set("limit", String(shortsPageSize));
+      params.delete("page");
+      params.set("offset", String((page - 1) * shortsPageSize));
+      const url = new URL("/api/kb/entity_search", window.location.origin);
+      url.search = params.toString();
+      if (typeof window.appendCurrentDbParam === "function") {
+        const scopedUrl = window.appendCurrentDbParam(url);
+        if (scopedUrl instanceof URL) {
+          url.search = scopedUrl.search;
+        }
+      }
+      return url;
+    };
+
+    const fetchShortsPage = async (page) => {
+      const url = buildShortsSearchUrl(page);
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      const data = await resp.json();
+      shortsTotalNodes = Number(data.total || shortsTotalNodes || 0);
+      const nodes = Array.isArray(data.nodes) ? data.nodes : [];
+      return nodes;
+    };
+
+    const loadMoreShortsPage = async () => {
+      if (shortsLoadingMore) return;
+      if (
+        shortsTotalNodes &&
+        shortsCurrentPage * shortsPageSize >= shortsTotalNodes
+      )
+        return;
+      shortsLoadingMore = true;
+      try {
+        const nextPage = shortsCurrentPage + 1;
+        const nodes = await fetchShortsPage(nextPage);
+        const tableList = nodes.map((item) => ({
+          label_zh: item.label || "",
+          id: item.id || "",
+          link: item.link || "",
+          classLabel: item.classLabel || item.type || "",
+          video: item.video || "",
+          image: item.image || item.avatar || "",
+        }));
+        const newVideos = tableList
+          .map((item) => ({
+            id: item.id || "",
+            label: item.label_zh || item.label || "",
+            classLabel: item.classLabel || item.type || "",
+            video: item.video || "",
+            image: item.image || "",
+          }))
+          .filter((item) => item.video && item.video.trim());
+        if (!newVideos.length) {
+          shortsCurrentPage = nextPage;
+          return;
+        }
+        if (!Array.isArray(window.kbTableNodes)) {
+          window.kbTableNodes = tableList;
+        } else {
+          window.kbTableNodes = window.kbTableNodes.concat(tableList);
+        }
+        try {
+          if (window.localStorage) {
+            localStorage.setItem(
+              "kbTableNodesCache",
+              JSON.stringify(window.kbTableNodes),
+            );
+          }
+        } catch (err) {
+          console.warn("kbTableNodes cache update failed", err);
+        }
+        shortsCurrentPage = nextPage;
+        renderShortsList();
+      } catch (err) {
+        console.warn("loadMoreShortsPage failed", err);
+      } finally {
+        shortsLoadingMore = false;
+      }
+    };
+
+    const shouldLoadMoreShorts = (index) => {
+      return (
+        index === videoItems.length - 1 &&
+        !shortsLoadingMore &&
+        (!shortsTotalNodes ||
+          shortsCurrentPage * shortsPageSize < shortsTotalNodes)
+      );
+    };
+
     const cacheShortsVideos = async () => {
       if (!count || !("caches" in window)) return;
       try {
@@ -810,12 +922,10 @@
 
     const updateNavButtons = (index) => {
       if (!shortsPrevBtn || !shortsNextBtn) return;
-      const hasPrev = index > 0;
-      const hasNext = index < cardCount - 1;
-      shortsPrevBtn.disabled = !hasPrev;
-      shortsNextBtn.disabled = !hasNext;
-      shortsPrevBtn.classList.toggle("hidden", !hasPrev);
-      shortsNextBtn.classList.toggle("hidden", !hasNext);
+      shortsPrevBtn.disabled = false;
+      shortsNextBtn.disabled = false;
+      shortsPrevBtn.classList.remove("hidden");
+      shortsNextBtn.classList.remove("hidden");
     };
 
     let isInitializingShorts = true;
@@ -824,6 +934,9 @@
       const newIndex = getCurrentCardIndex();
       updateNavButtons(newIndex);
       setActiveShortsIndex(newIndex);
+      if (shouldLoadMoreShorts(newIndex)) {
+        loadMoreShortsPage().catch(() => {});
+      }
     };
 
     const handleShortsControlClick = (event) => {
@@ -835,8 +948,8 @@
       event.preventDefault();
       const currentIndex = getCurrentCardIndex();
       const nextIndex = isPrev
-        ? Math.max(0, currentIndex - 1)
-        : Math.min(cardCount - 1, currentIndex + 1);
+        ? (currentIndex - 1 + cardCount) % cardCount
+        : (currentIndex + 1) % cardCount;
       if (nextIndex !== currentIndex) {
         scrollToCard(nextIndex);
       }
@@ -847,28 +960,36 @@
       shortsPanel.addEventListener("click", handleShortsControlClick);
     }
 
-    shortsList.addEventListener("scroll", handleShortsScroll, {
-      passive: true,
-    });
+    if (!shortsList.dataset.shortsScrollBound) {
+      shortsList.dataset.shortsScrollBound = "1";
+      shortsList.addEventListener("scroll", handleShortsScroll, {
+        passive: true,
+      });
+    }
 
-    shortsList.addEventListener(
-      "wheel",
-      (event) => {
-        if (wheelLock) {
-          event.preventDefault();
-          return;
-        }
-        if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
-        const currentIndex = getCurrentCardIndex();
-        const nextIndex =
-          event.deltaY > 0 ? currentIndex + 1 : currentIndex - 1;
-        if (nextIndex !== currentIndex) {
-          event.preventDefault();
-          scrollToCard(nextIndex);
-        }
-      },
-      { passive: false },
-    );
+    if (!shortsList.dataset.shortsWheelBound) {
+      shortsList.dataset.shortsWheelBound = "1";
+      shortsList.addEventListener(
+        "wheel",
+        (event) => {
+          if (wheelLock) {
+            event.preventDefault();
+            return;
+          }
+          if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
+          const currentIndex = getCurrentCardIndex();
+          const nextIndex =
+            event.deltaY > 0
+              ? (currentIndex + 1) % cardCount
+              : (currentIndex - 1 + cardCount) % cardCount;
+          if (nextIndex !== currentIndex) {
+            event.preventDefault();
+            scrollToCard(nextIndex);
+          }
+        },
+        { passive: false },
+      );
+    }
 
     let initialNodeId = window.kbSelectedRowId || "";
     try {

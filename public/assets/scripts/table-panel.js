@@ -111,6 +111,9 @@
       }));
 
       window.kbTableNodes = tableList;
+      window.kbTablePage = tblPage;
+      window.kbTablePageSize = tblPageSize;
+      window.kbTableTotalNodes = data.total || tableList.length;
       try {
         if (window.localStorage) {
           localStorage.setItem("kbTableNodesCache", JSON.stringify(tableList));
@@ -118,7 +121,7 @@
       } catch (err) {
         console.warn("kbTableNodes cache failed", err);
       }
-      tblTotalNodes = data.total || tableList.length;
+      tblTotalNodes = window.kbTableTotalNodes;
       updateTblPageInfo();
 
       if (tblCount) {
