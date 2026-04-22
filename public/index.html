@@ -812,6 +812,7 @@
         <!-- Left: Wikidata-style entity editor panel -->
         <div class="panel column-panel editor-panel">
           <!-- Entity header (Wikidata-style) -->
+
           <div id="entityHeader" class="wd-entity-header">
             <div class="wd-entity-header-top">
               <div id="entityDisplayImageWrap" class="wd-entity-avatar-wrap empty">
@@ -833,6 +834,9 @@
                       <i class="fa-solid fa-video"></i>
                     </button>
                     <span id="entityIdBadge" class="wd-entity-id-badge" style="display:none"></span>
+                    <button id="btnEntityEdit" type="button" class="btn wd-btn-icon" title="编辑实体" style="margin-left:8px;">
+                      <i class="fa-solid fa-pen"></i>
+                    </button>
                   </div>
                 </div>
                 <p id="entityDisplayDesc" class="wd-entity-desc">点击此处添加描述</p>
@@ -845,7 +849,7 @@
           </div>
 
           <!-- Collapsible node form (hidden by default, shown on edit/create) -->
-          <div id="nodeFormSection" class="wd-section">
+          <div id="nodeFormSection" class="wd-section" style="display:none;">
             <div class="wd-section-header" data-toggle="nodeFormBody">
               <i class="fa-solid fa-pen-to-square wd-section-icon"></i>
               <span>基本信息</span>
@@ -897,11 +901,11 @@
             </div>
           </div>
 
-          <!-- Statements / Attributes section (Wikidata-style) -->
+          <!-- 关系 / 属性区块 (Wikidata-style) -->
           <div id="attrPanel" class="wd-section" style="display:none; flex:1; flex-direction:column;">
             <div class="wd-section-header" data-toggle="attrFormBody">
               <i class="fa-solid fa-list-check wd-section-icon"></i>
-              <span>声明</span>
+              <span>关系</span>
               <span id="attrCountBadge" class="wd-count-badge">0</span>
               <button id="btnToggleAttrForm" type="button" class="wd-collapse-btn" title="收起/展开添加表单">
                 <i class="fa-solid fa-chevron-up"></i>
@@ -1024,7 +1028,7 @@
                 </div>
               </div>
             </div>
-            <!-- Attribute list (Wikidata statement style) -->
+            <!-- Attribute list (Wikidata relation style) -->
             <div id="attrList" class="wd-statement-list"></div>
           </div>
         </div>
@@ -10291,7 +10295,15 @@
           const eAliases = document.getElementById('entityDisplayAliases');
           const eAliasVals = document.getElementById('entityAliasValues');
           if (eName) updateEntityDisplayName(eName, nameVal || '未命名实体');
-          if (eDesc) eDesc.textContent = descVal || '暂无描述';
+          if (eDesc) {
+            if (descVal && descVal.trim()) {
+              eDesc.textContent = descVal;
+              eDesc.style.display = '';
+            } else {
+              eDesc.textContent = '';
+              eDesc.style.display = 'none';
+            }
+          }
           const eLink = document.getElementById('entityDisplayLink');
           const linkUrl = (node?.link || node?.url || "")?.toString().trim();
           if (eLink) {
@@ -10331,9 +10343,40 @@
             }
           }
           if (eAliases && eAliasVals) {
-            const aliasStr = toListString(aliasSource);
-            if (aliasStr) {
-              eAliasVals.textContent = aliasStr;
+            let aliases = Array.isArray(aliasSource) ? aliasSource : (typeof aliasSource === 'string' ? aliasSource.split(/[;,，；、\s]+/) : []);
+            aliases = aliases.filter(Boolean);
+            if (aliases.length > 0) {
+              eAliasVals.innerHTML = '';
+              const maxShow = 3;
+              const showList = aliases.slice(0, maxShow);
+              showList.forEach((al, idx) => {
+                const span = document.createElement('span');
+                span.textContent = al;
+                if (idx > 0) span.style.marginLeft = '4px';
+                eAliasVals.appendChild(span);
+              });
+              if (aliases.length > maxShow) {
+                const btn = document.createElement('button');
+                btn.textContent = '展开';
+                btn.className = 'wd-alias-expand-btn';
+                btn.style.marginLeft = '6px';
+                btn.style.fontSize = '12px';
+                btn.style.background = 'none';
+                btn.style.border = 'none';
+                btn.style.color = 'var(--link)';
+                btn.style.cursor = 'pointer';
+                btn.onclick = function() {
+                  eAliasVals.innerHTML = '';
+                  aliases.forEach((al, idx) => {
+                    const span = document.createElement('span');
+                    span.textContent = al;
+                    if (idx > 0) span.style.marginLeft = '4px';
+                    eAliasVals.appendChild(span);
+                  });
+                  btn.remove();
+                };
+                eAliasVals.appendChild(btn);
+              }
               eAliases.style.display = '';
             } else {
               eAliases.style.display = 'none';
@@ -10538,9 +10581,7 @@
         }
       });
 
-      btnCancelEdit.addEventListener("click", () => {
-        resetFormToAdd();
-      });
+
 
       // Wikidata-style section collapse toggles
       document.querySelectorAll('.wd-section-header[data-toggle]').forEach(header => {

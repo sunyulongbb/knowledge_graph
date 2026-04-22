@@ -1,4 +1,69 @@
 ﻿(function () {
+  // 展示/编辑模式切换逻辑
+  const entityHeader = document.getElementById("entityHeader");
+  const nodeFormSection = document.getElementById("nodeFormSection");
+  const btnEntityEdit = document.getElementById("btnEntityEdit");
+  const btnCancelEdit = document.getElementById("btnCancelEdit");
+  const nodeForm = document.getElementById("nodeForm");
+  let entityEditMode = false;
+
+  function setEntityEditMode(edit) {
+    entityEditMode = !!edit;
+    if (entityEditMode) {
+      if (entityHeader) entityHeader.style.display = "none";
+      if (nodeFormSection) nodeFormSection.style.display = "";
+      // 聚焦名称输入框
+      const fName = document.getElementById("fName");
+      if (fName) setTimeout(() => fName.focus(), 100);
+    } else {
+      if (entityHeader) entityHeader.style.display = "";
+      if (nodeFormSection) nodeFormSection.style.display = "none";
+    }
+  }
+
+  if (btnEntityEdit) {
+    btnEntityEdit.addEventListener("click", function () {
+      setEntityEditMode(true);
+    });
+  }
+  if (btnCancelEdit) {
+    btnCancelEdit.addEventListener("click", function (e) {
+      e.preventDefault();
+      // 只切换回只读模式，并强制刷新展示区为当前节点数据（不是表单内容）
+      setEntityEditMode(false);
+      if (typeof window.renderEntityHeader === "function") {
+        window.renderEntityHeader();
+      } else if (window.kbCurrentNodeData) {
+        // 兼容：手动刷新展示区为当前节点数据
+        var node = window.kbCurrentNodeData;
+        var name = node?.label_zh || node?.label || node?.name || "新建实体";
+        var desc = node?.desc_zh || node?.description || node?.desc || "点击此处添加描述";
+        var aliases = node?.aliases_zh || node?.aliases || node?.alias || [];
+        var displayName = document.getElementById("entityDisplayName");
+        var displayDesc = document.getElementById("entityDisplayDesc");
+        var displayAliases = document.getElementById("entityDisplayAliases");
+        var aliasValues = document.getElementById("entityAliasValues");
+        if (displayName) displayName.textContent = name;
+        if (displayDesc) displayDesc.textContent = desc;
+        if (displayAliases && aliasValues) {
+          var arr = Array.isArray(aliases) ? aliases : (typeof aliases === "string" ? aliases.split(",") : []);
+          arr = arr.map(function(a){return a.trim();}).filter(Boolean);
+          aliasValues.innerHTML = arr.map(function(a){return '<span class="wd-alias-item">'+a+'</span>';}).join("");
+          displayAliases.style.display = arr.length ? "" : "none";
+        }
+      }
+    });
+  }
+  if (nodeForm) {
+    nodeForm.addEventListener("submit", function () {
+      setTimeout(() => setEntityEditMode(false), 200); // 提交后延迟切回展示
+    });
+  }
+
+  // 默认进入展示模式
+  setEntityEditMode(false);
+})();
+(function () {
   // Attribute Manager JS
   // ----------------------
   const shared = window.kbApp || {};
@@ -1024,7 +1089,8 @@
     reader.onload = (ev) => {
       if (attrImagePreviewImg) attrImagePreviewImg.src = ev.target.result;
       if (attrImagePreview) attrImagePreview.style.display = "block";
-      if (attrImageFileName) attrImageFileName.textContent = file.name || "clipboard-image";
+      if (attrImageFileName)
+        attrImageFileName.textContent = file.name || "clipboard-image";
       if (attrValueImageUrl) attrValueImageUrl.value = ev.target.result;
       if (attrImageStateText)
         attrImageStateText.textContent = `已从剪贴板加载: ${file.name || "剪贴板图像"}`;
