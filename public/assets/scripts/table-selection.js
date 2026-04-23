@@ -398,6 +398,36 @@
       });
 
       nameWrapper.appendChild(nameLink);
+
+      const hasImage = Boolean(
+        n.image || n.avatar || n.icon || n.logo || n.img,
+      );
+      const hasVideo = Boolean(n.video);
+      if (hasImage || hasVideo) {
+        const mediaContainer = document.createElement("span");
+        mediaContainer.style.display = "inline-flex";
+        mediaContainer.style.alignItems = "center";
+        mediaContainer.style.gap = "4px";
+        mediaContainer.style.marginLeft = "4px";
+
+        if (hasImage) {
+          const imgTag = document.createElement("span");
+          imgTag.className = "node-media-tag";
+          imgTag.title = "包含图片";
+          imgTag.innerHTML = '<i class="fa-solid fa-image"></i>';
+          mediaContainer.appendChild(imgTag);
+        }
+        if (hasVideo) {
+          const vidTag = document.createElement("span");
+          vidTag.className = "node-media-tag";
+          vidTag.title = "包含视频";
+          vidTag.innerHTML = '<i class="fa-solid fa-video"></i>';
+          mediaContainer.appendChild(vidTag);
+        }
+
+        nameWrapper.appendChild(mediaContainer);
+      }
+
       if (n.link) {
         try {
           const externalLink = document.createElement("a");
@@ -570,6 +600,27 @@
       url.searchParams.set("limit", String(shortsPageSize));
       if (excludeIds && excludeIds.length) {
         url.searchParams.set("exclude_ids", excludeIds.join(","));
+      }
+      const currentId =
+        String(window.kbShortsPendingSidebarNodeId || "").trim() ||
+        String(window.kbSelectedRowId || "").trim() ||
+        String(localStorage.getItem("kbShortsCurrentNode") || "").trim();
+      if (currentId) {
+        url.searchParams.set("current_id", currentId);
+      }
+      const recentItems = rawList.slice(-18);
+      const recentIds = recentItems
+        .map((item) => String(item.id || "").trim())
+        .filter(Boolean);
+      if (recentIds.length) {
+        url.searchParams.set("recent_ids", recentIds.join(","));
+      }
+      const recentClasses = recentItems
+        .map((item) => String(item.classLabel || "").trim())
+        .filter(Boolean)
+        .slice(-12);
+      if (recentClasses.length) {
+        url.searchParams.set("recent_classes", recentClasses.join(","));
       }
       const resp = await fetch(url);
       if (!resp.ok) throw new Error("HTTP " + resp.status);
@@ -1330,7 +1381,10 @@
     if (cachedShorts.length) {
       rawList = cachedShorts;
       window.kbShortsNodes = rawList;
-    } else if (Array.isArray(window.kbTableNodes) && window.kbTableNodes.length) {
+    } else if (
+      Array.isArray(window.kbTableNodes) &&
+      window.kbTableNodes.length
+    ) {
       rawList = window.kbTableNodes
         .filter((item) => item.video && item.video.trim())
         .map((item) => ({
@@ -1387,7 +1441,9 @@
 
     const count = videoItems.length;
     if (shortsCount) {
-      shortsCount.textContent = count ? `共 ${count} 条短视频` : "暂无可播放视频";
+      shortsCount.textContent = count
+        ? `共 ${count} 条短视频`
+        : "暂无可播放视频";
     }
     if (shortsControls) {
       shortsControls.style.display = count ? "inline-flex" : "none";
@@ -1399,7 +1455,9 @@
     };
 
     if (shortsProgressLabel) {
-      shortsProgressLabel.textContent = count ? formatProgress(0, count) : "00 / 00";
+      shortsProgressLabel.textContent = count
+        ? formatProgress(0, count)
+        : "00 / 00";
     }
     if (shortsProgressBar) {
       shortsProgressBar.style.width = count ? `${100 / count}%` : "0%";
@@ -1449,7 +1507,8 @@
     if (!count) {
       const empty = document.createElement("div");
       empty.className = "shorts-empty";
-      empty.textContent = "当前还没有可播放的视频，先在节点详情里上传视频后再来看看。";
+      empty.textContent =
+        "当前还没有可播放的视频，先在节点详情里上传视频后再来看看。";
       shortsList.appendChild(empty);
       return;
     }
@@ -1460,7 +1519,7 @@
     let activeShortsIndex = -1;
     let wheelLock = false;
     let shortsScrollEndTimer = null;
-    const scrollDuration = 400;
+    const scrollDuration = 360;
     const cardCount = videoItems.length;
 
     const updateShortsProgress = (index) => {
@@ -1514,7 +1573,9 @@
       window.kbShortsSidebarSyncTimer = setTimeout(async () => {
         try {
           if ((window.kbViewMode || "") !== "shorts") return;
-          const pendingId = String(window.kbShortsPendingSidebarNodeId || "").trim();
+          const pendingId = String(
+            window.kbShortsPendingSidebarNodeId || "",
+          ).trim();
           if (!pendingId || pendingId !== targetId) return;
           if (window.kbShortsSidebarHydratedId === pendingId) return;
           if (typeof enterEditById === "function") {
@@ -1538,7 +1599,10 @@
         const card = cardElements[videoIndex];
         if (card) {
           card.classList.toggle("is-active", videoIndex === index);
-          card.classList.toggle("is-paused", videoIndex !== index || videoEl.paused);
+          card.classList.toggle(
+            "is-paused",
+            videoIndex !== index || videoEl.paused,
+          );
         }
         if (videoIndex !== index) {
           videoEl.pause();
@@ -1603,7 +1667,7 @@
 
     videoItems.forEach((item, idx) => {
       const card = document.createElement("div");
-      card.className = "shorts-card is-paused";
+      card.className = "shorts-card is-paused is-portrait";
       card.dataset.index = String(idx);
 
       const stage = document.createElement("div");
@@ -1634,7 +1698,10 @@
       videoEl.appendChild(src);
       if (item.image) {
         try {
-          videoEl.poster = new URL(item.image, window.location.origin).toString();
+          videoEl.poster = new URL(
+            item.image,
+            window.location.origin,
+          ).toString();
         } catch {
           videoEl.poster = item.image;
         }
@@ -1655,6 +1722,24 @@
       videoEl.addEventListener("pause", () => {
         card.classList.add("is-paused");
       });
+      videoEl.addEventListener("loadedmetadata", () => {
+        try {
+          const width = Number(videoEl.videoWidth || 0);
+          const height = Number(videoEl.videoHeight || 0);
+          if (!width || !height) return;
+          const ratio = width / height;
+          card.classList.remove("is-portrait", "is-landscape", "is-square");
+          if (ratio >= 1.15) {
+            card.classList.add("is-landscape");
+          } else if (ratio >= 0.9) {
+            card.classList.add("is-square");
+          } else {
+            card.classList.add("is-portrait");
+          }
+        } catch (err) {
+          console.warn("shorts video metadata parse failed", err);
+        }
+      });
 
       const playIndicator = document.createElement("div");
       playIndicator.className = "shorts-video-play";
@@ -1662,7 +1747,8 @@
 
       const muteBadge = document.createElement("div");
       muteBadge.className = "shorts-video-badge";
-      muteBadge.innerHTML = '<i class="fa-solid fa-volume-xmark"></i><span>静音播放</span>';
+      muteBadge.innerHTML =
+        '<i class="fa-solid fa-volume-xmark"></i><span>静音播放</span>';
 
       stage.appendChild(videoEl);
       stage.appendChild(playIndicator);
@@ -1748,7 +1834,8 @@
       detailIconBtn.type = "button";
       detailIconBtn.className = "shorts-action-btn";
       detailIconBtn.dataset.shortsAction = "detail";
-      detailIconBtn.innerHTML = '<i class="fa-solid fa-up-right-from-square"></i>';
+      detailIconBtn.innerHTML =
+        '<i class="fa-solid fa-up-right-from-square"></i>';
       detailWrap.appendChild(detailIconBtn);
       const detailText = document.createElement("div");
       detailText.className = "shorts-action-label";
@@ -1767,9 +1854,7 @@
     });
 
     const shouldLoadMoreShorts = (index) => {
-      return (
-        index >= cardCount - 2 && !shortsLoadingMore
-      );
+      return index >= cardCount - 2 && !shortsLoadingMore;
     };
 
     const getCurrentCardIndex = () => {
@@ -1829,16 +1914,8 @@
         clearTimeout(shortsScrollEndTimer);
       }
       shortsScrollEndTimer = setTimeout(() => {
-        const targetCard = cardElements[newIndex];
-        if (targetCard) {
-          const targetTop = targetCard.offsetTop;
-          if (Math.abs(shortsList.scrollTop - targetTop) > 8) {
-            scrollToCard(newIndex);
-            return;
-          }
-        }
         maybeLoadMoreShorts(newIndex);
-      }, 120);
+      }, 110);
     };
 
     const handleShortsControlClick = async (event) => {
@@ -1946,29 +2023,26 @@
         if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
         const currentIndex = getCurrentCardIndex();
         if (event.deltaY > 0) {
+          event.preventDefault();
           if (currentIndex >= cardCount - 1) {
             if (shouldLoadMoreShorts(currentIndex) || isListScrolledToBottom()) {
-              event.preventDefault();
               window.kbShortsPendingScrollIndex = currentIndex + 1;
               await loadMoreShortsPage();
             }
             return;
           }
           const nextIndex = currentIndex + 1;
-          if (nextIndex !== currentIndex) {
-            event.preventDefault();
-            scrollToCard(nextIndex);
-          }
+          scrollToCard(nextIndex);
           if (currentIndex >= cardCount - 2) {
             window.kbShortsPendingScrollIndex = currentIndex + 1;
             loadMoreShortsPage().catch(() => {});
           }
-        } else {
-          const prevIndex = Math.max(currentIndex - 1, 0);
-          if (prevIndex !== currentIndex) {
-            event.preventDefault();
-            scrollToCard(prevIndex);
-          }
+          return;
+        }
+        event.preventDefault();
+        const prevIndex = Math.max(currentIndex - 1, 0);
+        if (prevIndex !== currentIndex) {
+          scrollToCard(prevIndex);
         }
       },
       click: handleShortsControlClick,
@@ -1998,7 +2072,9 @@
 
     const normalizeNodeId = (value) => {
       if (!value) return "";
-      return String(value).trim().replace(/^entity\//, "");
+      return String(value)
+        .trim()
+        .replace(/^entity\//, "");
     };
     const initialNormalizedId = normalizeNodeId(initialNodeId);
     let initialShortsIndex = videoItems.findIndex((item) => {
@@ -2012,7 +2088,9 @@
     });
     if (initialShortsIndex < 0) initialShortsIndex = 0;
 
-    const pendingAnchorKey = String(window.kbShortsPendingAnchorKey || "").trim();
+    const pendingAnchorKey = String(
+      window.kbShortsPendingAnchorKey || "",
+    ).trim();
     if (pendingAnchorKey) {
       const anchoredIndex = videoItems.findIndex(
         (item) => String(item.replayKey || "").trim() === pendingAnchorKey,
