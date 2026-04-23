@@ -8,10 +8,20 @@ const byId =
 const attrForm = byId("attrForm");
 const btnShowAttrForm = byId("btnShowAttrForm");
 const attrFormBody = byId("attrFormBody");
+function resetEditingRow() {
+  if (typeof window.kbResetAttrEditingRow === "function") {
+    window.kbResetAttrEditingRow();
+    return;
+  }
+  const hiddenRow = document.querySelector("#attrList .attr-editing-hidden");
+  if (hiddenRow) hiddenRow.classList.remove("attr-editing-hidden");
+  if (attrFormBody) attrFormBody.classList.remove("inline-editing");
+}
 // 默认只展示关系列表，隐藏表单
 if (attrFormBody) attrFormBody.style.display = "none";
 if (btnShowAttrForm) {
   btnShowAttrForm.addEventListener("click", function () {
+    resetEditingRow();
     if (attrFormBody) {
       attrFormBody.style.display = "";
       attrFormBody.classList.remove("collapsed");
@@ -33,6 +43,7 @@ if (attrForm) {
     setTimeout(() => {
       if (attrFormBody) attrFormBody.style.display = "none";
       if (btnShowAttrForm) btnShowAttrForm.style.display = "";
+      resetEditingRow();
     }, 200);
   });
 }
@@ -42,6 +53,7 @@ if (btnAttrReset) {
   btnAttrReset.addEventListener("click", function () {
     if (attrFormBody) attrFormBody.style.display = "none";
     if (btnShowAttrForm) btnShowAttrForm.style.display = "";
+    resetEditingRow();
   });
 }
 (function () {
@@ -166,6 +178,88 @@ if (btnAttrReset) {
   const btnAttrReset = byId("btnAttrReset");
   const btnAttrEditSelected = byId("btnAttrEditSelected");
   const btnAttrDeleteSelected = byId("btnAttrDeleteSelected");
+  let currentAttrEditingRow = null;
+
+  function ensureAttrInlineEditorLayout() {
+    if (!attrForm) return;
+    const editRow = attrForm.querySelector(".wd-attr-edit-row");
+    const valueWrap = byId("attrValueWrap");
+    const propPicker = byId("attrPropPicker");
+    if (!editRow || !valueWrap || !propPicker) return;
+
+    let propCell = editRow.querySelector(".wd-prop-cell");
+    if (!propCell) {
+      propCell = document.createElement("div");
+      propCell.className = "wd-prop-cell";
+    }
+
+    const currentProp = byId("attrCurrentProp");
+    if (currentProp && propCell.firstElementChild !== currentProp) {
+      propCell.appendChild(currentProp);
+    }
+    if (propCell.lastElementChild !== propPicker) {
+      propCell.appendChild(propPicker);
+    }
+    if (editRow.firstElementChild !== propCell) {
+      editRow.insertBefore(propCell, valueWrap);
+    }
+  }
+
+  function resetEditingRow() {
+    if (currentAttrEditingRow) {
+      currentAttrEditingRow.classList.remove("attr-editing-hidden");
+      currentAttrEditingRow = null;
+    }
+    if (attrFormBody) attrFormBody.classList.remove("inline-editing");
+  }
+
+  window.kbResetAttrEditingRow = resetEditingRow;
+
+  function openAttrEditorForRow(row, it, valueIndex, nodeId) {
+    if (!row) return;
+    resetEditingRow();
+    ensureAttrInlineEditorLayout();
+    try {
+      if (
+        window.kbSelectedAttrIds &&
+        typeof window.kbSelectedAttrIds.clear === "function"
+      ) {
+        window.kbSelectedAttrIds.clear();
+      }
+      window.kbLastAttrAnchorId = "";
+      updateAttrSelectionStyles();
+      ensureAttrButtonsState();
+    } catch {}
+    if (attrForm && attrFormBody && btnShowAttrForm) {
+      attrFormBody.style.display = "";
+      attrFormBody.classList.remove("collapsed");
+      attrFormBody.classList.add("inline-editing");
+      attrForm.classList.add("value-only-editing");
+      btnShowAttrForm.style.display = "none";
+      if (row.parentNode) {
+        row.insertAdjacentElement("afterend", attrFormBody);
+      }
+    }
+    currentAttrEditingRow = row;
+    row.classList.add("attr-editing-hidden");
+    try {
+      fillAttrForm(nodeId, it, valueIndex);
+    } catch {
+      if (window.fillAttrForm && typeof window.fillAttrForm === "function") {
+        window.fillAttrForm(it);
+      }
+      if (window.attrId) window.attrId.value = it?.id || "";
+    }
+    const visibleInput =
+      document.querySelector(
+        '#attrDatatypeGroups .dtype-group[style*="display: flex"] input:not([type="hidden"]), #attrDatatypeGroups .dtype-group[style*="display:flex"] input:not([type="hidden"])',
+      ) || attrValue;
+    if (visibleInput && typeof visibleInput.focus === "function") {
+      setTimeout(() => visibleInput.focus(), 0);
+    } else if (attrValue) {
+      setTimeout(() => attrValue.focus(), 0);
+    }
+  }
   // commonsMedia (image) inputs
   const attrValueImage = byId("attrValueImage");
   const attrImagePreview = byId("attrImagePreview");
@@ -766,31 +860,13 @@ if (btnAttrReset) {
             updateAttrSelectionStyles();
             ensureAttrButtonsState();
           });
+          val.addEventListener("click", (e) => {
+            e.stopPropagation();
+            openAttrEditorForRow(row, it, vi, nodeId);
+          });
           row.addEventListener("dblclick", (e) => {
-            if (attrForm && attrFormBody && btnShowAttrForm) {
-              attrFormBody.style.display = "";
-              attrFormBody.classList.remove("collapsed");
-              btnShowAttrForm.style.display = "none";
-              if (row.parentNode) {
-                row.insertAdjacentElement("afterend", attrFormBody);
-              }
-            }
-            try {
-              fillAttrForm(nodeId, it, vi);
-            } catch {
-              if (
-                window.fillAttrForm &&
-                typeof window.fillAttrForm === "function"
-              ) {
-                window.fillAttrForm(it);
-              }
-              if (window.attrId) window.attrId.value = it.id;
-            }
-            if (attrPropSearchInput) {
-              setTimeout(() => attrPropSearchInput.focus(), 0);
-            } else if (attrValue) {
-              setTimeout(() => attrValue.focus(), 0);
-            }
+            e.stopPropagation();
+            openAttrEditorForRow(row, it, vi, nodeId);
           });
         }
         frag.appendChild(row);
@@ -871,6 +947,9 @@ if (btnAttrReset) {
 
   function resetAttrForm() {
     window.kbEditingValueIndex = -1;
+    ensureAttrInlineEditorLayout();
+    resetEditingRow();
+    if (attrForm) attrForm.classList.remove("value-only-editing");
     try {
       if (
         window.kbSelectedAttrIds &&
@@ -881,6 +960,17 @@ if (btnAttrReset) {
     } catch (e) {}
     window.kbSelectedSchemaPropId = "";
     window.kbSelectedSchemaPropLabel = "";
+    const currentPropEl = byId("attrCurrentProp");
+    if (currentPropEl) {
+      currentPropEl.textContent = "当前属性：未选择";
+    }
+    if (attrPropSearchInput) {
+      attrPropSearchInput.value = "";
+    }
+    const attrPropPickerList = byId("attrPropPickerList");
+    if (attrPropPickerList) {
+      attrPropPickerList.selectedIndex = -1;
+    }
     attrId.value = "";
     attrProp.value = "";
     attrPropLabel.value = "";
@@ -911,6 +1001,7 @@ if (btnAttrReset) {
     attrMsg.textContent = "";
     updateDatatypeUI("string");
     try {
+      updateAttrSelectionStyles();
       ensureAttrButtonsState();
     } catch (e) {}
   }
@@ -1604,6 +1695,18 @@ if (btnAttrReset) {
 
     // map value back to simple inputs
     try {
+      attrValue.value = "";
+      attrValueUrl.value = "";
+      attrValueDate.value = "";
+      attrValueAmount.value = "";
+      attrValueUnit.value = "";
+      attrValueLat.value = "";
+      attrValueLon.value = "";
+      attrValueMonoText.value = "";
+      attrValueMonoLang.value = "";
+      clearImageUpload();
+      clearEntitySearchState();
+
       if (dtype === "time") {
         const d = extractDateString(val);
         attrValueDate.value = d;

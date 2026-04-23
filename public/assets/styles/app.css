@@ -3054,12 +3054,117 @@ body {
 #attrList > div[data-id] + div[data-id] {
   margin-top: 10px;
 }
+#attrFormBody.inline-editing {
+  padding-top: 2px;
+}
+#attrFormBody.inline-editing .wd-statement-form {
+  padding: 8px 0 10px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+#attrForm .wd-attr-edit-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 24%) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  background: var(--surface-0);
+}
+#attrForm .wd-prop-cell {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 10px;
+}
+#attrForm.value-only-editing .wd-prop-cell {
+  display: none;
+}
+#attrForm.value-only-editing .wd-attr-edit-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+#attrForm .wd-prop-cell .wd-prop-picker {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+  width: 100%;
+}
+#attrForm .wd-prop-cell .wd-prop-picker .wd-prop-search-row {
+  gap: 8px;
+}
+#attrForm .wd-prop-cell .wd-prop-search-row {
+  margin-bottom: 0;
+}
+#attrForm .wd-prop-cell .wd-prop-search-wrap,
+#attrForm .wd-prop-cell .wd-input,
+#attrForm .wd-prop-cell .wd-prop-list {
+  width: 100%;
+}
+#attrForm .wd-current-prop {
+  min-width: 0;
+  display: none;
+  align-items: center;
+  padding: 11px 12px;
+  border-radius: 12px;
+  background: rgba(79, 70, 229, 0.08);
+  color: var(--fg);
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1.4;
+}
+#attrFormBody.inline-editing #attrForm .wd-current-prop {
+  display: none !important;
+}
+#attrForm .wd-value-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+#attrForm .wd-value-input-row {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  flex-wrap: nowrap;
+}
+#attrForm .wd-value-input-row > #attrDatatypeGroups {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+#attrForm .wd-value-input-row > .wd-qualifier-toggle {
+  flex: 0 0 auto;
+}
+#attrForm .wd-value-input-row > * {
+  min-width: 0;
+  flex: 1;
+}
+#attrForm .wd-qualifier-row {
+  margin-top: 2px;
+}
+#attrList .attr-editing-hidden {
+  display: none !important;
+}
+#attrForm .wd-form-actions {
+  margin-top: 10px;
+  padding: 0 4px;
+}
 #attrList::-webkit-scrollbar {
   width: 6px;
 }
 #attrList::-webkit-scrollbar-thumb {
   background: rgba(148, 163, 184, 0.75);
   border-radius: 4px;
+}
+
+@media (max-width: 900px) {
+  #attrForm .wd-attr-edit-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    padding: 14px 16px;
+  }
+  #attrForm .wd-value-input-row {
+    flex-wrap: wrap;
+  }
 }
 
 #detailAttrList {

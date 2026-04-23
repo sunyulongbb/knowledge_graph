@@ -1465,10 +1465,18 @@
       }
       const attrTypeEl = document.getElementById("attrType");
       if (attrTypeEl) attrTypeEl.value = dtype;
-      attrEntitySearchItems = [];
-      if (attrEntitySearchStatus) attrEntitySearchStatus.textContent = "";
-      if (attrEntitySearchResultsWrap)
-        attrEntitySearchResultsWrap.style.display = "none";
+      if (typeof attrEntitySearchItems !== "undefined") {
+        attrEntitySearchItems = [];
+      }
+      const attrEntitySearchStatusEl = document.getElementById(
+        "attrEntitySearchStatus",
+      );
+      if (attrEntitySearchStatusEl) attrEntitySearchStatusEl.textContent = "";
+      const attrEntitySearchResultsWrapEl = document.getElementById(
+        "attrEntitySearchResultsWrap",
+      );
+      if (attrEntitySearchResultsWrapEl)
+        attrEntitySearchResultsWrapEl.style.display = "none";
     } catch (err) {
       console.error("setSelectedSchemaProp suggestions failed", err);
     }
