@@ -222,7 +222,8 @@
         overflow: hidden;
         position: relative;
       }
-      #shortsPanel {
+      #shortsPanel,
+      #galleryPanel {
         box-sizing: border-box;
         position: relative;
         width: 100%;
@@ -233,7 +234,8 @@
         background: #000;
         overflow: hidden;
       }
-      #shortsPanel .panel-header {
+      #shortsPanel .panel-header,
+      #galleryPanel .panel-header {
         display: none;
       }
       .shorts-shell {
@@ -310,7 +312,8 @@
         font-weight: 700;
         letter-spacing: 0.04em;
       }
-      #shortsList {
+      #shortsList,
+      #galleryList {
         display: flex;
         flex-direction: column;
         gap: 0;
@@ -327,7 +330,8 @@
         scrollbar-width: none;
         -ms-overflow-style: none;
       }
-      #shortsList::-webkit-scrollbar {
+      #shortsList::-webkit-scrollbar,
+      #galleryList::-webkit-scrollbar {
         width: 0;
         height: 0;
       }
@@ -382,6 +386,13 @@
         pointer-events: none;
       }
       .shorts-card video {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+        background: #000;
+      }
+      .gallery-media {
         width: 100%;
         height: 100%;
         object-fit: contain;
@@ -648,10 +659,18 @@
         min-width: 18px;
         min-height: 18px;
         border-radius: 12px;
+        border: none;
         background: rgba(148, 163, 184, 0.24);
         color: rgba(148, 163, 184, 0.96);
         font-size: 0.72rem;
         padding: 2px 3px;
+        cursor: pointer;
+        transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+      }
+      .node-media-tag:hover {
+        background: rgba(59, 130, 246, 0.18);
+        color: rgba(59, 130, 246, 0.98);
+        transform: translateY(-1px);
       }
       .node-media-tag i {
         font-size: 0.76rem;
@@ -1705,6 +1724,14 @@
                   <i class="fa-solid fa-play"></i>
                 </button>
                 <button
+                  id="btnGalleryMode"
+                  class="btn icon"
+                  title="图库"
+                  aria-label="图库"
+                >
+                  <i class="fa-solid fa-image"></i>
+                </button>
+                <button
                   id="btnDeleteSelected"
                   class="btn icon"
                   disabled
@@ -1793,6 +1820,39 @@
               <div id="shortsList"></div>
               <div id="shortsStatus" class="shorts-status">
                 <div class="shorts-status-text">正在加载新视频...</div>
+                <div class="shorts-status-bar"></div>
+              </div>
+            </div>
+          </div>
+          <div id="galleryPanel" class="panel" style="display:none; padding: 0">
+            <div class="shorts-shell">
+              <div class="shorts-topbar">
+                <div class="shorts-topbar-title">
+                  <strong>图库</strong>
+                  <span>上下切换图片，交互与短视频模式保持一致</span>
+                </div>
+                <div class="shorts-progress">
+                  <span id="galleryProgressLabel" class="shorts-progress-label">00 / 00</span>
+                  <span class="shorts-progress-track"><span id="galleryProgressBar"></span></span>
+                </div>
+              </div>
+              <div class="panel-header">
+                <div class="panel-title">
+                  <span>图库</span>
+                  <span id="galleryCount" class="panel-subtitle"></span>
+                </div>
+              </div>
+              <div id="galleryControls" class="shorts-controls">
+                <button id="galleryPrevBtn" type="button" class="shorts-arrow-btn" title="上一张">
+                  <i class="fa-solid fa-chevron-up"></i>
+                </button>
+                <button id="galleryNextBtn" type="button" class="shorts-arrow-btn" title="下一张">
+                  <i class="fa-solid fa-chevron-down"></i>
+                </button>
+              </div>
+              <div id="galleryList"></div>
+              <div id="galleryStatus" class="shorts-status">
+                <div class="shorts-status-text">正在加载新图片...</div>
                 <div class="shorts-status-bar"></div>
               </div>
             </div>
@@ -3724,6 +3784,7 @@
       const entryProgressLabel = document.getElementById("entryProgressLabel");
       const entryProgressPercent = document.getElementById("entryProgressPercent");
       const tablePanel = document.getElementById("tablePanel");
+      const galleryPanel = document.getElementById("galleryPanel");
       const attrTablePanel = document.getElementById("attrTablePanel");
       const cleanPanel = document.getElementById("cleanPanel");
       const relPanel = document.getElementById("relPanel");
@@ -3850,7 +3911,7 @@
 
       let entrySubmitInFlight = false;
 
-const KB_VIEW_MODES = new Set(["entry", "table", "vis", "attr", "detail", "clean", "chat", "shorts"]);
+const KB_VIEW_MODES = new Set(["entry", "table", "vis", "attr", "detail", "clean", "chat", "shorts", "gallery"]);
 
       function normalizeViewModeInput(value) {
         if (!value) return "";
@@ -6475,6 +6536,7 @@ const KB_VIEW_MODES = new Set(["entry", "table", "vis", "attr", "detail", "clean
   const isClean = normalized === "clean";
   const isChat = normalized === "chat";
   const isShorts = normalized === "shorts";
+  const isGallery = normalized === "gallery";
         if (isClean) {
           startCleanTaskPolling();
         } else {
@@ -6509,6 +6571,14 @@ const KB_VIEW_MODES = new Set(["entry", "table", "vis", "attr", "detail", "clean
           btnViewDetail.classList.toggle("active", isDetail);
           btnViewDetail.setAttribute("aria-selected", String(isDetail));
         }
+        if (btnShortsMode) {
+          btnShortsMode.classList.toggle("active", isShorts);
+          btnShortsMode.setAttribute("aria-pressed", String(isShorts));
+        }
+        if (btnGalleryMode) {
+          btnGalleryMode.classList.toggle("active", isGallery);
+          btnGalleryMode.setAttribute("aria-pressed", String(isGallery));
+        }
         // 控制工具栏显示
         if (tbTableControls)
           tbTableControls.style.display = isTable ? "" : "none";
@@ -6523,6 +6593,7 @@ const KB_VIEW_MODES = new Set(["entry", "table", "vis", "attr", "detail", "clean
   if (entryPanel) entryPanel.style.display = isEntry ? "" : "none";
   if (tablePanel) tablePanel.style.display = isTable ? "" : "none";
   if (shortsPanel) shortsPanel.style.display = isShorts ? "" : "none";
+  if (galleryPanel) galleryPanel.style.display = isGallery ? "" : "none";
         if (cywrap) cywrap.style.display = isVis ? "" : "none";
 
         if (attrTablePanel)
@@ -6572,6 +6643,10 @@ const KB_VIEW_MODES = new Set(["entry", "table", "vis", "attr", "detail", "clean
         } else if (isShorts) {
           try {
             renderShortsList();
+          } catch {}
+        } else if (isGallery) {
+          try {
+            renderGalleryList();
           } catch {}
         } else if (isVis) {
           if (hasResolvedVisNode) {

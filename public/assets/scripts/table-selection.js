@@ -307,6 +307,32 @@
     tip.style.top = y + "px";
   }
 
+  function openMediaViewForNode(viewMode, node) {
+    const targetMode = viewMode === "gallery" ? "gallery" : "shorts";
+    const nodeId = String(node?._id || node?.id || "").trim();
+    if (!nodeId) return;
+    try {
+      setTableSelection(nodeId, false, {
+        skipDetailRefresh: true,
+        skipSidebarSync: true,
+      });
+    } catch {}
+    try {
+      if (window.localStorage) {
+        if (targetMode === "gallery") {
+          localStorage.setItem("kbGalleryCurrentNode", nodeId);
+          window.kbGalleryForceFirst = false;
+        } else {
+          localStorage.setItem("kbShortsCurrentNode", nodeId);
+          window.kbShortsForceFirst = false;
+        }
+      }
+    } catch {}
+    if (typeof setViewMode === "function") {
+      setViewMode(targetMode, { targetNodeId: nodeId });
+    }
+  }
+
   function renderTableList() {
     if (!tblNodes) return;
 
@@ -411,17 +437,31 @@
         mediaContainer.style.marginLeft = "4px";
 
         if (hasImage) {
-          const imgTag = document.createElement("span");
+          const imgTag = document.createElement("button");
+          imgTag.type = "button";
           imgTag.className = "node-media-tag";
           imgTag.title = "包含图片";
           imgTag.innerHTML = '<i class="fa-solid fa-image"></i>';
+          imgTag.title = "打开图库";
+          imgTag.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openMediaViewForNode("gallery", n);
+          });
           mediaContainer.appendChild(imgTag);
         }
         if (hasVideo) {
-          const vidTag = document.createElement("span");
+          const vidTag = document.createElement("button");
+          vidTag.type = "button";
           vidTag.className = "node-media-tag";
           vidTag.title = "包含视频";
           vidTag.innerHTML = '<i class="fa-solid fa-video"></i>';
+          vidTag.title = "打开短视频";
+          vidTag.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openMediaViewForNode("shorts", n);
+          });
           mediaContainer.appendChild(vidTag);
         }
 
@@ -2132,6 +2172,745 @@
     updateMuteButtonState();
   };
 
+  async function renderGalleryList() {
+    const galleryPanel = document.getElementById("galleryPanel");
+    const galleryList = document.getElementById("galleryList");
+    const galleryCount = document.getElementById("galleryCount");
+    const galleryControls = document.getElementById("galleryControls");
+    const galleryPrevBtn = document.getElementById("galleryPrevBtn");
+    const galleryNextBtn = document.getElementById("galleryNextBtn");
+    const galleryStatus = document.getElementById("galleryStatus");
+    const galleryProgressLabel = document.getElementById("galleryProgressLabel");
+    const galleryProgressBar = document.getElementById("galleryProgressBar");
+    if (!galleryPanel || !galleryList) return;
+
+    if (window.kbGalleryHandlers?.scroll) {
+      galleryList.removeEventListener("scroll", window.kbGalleryHandlers.scroll);
+    }
+    if (window.kbGalleryHandlers?.wheel) {
+      galleryList.removeEventListener("wheel", window.kbGalleryHandlers.wheel);
+    }
+    if (window.kbGalleryHandlers?.click) {
+      galleryPanel.removeEventListener("click", window.kbGalleryHandlers.click);
+    }
+    if (window.kbGalleryHandlers?.keydown) {
+      document.removeEventListener("keydown", window.kbGalleryHandlers.keydown);
+    }
+    if (window.kbGallerySidebarSyncTimer) {
+      try {
+        clearTimeout(window.kbGallerySidebarSyncTimer);
+      } catch {}
+      window.kbGallerySidebarSyncTimer = null;
+    }
+
+    let rawList = Array.isArray(window.kbGalleryNodes) ? window.kbGalleryNodes : [];
+    const galleryPageSize = 12;
+    const galleryCacheKey = "kbGalleryRandomCache";
+    const galleryCacheLimit = 48;
+    const galleryCacheByteLimit = 180000;
+    const galleryStatusDelay = 180;
+    const galleryLoadCooldown = 700;
+    let galleryTotalNodes = Number(window.kbTableTotalNodes || 0) || 0;
+    const galleryLoadState = window.kbGalleryLoadState || {
+      inFlight: false,
+      lastLoadedAt: 0,
+      statusTimer: null,
+    };
+    window.kbGalleryLoadState = galleryLoadState;
+    let galleryLoadingMore = galleryLoadState.inFlight === true;
+    let galleryCacheDisabled = window.kbGalleryCacheDisabled === true;
+
+    const setGalleryStatus = (message) => {
+      if (!galleryStatus) return;
+      const statusText = galleryStatus.querySelector(".shorts-status-text");
+      if (message) {
+        if (statusText) statusText.textContent = message;
+        galleryStatus.classList.add("active");
+      } else {
+        galleryStatus.classList.remove("active");
+      }
+    };
+
+    const clearGalleryStatusTimer = () => {
+      try {
+        if (galleryLoadState.statusTimer) {
+          clearTimeout(galleryLoadState.statusTimer);
+        }
+      } catch {}
+      galleryLoadState.statusTimer = null;
+    };
+
+    const getGalleryCacheSnapshot = (items) => {
+      const normalizedItems = Array.isArray(items) ? items : [];
+      const slicedItems = normalizedItems.slice(-galleryCacheLimit).map((item) => ({
+        id: item?.id || item?._id || "",
+        label_zh: item?.label_zh || item?.label || "",
+        classLabel: item?.classLabel || item?.type || "",
+        image: item?.image || item?.avatar || "",
+      }));
+      let snapshot = slicedItems;
+      try {
+        while (snapshot.length > 12) {
+          const serialized = JSON.stringify(snapshot);
+          if (serialized.length <= galleryCacheByteLimit) break;
+          snapshot = snapshot.slice(Math.ceil(snapshot.length * 0.75));
+        }
+      } catch {
+        snapshot = slicedItems.slice(-12);
+      }
+      return snapshot;
+    };
+
+    const saveGalleryCache = (items) => {
+      if (galleryCacheDisabled) return;
+      try {
+        if (window.localStorage) {
+          const snapshot = getGalleryCacheSnapshot(items);
+          localStorage.setItem(galleryCacheKey, JSON.stringify(snapshot));
+        }
+      } catch (err) {
+        galleryCacheDisabled = true;
+        window.kbGalleryCacheDisabled = true;
+        try {
+          if (window.localStorage) localStorage.removeItem(galleryCacheKey);
+        } catch {}
+        console.warn("save gallery cache skipped after quota hit", err);
+      }
+    };
+
+    const loadGalleryCache = () => {
+      if (!window.localStorage) return [];
+      try {
+        const cached = localStorage.getItem(galleryCacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) return getGalleryCacheSnapshot(parsed);
+        }
+      } catch (err) {
+        console.warn("load gallery cache failed", err);
+      }
+      return [];
+    };
+
+    const fetchGalleryRandomBatch = async (excludeIds = []) => {
+      const url = new URL("/api/kb/gallery_random", window.location.origin);
+      url.searchParams.set("limit", String(galleryPageSize));
+      if (excludeIds && excludeIds.length) {
+        url.searchParams.set("exclude_ids", excludeIds.join(","));
+      }
+      const currentId =
+        String(window.kbGalleryPendingSidebarNodeId || "").trim() ||
+        String(window.kbSelectedRowId || "").trim() ||
+        String(localStorage.getItem("kbGalleryCurrentNode") || "").trim();
+      if (currentId) url.searchParams.set("current_id", currentId);
+      const recentItems = rawList.slice(-18);
+      const recentIds = recentItems
+        .map((item) => String(item.id || "").trim())
+        .filter(Boolean);
+      if (recentIds.length) {
+        url.searchParams.set("recent_ids", recentIds.join(","));
+      }
+      const recentClasses = recentItems
+        .map((item) => String(item.classLabel || "").trim())
+        .filter(Boolean)
+        .slice(-12);
+      if (recentClasses.length) {
+        url.searchParams.set("recent_classes", recentClasses.join(","));
+      }
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      const data = await resp.json();
+      galleryTotalNodes = Number(data.total || galleryTotalNodes || 0);
+      return Array.isArray(data.nodes) ? data.nodes : [];
+    };
+
+    const normalizeGalleryNodes = (nodes) =>
+      nodes.map((item) => ({
+        label_zh: item.label || "",
+        id: item.id || "",
+        classLabel: item.classLabel || item.type || "",
+        image: item.image || item.avatar || "",
+      }));
+
+    const appendGalleryNodes = async (nodes, options = {}) => {
+      const allowDuplicates = options.allowDuplicates === true;
+      const tableList = normalizeGalleryNodes(nodes);
+      const existingIds = new Set(rawList.map((item) => item.id));
+      const newItems = allowDuplicates
+        ? tableList
+            .filter((item) => item.id && item.image)
+            .map((item, index) => ({
+              ...item,
+              __galleryReplayKey: `${item.id || "image"}-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
+            }))
+        : tableList.filter(
+            (item) => item.id && item.image && !existingIds.has(item.id),
+          );
+      if (!newItems.length) return false;
+      window.kbGalleryPendingAnchorKey =
+        newItems[0]?.__galleryReplayKey || newItems[0]?.id || "";
+      window.kbGalleryPendingScrollIndex = rawList.length;
+      rawList = rawList.concat(newItems);
+      window.kbGalleryNodes = rawList;
+      saveGalleryCache(rawList);
+      await renderGalleryList();
+      return true;
+    };
+
+    const loadMoreGalleryPage = async (retryCount = 0) => {
+      if (galleryLoadingMore) return;
+      galleryLoadingMore = true;
+      galleryLoadState.inFlight = true;
+      clearGalleryStatusTimer();
+      galleryLoadState.statusTimer = setTimeout(() => {
+        if (galleryLoadState.inFlight) {
+          setGalleryStatus("正在加载更多图片...");
+        }
+      }, galleryStatusDelay);
+      setGalleryStatus("");
+      setGalleryStatus("正在加载更多图片...");
+      try {
+        const excludeIds = rawList.map((item) => item.id).filter(Boolean);
+        const canUseFreshOnly =
+          !galleryTotalNodes || excludeIds.length < galleryTotalNodes;
+        const nodes = await fetchGalleryRandomBatch(
+          canUseFreshOnly ? excludeIds : [],
+        );
+        const appended = await appendGalleryNodes(nodes, {
+          allowDuplicates: !canUseFreshOnly,
+        });
+        if (!appended && retryCount < 2) {
+          if (canUseFreshOnly) {
+            const replayNodes = await fetchGalleryRandomBatch([]);
+            const replayAppended = await appendGalleryNodes(replayNodes, {
+              allowDuplicates: true,
+            });
+            if (replayAppended) return;
+          }
+          return await loadMoreGalleryPage(retryCount + 1);
+        }
+      } catch (err) {
+        console.warn("loadMoreGalleryPage failed", err);
+      } finally {
+        galleryLoadingMore = false;
+        galleryLoadState.inFlight = false;
+        galleryLoadState.lastLoadedAt = Date.now();
+        clearGalleryStatusTimer();
+        setGalleryStatus("");
+      }
+    };
+
+    const cachedGallery = loadGalleryCache();
+    if (cachedGallery.length) {
+      rawList = cachedGallery;
+      window.kbGalleryNodes = rawList;
+    } else if (Array.isArray(window.kbTableNodes) && window.kbTableNodes.length) {
+      rawList = window.kbTableNodes
+        .filter((item) => item.image && item.image.trim())
+        .map((item) => ({
+          label_zh: item.label || "",
+          id: item.id || "",
+          classLabel: item.classLabel || item.type || "",
+          image: item.image || item.avatar || "",
+        }));
+      window.kbGalleryNodes = rawList;
+      saveGalleryCache(rawList);
+    }
+
+    if (!rawList.length) {
+      try {
+        const nodes = await fetchGalleryRandomBatch();
+        rawList = normalizeGalleryNodes(nodes);
+        window.kbGalleryNodes = rawList;
+        saveGalleryCache(rawList);
+      } catch (err) {
+        console.warn("load initial gallery batch failed", err);
+      }
+    }
+
+    const imageItems = rawList
+      .map((item) => ({
+        id: item._id || item.id || "",
+        label: item.label_zh || item.label || "",
+        classLabel: item.classLabel || item.type || "",
+        image: item.image || "",
+        replayKey: item.__galleryReplayKey || "",
+      }))
+      .filter((item) => item.image && item.image.trim());
+
+    const count = imageItems.length;
+    if (galleryCount) {
+      galleryCount.textContent = count ? `共 ${count} 张图片` : "暂无可展示图片";
+    }
+    if (galleryControls) {
+      galleryControls.style.display = count ? "inline-flex" : "none";
+    }
+
+    const formatProgress = (index, total) => {
+      if (!total) return "00 / 00";
+      return `${String(index + 1).padStart(2, "0")} / ${String(total).padStart(2, "0")}`;
+    };
+
+    if (galleryProgressLabel) {
+      galleryProgressLabel.textContent = count ? formatProgress(0, count) : "00 / 00";
+    }
+    if (galleryProgressBar) {
+      galleryProgressBar.style.width = count ? `${100 / count}%` : "0%";
+    }
+
+    galleryList.innerHTML = "";
+    if (!count) {
+      const empty = document.createElement("div");
+      empty.className = "shorts-empty";
+      empty.textContent = "当前还没有可展示的图片，先在节点中上传图片后再来看看。";
+      galleryList.appendChild(empty);
+      return;
+    }
+
+    const cardElements = [];
+    let activeGalleryIndex = -1;
+    let wheelLock = false;
+    let galleryScrollEndTimer = null;
+    const scrollDuration = 360;
+    const cardCount = imageItems.length;
+
+    const updateGalleryProgress = (index) => {
+      if (galleryProgressLabel) {
+        galleryProgressLabel.textContent = formatProgress(index, cardCount);
+      }
+      if (galleryProgressBar) {
+        const progress = cardCount ? ((index + 1) / cardCount) * 100 : 0;
+        galleryProgressBar.style.width = `${progress}%`;
+      }
+    };
+
+    const updateNavButtons = (index) => {
+      if (!galleryPrevBtn || !galleryNextBtn) return;
+      const canPrev = index > 0;
+      const canNext =
+        index < cardCount - 1 ||
+        galleryTotalNodes === 0 ||
+        rawList.length < galleryTotalNodes;
+      galleryPrevBtn.disabled = !canPrev;
+      galleryNextBtn.disabled = !canNext;
+      galleryPrevBtn.classList.toggle("hidden", !canPrev);
+      galleryNextBtn.classList.toggle("hidden", !canNext);
+    };
+
+    const scheduleGallerySidebarSync = (targetId) => {
+      if (!targetId) return;
+      try {
+        if (window.kbGallerySidebarSyncTimer) {
+          clearTimeout(window.kbGallerySidebarSyncTimer);
+        }
+      } catch {}
+      window.kbGalleryPendingSidebarNodeId = targetId;
+      window.kbGallerySidebarSyncTimer = setTimeout(async () => {
+        try {
+          if ((window.kbViewMode || "") !== "gallery") return;
+          const pendingId = String(
+            window.kbGalleryPendingSidebarNodeId || "",
+          ).trim();
+          if (!pendingId || pendingId !== targetId) return;
+          if (window.kbGallerySidebarHydratedId === pendingId) return;
+          if (typeof enterEditById === "function") {
+            await enterEditById(pendingId);
+            window.kbGallerySidebarHydratedId = pendingId;
+          }
+        } catch (err) {
+          console.warn("gallery sidebar sync failed", err);
+        }
+      }, 220);
+    };
+
+    const setActiveGalleryIndex = (index) => {
+      if (index < 0 || index >= cardCount) return;
+      if (index === activeGalleryIndex) return;
+      activeGalleryIndex = index;
+      updateNavButtons(index);
+      updateGalleryProgress(index);
+      cardElements.forEach((card, cardIndex) => {
+        card.classList.toggle("is-active", cardIndex === index);
+      });
+      const targetId = imageItems[index].id;
+      if (targetId) {
+        try {
+          if (window.localStorage) {
+            localStorage.setItem("kbGalleryCurrentNode", targetId);
+          }
+        } catch (err) {
+          console.warn("persist gallery current node failed", err);
+        }
+        if (
+          window.kbViewMode === "gallery" &&
+          typeof syncHashForView === "function"
+        ) {
+          syncHashForView("gallery", {
+            replace: true,
+            nodeId: targetId,
+            includeNode: true,
+          });
+        }
+        if (window.kbSelectedRowId !== targetId) {
+          try {
+            setTableSelection(targetId, false, {
+              skipDetailRefresh: true,
+              skipSidebarSync: true,
+            });
+          } catch (err) {
+            console.warn("gallery auto-select failed", err);
+          }
+        }
+        scheduleGallerySidebarSync(targetId);
+      }
+    };
+
+    imageItems.forEach((item, idx) => {
+      const card = document.createElement("div");
+      card.className = "shorts-card is-portrait";
+      card.dataset.index = String(idx);
+
+      const stage = document.createElement("div");
+      stage.className = "shorts-stage";
+
+      const imageEl = document.createElement("img");
+      imageEl.className = "gallery-media";
+      imageEl.alt = item.label || item.id || "图库图片";
+      try {
+        imageEl.src = new URL(item.image, window.location.origin).toString();
+      } catch {
+        imageEl.src = item.image;
+      }
+      imageEl.addEventListener("load", () => {
+        try {
+          const width = Number(imageEl.naturalWidth || 0);
+          const height = Number(imageEl.naturalHeight || 0);
+          if (!width || !height) return;
+          const ratio = width / height;
+          card.classList.remove("is-portrait", "is-landscape", "is-square");
+          if (ratio >= 1.15) {
+            card.classList.add("is-landscape");
+          } else if (ratio >= 0.9) {
+            card.classList.add("is-square");
+          } else {
+            card.classList.add("is-portrait");
+          }
+        } catch (err) {
+          console.warn("gallery image load parse failed", err);
+        }
+      });
+
+      stage.appendChild(imageEl);
+      card.appendChild(stage);
+
+      const meta = document.createElement("div");
+      meta.className = "shorts-card-meta";
+      const metaMain = document.createElement("div");
+      metaMain.className = "shorts-card-meta-main";
+
+      const topLine = document.createElement("div");
+      topLine.className = "shorts-card-meta-topline";
+      const chip = document.createElement("span");
+      chip.className = "shorts-card-chip";
+      chip.textContent = item.classLabel || "未分类";
+      topLine.appendChild(chip);
+      metaMain.appendChild(topLine);
+
+      const title = document.createElement("div");
+      title.className = "shorts-card-title";
+      title.textContent = item.label || item.id || "未命名节点";
+      metaMain.appendChild(title);
+
+      const label = document.createElement("div");
+      label.className = "shorts-card-label";
+      label.textContent = item.id ? `节点 ID: ${item.id}` : "知识库图片";
+      metaMain.appendChild(label);
+
+      const actions = document.createElement("div");
+      actions.className = "shorts-card-actions";
+      const detailBtn = document.createElement("button");
+      detailBtn.type = "button";
+      detailBtn.textContent = "查看节点";
+      detailBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const params = new URLSearchParams();
+        if (item.id) params.set("id", item.id);
+        window.location.href =
+          "/kb/detail" + (params.toString() ? "?" + params.toString() : "");
+      });
+      actions.appendChild(detailBtn);
+
+      const locateBtn = document.createElement("button");
+      locateBtn.type = "button";
+      locateBtn.textContent = "在表格中定位";
+      locateBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!item.id) return;
+        try {
+          setTableSelection(item.id, true);
+        } catch (err) {
+          console.warn("gallery locate failed", err);
+        }
+      });
+      actions.appendChild(locateBtn);
+
+      meta.appendChild(metaMain);
+      meta.appendChild(actions);
+      card.appendChild(meta);
+
+      const sideActions = document.createElement("div");
+      sideActions.className = "shorts-side-actions";
+      const detailWrap = document.createElement("div");
+      detailWrap.className = "shorts-side-action";
+      const detailIconBtn = document.createElement("button");
+      detailIconBtn.type = "button";
+      detailIconBtn.className = "shorts-action-btn";
+      detailIconBtn.dataset.galleryAction = "detail";
+      detailIconBtn.innerHTML = '<i class="fa-solid fa-up-right-from-square"></i>';
+      detailWrap.appendChild(detailIconBtn);
+      const detailText = document.createElement("div");
+      detailText.className = "shorts-action-label";
+      detailText.textContent = "详情";
+      detailWrap.appendChild(detailText);
+      sideActions.appendChild(detailWrap);
+      card.appendChild(sideActions);
+
+      cardElements.push(card);
+      galleryList.appendChild(card);
+    });
+
+    const shouldLoadMoreGallery = (index) => {
+      return index >= cardCount - 2 && !galleryLoadingMore;
+    };
+
+    const getCurrentCardIndex = () => {
+      const center = galleryList.scrollTop + galleryList.clientHeight / 2;
+      let bestIndex = 0;
+      let bestDistance = Infinity;
+      cardElements.forEach((card, idx) => {
+        const top = card.offsetTop;
+        const distance = Math.abs(top - center + card.clientHeight / 2);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestIndex = idx;
+        }
+      });
+      return bestIndex;
+    };
+
+    const scrollToCard = (index) => {
+      if (index < 0 || index >= cardCount) return;
+      wheelLock = true;
+      const targetCard = cardElements[index];
+      if (targetCard) {
+        galleryList.scrollTo({ top: targetCard.offsetTop, behavior: "smooth" });
+      }
+      setActiveGalleryIndex(index);
+      setTimeout(() => {
+        wheelLock = false;
+      }, scrollDuration);
+    };
+
+    const isListScrolledToBottom = () => {
+      return (
+        galleryList.scrollTop + galleryList.clientHeight >=
+        galleryList.scrollHeight - 12
+      );
+    };
+
+    const maybeLoadMoreGallery = (index) => {
+      if (galleryLoadingMore) return;
+      if (Date.now() - Number(galleryLoadState.lastLoadedAt || 0) < galleryLoadCooldown) {
+        return;
+      }
+      if (!shouldLoadMoreGallery(index) && !isListScrolledToBottom()) return;
+      window.kbGalleryPendingScrollIndex = index + 1;
+      loadMoreGalleryPage().catch(() => {
+        galleryLoadState.inFlight = false;
+        clearGalleryStatusTimer();
+        setGalleryStatus("");
+      });
+    };
+
+    let isInitializingGallery = true;
+    const handleGalleryScroll = () => {
+      if (isInitializingGallery) return;
+      const newIndex = getCurrentCardIndex();
+      setActiveGalleryIndex(newIndex);
+      if (galleryScrollEndTimer) {
+        clearTimeout(galleryScrollEndTimer);
+      }
+      galleryScrollEndTimer = setTimeout(() => {
+        maybeLoadMoreGallery(newIndex);
+      }, 110);
+    };
+
+    const handleGalleryControlClick = async (event) => {
+      const actionButton = event.target.closest("[data-gallery-action='detail']");
+      if (actionButton) {
+        event.preventDefault();
+        const parentCard = actionButton.closest(".shorts-card");
+        const cardIndex = Number(parentCard?.dataset.index || -1);
+        const currentItem = cardIndex >= 0 ? imageItems[cardIndex] : null;
+        if (currentItem?.id) {
+          const params = new URLSearchParams();
+          params.set("id", currentItem.id);
+          window.location.href =
+            "/kb/detail" + (params.toString() ? "?" + params.toString() : "");
+        }
+        return;
+      }
+
+      const target = event.target.closest(".shorts-arrow-btn");
+      if (!target) return;
+      const isPrev = target.id === "galleryPrevBtn";
+      const isNext = target.id === "galleryNextBtn";
+      if (!isPrev && !isNext) return;
+      event.preventDefault();
+      const currentIndex = getCurrentCardIndex();
+      if (isPrev) {
+        const prevIndex = Math.max(currentIndex - 1, 0);
+        if (prevIndex !== currentIndex) scrollToCard(prevIndex);
+        return;
+      }
+      if (currentIndex >= cardCount - 1) {
+        if (shouldLoadMoreGallery(currentIndex) || isListScrolledToBottom()) {
+          window.kbGalleryPendingScrollIndex = currentIndex + 1;
+          await loadMoreGalleryPage();
+        }
+        return;
+      }
+      const nextIndex = currentIndex + 1;
+      if (nextIndex !== currentIndex) scrollToCard(nextIndex);
+    };
+
+    const handleGalleryKeydown = async (event) => {
+      if (window.kbViewMode !== "gallery") return;
+      const tagName = event.target?.tagName || "";
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(tagName)) return;
+      const currentIndex = getCurrentCardIndex();
+      if (event.key === "ArrowDown" || event.key === "PageDown") {
+        event.preventDefault();
+        if (currentIndex >= cardCount - 1) {
+          if (shouldLoadMoreGallery(currentIndex) || isListScrolledToBottom()) {
+            window.kbGalleryPendingScrollIndex = currentIndex + 1;
+            await loadMoreGalleryPage();
+          }
+          return;
+        }
+        scrollToCard(Math.min(currentIndex + 1, cardCount - 1));
+        return;
+      }
+      if (event.key === "ArrowUp" || event.key === "PageUp") {
+        event.preventDefault();
+        scrollToCard(Math.max(currentIndex - 1, 0));
+      }
+    };
+
+    window.kbGalleryHandlers = {
+      scroll: handleGalleryScroll,
+      wheel: async (event) => {
+        if (wheelLock) {
+          event.preventDefault();
+          return;
+        }
+        if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
+        const currentIndex = getCurrentCardIndex();
+        if (event.deltaY > 0) {
+          event.preventDefault();
+          if (currentIndex >= cardCount - 1) {
+            if (shouldLoadMoreGallery(currentIndex) || isListScrolledToBottom()) {
+              window.kbGalleryPendingScrollIndex = currentIndex + 1;
+              await loadMoreGalleryPage();
+            }
+            return;
+          }
+          scrollToCard(currentIndex + 1);
+          if (currentIndex >= cardCount - 2) {
+            window.kbGalleryPendingScrollIndex = currentIndex + 1;
+            loadMoreGalleryPage().catch(() => {});
+          }
+          return;
+        }
+        event.preventDefault();
+        const prevIndex = Math.max(currentIndex - 1, 0);
+        if (prevIndex !== currentIndex) scrollToCard(prevIndex);
+      },
+      click: handleGalleryControlClick,
+      keydown: handleGalleryKeydown,
+    };
+
+    galleryPanel.addEventListener("click", window.kbGalleryHandlers.click);
+    galleryList.addEventListener("scroll", window.kbGalleryHandlers.scroll, {
+      passive: true,
+    });
+    galleryList.addEventListener("wheel", window.kbGalleryHandlers.wheel, {
+      passive: false,
+    });
+    document.addEventListener("keydown", window.kbGalleryHandlers.keydown);
+
+    let initialNodeId = window.kbSelectedRowId || "";
+    try {
+      if (!initialNodeId && window.localStorage) {
+        const cachedGalleryNode = localStorage.getItem("kbGalleryCurrentNode");
+        if (cachedGalleryNode) initialNodeId = cachedGalleryNode;
+      }
+    } catch (err) {
+      console.warn("load persisted gallery node failed", err);
+    }
+
+    const normalizeNodeId = (value) => {
+      if (!value) return "";
+      return String(value).trim().replace(/^entity\//, "");
+    };
+    const initialNormalizedId = normalizeNodeId(initialNodeId);
+    let initialGalleryIndex = imageItems.findIndex((item) => {
+      const itemId = normalizeNodeId(item.id);
+      return (
+        itemId &&
+        (itemId === initialNormalizedId ||
+          initialNormalizedId.endsWith(itemId) ||
+          itemId.endsWith(initialNormalizedId))
+      );
+    });
+    if (initialGalleryIndex < 0) initialGalleryIndex = 0;
+
+    const pendingAnchorKey = String(window.kbGalleryPendingAnchorKey || "").trim();
+    if (pendingAnchorKey) {
+      const anchoredIndex = imageItems.findIndex(
+        (item) => String(item.replayKey || "").trim() === pendingAnchorKey,
+      );
+      if (anchoredIndex >= 0) initialGalleryIndex = anchoredIndex;
+      window.kbGalleryPendingAnchorKey = "";
+    }
+
+    const pendingIndex = Number(window.kbGalleryPendingScrollIndex || -1);
+    if (pendingIndex >= 0 && pendingIndex < imageItems.length) {
+      initialGalleryIndex = pendingIndex;
+    }
+    if (window.kbGalleryPendingScrollIndex) {
+      window.kbGalleryPendingScrollIndex = null;
+    }
+    if (window.kbGalleryForceFirst) {
+      initialGalleryIndex = 0;
+      window.kbGalleryForceFirst = false;
+    }
+
+    const originalScrollBehavior = galleryList.style.scrollBehavior;
+    galleryList.style.visibility = "hidden";
+    galleryList.style.scrollBehavior = "auto";
+    updateNavButtons(initialGalleryIndex);
+    updateGalleryProgress(initialGalleryIndex);
+    setActiveGalleryIndex(initialGalleryIndex);
+    if (cardElements[initialGalleryIndex]) {
+      galleryList.scrollTop = cardElements[initialGalleryIndex].offsetTop;
+    }
+    galleryList.style.visibility = "";
+    galleryList.style.scrollBehavior = originalScrollBehavior;
+    isInitializingGallery = false;
+    handleGalleryScroll();
+  }
+
   async function deleteSelectedRows() {
     const ids = Array.from(window.kbSelectedRowIds || []);
     if (!ids.length) return;
@@ -2184,6 +2963,18 @@
       window.kbShortsForceFirst = true;
       if (typeof setViewMode === "function") {
         setViewMode("shorts");
+      }
+    });
+  }
+
+  function bindGalleryButton() {
+    const btnGalleryMode = document.getElementById("btnGalleryMode");
+    if (!btnGalleryMode) return;
+    btnGalleryMode.addEventListener("click", (e) => {
+      e.preventDefault();
+      window.kbGalleryForceFirst = true;
+      if (typeof setViewMode === "function") {
+        setViewMode("gallery");
       }
     });
   }
@@ -2284,6 +3075,7 @@
   window.positionTooltip = positionTooltip;
   window.renderTableList = renderTableList;
   window.renderShortsList = renderShortsList;
+  window.renderGalleryList = renderGalleryList;
 
   if (window.kbViewMode === "shorts") {
     try {
@@ -2292,9 +3084,17 @@
       console.warn("shorts page rehydrate failed", err);
     }
   }
+  if (window.kbViewMode === "gallery") {
+    try {
+      renderGalleryList();
+    } catch (err) {
+      console.warn("gallery page rehydrate failed", err);
+    }
+  }
 
   bindDeleteButton();
   bindShortsButton();
+  bindGalleryButton();
   bindSelectAll();
   bindClearButtons();
 })();

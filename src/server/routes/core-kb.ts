@@ -1029,6 +1029,162 @@ export async function handleCoreKbRoutes(
     return Response.json({ nodes: picked, total: total?.count || 0 });
   }
 
+  if (url.pathname === "/api/kb/gallery_random" && method === "GET") {
+    const limit = Math.max(
+      1,
+      parseInt(url.searchParams.get("limit") || "12", 10),
+    );
+    const parseListParam = (value: string | null) =>
+      (value || "")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+    let params: any[] = [];
+    let whereClause = "WHERE image IS NOT NULL AND TRIM(image) <> ''";
+
+    if (hasProjectScope) {
+      whereClause += ` AND ${scopedClause()}`;
+      params.push(scopedProjectId);
+    }
+
+    const baseWhereClause = whereClause;
+    const total = db
+      .query(`SELECT COUNT(*) as count FROM nodes ${baseWhereClause}`)
+      .get(...params) as any;
+
+    const excludeIdsParam = parseListParam(url.searchParams.get("exclude_ids"));
+    const recentIdsParam = parseListParam(url.searchParams.get("recent_ids"));
+    const recentClassesParam = parseListParam(
+      url.searchParams.get("recent_classes"),
+    );
+    const currentId = (url.searchParams.get("current_id") || "").trim();
+    if (excludeIdsParam.length) {
+      const placeholders = excludeIdsParam.map(() => "?").join(",");
+      whereClause += ` AND id NOT IN (${placeholders})`;
+      params.push(...excludeIdsParam);
+    }
+
+    const candidateLimit = Math.max(limit * 10, 80);
+    const recentRows = db
+      .query(
+        `SELECT * FROM nodes ${whereClause}
+         ORDER BY datetime(COALESCE(updated_at, created_at)) DESC, rowid DESC
+         LIMIT ?`,
+      )
+      .all(...params, candidateLimit) as any[];
+    const randomRows = db
+      .query(`SELECT * FROM nodes ${whereClause} ORDER BY RANDOM() LIMIT ?`)
+      .all(...params, candidateLimit) as any[];
+
+    const mergedRowMap = new Map<string, any>();
+    [...recentRows, ...randomRows].forEach((row: any) => {
+      const rowId = (row?.id || "").toString().trim();
+      if (rowId && !mergedRowMap.has(rowId)) {
+        mergedRowMap.set(rowId, row);
+      }
+    });
+
+    const currentNode = currentId
+      ? formatNode(
+          db.query(`SELECT * FROM nodes ${baseWhereClause} AND id = ? LIMIT 1`).get(
+            ...params.slice(0, hasProjectScope ? 1 : 0),
+            currentId,
+          ) as any,
+        )
+      : null;
+    const currentClass = (currentNode?.classLabel || "").toString().trim();
+    const currentTags = new Set(
+      Array.isArray(currentNode?.tags)
+        ? currentNode.tags
+            .map((tag: any) => String(tag || "").trim())
+            .filter(Boolean)
+        : [],
+    );
+    const recentClassCounts = new Map<string, number>();
+    recentClassesParam.forEach((className) => {
+      recentClassCounts.set(
+        className,
+        (recentClassCounts.get(className) || 0) + 1,
+      );
+    });
+    const recentIdSet = new Set(recentIdsParam);
+
+    const daysSince = (value: any) => {
+      if (!value) return 365;
+      const time = new Date(value).getTime();
+      if (!Number.isFinite(time)) return 365;
+      return Math.max(0, (Date.now() - time) / 86400000);
+    };
+    const tagOverlapCount = (tags: any[]) => {
+      if (!currentTags.size || !Array.isArray(tags)) return 0;
+      let count = 0;
+      tags.forEach((tag: any) => {
+        const text = String(tag || "").trim();
+        if (text && currentTags.has(text)) count += 1;
+      });
+      return count;
+    };
+
+    const scoredNodes = Array.from(mergedRowMap.values())
+      .map((row) => formatNode(row))
+      .filter(Boolean)
+      .map((node: any) => {
+        const classLabel = String(node.classLabel || "").trim();
+        const updatedDays = Math.min(
+          daysSince(node.updated_at || node.created_at),
+          365,
+        );
+        const freshnessScore = 2.4 / (1 + updatedDays / 7);
+        const overlap = tagOverlapCount(node.tags || []);
+        const sameClassBoost =
+          currentClass && classLabel && classLabel === currentClass ? 1.7 : 0;
+        const overlapBoost = Math.min(1.5, overlap * 0.45);
+        const richnessScore =
+          (node.image ? 0.75 : 0) +
+          (node.description ? 0.3 : 0) +
+          (classLabel ? 0.25 : 0) +
+          (Array.isArray(node.tags) && node.tags.length ? 0.3 : 0);
+        const diversityPenalty = Math.min(
+          1.5,
+          (recentClassCounts.get(classLabel) || 0) * 0.45,
+        );
+        const recentPenalty = recentIdSet.has(node.id) ? 3 : 0;
+        const randomJitter = Math.random() * 0.35;
+        const score =
+          freshnessScore +
+          sameClassBoost +
+          overlapBoost +
+          richnessScore -
+          diversityPenalty -
+          recentPenalty +
+          randomJitter;
+        return { node, score };
+      })
+      .sort((a, b) => b.score - a.score);
+
+    const samplePool = scoredNodes.slice(0, Math.max(limit * 4, 24));
+    const picked: any[] = [];
+    while (samplePool.length && picked.length < limit) {
+      const totalWeight = samplePool.reduce(
+        (sum, item) => sum + Math.max(0.05, item.score + 0.5),
+        0,
+      );
+      let threshold = Math.random() * totalWeight;
+      let pickedIndex = 0;
+      for (let i = 0; i < samplePool.length; i += 1) {
+        threshold -= Math.max(0.05, samplePool[i].score + 0.5);
+        if (threshold <= 0) {
+          pickedIndex = i;
+          break;
+        }
+      }
+      const [nextItem] = samplePool.splice(pickedIndex, 1);
+      if (nextItem?.node) picked.push(nextItem.node);
+    }
+
+    return Response.json({ nodes: picked, total: total?.count || 0 });
+  }
+
   if (url.pathname === "/api/kb/entry/single" && method === "POST") {
     try {
       const body = (await req.json()) as any;
