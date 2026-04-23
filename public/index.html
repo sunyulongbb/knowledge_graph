@@ -225,17 +225,105 @@
       #shortsPanel {
         box-sizing: border-box;
         position: relative;
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        flex: 1 1 auto;
+        padding: 0;
+        background: #000;
+        overflow: hidden;
+      }
+      #shortsPanel .panel-header {
+        display: none;
+      }
+      .shorts-shell {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at top, rgba(239, 68, 68, 0.18), transparent 30%),
+          radial-gradient(circle at bottom, rgba(59, 130, 246, 0.2), transparent 28%),
+          #000;
+      }
+      .shorts-topbar {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 30;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 24px 14px;
+        background: linear-gradient(180deg, rgba(0, 0, 0, 0.62) 0%, rgba(0, 0, 0, 0) 100%);
+        pointer-events: none;
+      }
+      .shorts-topbar > * {
+        pointer-events: auto;
+      }
+      .shorts-topbar-title {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .shorts-topbar-title strong {
+        font-size: 18px;
+        line-height: 1.2;
+        color: #fff;
+        letter-spacing: 0.01em;
+      }
+      .shorts-topbar-title span {
+        font-size: 12px;
+        color: rgba(255,255,255,0.72);
+      }
+      .shorts-progress {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.1);
+        backdrop-filter: blur(16px);
+        color: #fff;
+      }
+      .shorts-progress-track {
+        width: 96px;
+        height: 4px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: rgba(255,255,255,0.14);
+      }
+      .shorts-progress-track > span {
+        display: block;
+        width: 0;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #f97316 0%, #ef4444 45%, #3b82f6 100%);
+        transition: width 0.24s ease;
+      }
+      .shorts-progress-label {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
       }
       #shortsList {
         display: flex;
         flex-direction: column;
         gap: 0;
+        align-items: center;
         padding: 0;
-        height: calc(100vh - 148px);
+        width: 100%;
+        height: 100%;
+        min-height: 0;
         overflow-y: auto;
         scroll-snap-type: y mandatory;
         scroll-behavior: smooth;
         -webkit-overflow-scrolling: touch;
+        touch-action: pan-y;
         scrollbar-width: none;
         -ms-overflow-style: none;
       }
@@ -245,18 +333,43 @@
       }
       .shorts-card {
         position: relative;
-        height: calc(100vh - 148px);
-        min-height: calc(100vh - 148px);
+        height: 100%;
+        min-height: 100%;
         width: 100%;
-        border-radius: 18px;
+        border-radius: 0;
         overflow: hidden;
-        background: var(--surface-1);
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
-        border: 1px solid rgba(255,255,255,0.08);
+        background: #000;
+        box-shadow: none;
+        border: none;
         scroll-snap-align: start;
         scroll-snap-stop: always;
         display: flex;
-        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 24px 88px 24px 24px;
+        box-sizing: border-box;
+      }
+      .shorts-stage {
+        position: relative;
+        width: min(100%, 420px);
+        height: min(calc(100% - 48px), 820px);
+        max-height: 100%;
+        border-radius: 28px;
+        overflow: hidden;
+        border: 1px solid rgba(255,255,255,0.12);
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02)),
+          #050505;
+        box-shadow:
+          0 28px 80px rgba(0,0,0,0.45),
+          inset 0 1px 0 rgba(255,255,255,0.08);
+      }
+      .shorts-stage::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0) 28%, rgba(0,0,0,0.48) 100%);
+        pointer-events: none;
       }
       .shorts-card video {
         width: 100%;
@@ -265,79 +378,324 @@
         display: block;
         background: #000;
       }
+      .shorts-card.is-paused .shorts-video-play {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+      }
+      .shorts-video-play {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        z-index: 6;
+        width: 74px;
+        height: 74px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0,0,0,0.5);
+        color: #fff;
+        border: 1px solid rgba(255,255,255,0.18);
+        backdrop-filter: blur(12px);
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.88);
+        transition: opacity 0.18s ease, transform 0.18s ease;
+        pointer-events: none;
+      }
+      .shorts-video-play i {
+        font-size: 24px;
+        margin-left: 3px;
+      }
+      .shorts-video-badge {
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        z-index: 7;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        color: #fff;
+        background: rgba(0,0,0,0.42);
+        border: 1px solid rgba(255,255,255,0.12);
+        backdrop-filter: blur(14px);
+        font-size: 12px;
+      }
+      .shorts-video-badge.hidden {
+        display: none;
+      }
       .shorts-card-meta {
         position: absolute;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        padding: 14px 16px 18px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.64) 100%);
+        left: 18px;
+        right: 18px;
+        bottom: 18px;
+        z-index: 7;
+        display: grid;
+        gap: 8px;
+        padding: 0;
+        background: none;
       }
       .shorts-controls {
         position: absolute;
-        right: 18px;
+        right: max(20px, calc(50% - 330px));
         top: 50%;
         transform: translateY(-50%);
         display: inline-flex;
         flex-direction: column;
-        gap: 12px;
-        z-index: 10;
+        gap: 14px;
+        z-index: 20;
+        pointer-events: none;
       }
       .shorts-arrow-btn {
-        width: 38px;
-        height: 38px;
+        width: 46px;
+        height: 46px;
         border-radius: 50%;
-        border: 1px solid rgba(255,255,255,0.16);
+        border: 1px solid rgba(255,255,255,0.18);
         background: rgba(0,0,0,0.52);
         color: #fff;
         display: inline-flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        transition: transform 0.2s ease, opacity 0.2s ease;
+        transition: transform 0.2s ease, opacity 0.2s ease, background 0.2s ease;
+        pointer-events: auto;
       }
       .shorts-arrow-btn:hover {
-        transform: scale(1.05);
+        transform: scale(1.08);
+        background: rgba(0,0,0,0.68);
+      }
+      .shorts-arrow-btn i {
+        font-size: 14px;
       }
       .shorts-arrow-btn.hidden,
       .shorts-arrow-btn:disabled {
         opacity: 0.24;
         cursor: default;
       }
+      .shorts-card-meta {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+      }
+      .shorts-card-meta-main {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-width: 0;
+      }
+      .shorts-card-meta-topline {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: rgba(255,255,255,0.86);
+        font-size: 12px;
+      }
+      .shorts-card-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        width: fit-content;
+        max-width: 100%;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.1);
+        border: 1px solid rgba(255,255,255,0.12);
+        backdrop-filter: blur(10px);
+      }
       .shorts-card-title {
-        font-size: 14px;
+        font-size: 16px;
         font-weight: 700;
         line-height: 1.4;
-        color: var(--fg);
+        color: #fff;
+        text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6);
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
       }
       .shorts-card-label {
-        font-size: 12px;
-        color: var(--muted);
+        font-size: 13px;
+        color: rgba(255,255,255,0.82);
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
       }
       .shorts-card-actions {
         display: flex;
-        gap: 8px;
+        gap: 10px;
         align-items: center;
+        flex-wrap: wrap;
       }
       .shorts-card button {
-        padding: 6px 10px;
+        padding: 8px 12px;
         border-radius: 999px;
-        border: 1px solid var(--border);
-        background: var(--surface-0);
-        color: var(--fg);
+        border: 1px solid rgba(255,255,255,0.16);
+        background: rgba(0,0,0,0.45);
+        color: #fff;
         cursor: pointer;
         font-size: 12px;
       }
-      .shorts-empty {
-        padding: 24px 18px;
-        border-radius: 16px;
-        background: var(--surface-1);
+      .shorts-side-actions {
+        position: absolute;
+        right: 18px;
+        bottom: 22px;
+        z-index: 8;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        align-items: center;
+      }
+      .shorts-side-action {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        width: 56px;
+      }
+      .shorts-action-btn {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        border: 1px solid rgba(255,255,255,0.14);
+        background: rgba(15,23,42,0.5);
+        color: #fff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        backdrop-filter: blur(12px);
+        transition: transform 0.18s ease, background 0.18s ease;
+      }
+      .shorts-action-btn:hover {
+        transform: translateY(-2px);
+        background: rgba(15,23,42,0.68);
+      }
+      .shorts-action-label {
+        font-size: 11px;
+        color: rgba(255,255,255,0.84);
         text-align: center;
-        color: var(--muted);
+        line-height: 1.2;
+        width: 100%;
+      }
+      .shorts-status {
+        position: absolute;
+        left: 50%;
+        bottom: 16px;
+        transform: translateX(-50%);
+        width: calc(100% - 36px);
+        max-width: 360px;
+        display: none;
+        z-index: 15;
+        pointer-events: none;
+      }
+      .shorts-status.active {
+        display: block;
+      }
+      .shorts-status-text {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 42px;
+        padding: 10px 16px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.72);
+        color: #fff;
+        font-size: 13px;
+        letter-spacing: 0.02em;
+      }
+      .shorts-status-bar {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: -6px;
+        height: 4px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: rgba(255, 255, 255, 0.15);
+      }
+      .shorts-status-bar::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 30%;
+        background: rgba(255, 255, 255, 0.95);
+        animation: shorts-loading-progress 1.4s infinite ease-in-out;
+      }
+      @keyframes shorts-loading-progress {
+        0% { transform: translateX(-100%); }
+        50% { transform: translateX(40%); }
+        100% { transform: translateX(120%); }
+      }
+      .shorts-arrow-btn.hidden,
+      .shorts-arrow-btn:disabled {
+        opacity: 0.24;
+        cursor: default;
+      }
+      .shorts-empty {
+        width: min(92vw, 420px);
+        margin: auto;
+        padding: 28px 22px;
+        border-radius: 28px;
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.1);
+        backdrop-filter: blur(16px);
+        text-align: center;
+        color: rgba(255,255,255,0.76);
+      }
+      @media (max-width: 900px) {
+        .shorts-card {
+          padding: 0;
+        }
+        .shorts-stage {
+          width: 100%;
+          height: 100%;
+          max-height: none;
+          border-radius: 0;
+          border: none;
+          box-shadow: none;
+        }
+        .shorts-topbar {
+          padding: 16px 14px 12px;
+        }
+        .shorts-progress {
+          gap: 8px;
+          padding: 7px 10px;
+        }
+        .shorts-progress-track {
+          width: 72px;
+        }
+        .shorts-controls {
+          right: 12px;
+        }
+      }
+      @media (max-width: 640px) {
+        .shorts-topbar-title strong {
+          font-size: 16px;
+        }
+        .shorts-topbar-title span {
+          display: none;
+        }
+        .shorts-progress-track {
+          display: none;
+        }
+        .shorts-controls {
+          display: none;
+        }
+        .shorts-side-actions {
+          right: 12px;
+          bottom: 18px;
+        }
+        .shorts-action-btn {
+          width: 44px;
+          height: 44px;
+        }
       }
       .detail-carousel-container {
         position: relative;
@@ -1372,22 +1730,37 @@
               </select>
             </div>
           </div>
-          <div id="shortsPanel" class="panel" style="display:none; padding: 8px 10px">
-            <div class="panel-header">
-              <div class="panel-title">
-                <span>短视频</span>
-                <span id="shortsCount" class="panel-subtitle"></span>
+          <div id="shortsPanel" class="panel" style="display:none; padding: 0">
+            <div class="shorts-shell">
+              <div class="shorts-topbar">
+                <div class="shorts-topbar-title">
+                  <strong>短视频</strong>
+                </div>
+                <div class="shorts-progress">
+                  <span id="shortsProgressLabel" class="shorts-progress-label">00 / 00</span>
+                  <span class="shorts-progress-track"><span id="shortsProgressBar"></span></span>
+                </div>
+              </div>
+              <div class="panel-header">
+                <div class="panel-title">
+                  <span>短视频</span>
+                  <span id="shortsCount" class="panel-subtitle"></span>
+                </div>
+              </div>
+              <div id="shortsControls" class="shorts-controls">
+                <button id="shortsPrevBtn" type="button" class="shorts-arrow-btn" title="上一条">
+                  <i class="fa-solid fa-chevron-up"></i>
+                </button>
+                <button id="shortsNextBtn" type="button" class="shorts-arrow-btn" title="下一条">
+                  <i class="fa-solid fa-chevron-down"></i>
+                </button>
+              </div>
+              <div id="shortsList"></div>
+              <div id="shortsStatus" class="shorts-status">
+                <div class="shorts-status-text">正在加载新视频...</div>
+                <div class="shorts-status-bar"></div>
               </div>
             </div>
-            <div id="shortsControls" class="shorts-controls">
-              <button id="shortsPrevBtn" type="button" class="shorts-arrow-btn" title="上一条">
-                <i class="fa-solid fa-chevron-up"></i>
-              </button>
-              <button id="shortsNextBtn" type="button" class="shorts-arrow-btn" title="下一条">
-                <i class="fa-solid fa-chevron-down"></i>
-              </button>
-            </div>
-            <div id="shortsList"></div>
           </div>
           <!-- 本体管理面板 -->
           <div
