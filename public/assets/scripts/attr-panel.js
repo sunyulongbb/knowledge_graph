@@ -26,7 +26,6 @@ if (btnShowAttrForm) {
       attrFormBody.style.display = "";
       attrFormBody.classList.remove("collapsed");
     }
-    if (btnShowAttrForm) btnShowAttrForm.style.display = "none";
     const attrList = byId("attrList");
     if (attrList && attrFormBody && attrList.parentNode) {
       attrList.parentNode.insertBefore(attrFormBody, attrList);
@@ -42,7 +41,6 @@ if (attrForm) {
   attrForm.addEventListener("submit", function () {
     setTimeout(() => {
       if (attrFormBody) attrFormBody.style.display = "none";
-      if (btnShowAttrForm) btnShowAttrForm.style.display = "";
       resetEditingRow();
     }, 200);
   });
@@ -52,7 +50,6 @@ const btnAttrReset = byId("btnAttrReset");
 if (btnAttrReset) {
   btnAttrReset.addEventListener("click", function () {
     if (attrFormBody) attrFormBody.style.display = "none";
-    if (btnShowAttrForm) btnShowAttrForm.style.display = "";
     resetEditingRow();
   });
 }
@@ -235,7 +232,6 @@ if (btnAttrReset) {
       attrFormBody.classList.remove("collapsed");
       attrFormBody.classList.add("inline-editing");
       attrForm.classList.add("value-only-editing");
-      btnShowAttrForm.style.display = "none";
       if (row.parentNode) {
         row.insertAdjacentElement("afterend", attrFormBody);
       }
@@ -859,10 +855,6 @@ if (btnAttrReset) {
             }
             updateAttrSelectionStyles();
             ensureAttrButtonsState();
-          });
-          val.addEventListener("click", (e) => {
-            e.stopPropagation();
-            openAttrEditorForRow(row, it, vi, nodeId);
           });
           row.addEventListener("dblclick", (e) => {
             e.stopPropagation();

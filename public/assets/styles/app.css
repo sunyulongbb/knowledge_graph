@@ -3065,7 +3065,7 @@ body {
 }
 #attrForm .wd-attr-edit-row {
   display: grid;
-  grid-template-columns: minmax(160px, 24%) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
   align-items: start;
   background: var(--surface-0);
@@ -3100,6 +3100,12 @@ body {
 #attrForm .wd-prop-cell .wd-prop-list {
   width: 100%;
 }
+#attrForm .wd-prop-cell .wd-prop-search-icon {
+  display: none;
+}
+#attrForm .wd-prop-cell .wd-prop-search-wrap .wd-input {
+  padding-left: 10px;
+}
 #attrForm .wd-current-prop {
   min-width: 0;
   display: none;
@@ -3120,6 +3126,7 @@ body {
   flex-direction: column;
   gap: 10px;
   min-width: 0;
+  width: 100%;
 }
 #attrForm .wd-value-input-row {
   display: flex;
