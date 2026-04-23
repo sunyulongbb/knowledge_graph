@@ -224,6 +224,7 @@
       }
       #shortsPanel {
         box-sizing: border-box;
+        position: relative;
       }
       #shortsList {
         display: flex;
@@ -1372,19 +1373,19 @@
             </div>
           </div>
           <div id="shortsPanel" class="panel" style="display:none; padding: 8px 10px">
-            <div class="panel-header" style="position: relative;">
+            <div class="panel-header">
               <div class="panel-title">
                 <span>短视频</span>
                 <span id="shortsCount" class="panel-subtitle"></span>
               </div>
-              <div id="shortsControls" class="shorts-controls">
-                <button id="shortsPrevBtn" type="button" class="shorts-arrow-btn" title="上一条">
-                  <i class="fa-solid fa-chevron-up"></i>
-                </button>
-                <button id="shortsNextBtn" type="button" class="shorts-arrow-btn" title="下一条">
-                  <i class="fa-solid fa-chevron-down"></i>
-                </button>
-              </div>
+            </div>
+            <div id="shortsControls" class="shorts-controls">
+              <button id="shortsPrevBtn" type="button" class="shorts-arrow-btn" title="上一条">
+                <i class="fa-solid fa-chevron-up"></i>
+              </button>
+              <button id="shortsNextBtn" type="button" class="shorts-arrow-btn" title="下一条">
+                <i class="fa-solid fa-chevron-down"></i>
+              </button>
             </div>
             <div id="shortsList"></div>
           </div>

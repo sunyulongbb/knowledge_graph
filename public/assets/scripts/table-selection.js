@@ -530,27 +530,150 @@
       window.kbShortsObserver = null;
     }
 
-    let rawList = Array.isArray(window.kbTableNodes) ? window.kbTableNodes : [];
-    if (!rawList.length) {
+    let rawList = Array.isArray(window.kbShortsNodes)
+      ? window.kbShortsNodes
+      : [];
+    const shortsPageSize = 12;
+    const shortsCacheKey = "kbShortsRandomCache";
+    let shortsTotalNodes = Number(window.kbTableTotalNodes || 0) || 0;
+    let shortsLoadingMore = false;
+
+    const saveShortsCache = (items) => {
       try {
         if (window.localStorage) {
-          const cached = localStorage.getItem("kbTableNodesCache");
-          if (cached) {
-            const parsed = JSON.parse(cached);
-            if (Array.isArray(parsed) && parsed.length) {
-              rawList = parsed;
-            }
-          }
+          localStorage.setItem(shortsCacheKey, JSON.stringify(items));
         }
       } catch (err) {
-        console.warn("load cached kbTableNodes failed", err);
+        console.warn("save shorts cache failed", err);
       }
-    }
-    if (!rawList.length && typeof loadTablePage === "function") {
+    };
+
+    const loadShortsCache = () => {
+      if (!window.localStorage) return [];
       try {
-        await loadTablePage();
-        rawList = Array.isArray(window.kbTableNodes) ? window.kbTableNodes : [];
-      } catch {}
+        const cached = localStorage.getItem(shortsCacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed)) return parsed;
+        }
+      } catch (err) {
+        console.warn("load shorts cache failed", err);
+      }
+      return [];
+    };
+
+    const fetchShortsRandomBatch = async (excludeIds = []) => {
+      const url = new URL("/api/kb/shorts_random", window.location.origin);
+      url.searchParams.set("limit", String(shortsPageSize));
+      if (excludeIds && excludeIds.length) {
+        url.searchParams.set("exclude_ids", excludeIds.join(","));
+      }
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      const data = await resp.json();
+      shortsTotalNodes = Number(data.total || shortsTotalNodes || 0);
+      return Array.isArray(data.nodes) ? data.nodes : [];
+    };
+
+    const normalizeShortsNodes = (nodes) =>
+      nodes.map((item) => ({
+        label_zh: item.label || "",
+        id: item.id || "",
+        link: item.link || "",
+        classLabel: item.classLabel || item.type || "",
+        video: item.video || "",
+        image: item.image || item.avatar || "",
+      }));
+
+    const appendShortsNodes = async (nodes) => {
+      const tableList = normalizeShortsNodes(nodes);
+      const existingIds = new Set(rawList.map((item) => item.id));
+      const newItems = tableList.filter(
+        (item) => item.id && !existingIds.has(item.id),
+      );
+      if (!newItems.length) return false;
+      rawList = rawList.concat(newItems);
+      window.kbShortsNodes = rawList;
+      saveShortsCache(rawList);
+      await renderShortsList();
+      return true;
+    };
+
+    const loadMoreShortsPage = async (retryCount = 0) => {
+      if (shortsLoadingMore) return;
+      if (shortsTotalNodes && rawList.length >= shortsTotalNodes) return;
+      shortsLoadingMore = true;
+      try {
+        const excludeIds = rawList.map((item) => item.id).filter((id) => id);
+        const nodes = await fetchShortsRandomBatch(excludeIds);
+        const appended = await appendShortsNodes(nodes);
+        if (!appended && retryCount < 2 && rawList.length < shortsTotalNodes) {
+          return await loadMoreShortsPage(retryCount + 1);
+        }
+      } catch (err) {
+        console.warn("loadMoreShortsPage failed", err);
+      } finally {
+        shortsLoadingMore = false;
+      }
+    };
+
+    const shouldLoadMoreShorts = (index) => {
+      return (
+        index === videoItems.length - 1 &&
+        !shortsLoadingMore &&
+        (!shortsTotalNodes || rawList.length < shortsTotalNodes)
+      );
+    };
+
+    const cachedShorts = loadShortsCache();
+    if (cachedShorts.length) {
+      rawList = cachedShorts;
+      window.kbShortsNodes = rawList;
+    } else if (
+      Array.isArray(window.kbTableNodes) &&
+      window.kbTableNodes.length
+    ) {
+      rawList = window.kbTableNodes
+        .filter((item) => item.video && item.video.trim())
+        .map((item) => ({
+          label_zh: item.label || "",
+          id: item.id || "",
+          link: item.link || "",
+          classLabel: item.classLabel || item.type || "",
+          video: item.video || "",
+          image: item.image || item.avatar || "",
+        }));
+      window.kbShortsNodes = rawList;
+      saveShortsCache(rawList);
+    }
+
+    if (!rawList.length) {
+      try {
+        const nodes = await fetchShortsRandomBatch();
+        rawList = normalizeShortsNodes(nodes);
+        window.kbShortsNodes = rawList;
+        saveShortsCache(rawList);
+      } catch (err) {
+        console.warn("load initial shorts batch failed", err);
+        if (!rawList.length && typeof loadTablePage === "function") {
+          try {
+            await loadTablePage();
+            rawList = Array.isArray(window.kbTableNodes)
+              ? window.kbTableNodes
+                  .filter((item) => item.video && item.video.trim())
+                  .map((item) => ({
+                    label_zh: item.label || "",
+                    id: item.id || "",
+                    link: item.link || "",
+                    classLabel: item.classLabel || item.type || "",
+                    video: item.video || "",
+                    image: item.image || item.avatar || "",
+                  }))
+              : [];
+            window.kbShortsNodes = rawList;
+          } catch {}
+        }
+      }
     }
 
     const videoItems = rawList
@@ -573,118 +696,6 @@
     if (shortsControls) {
       shortsControls.style.display = count ? "inline-flex" : "none";
     }
-
-    const getShortsQueryState = () => {
-      const params = new URLSearchParams(window.location.search || "");
-      const limit = parseInt(params.get("limit") || "20", 10) || 20;
-      const rawPage = parseInt(params.get("page") || "", 10);
-      const rawOffset = parseInt(params.get("offset") || "0", 10) || 0;
-      const page =
-        Number.isInteger(rawPage) && rawPage > 0
-          ? rawPage
-          : Math.floor(rawOffset / limit) + 1;
-      return { params, page, limit };
-    };
-
-    let shortsCurrentPage = Number(
-      window.kbTablePage || getShortsQueryState().page || 1,
-    );
-    const shortsPageSize = Number(
-      window.kbTablePageSize || getShortsQueryState().limit || 20,
-    );
-    let shortsTotalNodes = Number(window.kbTableTotalNodes || 0) || 0;
-    let shortsLoadingMore = false;
-
-    const buildShortsSearchUrl = (page) => {
-      const params = new URLSearchParams(window.location.search || "");
-      params.set("limit", String(shortsPageSize));
-      params.delete("page");
-      params.set("offset", String((page - 1) * shortsPageSize));
-      const url = new URL("/api/kb/entity_search", window.location.origin);
-      url.search = params.toString();
-      if (typeof window.appendCurrentDbParam === "function") {
-        const scopedUrl = window.appendCurrentDbParam(url);
-        if (scopedUrl instanceof URL) {
-          url.search = scopedUrl.search;
-        }
-      }
-      return url;
-    };
-
-    const fetchShortsPage = async (page) => {
-      const url = buildShortsSearchUrl(page);
-      const resp = await fetch(url);
-      if (!resp.ok) throw new Error("HTTP " + resp.status);
-      const data = await resp.json();
-      shortsTotalNodes = Number(data.total || shortsTotalNodes || 0);
-      const nodes = Array.isArray(data.nodes) ? data.nodes : [];
-      return nodes;
-    };
-
-    const loadMoreShortsPage = async () => {
-      if (shortsLoadingMore) return;
-      if (
-        shortsTotalNodes &&
-        shortsCurrentPage * shortsPageSize >= shortsTotalNodes
-      )
-        return;
-      shortsLoadingMore = true;
-      try {
-        const nextPage = shortsCurrentPage + 1;
-        const nodes = await fetchShortsPage(nextPage);
-        const tableList = nodes.map((item) => ({
-          label_zh: item.label || "",
-          id: item.id || "",
-          link: item.link || "",
-          classLabel: item.classLabel || item.type || "",
-          video: item.video || "",
-          image: item.image || item.avatar || "",
-        }));
-        const newVideos = tableList
-          .map((item) => ({
-            id: item.id || "",
-            label: item.label_zh || item.label || "",
-            classLabel: item.classLabel || item.type || "",
-            video: item.video || "",
-            image: item.image || "",
-          }))
-          .filter((item) => item.video && item.video.trim());
-        if (!newVideos.length) {
-          shortsCurrentPage = nextPage;
-          return;
-        }
-        if (!Array.isArray(window.kbTableNodes)) {
-          window.kbTableNodes = tableList;
-        } else {
-          window.kbTableNodes = window.kbTableNodes.concat(tableList);
-        }
-        try {
-          if (window.localStorage) {
-            localStorage.setItem(
-              "kbTableNodesCache",
-              JSON.stringify(window.kbTableNodes),
-            );
-          }
-        } catch (err) {
-          console.warn("kbTableNodes cache update failed", err);
-        }
-        shortsCurrentPage = nextPage;
-        renderShortsList();
-      } catch (err) {
-        console.warn("loadMoreShortsPage failed", err);
-      } finally {
-        shortsLoadingMore = false;
-      }
-    };
-
-    const shouldLoadMoreShorts = (index) => {
-      return (
-        index === videoItems.length - 1 &&
-        !shortsLoadingMore &&
-        (!shortsTotalNodes ||
-          shortsCurrentPage * shortsPageSize < shortsTotalNodes)
-      );
-    };
 
     const cacheShortsVideos = async () => {
       if (!count || !("caches" in window)) return;
@@ -882,6 +893,7 @@
     });
 
     let wheelLock = false;
+    let shortsScrollEndTimer = null;
     const scrollDuration = 400;
     const cardCount = cardElements.length;
 
@@ -922,24 +934,47 @@
 
     const updateNavButtons = (index) => {
       if (!shortsPrevBtn || !shortsNextBtn) return;
-      shortsPrevBtn.disabled = false;
-      shortsNextBtn.disabled = false;
-      shortsPrevBtn.classList.remove("hidden");
-      shortsNextBtn.classList.remove("hidden");
+      const canPrev = index > 0;
+      const canNext =
+        index < cardCount - 1 ||
+        shortsTotalNodes === 0 ||
+        rawList.length < shortsTotalNodes;
+      shortsPrevBtn.disabled = !canPrev;
+      shortsNextBtn.disabled = !canNext;
+      shortsPrevBtn.classList.toggle("hidden", !canPrev);
+      shortsNextBtn.classList.toggle("hidden", !canNext);
+    };
+
+    const maybeLoadMoreShorts = (index) => {
+      if (shortsLoadingMore) return;
+      if (!shouldLoadMoreShorts(index) && !isListScrolledToBottom()) return;
+      window.kbShortsPendingScrollIndex = index + 1;
+      loadMoreShortsPage().catch(() => {});
     };
 
     let isInitializingShorts = true;
+    const isListScrolledToBottom = () => {
+      if (!shortsList) return false;
+      return (
+        shortsList.scrollTop + shortsList.clientHeight >=
+        shortsList.scrollHeight - 12
+      );
+    };
+
     const handleShortsScroll = () => {
       if (isInitializingShorts) return;
       const newIndex = getCurrentCardIndex();
       updateNavButtons(newIndex);
       setActiveShortsIndex(newIndex);
-      if (shouldLoadMoreShorts(newIndex)) {
-        loadMoreShortsPage().catch(() => {});
+      if (shortsScrollEndTimer) {
+        clearTimeout(shortsScrollEndTimer);
       }
+      shortsScrollEndTimer = setTimeout(() => {
+        maybeLoadMoreShorts(newIndex);
+      }, 120);
     };
 
-    const handleShortsControlClick = (event) => {
+    const handleShortsControlClick = async (event) => {
       const target = event.target.closest(".shorts-arrow-btn");
       if (!target) return;
       const isPrev = target.id === "shortsPrevBtn";
@@ -947,11 +982,25 @@
       if (!isPrev && !isNext) return;
       event.preventDefault();
       const currentIndex = getCurrentCardIndex();
-      const nextIndex = isPrev
-        ? (currentIndex - 1 + cardCount) % cardCount
-        : (currentIndex + 1) % cardCount;
-      if (nextIndex !== currentIndex) {
-        scrollToCard(nextIndex);
+      if (isPrev) {
+        const prevIndex = Math.max(currentIndex - 1, 0);
+        if (prevIndex !== currentIndex) {
+          scrollToCard(prevIndex);
+        }
+        return;
+      }
+      if (isNext) {
+        if (currentIndex >= cardCount - 1) {
+          if (shouldLoadMoreShorts(currentIndex) || isListScrolledToBottom()) {
+            window.kbShortsPendingScrollIndex = currentIndex + 1;
+            await loadMoreShortsPage();
+          }
+          return;
+        }
+        const nextIndex = currentIndex + 1;
+        if (nextIndex !== currentIndex) {
+          scrollToCard(nextIndex);
+        }
       }
     };
 
@@ -971,20 +1020,36 @@
       shortsList.dataset.shortsWheelBound = "1";
       shortsList.addEventListener(
         "wheel",
-        (event) => {
+        async (event) => {
           if (wheelLock) {
             event.preventDefault();
             return;
           }
           if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
           const currentIndex = getCurrentCardIndex();
-          const nextIndex =
-            event.deltaY > 0
-              ? (currentIndex + 1) % cardCount
-              : (currentIndex - 1 + cardCount) % cardCount;
-          if (nextIndex !== currentIndex) {
-            event.preventDefault();
-            scrollToCard(nextIndex);
+          if (event.deltaY > 0) {
+            if (currentIndex >= cardCount - 1) {
+              if (
+                shouldLoadMoreShorts(currentIndex) ||
+                isListScrolledToBottom()
+              ) {
+                event.preventDefault();
+                window.kbShortsPendingScrollIndex = currentIndex + 1;
+                await loadMoreShortsPage();
+              }
+              return;
+            }
+            const nextIndex = currentIndex + 1;
+            if (nextIndex !== currentIndex) {
+              event.preventDefault();
+              scrollToCard(nextIndex);
+            }
+          } else {
+            const prevIndex = Math.max(currentIndex - 1, 0);
+            if (prevIndex !== currentIndex) {
+              event.preventDefault();
+              scrollToCard(prevIndex);
+            }
           }
         },
         { passive: false },
@@ -1020,6 +1085,14 @@
       );
     });
     if (initialShortsIndex < 0) initialShortsIndex = 0;
+
+    const pendingIndex = Number(window.kbShortsPendingScrollIndex || -1);
+    if (pendingIndex >= 0 && pendingIndex < videoItems.length) {
+      initialShortsIndex = pendingIndex;
+    }
+    if (window.kbShortsPendingScrollIndex) {
+      window.kbShortsPendingScrollIndex = null;
+    }
 
     const originalScrollBehavior = shortsList.style.scrollBehavior;
     let listWasHidden = false;

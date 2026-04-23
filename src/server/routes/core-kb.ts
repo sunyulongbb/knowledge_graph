@@ -42,7 +42,14 @@ export async function handleCoreKbRoutes(
       ? `${prefix}project_id = ?`
       : `${prefix}project_id IS NULL`;
   };
-  const NODE_VIDEO_UPLOADS_DIR = resolve(import.meta.dir, "..", "..", "..", "uploads", "node-videos");
+  const NODE_VIDEO_UPLOADS_DIR = resolve(
+    import.meta.dir,
+    "..",
+    "..",
+    "..",
+    "uploads",
+    "node-videos",
+  );
   mkdirSync(NODE_VIDEO_UPLOADS_DIR, { recursive: true });
 
   const entryTaskScopeParams = () => (hasProjectScope ? [scopedProjectId] : []);
@@ -868,6 +875,42 @@ export async function handleCoreKbRoutes(
     return Response.json({ nodes, total: total?.count || 0 });
   }
 
+  if (url.pathname === "/api/kb/shorts_random" && method === "GET") {
+    const limit = Math.max(
+      1,
+      parseInt(url.searchParams.get("limit") || "12", 10),
+    );
+    let params: any[] = [];
+    let whereClause = "WHERE video IS NOT NULL AND TRIM(video) <> ''";
+
+    if (hasProjectScope) {
+      whereClause += ` AND ${scopedClause()}`;
+      params.push(scopedProjectId);
+    }
+
+    const baseWhereClause = whereClause;
+    const total = db
+      .query(`SELECT COUNT(*) as count FROM nodes ${baseWhereClause}`)
+      .get(...params) as any;
+
+    const excludeIdsParam = (url.searchParams.get("exclude_ids") || "")
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean);
+    if (excludeIdsParam.length) {
+      const placeholders = excludeIdsParam.map(() => "?").join(",");
+      whereClause += ` AND id NOT IN (${placeholders})`;
+      params.push(...excludeIdsParam);
+    }
+
+    const nodes = db
+      .query(`SELECT * FROM nodes ${whereClause} ORDER BY RANDOM() LIMIT ?`)
+      .all(...params, limit)
+      .map(formatNode);
+
+    return Response.json({ nodes, total: total?.count || 0 });
+  }
+
   if (url.pathname === "/api/kb/entry/single" && method === "POST") {
     try {
       const body = (await req.json()) as any;
@@ -1405,7 +1448,9 @@ export async function handleCoreKbRoutes(
       }
       const maxSize = 300 * 1024 * 1024;
       if (typeof file.size === "number" && file.size > maxSize) {
-        return new Response("视频文件过大，请上传不超过 300MB 的视频。", { status: 413 });
+        return new Response("视频文件过大，请上传不超过 300MB 的视频。", {
+          status: 413,
+        });
       }
       const filename = `${crypto.randomUUID()}.${ext}`;
       const filePath = resolve(NODE_VIDEO_UPLOADS_DIR, filename);
@@ -1436,7 +1481,18 @@ export async function handleCoreKbRoutes(
 
       db.run(
         "INSERT INTO nodes (id, name, type, description, aliases, tags, image, link, video, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [id, name, type, desc, aliases, tags, image, link, video, scopedProjectId],
+        [
+          id,
+          name,
+          type,
+          desc,
+          aliases,
+          tags,
+          image,
+          link,
+          video,
+          scopedProjectId,
+        ],
       );
 
       const newNode = hasProjectScope
@@ -2276,7 +2332,7 @@ export async function handleCoreKbRoutes(
         .query("SELECT * FROM attributes WHERE node_id = ? AND key = ?")
         .get(source, propId) as any;
 
-      const displayLabel = (propRec && propRec.name) ? propRec.name : propId;
+      const displayLabel = propRec && propRec.name ? propRec.name : propId;
 
       return Response.json(
         formatEdge({
