@@ -28,6 +28,56 @@
     } catch {}
   }
 
+  function appendCurrentDbToUrl(url) {
+    if (!(url instanceof URL)) return url;
+    try {
+      if (typeof window.appendCurrentDbParam === "function") {
+        const scopedUrl = window.appendCurrentDbParam(new URL(url.toString()));
+        if (scopedUrl instanceof URL) {
+          url.search = scopedUrl.search;
+          return url;
+        }
+      }
+    } catch {}
+
+    let db = "";
+    try {
+      if (typeof window.getCurrentDbParam === "function") {
+        db = String(window.getCurrentDbParam() || "").trim();
+      }
+    } catch {}
+    if (!db) {
+      try {
+        const currentUrl = new URL(window.location.href);
+        db = String(currentUrl.searchParams.get("db") || "").trim();
+      } catch {}
+    }
+    if (db) {
+      url.searchParams.set("db", db);
+    }
+    return url;
+  }
+
+  function buildDetailPageUrl(nodeId) {
+    if (!nodeId) return window.location.href;
+    try {
+      const currentUrl = new URL(window.location.href);
+      const search = new URLSearchParams(currentUrl.search || "");
+      search.delete("view");
+      search.delete("node");
+      const basePath = currentUrl.pathname || "/";
+      const searchString = search.toString();
+      return (
+        basePath +
+        (searchString ? "?" + searchString : "") +
+        "#view=detail&node=" +
+        encodeURIComponent(nodeId)
+      );
+    } catch (err) {
+      return "/#view=detail&node=" + encodeURIComponent(nodeId);
+    }
+  }
+
   function updateSelectedRowStyles() {
     try {
       if (!tblNodes) return;
@@ -636,7 +686,9 @@
     };
 
     const fetchShortsRandomBatch = async (excludeIds = []) => {
-      const url = new URL("/api/kb/shorts_random", window.location.origin);
+      const url = appendCurrentDbToUrl(
+        new URL("/api/kb/shorts_random", window.location.origin),
+      );
       url.searchParams.set("limit", String(shortsPageSize));
       if (excludeIds && excludeIds.length) {
         url.searchParams.set("exclude_ids", excludeIds.join(","));
@@ -978,11 +1030,8 @@
       detailBtn.textContent = "查看节点";
       detailBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        const params = new URLSearchParams();
-        if (item.id) params.set("id", item.id);
-        const url =
-          "/kb/detail" + (params.toString() ? "?" + params.toString() : "");
-        window.location.href = url;
+        if (!item.id) return;
+        window.location.href = buildDetailPageUrl(item.id);
       });
       actions.appendChild(detailBtn);
       meta.appendChild(actions);
@@ -1340,7 +1389,9 @@
     };
 
     const fetchShortsRandomBatch = async (excludeIds = []) => {
-      const url = new URL("/api/kb/shorts_random", window.location.origin);
+      const url = appendCurrentDbToUrl(
+        new URL("/api/kb/shorts_random", window.location.origin),
+      );
       url.searchParams.set("limit", String(shortsPageSize));
       if (excludeIds && excludeIds.length) {
         url.searchParams.set("exclude_ids", excludeIds.join(","));
@@ -1827,11 +1878,8 @@
       detailBtn.textContent = "查看节点";
       detailBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        const params = new URLSearchParams();
-        if (item.id) params.set("id", item.id);
-        const url =
-          "/kb/detail" + (params.toString() ? "?" + params.toString() : "");
-        window.location.href = url;
+        if (!item.id) return;
+        window.location.href = buildDetailPageUrl(item.id);
       });
       actions.appendChild(detailBtn);
 
@@ -1975,10 +2023,7 @@
           return;
         }
         if (action === "detail" && currentItem?.id) {
-          const params = new URLSearchParams();
-          params.set("id", currentItem.id);
-          window.location.href =
-            "/kb/detail" + (params.toString() ? "?" + params.toString() : "");
+          window.location.href = buildDetailPageUrl(currentItem.id);
           return;
         }
       }
@@ -2065,7 +2110,10 @@
         if (event.deltaY > 0) {
           event.preventDefault();
           if (currentIndex >= cardCount - 1) {
-            if (shouldLoadMoreShorts(currentIndex) || isListScrolledToBottom()) {
+            if (
+              shouldLoadMoreShorts(currentIndex) ||
+              isListScrolledToBottom()
+            ) {
               window.kbShortsPendingScrollIndex = currentIndex + 1;
               await loadMoreShortsPage();
             }
@@ -2180,12 +2228,17 @@
     const galleryPrevBtn = document.getElementById("galleryPrevBtn");
     const galleryNextBtn = document.getElementById("galleryNextBtn");
     const galleryStatus = document.getElementById("galleryStatus");
-    const galleryProgressLabel = document.getElementById("galleryProgressLabel");
+    const galleryProgressLabel = document.getElementById(
+      "galleryProgressLabel",
+    );
     const galleryProgressBar = document.getElementById("galleryProgressBar");
     if (!galleryPanel || !galleryList) return;
 
     if (window.kbGalleryHandlers?.scroll) {
-      galleryList.removeEventListener("scroll", window.kbGalleryHandlers.scroll);
+      galleryList.removeEventListener(
+        "scroll",
+        window.kbGalleryHandlers.scroll,
+      );
     }
     if (window.kbGalleryHandlers?.wheel) {
       galleryList.removeEventListener("wheel", window.kbGalleryHandlers.wheel);
@@ -2203,7 +2256,9 @@
       window.kbGallerySidebarSyncTimer = null;
     }
 
-    let rawList = Array.isArray(window.kbGalleryNodes) ? window.kbGalleryNodes : [];
+    let rawList = Array.isArray(window.kbGalleryNodes)
+      ? window.kbGalleryNodes
+      : [];
     const galleryPageSize = 12;
     const galleryCacheKey = "kbGalleryRandomCache";
     const galleryCacheLimit = 48;
@@ -2242,12 +2297,14 @@
 
     const getGalleryCacheSnapshot = (items) => {
       const normalizedItems = Array.isArray(items) ? items : [];
-      const slicedItems = normalizedItems.slice(-galleryCacheLimit).map((item) => ({
-        id: item?.id || item?._id || "",
-        label_zh: item?.label_zh || item?.label || "",
-        classLabel: item?.classLabel || item?.type || "",
-        image: item?.image || item?.avatar || "",
-      }));
+      const slicedItems = normalizedItems
+        .slice(-galleryCacheLimit)
+        .map((item) => ({
+          id: item?.id || item?._id || "",
+          label_zh: item?.label_zh || item?.label || "",
+          classLabel: item?.classLabel || item?.type || "",
+          image: item?.image || item?.avatar || "",
+        }));
       let snapshot = slicedItems;
       try {
         while (snapshot.length > 12) {
@@ -2293,7 +2350,9 @@
     };
 
     const fetchGalleryRandomBatch = async (excludeIds = []) => {
-      const url = new URL("/api/kb/gallery_random", window.location.origin);
+      const url = appendCurrentDbToUrl(
+        new URL("/api/kb/gallery_random", window.location.origin),
+      );
       url.searchParams.set("limit", String(galleryPageSize));
       if (excludeIds && excludeIds.length) {
         url.searchParams.set("exclude_ids", excludeIds.join(","));
@@ -2326,10 +2385,12 @@
 
     const normalizeGalleryNodes = (nodes) =>
       nodes.map((item) => ({
-        label_zh: item.label || "",
-        id: item.id || "",
+        label: item.label || item.label_zh || item.name || "",
+        label_zh: item.label_zh || item.label || item.name || "",
+        id: item.id || item._id || "",
         classLabel: item.classLabel || item.type || "",
-        image: item.image || item.avatar || "",
+        image:
+          item.image || item.avatar || item.icon || item.img || item.logo || "",
       }));
 
     const appendGalleryNodes = async (nodes, options = {}) => {
@@ -2404,17 +2465,6 @@
     if (cachedGallery.length) {
       rawList = cachedGallery;
       window.kbGalleryNodes = rawList;
-    } else if (Array.isArray(window.kbTableNodes) && window.kbTableNodes.length) {
-      rawList = window.kbTableNodes
-        .filter((item) => item.image && item.image.trim())
-        .map((item) => ({
-          label_zh: item.label || "",
-          id: item.id || "",
-          classLabel: item.classLabel || item.type || "",
-          image: item.image || item.avatar || "",
-        }));
-      window.kbGalleryNodes = rawList;
-      saveGalleryCache(rawList);
     }
 
     if (!rawList.length) {
@@ -2440,7 +2490,9 @@
 
     const count = imageItems.length;
     if (galleryCount) {
-      galleryCount.textContent = count ? `共 ${count} 张图片` : "暂无可展示图片";
+      galleryCount.textContent = count
+        ? `共 ${count} 张图片`
+        : "暂无可展示图片";
     }
     if (galleryControls) {
       galleryControls.style.display = count ? "inline-flex" : "none";
@@ -2452,7 +2504,9 @@
     };
 
     if (galleryProgressLabel) {
-      galleryProgressLabel.textContent = count ? formatProgress(0, count) : "00 / 00";
+      galleryProgressLabel.textContent = count
+        ? formatProgress(0, count)
+        : "00 / 00";
     }
     if (galleryProgressBar) {
       galleryProgressBar.style.width = count ? `${100 / count}%` : "0%";
@@ -2462,7 +2516,8 @@
     if (!count) {
       const empty = document.createElement("div");
       empty.className = "shorts-empty";
-      empty.textContent = "当前还没有可展示的图片，先在节点中上传图片后再来看看。";
+      empty.textContent =
+        "当前还没有可展示的图片，先在节点中上传图片后再来看看。";
       galleryList.appendChild(empty);
       return;
     }
@@ -2633,10 +2688,8 @@
       detailBtn.textContent = "查看节点";
       detailBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        const params = new URLSearchParams();
-        if (item.id) params.set("id", item.id);
-        window.location.href =
-          "/kb/detail" + (params.toString() ? "?" + params.toString() : "");
+        if (!item.id) return;
+        window.location.href = buildDetailPageUrl(item.id);
       });
       actions.appendChild(detailBtn);
 
@@ -2666,7 +2719,8 @@
       detailIconBtn.type = "button";
       detailIconBtn.className = "shorts-action-btn";
       detailIconBtn.dataset.galleryAction = "detail";
-      detailIconBtn.innerHTML = '<i class="fa-solid fa-up-right-from-square"></i>';
+      detailIconBtn.innerHTML =
+        '<i class="fa-solid fa-up-right-from-square"></i>';
       detailWrap.appendChild(detailIconBtn);
       const detailText = document.createElement("div");
       detailText.className = "shorts-action-label";
@@ -2674,6 +2728,11 @@
       detailWrap.appendChild(detailText);
       sideActions.appendChild(detailWrap);
       card.appendChild(sideActions);
+
+      const nodeNameBadge = document.createElement("div");
+      nodeNameBadge.className = "shorts-card-node-name";
+      nodeNameBadge.textContent = item.label || item.id || "未知节点";
+      card.appendChild(nodeNameBadge);
 
       cardElements.push(card);
       galleryList.appendChild(card);
@@ -2720,7 +2779,10 @@
 
     const maybeLoadMoreGallery = (index) => {
       if (galleryLoadingMore) return;
-      if (Date.now() - Number(galleryLoadState.lastLoadedAt || 0) < galleryLoadCooldown) {
+      if (
+        Date.now() - Number(galleryLoadState.lastLoadedAt || 0) <
+        galleryLoadCooldown
+      ) {
         return;
       }
       if (!shouldLoadMoreGallery(index) && !isListScrolledToBottom()) return;
@@ -2746,17 +2808,16 @@
     };
 
     const handleGalleryControlClick = async (event) => {
-      const actionButton = event.target.closest("[data-gallery-action='detail']");
+      const actionButton = event.target.closest(
+        "[data-gallery-action='detail']",
+      );
       if (actionButton) {
         event.preventDefault();
         const parentCard = actionButton.closest(".shorts-card");
         const cardIndex = Number(parentCard?.dataset.index || -1);
         const currentItem = cardIndex >= 0 ? imageItems[cardIndex] : null;
         if (currentItem?.id) {
-          const params = new URLSearchParams();
-          params.set("id", currentItem.id);
-          window.location.href =
-            "/kb/detail" + (params.toString() ? "?" + params.toString() : "");
+          window.location.href = buildDetailPageUrl(currentItem.id);
         }
         return;
       }
@@ -2819,7 +2880,10 @@
         if (event.deltaY > 0) {
           event.preventDefault();
           if (currentIndex >= cardCount - 1) {
-            if (shouldLoadMoreGallery(currentIndex) || isListScrolledToBottom()) {
+            if (
+              shouldLoadMoreGallery(currentIndex) ||
+              isListScrolledToBottom()
+            ) {
               window.kbGalleryPendingScrollIndex = currentIndex + 1;
               await loadMoreGalleryPage();
             }
@@ -2861,7 +2925,9 @@
 
     const normalizeNodeId = (value) => {
       if (!value) return "";
-      return String(value).trim().replace(/^entity\//, "");
+      return String(value)
+        .trim()
+        .replace(/^entity\//, "");
     };
     const initialNormalizedId = normalizeNodeId(initialNodeId);
     let initialGalleryIndex = imageItems.findIndex((item) => {
@@ -2875,7 +2941,9 @@
     });
     if (initialGalleryIndex < 0) initialGalleryIndex = 0;
 
-    const pendingAnchorKey = String(window.kbGalleryPendingAnchorKey || "").trim();
+    const pendingAnchorKey = String(
+      window.kbGalleryPendingAnchorKey || "",
+    ).trim();
     if (pendingAnchorKey) {
       const anchoredIndex = imageItems.findIndex(
         (item) => String(item.replayKey || "").trim() === pendingAnchorKey,

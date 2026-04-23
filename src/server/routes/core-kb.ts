@@ -932,16 +932,17 @@ export async function handleCoreKbRoutes(
 
     const currentNode = currentId
       ? formatNode(
-          db.query(`SELECT * FROM nodes ${baseWhereClause} AND id = ? LIMIT 1`).get(
-            ...params.slice(0, hasProjectScope ? 1 : 0),
-            currentId,
-          ) as any,
+          db
+            .query(`SELECT * FROM nodes ${baseWhereClause} AND id = ? LIMIT 1`)
+            .get(...params.slice(0, hasProjectScope ? 1 : 0), currentId) as any,
         )
       : null;
     const currentClass = (currentNode?.classLabel || "").toString().trim();
     const currentTags = new Set(
       Array.isArray(currentNode?.tags)
-        ? currentNode.tags.map((tag: any) => String(tag || "").trim()).filter(Boolean)
+        ? currentNode.tags
+            .map((tag: any) => String(tag || "").trim())
+            .filter(Boolean)
         : [],
     );
     const recentClassCounts = new Map<string, number>();
@@ -1040,16 +1041,33 @@ export async function handleCoreKbRoutes(
         .map((item) => item.trim())
         .filter(Boolean);
     let params: any[] = [];
-    let whereClause = "WHERE image IS NOT NULL AND TRIM(image) <> ''";
+    const imageFilterClause = `
+      (TRIM(n.image) <> ''
+       OR EXISTS (
+         SELECT 1 FROM attributes a
+         WHERE a.node_id = n.id
+           AND a.key IN ('image', '图像')
+           AND TRIM(a.value) <> ''
+       )
+       OR TRIM(COALESCE(json_extract(n.data, '$.image'), '')) <> ''
+       OR TRIM(COALESCE(json_extract(n.data, '$.icon'), '')) <> ''
+       OR TRIM(COALESCE(json_extract(n.data, '$.avatar'), '')) <> ''
+       OR TRIM(COALESCE(json_extract(n.data, '$.img'), '')) <> ''
+       OR TRIM(COALESCE(json_extract(n.data, '$.logo'), '')) <> ''
+      )
+    `;
+    let whereClause = `WHERE ${imageFilterClause}`;
 
     if (hasProjectScope) {
-      whereClause += ` AND ${scopedClause()}`;
+      whereClause += ` AND ${scopedClause("n")}`;
       params.push(scopedProjectId);
     }
 
     const baseWhereClause = whereClause;
     const total = db
-      .query(`SELECT COUNT(*) as count FROM nodes ${baseWhereClause}`)
+      .query(
+        `SELECT COUNT(DISTINCT n.id) as count FROM nodes n ${baseWhereClause}`,
+      )
       .get(...params) as any;
 
     const excludeIdsParam = parseListParam(url.searchParams.get("exclude_ids"));
@@ -1060,20 +1078,22 @@ export async function handleCoreKbRoutes(
     const currentId = (url.searchParams.get("current_id") || "").trim();
     if (excludeIdsParam.length) {
       const placeholders = excludeIdsParam.map(() => "?").join(",");
-      whereClause += ` AND id NOT IN (${placeholders})`;
+      whereClause += ` AND n.id NOT IN (${placeholders})`;
       params.push(...excludeIdsParam);
     }
 
     const candidateLimit = Math.max(limit * 10, 80);
     const recentRows = db
       .query(
-        `SELECT * FROM nodes ${whereClause}
-         ORDER BY datetime(COALESCE(updated_at, created_at)) DESC, rowid DESC
+        `SELECT DISTINCT n.* FROM nodes n ${whereClause}
+         ORDER BY datetime(COALESCE(n.updated_at, n.created_at)) DESC, n.rowid DESC
          LIMIT ?`,
       )
       .all(...params, candidateLimit) as any[];
     const randomRows = db
-      .query(`SELECT * FROM nodes ${whereClause} ORDER BY RANDOM() LIMIT ?`)
+      .query(
+        `SELECT DISTINCT n.* FROM nodes n ${whereClause} ORDER BY RANDOM() LIMIT ?`,
+      )
       .all(...params, candidateLimit) as any[];
 
     const mergedRowMap = new Map<string, any>();
@@ -1086,10 +1106,16 @@ export async function handleCoreKbRoutes(
 
     const currentNode = currentId
       ? formatNode(
-          db.query(`SELECT * FROM nodes ${baseWhereClause} AND id = ? LIMIT 1`).get(
-            ...params.slice(0, hasProjectScope ? 1 : 0),
-            currentId,
-          ) as any,
+          db
+            .query(
+              `SELECT * FROM nodes n WHERE n.id = ?` +
+                (hasProjectScope ? ` AND ${scopedClause("n")}` : "") +
+                ` LIMIT 1`,
+            )
+            .get(
+              currentId,
+              ...(hasProjectScope ? [scopedProjectId] : []),
+            ) as any,
         )
       : null;
     const currentClass = (currentNode?.classLabel || "").toString().trim();
@@ -1127,7 +1153,9 @@ export async function handleCoreKbRoutes(
 
     const scoredNodes = Array.from(mergedRowMap.values())
       .map((row) => formatNode(row))
-      .filter(Boolean)
+      .filter(
+        (node) => node && typeof node.image === "string" && node.image.trim(),
+      )
       .map((node: any) => {
         const classLabel = String(node.classLabel || "").trim();
         const updatedDays = Math.min(
