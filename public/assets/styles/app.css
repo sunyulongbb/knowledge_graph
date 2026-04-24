@@ -3304,6 +3304,20 @@ body {
   flex: 1 1 auto;
   min-width: 0;
 }
+#attrForm #attrEntitySearchResultsWrap {
+  position: relative;
+}
+#attrForm #attrEntitySearchResultsWrap .wd-prop-list {
+  position: static;
+  top: auto;
+  left: auto;
+  right: auto;
+  z-index: auto;
+  box-shadow: none;
+  max-height: 220px;
+  overflow-y: auto;
+  display: block !important;
+}
 #attrForm .wd-value-input-row > .wd-qualifier-toggle {
   flex: 0 0 auto;
 }
