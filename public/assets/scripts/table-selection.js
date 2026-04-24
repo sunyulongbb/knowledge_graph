@@ -566,7 +566,16 @@
         } else if (e.ctrlKey || e.metaKey) {
           toggleCtrlSelection(rid);
         } else {
-          setTableSelection(rid, true);
+          const alreadySelected =
+            (window.kbSelectedRowIds &&
+              window.kbSelectedRowIds.size === 1 &&
+              window.kbSelectedRowIds.has(rid)) ||
+            (!window.kbSelectedRowIds && window.kbSelectedRowId === rid);
+          if (alreadySelected) {
+            setTableSelection("", true);
+          } else {
+            setTableSelection(rid, true);
+          }
         }
         focusRowElement(tr);
       });

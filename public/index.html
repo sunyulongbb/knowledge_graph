@@ -9928,6 +9928,32 @@ const KB_VIEW_MODES = new Set(["entry", "table", "vis", "attr", "detail", "clean
               const ele = evt.target;
               const id = ele?.data("id");
               if (!id) return;
+              const alreadySelected =
+                (window.kbSelectedRowIds &&
+                  window.kbSelectedRowIds.size === 1 &&
+                  window.kbSelectedRowIds.has(id)) ||
+                (!window.kbSelectedRowIds && window.kbSelectedRowId === id);
+              if (alreadySelected) {
+                try {
+                  window.kbCy.elements(":selected").unselect();
+                } catch (e) {}
+                try {
+                  setTableSelection("", false, {
+                    skipDetailRefresh: true,
+                    skipSidebarSync: true,
+                  });
+                } catch (e) {}
+                try {
+                  window.kbSelectedNodeId = "";
+                  window.kbSelectedRowId = "";
+                  window.kbSelectedRowIds = new Set();
+                  window.kbCurrentNodeId = "";
+                } catch (e) {}
+                try {
+                  syncHashForView('vis', { nodeId: '', includeNode: true });
+                } catch (e) {}
+                return;
+              }
               try {
                 if (typeof setTableSelection === "function") {
                   setTableSelection(id, false, { skipDetailRefresh: true });
