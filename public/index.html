@@ -1325,25 +1325,6 @@
     </style>
         </div>
       </div>
-      <!-- monolingualtext -->
-      <div
-        class="dtype-group"
-        data-dtype="monolingualtext"
-        style="display: none; flex-wrap: wrap; gap: 6px"
-      >
-        <input
-          id="attrValueMonoText"
-          type="text"
-          placeholder="文本内容"
-          style="flex: 2; min-width: 120px"
-        />
-        <input
-          id="attrValueMonoLang"
-          type="text"
-          placeholder="语言代码 (如 zh, en)"
-          style="flex: 1; min-width: 80px"
-        />
-      </div>
     </header>
     <main>
   <div class="kb-split sidebar-collapsed">
@@ -1478,68 +1459,83 @@
                       <input type="hidden" id="attrProp" />
                       <input type="hidden" id="attrPropLabel" />
                       <input type="hidden" id="attrType" />
-                      <div class="wd-value-input-row">
-                        <div id="attrDatatypeGroups" class="wd-dtype-groups">
-                          <!-- string / default -->
-                          <div class="dtype-group" data-dtype="string" style="display:flex; gap:6px">
-                            <input id="attrValue" type="text" class="wd-input" placeholder="文本值" style="flex:1" />
-                          </div>
-                          <!-- url -->
-                          <div class="dtype-group" data-dtype="url" style="display:none; gap:6px">
-                            <input id="attrValueUrl" type="url" class="wd-input" placeholder="https://example.com" style="flex:1" />
-                          </div>
-                          <!-- time (date) -->
-                          <div class="dtype-group" data-dtype="time" style="display:none; gap:6px">
-                            <input id="attrValueDate" type="date" class="wd-input" style="flex:1" />
-                          </div>
-                          <!-- quantity -->
-                          <div class="dtype-group wd-dtype-row" data-dtype="quantity" style="display:none; flex-wrap:wrap; gap:6px">
-                            <input id="attrValueAmount" type="number" step="any" class="wd-input" placeholder="数值" style="flex:1; min-width:100px" />
-                            <input id="attrValueUnit" type="text" class="wd-input" placeholder="单位（可选）" style="flex:1; min-width:100px" />
-                          </div>
-                          <!-- globecoordinate -->
-                          <div class="dtype-group wd-dtype-row" data-dtype="globecoordinate" style="display:none; flex-wrap:wrap; gap:6px">
-                            <input id="attrValueLat" type="number" step="any" class="wd-input" placeholder="纬度" style="flex:1; min-width:100px" />
-                            <input id="attrValueLon" type="number" step="any" class="wd-input" placeholder="经度" style="flex:1; min-width:100px" />
-                          </div>
-                          <!-- commonsMedia (image upload) -->
-                          <div class="dtype-group wd-dtype-stack" data-dtype="commonsMedia" style="display:none; flex-direction:column; gap:8px">
-                            <div class="wd-inline-row" style="display:flex; gap:6px; align-items:center">
-                              <input id="attrValueImage" type="file" accept="image/*" style="display:none" />
-                              <button id="btnAttrImageUpload" type="button" class="btn wd-btn-outline" title="上传图像">
-                                <i class="fa-solid fa-cloud-arrow-up"></i>
-                                <span>上传图像</span>
-                              </button>
-                              <span id="attrImageStateText" class="wd-msg" style="flex:1; min-height:20px; font-size:12px"></span>
+                      <div class="wd-value-action-row">
+                        <div class="wd-value-input-row">
+                          <div id="attrDatatypeGroups" class="wd-dtype-groups">
+                            <!-- string / default -->
+                            <div class="dtype-group" data-dtype="string" style="display:flex; gap:6px">
+                              <input id="attrValue" type="text" class="wd-input" placeholder="文本值" style="flex:1" />
                             </div>
-                            <div class="wd-inline-row" style="display:flex; gap:6px; align-items:center">
-                              <input id="attrValueImageUrl" type="text" class="wd-input" placeholder="图片地址" style="flex:1" />
-                              <button type="button" id="btnAttrImageClear" class="btn wd-btn-icon" title="清除图片">
-                                <i class="fa-solid fa-xmark"></i>
-                              </button>
+                            <!-- url -->
+                            <div class="dtype-group" data-dtype="url" style="display:none; gap:6px">
+                              <input id="attrValueUrl" type="url" class="wd-input" placeholder="https://example.com" style="flex:1" />
                             </div>
-                            <div id="attrImagePreview" style="display:none; margin-top:4px">
-                              <img id="attrImagePreviewImg" style="max-width:200px; max-height:150px; border:1px solid var(--border); border-radius:6px" />
-                              <span id="attrImageFileName" class="wd-msg" style="font-size:12px; display:block; margin-top:4px"></span>
+                            <!-- time (date) -->
+                            <div class="dtype-group" data-dtype="time" style="display:none; gap:6px">
+                              <input id="attrValueDate" type="date" class="wd-input" style="flex:1" />
+                            </div>
+                            <!-- quantity -->
+                            <div class="dtype-group wd-dtype-row" data-dtype="quantity" style="display:none; flex-wrap:wrap; gap:6px">
+                              <input id="attrValueAmount" type="number" step="any" class="wd-input" placeholder="数值" style="flex:1; min-width:100px" />
+                              <input id="attrValueUnit" type="text" class="wd-input" placeholder="单位（可选）" style="flex:1; min-width:100px" />
+                            </div>
+                            <!-- globecoordinate -->
+                            <div class="dtype-group wd-dtype-row" data-dtype="globecoordinate" style="display:none; flex-wrap:wrap; gap:6px">
+                              <input id="attrValueLat" type="number" step="any" class="wd-input" placeholder="纬度" style="flex:1; min-width:100px" />
+                              <input id="attrValueLon" type="number" step="any" class="wd-input" placeholder="经度" style="flex:1; min-width:100px" />
+                            </div>
+                            <!-- commonsMedia (image upload) -->
+                            <div class="dtype-group wd-dtype-stack" data-dtype="commonsMedia" style="display:none; flex-direction:column; gap:8px">
+                              <div class="wd-inline-row" style="display:flex; gap:6px; align-items:center">
+                                <input id="attrValueImage" type="file" accept="image/*" style="display:none" />
+                                <button id="btnAttrImageUpload" type="button" class="btn wd-btn-outline" title="上传图像">
+                                  <i class="fa-solid fa-cloud-arrow-up"></i>
+                                  <span>上传图像</span>
+                                </button>
+                                <span id="attrImageStateText" class="wd-msg" style="flex:1; min-height:20px; font-size:12px"></span>
+                              </div>
+                              <div class="wd-inline-row" style="display:flex; gap:6px; align-items:center">
+                                <input id="attrValueImageUrl" type="text" class="wd-input" placeholder="图片地址" style="flex:1" />
+                                <button type="button" id="btnAttrImageClear" class="btn wd-btn-icon" title="清除图片">
+                                  <i class="fa-solid fa-xmark"></i>
+                                </button>
+                              </div>
+                              <div id="attrImagePreview" style="display:none; margin-top:4px">
+                                <img id="attrImagePreviewImg" style="max-width:200px; max-height:150px; border:1px solid var(--border); border-radius:6px" />
+                                <span id="attrImageFileName" class="wd-msg" style="font-size:12px; display:block; margin-top:4px"></span>
+                              </div>
+                            </div>
+                            <!-- wikibase-entityid -->
+                            <div class="dtype-group wd-dtype-stack" data-dtype="wikibase-entityid" style="display:none; flex-direction:column; gap:8px">
+                              <div class="wd-inline-row" style="display:flex; gap:6px; align-items:center">
+                                <input id="attrEntitySearchInput" type="text" class="wd-input" placeholder="输入关键词后回车检索实体" style="flex:1" autocomplete="off" />
+                              </div>
+                              <div id="attrEntitySearchResultsWrap" style="display:none">
+                                <select id="attrEntitySearchResults" size="8" class="wd-prop-list" style="min-height:120px"></select>
+                              </div>
+                              <div id="attrEntitySelectedPreview" class="wd-msg" style="font-size:12px">当前未选择实体</div>
+                              <input id="attrValueEntityType" type="hidden" />
+                              <input id="attrValueEntityId" type="hidden" />
+                              <input id="attrValueEntityNumericId" type="hidden" />
+                            </div>
+                            <div class="dtype-group" data-dtype="monolingualtext" style="display:none; flex-wrap: wrap; gap: 6px">
+                              <input id="attrValueMonoText" type="text" placeholder="文本内容" class="wd-input" style="flex: 2; min-width: 120px" />
+                              <input id="attrValueMonoLang" type="text" placeholder="语言代码 (如 zh, en)" class="wd-input" style="flex: 1; min-width: 80px" />
                             </div>
                           </div>
-                          <!-- wikibase-entityid -->
-                          <div class="dtype-group wd-dtype-stack" data-dtype="wikibase-entityid" style="display:none; flex-direction:column; gap:8px">
-                            <div class="wd-inline-row" style="display:flex; gap:6px; align-items:center">
-                              <input id="attrEntitySearchInput" type="text" class="wd-input" placeholder="输入关键词后回车检索实体" style="flex:1" autocomplete="off" />
-                            </div>
-                            <div id="attrEntitySearchResultsWrap" style="display:none">
-                              <select id="attrEntitySearchResults" size="8" class="wd-prop-list" style="min-height:120px"></select>
-                            </div>
-                            <div id="attrEntitySelectedPreview" class="wd-msg" style="font-size:12px">当前未选择实体</div>
-                            <input id="attrValueEntityType" type="hidden" />
-                            <input id="attrValueEntityId" type="hidden" />
-                            <input id="attrValueEntityNumericId" type="hidden" />
-                          </div>
+                          <button id="btnAttrQualifierToggle" type="button" class="btn wd-btn-icon wd-qualifier-toggle" title="编辑限定">
+                            <i class="fa-solid fa-code-branch"></i>
+                          </button>
                         </div>
-                        <button id="btnAttrQualifierToggle" type="button" class="btn wd-btn-icon wd-qualifier-toggle" title="编辑限定">
-                          <i class="fa-solid fa-code-branch"></i>
-                        </button>
+                        <div class="wd-form-actions attr-inline-actions">
+                          <button id="btnAttrSave" class="btn wd-btn-icon wd-btn-primary" type="submit" title="保存属性" aria-label="保存属性">
+                            <i class="fa-solid fa-floppy-disk"></i>
+                          </button>
+                          <button id="btnAttrReset" class="btn wd-btn-icon wd-btn-secondary" type="button" title="取消" aria-label="取消">
+                            <i class="fa-solid fa-xmark"></i>
+                          </button>
+                          <span id="attrMsg" class="wd-msg"></span>
+                        </div>
                       </div>
                       <!-- Qualifier -->
                       <div class="wd-qualifier-row" style="display:none;">
@@ -1547,17 +1543,6 @@
                         <input id="attrValueQualifier" type="text" class="wd-input" placeholder="限定信息（可选）" />
                       </div>
                     </div>
-                  </div>
-                  <div class="wd-form-actions">
-                    <button id="btnAttrSave" class="btn wd-btn-primary" type="submit" title="保存属性">
-                      <i class="fa-solid fa-floppy-disk"></i>
-                      <span>保存</span>
-                    </button>
-                    <button id="btnAttrReset" class="btn wd-btn-secondary" type="button" title="取消">
-                      <i class="fa-solid fa-xmark"></i>
-                      <span>取消</span>
-                    </button>
-                    <span id="attrMsg" class="wd-msg"></span>
                   </div>
                 </form>
               </div>

@@ -2254,11 +2254,23 @@ body {
   position: relative;
   z-index: 1;
   display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 #attrList {
   display: block;
   overflow: auto;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.attr-panel-card,
+#attrForm .wd-statement-form {
+  width: 100%;
+  max-width: 100%;
 }
 
 /* Prevent horizontal scroll caused by wide controls */
@@ -2484,7 +2496,6 @@ body {
   transform: rotate(180deg);
 }
 .wd-section-body {
-  padding: 0 12px 10px;
   overflow: hidden;
   transition:
     max-height 0.3s ease,
@@ -2607,6 +2618,10 @@ body {
   background: var(--surface-2, rgba(0, 0, 0, 0.06));
 }
 
+#attrForm .wd-form-actions {
+  justify-content: flex-end;
+}
+
 #attrForm .wd-form-actions .wd-btn-primary,
 #attrForm .wd-form-actions .wd-btn-secondary,
 #attrForm .wd-form-actions .wd-btn-outline,
@@ -2651,11 +2666,17 @@ body {
   cursor: pointer;
   transition:
     border-color 0.15s ease,
-    color 0.15s ease;
+    color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
 }
 .wd-btn-icon:hover {
   border-color: var(--accent);
   color: var(--accent);
+  background: rgba(79, 70, 229, 0.08);
+  box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.12);
+  transform: translateY(-1px);
 }
 .wd-btn-icon:disabled {
   opacity: 0.4;
@@ -2785,11 +2806,32 @@ body {
   flex: 0 0 auto;
 }
 .wd-qualifier-toggle {
-  width: 34px;
-  height: 34px;
-  min-width: 34px;
-  font-size: 14px;
-  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  padding: 0;
+  font-size: 13px;
+  background: var(--surface-1);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+.wd-qualifier-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(79, 70, 229, 0.08);
+  box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.12);
+  transform: translateY(-1px);
 }
 .wd-dtype-groups {
   width: 100%;
@@ -3131,6 +3173,25 @@ body {
   min-width: 0;
   width: 100%;
 }
+#attrForm .wd-value-action-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  flex-wrap: nowrap;
+}
+#attrForm .wd-value-action-row > .wd-value-input-row {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+#attrForm .wd-value-action-row > .attr-inline-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  margin-top: 0;
+  padding: 0;
+}
 #attrForm .wd-value-input-row {
   display: flex;
   align-items: stretch;
@@ -3155,8 +3216,20 @@ body {
   display: none !important;
 }
 #attrForm .wd-form-actions {
-  margin-top: 10px;
-  padding: 0 4px;
+  margin-top: 0;
+  padding: 0;
+}
+#attrForm .wd-form-actions .wd-msg {
+  white-space: nowrap;
+}
+@media (max-width: 900px) {
+  #attrForm .wd-value-action-row {
+    flex-wrap: wrap;
+  }
+  #attrForm .wd-value-action-row > .attr-inline-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
 #attrList::-webkit-scrollbar {
   width: 6px;
