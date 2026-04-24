@@ -1032,6 +1032,9 @@ main {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
 }
+.vis-tool-footer {
+  margin-top: auto;
+}
 .vis-tool-btn.sm {
   width: 28px;
   height: 28px;
@@ -1066,7 +1069,7 @@ main {
   z-index: 1199;
   display: none;
   min-width: 180px;
-  max-width: 280px;
+  max-width: 340px;
   background: var(--surface-0);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -1081,6 +1084,105 @@ main {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+.vis-legend-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+  cursor: pointer;
+}
+.vis-legend-item-icon {
+  flex: none;
+}
+.vis-legend-item-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: calc(100% - 24px);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+.vis-legend-item.active {
+  background: rgba(245, 158, 11, 0.08);
+  border-radius: 8px;
+}
+.vis-legend-item-count {
+  color: var(--muted);
+  font-size: 11px;
+}
+.vis-legend-toggle {
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+}
+.vis-legend-toggle.active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+.vis-sidebar-left #cy_btnLegend {
+  display: none;
+}
+.ontology-color-picker-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.ontology-color-input {
+  width: 100%;
+  height: 42px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #fff;
+  cursor: pointer;
+}
+.ontology-color-reset {
+  min-width: auto;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+}
+.ontology-color-groups {
+  display: grid;
+  gap: 12px;
+}
+.ontology-color-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ontology-color-group-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.ontology-color-swatch-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ontology-color-swatch {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  outline: none;
+  transition:
+    transform 120ms ease,
+    border-color 120ms ease;
+}
+.ontology-color-swatch:hover,
+.ontology-color-swatch:focus {
+  transform: scale(1.08);
+}
+.ontology-color-swatch.active {
+  border-color: #000;
 }
 
 /* Empty state */
@@ -2254,11 +2356,23 @@ body {
   position: relative;
   z-index: 1;
   display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 #attrList {
   display: block;
   overflow: auto;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.attr-panel-card,
+#attrForm .wd-statement-form {
+  width: 100%;
+  max-width: 100%;
 }
 
 /* Prevent horizontal scroll caused by wide controls */
@@ -2484,7 +2598,6 @@ body {
   transform: rotate(180deg);
 }
 .wd-section-body {
-  padding: 0 12px 10px;
   overflow: hidden;
   transition:
     max-height 0.3s ease,
@@ -2554,8 +2667,11 @@ body {
   flex-wrap: nowrap;
   padding-top: 4px;
 }
-.wd-form-actions #btnCancelEdit {
-  margin-left: auto;
+#nodeForm .wd-form-actions {
+  justify-content: flex-end;
+}
+#nodeForm .wd-form-actions #btnCancelEdit {
+  margin-left: 6px;
 }
 .wd-form-actions #attrMsg {
   margin-left: 0;
@@ -2604,6 +2720,10 @@ body {
   background: var(--surface-2, rgba(0, 0, 0, 0.06));
 }
 
+#attrForm .wd-form-actions {
+  justify-content: flex-end;
+}
+
 #attrForm .wd-form-actions .wd-btn-primary,
 #attrForm .wd-form-actions .wd-btn-secondary,
 #attrForm .wd-form-actions .wd-btn-outline,
@@ -2648,11 +2768,17 @@ body {
   cursor: pointer;
   transition:
     border-color 0.15s ease,
-    color 0.15s ease;
+    color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
 }
 .wd-btn-icon:hover {
   border-color: var(--accent);
   color: var(--accent);
+  background: rgba(79, 70, 229, 0.08);
+  box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.12);
+  transform: translateY(-1px);
 }
 .wd-btn-icon:disabled {
   opacity: 0.4;
@@ -2782,11 +2908,32 @@ body {
   flex: 0 0 auto;
 }
 .wd-qualifier-toggle {
-  width: 34px;
-  height: 34px;
-  min-width: 34px;
-  font-size: 14px;
-  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  padding: 0;
+  font-size: 13px;
+  background: var(--surface-1);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+.wd-qualifier-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(79, 70, 229, 0.08);
+  box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.12);
+  transform: translateY(-1px);
 }
 .wd-dtype-groups {
   width: 100%;
@@ -3128,6 +3275,25 @@ body {
   min-width: 0;
   width: 100%;
 }
+#attrForm .wd-value-action-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  flex-wrap: nowrap;
+}
+#attrForm .wd-value-action-row > .wd-value-input-row {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+#attrForm .wd-value-action-row > .attr-inline-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  margin-top: 0;
+  padding: 0;
+}
 #attrForm .wd-value-input-row {
   display: flex;
   align-items: stretch;
@@ -3137,6 +3303,20 @@ body {
 #attrForm .wd-value-input-row > #attrDatatypeGroups {
   flex: 1 1 auto;
   min-width: 0;
+}
+#attrForm #attrEntitySearchResultsWrap {
+  position: relative;
+}
+#attrForm #attrEntitySearchResultsWrap .wd-prop-list {
+  position: static;
+  top: auto;
+  left: auto;
+  right: auto;
+  z-index: auto;
+  box-shadow: none;
+  max-height: 220px;
+  overflow-y: auto;
+  display: block !important;
 }
 #attrForm .wd-value-input-row > .wd-qualifier-toggle {
   flex: 0 0 auto;
@@ -3152,8 +3332,20 @@ body {
   display: none !important;
 }
 #attrForm .wd-form-actions {
-  margin-top: 10px;
-  padding: 0 4px;
+  margin-top: 0;
+  padding: 0;
+}
+#attrForm .wd-form-actions .wd-msg {
+  white-space: nowrap;
+}
+@media (max-width: 900px) {
+  #attrForm .wd-value-action-row {
+    flex-wrap: wrap;
+  }
+  #attrForm .wd-value-action-row > .attr-inline-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
 #attrList::-webkit-scrollbar {
   width: 6px;

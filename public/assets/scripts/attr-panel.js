@@ -22,6 +22,9 @@ if (attrFormBody) attrFormBody.style.display = "none";
 if (btnShowAttrForm) {
   btnShowAttrForm.addEventListener("click", function () {
     resetEditingRow();
+    if (typeof resetAttrForm === "function") {
+      resetAttrForm();
+    }
     if (attrFormBody) {
       attrFormBody.style.display = "";
       attrFormBody.classList.remove("collapsed");
@@ -67,12 +70,14 @@ if (btnAttrReset) {
     if (entityEditMode) {
       if (entityHeader) entityHeader.style.display = "none";
       if (nodeFormSection) nodeFormSection.style.display = "";
+      if (btnCancelEdit) btnCancelEdit.style.display = "";
       // 聚焦名称输入框
       const fName = document.getElementById("fName");
       if (fName) setTimeout(() => fName.focus(), 100);
     } else {
       if (entityHeader) entityHeader.style.display = "";
       if (nodeFormSection) nodeFormSection.style.display = "none";
+      if (btnCancelEdit) btnCancelEdit.style.display = "none";
     }
   }
 
@@ -155,6 +160,8 @@ if (btnAttrReset) {
   const attrValueUnit = byId("attrValueUnit");
   const attrValueLat = byId("attrValueLat");
   const attrValueLon = byId("attrValueLon");
+  const attrValueMonoText = byId("attrValueMonoText");
+  const attrValueMonoLang = byId("attrValueMonoLang");
   // wikibase-entityid inputs
   const attrEntitySearchInput = byId("attrEntitySearchInput");
   const attrEntitySearchResults = byId("attrEntitySearchResults");
@@ -240,10 +247,8 @@ if (btnAttrReset) {
     row.classList.add("attr-editing-hidden");
     try {
       fillAttrForm(nodeId, it, valueIndex);
-    } catch {
-      if (window.fillAttrForm && typeof window.fillAttrForm === "function") {
-        window.fillAttrForm(it);
-      }
+    } catch (err) {
+      console.error("fillAttrForm failed", err);
       if (window.attrId) window.attrId.value = it?.id || "";
     }
     const visibleInput =
@@ -308,8 +313,9 @@ if (btnAttrReset) {
   function pickUiDatatype(item) {
     if (!item || typeof item !== "object") return "";
     if (item.ui_datatype) return item.ui_datatype;
-    // 兼容 valuetype（属性表）和 datavalue_type（属性记录）两种字段名
-    const valueType = item.datavalue_type || item.valuetype || "";
+    // 兼容 datavalue.type / valuetype（属性表）和 datavalue_type（属性记录）几种字段名
+    const valueType =
+      item.datavalue?.type || item.datavalue_type || item.valuetype || "";
     return mapDatatypeToUi(item.datatype, valueType);
   }
 
@@ -1035,14 +1041,23 @@ if (btnAttrReset) {
     return "item";
   }
 
+  function parseEntityIdFromInput(value) {
+    if (!value || typeof value !== "string") return "";
+    const trimmed = value.trim();
+    const match = trimmed.match(/^(?:entity\/)?([QPLE]\d+)$/i);
+    if (!match) return "";
+    return match[1].toUpperCase();
+  }
+
   function updateEntitySelectionPreview(label, id) {
     if (!attrEntitySelectedPreview) return;
     if (!id) {
-      attrEntitySelectedPreview.style.display = "none";
+      attrEntitySelectedPreview.style.display = "";
+      attrEntitySelectedPreview.textContent = "当前未选择实体";
       if (attrEntitySearchInput) attrEntitySearchInput.value = "";
       return;
     }
-    const text = label ? `${label} (${id})` : id;
+    const text = label || id;
     if (attrEntitySearchInput) {
       attrEntitySearchInput.value = text;
     }
@@ -1060,6 +1075,7 @@ if (btnAttrReset) {
     attrEntitySearchItems = normalized;
     if (!attrEntitySearchItems.length) {
       attrEntitySearchResultsWrap.style.display = "none";
+      attrEntitySearchResults.style.display = "none";
       return;
     }
     const frag = document.createDocumentFragment();
@@ -1076,6 +1092,7 @@ if (btnAttrReset) {
     });
     attrEntitySearchResults.appendChild(frag);
     attrEntitySearchResultsWrap.style.display = "";
+    attrEntitySearchResults.style.display = "block";
   }
 
   function applyEntitySelectionById(entityId) {
@@ -1113,10 +1130,10 @@ if (btnAttrReset) {
   }
 
   async function searchEntitiesByKeyword(keyword) {
-    if (!attrEntitySearchStatus) return;
     const term = (keyword || "").trim();
     if (!term) {
-      attrEntitySearchStatus.textContent = "请输入检索关键词";
+      if (attrEntitySearchStatus)
+        attrEntitySearchStatus.textContent = "请输入检索关键词";
       renderEntitySearchResults([]);
       return;
     }
@@ -1226,7 +1243,10 @@ if (btnAttrReset) {
 
   function clearEntitySearchState() {
     attrEntitySearchItems = [];
-    if (attrEntitySearchResults) attrEntitySearchResults.innerHTML = "";
+    if (attrEntitySearchResults) {
+      attrEntitySearchResults.innerHTML = "";
+      attrEntitySearchResults.style.display = "none";
+    }
     if (attrEntitySearchResultsWrap)
       attrEntitySearchResultsWrap.style.display = "none";
     if (attrEntitySearchStatus) attrEntitySearchStatus.textContent = "";
@@ -1332,27 +1352,38 @@ if (btnAttrReset) {
     attrEntitySearchInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
-        searchEntitiesByKeyword(attrEntitySearchInput.value || "");
+        const rawValue = attrEntitySearchInput.value || "";
+        const directEntityId = parseEntityIdFromInput(rawValue);
+        if (directEntityId) {
+          applyEntitySelectionById(directEntityId);
+          if (attrEntitySearchStatus)
+            attrEntitySearchStatus.textContent = "已选择实体";
+          if (attrEntitySearchResultsWrap)
+            attrEntitySearchResultsWrap.style.display = "none";
+          return;
+        }
+        searchEntitiesByKeyword(rawValue);
       }
     });
   }
 
   if (attrEntitySearchResults) {
-    attrEntitySearchResults.addEventListener("change", () => {
+    const hideSearchResults = () => {
+      if (attrEntitySearchResultsWrap)
+        attrEntitySearchResultsWrap.style.display = "none";
+      if (attrEntitySearchResults)
+        attrEntitySearchResults.style.display = "none";
+    };
+
+    const selectAndHide = () => {
       const selectedId = (attrEntitySearchResults.value || "").trim();
-      if (selectedId) applyEntitySelectionById(selectedId);
-    });
-    attrEntitySearchResults.addEventListener("dblclick", () => {
-      const selectedId = (attrEntitySearchResults.value || "").trim();
-      if (selectedId) applyEntitySelectionById(selectedId);
-    });
-    attrEntitySearchResults.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        const selectedId = (attrEntitySearchResults.value || "").trim();
-        if (selectedId) applyEntitySelectionById(selectedId);
+      if (selectedId) {
+        applyEntitySelectionById(selectedId);
+        hideSearchResults();
       }
-    });
+    };
+
+    attrEntitySearchResults.addEventListener("dblclick", selectAndHide);
   }
 
   async function loadAttributes(nodeId) {
@@ -1664,13 +1695,32 @@ if (btnAttrReset) {
     }
     const dtype = pickUiDatatype(it) || it?.datatype || "string";
     attrType.value = dtype;
-    updateDatatypeUI(dtype, it?.datavalue_type || it?.valuetype || "");
+    updateDatatypeUI(
+      dtype,
+      it?.datavalue?.type || it?.datavalue_type || it?.valuetype || "",
+    );
 
     if (attrValueQualifier && attrValueQualifier.parentElement) {
       attrValueQualifier.parentElement.style.display = "none";
     }
 
     let val = it?.value;
+    if (
+      (val === null || val === undefined) &&
+      it?.datavalue?.value !== undefined
+    ) {
+      val = it.datavalue.value;
+    }
+    if (typeof val === "string") {
+      const trimmed = val.trim();
+      if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+        try {
+          val = JSON.parse(trimmed);
+        } catch {
+          // keep raw string if parse fails
+        }
+      }
+    }
     if (valueIndex >= 0 && Array.isArray(val)) {
       val = val[valueIndex];
     }
@@ -1738,7 +1788,8 @@ if (btnAttrReset) {
         attrValueUrl.value = typeof val === "string" ? val : "";
       } else if (dtype === "monolingualtext") {
         attrValueMonoText.value = val?.text ?? val?.value ?? "";
-        attrValueMonoLang.value = val?.language ?? val?.lang ?? "";
+        attrValueMonoLang.value =
+          val?.language ?? val?.lang ?? val?.languageCode ?? "";
       } else if (dtype === "commonsMedia") {
         // Handle image value - could be URL or data URL
         const imageUrl = typeof val === "string" ? val : "";
@@ -1899,9 +1950,41 @@ if (btnAttrReset) {
       }
       value = { latitude: lat, longitude: lon };
     } else if (dtype === "wikibase-entityid") {
-      const entityType = (attrValueEntityType.value || "").trim();
-      const entityId = (attrValueEntityId.value || "").trim();
-      const numericIdStr = (attrValueEntityNumericId.value || "").trim();
+      let entityType = (attrValueEntityType.value || "").trim();
+      let entityId = (attrValueEntityId.value || "").trim();
+      let numericIdStr = (attrValueEntityNumericId.value || "").trim();
+      let entityLabel = "";
+      if (!entityId) {
+        const directEntityId = parseEntityIdFromInput(
+          attrEntitySearchInput?.value || "",
+        );
+        if (directEntityId) {
+          const normalized = normalizeEntitySearchItem(directEntityId);
+          if (normalized) {
+            entityId = normalized.id;
+            entityType = normalized.entity_type || entityType;
+            numericIdStr = normalized.numeric_id || numericIdStr;
+            entityLabel = normalized.label || "";
+            if (attrValueEntityType) attrValueEntityType.value = entityType;
+            if (attrValueEntityId) attrValueEntityId.value = entityId;
+            if (attrValueEntityNumericId)
+              attrValueEntityNumericId.value = numericIdStr;
+          }
+        }
+      }
+      if (!entityLabel && attrEntitySearchInput) {
+        const rawText = (attrEntitySearchInput.value || "").trim();
+        const directId = parseEntityIdFromInput(rawText);
+        if (directId && rawText !== directId) {
+          entityLabel = rawText;
+        }
+      }
+      if (!entityLabel) {
+        const found = attrEntitySearchItems.find(
+          (it) => (it?.id || "") === entityId,
+        );
+        entityLabel = found?.label || "";
+      }
       if (!entityType || !entityId || !numericIdStr) {
         attrMsg.textContent = "请填写全部wikibase-entityid字段";
         return;
@@ -1916,6 +1999,10 @@ if (btnAttrReset) {
         id: entityId,
         "numeric-id": numericId,
       };
+      if (entityLabel) {
+        value.entity_label_zh = entityLabel;
+        value.label = entityLabel;
+      }
     } else if (dtype === "monolingualtext") {
       const text = (attrValueMonoText.value || "").trim();
       const lang = (attrValueMonoLang.value || "").trim();
