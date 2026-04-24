@@ -1403,33 +1403,56 @@
       return Array.isArray(data.nodes) ? data.nodes : [];
     };
 
+    const normalizeShortsNodeKey = (item) => {
+      const id = String(item.id || item._id || "").trim();
+      if (id) return `id:${id}`;
+      const video = String(item.video || "").trim();
+      if (video) return `video:${video}`;
+      return "";
+    };
+
+    const dedupeShortsNodes = (items) => {
+      const seen = new Set();
+      return (Array.isArray(items) ? items : []).filter((item) => {
+        const key = normalizeShortsNodeKey(item);
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    };
+
     const normalizeShortsNodes = (nodes) =>
-      nodes.map((item) => ({
-        label_zh: item.label || "",
-        id: item.id || "",
-        link: item.link || "",
-        classLabel: item.classLabel || item.type || "",
-        video: item.video || "",
-        image: item.image || item.avatar || "",
-      }));
+      dedupeShortsNodes(
+        nodes.map((item) => ({
+          label_zh: item.label || "",
+          id: item.id || "",
+          _id: item._id || "",
+          link: item.link || "",
+          classLabel: item.classLabel || item.type || "",
+          video: item.video || "",
+          image: item.image || item.avatar || "",
+        })),
+      );
 
     const appendShortsNodes = async (nodes, options = {}) => {
       const allowDuplicates = options.allowDuplicates === true;
       const tableList = normalizeShortsNodes(nodes);
-      const existingIds = new Set(rawList.map((item) => item.id));
-      const newItems = allowDuplicates
-        ? tableList
-            .filter((item) => item.id)
-            .map((item, index) => ({
-              ...item,
-              __shortsReplayKey: `${item.id || "video"}-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
-            }))
-        : tableList.filter((item) => item.id && !existingIds.has(item.id));
+      const existingKeys = new Set(
+        rawList
+          .map((item) => normalizeShortsNodeKey(item))
+          .filter(Boolean),
+      );
+      const newItems = tableList.filter((item) => {
+        const key = normalizeShortsNodeKey(item);
+        if (!key || existingKeys.has(key)) return false;
+        return true;
+      });
       if (!newItems.length) return false;
       window.kbShortsPendingAnchorKey =
         newItems[0]?.__shortsReplayKey || newItems[0]?.id || "";
       window.kbShortsPendingScrollIndex = rawList.length;
       rawList = rawList.concat(newItems);
+      rawList = dedupeShortsNodes(rawList);
       window.kbShortsNodes = rawList;
       saveShortsCache(rawList);
       await renderShortsList();
@@ -1470,22 +1493,25 @@
 
     const cachedShorts = loadShortsCache();
     if (cachedShorts.length) {
-      rawList = cachedShorts;
+      rawList = dedupeShortsNodes(cachedShorts);
       window.kbShortsNodes = rawList;
     } else if (
       Array.isArray(window.kbTableNodes) &&
       window.kbTableNodes.length
     ) {
-      rawList = window.kbTableNodes
-        .filter((item) => item.video && item.video.trim())
-        .map((item) => ({
-          label_zh: item.label || "",
-          id: item.id || "",
-          link: item.link || "",
-          classLabel: item.classLabel || item.type || "",
-          video: item.video || "",
-          image: item.image || item.avatar || "",
-        }));
+      rawList = dedupeShortsNodes(
+        window.kbTableNodes
+          .filter((item) => item.video && item.video.trim())
+          .map((item) => ({
+            label_zh: item.label || "",
+            id: item.id || "",
+            _id: item._id || "",
+            link: item.link || "",
+            classLabel: item.classLabel || item.type || "",
+            video: item.video || "",
+            image: item.image || item.avatar || "",
+          })),
+      );
       window.kbShortsNodes = rawList;
       saveShortsCache(rawList);
     }
@@ -2098,41 +2124,64 @@
       }
     };
 
+    let wheelGestureActive = false;
+    let wheelGestureTimer = null;
+
+    const handleShortsWheel = async (event) => {
+      if (wheelLock) {
+        event.preventDefault();
+        return;
+      }
+      if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
+      event.preventDefault();
+      const direction = event.deltaY > 0 ? 1 : -1;
+      if (wheelGestureActive) {
+        if (wheelGestureTimer) {
+          clearTimeout(wheelGestureTimer);
+        }
+        wheelGestureTimer = window.setTimeout(() => {
+          wheelGestureActive = false;
+          wheelGestureTimer = null;
+        }, 220);
+        return;
+      }
+
+      wheelGestureActive = true;
+      wheelGestureTimer = window.setTimeout(() => {
+        wheelGestureActive = false;
+        wheelGestureTimer = null;
+      }, 220);
+
+      const currentIndex = getCurrentCardIndex();
+      if (direction > 0) {
+        if (currentIndex >= cardCount - 1) {
+          if (
+            shouldLoadMoreShorts(currentIndex) ||
+            isListScrolledToBottom()
+          ) {
+            window.kbShortsPendingScrollIndex = currentIndex + 1;
+            await loadMoreShortsPage();
+          }
+          return;
+        }
+        const nextIndex = currentIndex + 1;
+        scrollToCard(nextIndex);
+        if (currentIndex >= cardCount - 2) {
+          window.kbShortsPendingScrollIndex = currentIndex + 1;
+          loadMoreShortsPage().catch(() => {});
+        }
+        return;
+      }
+
+      const prevIndex = Math.max(currentIndex - 1, 0);
+      if (prevIndex !== currentIndex) {
+        scrollToCard(prevIndex);
+      }
+    };
+
     window.kbShortsHandlers = {
       scroll: handleShortsScroll,
-      wheel: async (event) => {
-        if (wheelLock) {
-          event.preventDefault();
-          return;
-        }
-        if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
-        const currentIndex = getCurrentCardIndex();
-        if (event.deltaY > 0) {
-          event.preventDefault();
-          if (currentIndex >= cardCount - 1) {
-            if (
-              shouldLoadMoreShorts(currentIndex) ||
-              isListScrolledToBottom()
-            ) {
-              window.kbShortsPendingScrollIndex = currentIndex + 1;
-              await loadMoreShortsPage();
-            }
-            return;
-          }
-          const nextIndex = currentIndex + 1;
-          scrollToCard(nextIndex);
-          if (currentIndex >= cardCount - 2) {
-            window.kbShortsPendingScrollIndex = currentIndex + 1;
-            loadMoreShortsPage().catch(() => {});
-          }
-          return;
-        }
-        event.preventDefault();
-        const prevIndex = Math.max(currentIndex - 1, 0);
-        if (prevIndex !== currentIndex) {
-          scrollToCard(prevIndex);
-        }
-      },
+      wheel: handleShortsWheel,
       click: handleShortsControlClick,
       keydown: handleShortsKeydown,
     };
