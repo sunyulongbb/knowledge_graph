@@ -8561,7 +8561,10 @@ const KB_VIEW_MODES = new Set(["entry", "table", "vis", "attr", "detail", "clean
             }
             try {
               window.kbCy.fit();
-            } catch {}
+              focusNode(fullId, { fit: false, duration: 180 });
+            } catch (e) {
+              console.error("focusNode after merge failed", e);
+            }
           } catch (e) {
             console.error("merge neighborhood error", e);
           }
@@ -8617,7 +8620,11 @@ const KB_VIEW_MODES = new Set(["entry", "table", "vis", "attr", "detail", "clean
           const ro = new ResizeObserver(() => {
             try {
               instance.resize();
-              instance.fit();
+              if (window.kbViewMode === 'vis' && window.kbActiveVisNodeId) {
+                focusNode(window.kbActiveVisNodeId, { fit: false, duration: 0 });
+              } else {
+                instance.fit();
+              }
             } catch {}
           });
           ro.observe(container);
@@ -8907,6 +8914,13 @@ const KB_VIEW_MODES = new Set(["entry", "table", "vis", "attr", "detail", "clean
             });
             fitOnDblClick(window.kbCy);
             observeResize(window.kbCy, container);
+            try {
+              if (window.kbViewMode === 'vis' && window.kbActiveVisNodeId) {
+                focusNode(window.kbActiveVisNodeId, { fit: false, duration: 180 });
+              }
+            } catch (err) {
+              console.error('initial focusNode failed', err);
+            }
             
             // 初始化 edgehandles 插件 - 拖拽创建关系
             console.log('Checking edgehandles:', typeof window.kbCy.edgehandles);
