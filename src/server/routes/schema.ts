@@ -69,6 +69,7 @@ export async function handleSchemaRoutes(
     parent_id: row.parent_id || null,
     parent: row.parent_id || null,
     project_id: row.project_id ?? null,
+    color: row.color || null,
     sort_order: Number.isFinite(Number(row.sort_order))
       ? Number(row.sort_order)
       : null,
@@ -369,7 +370,7 @@ export async function handleSchemaRoutes(
       const sortOrder = Number(orderRow?.max_order || 0) + 1;
 
       db.run(
-        "INSERT INTO ontologies (id, name, alias, description, parent_id, project_id, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO ontologies (id, name, alias, description, parent_id, project_id, color, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         [
           id,
           name,
@@ -377,6 +378,7 @@ export async function handleSchemaRoutes(
           description,
           parentId,
           projectId,
+          body.color || null,
           sortOrder,
         ],
       );
@@ -469,6 +471,10 @@ export async function handleSchemaRoutes(
         const sortOrder = Number(body.sort_order);
         updates.push("sort_order = ?");
         params.push(Number.isFinite(sortOrder) ? sortOrder : null);
+      }
+      if (body.color !== undefined) {
+        updates.push("color = ?");
+        params.push(body.color ? String(body.color).trim() : null);
       }
       if (hasProjectScope) {
         updates.push("project_id = COALESCE(project_id, ?)");

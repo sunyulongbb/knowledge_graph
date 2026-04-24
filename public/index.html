@@ -3206,6 +3206,16 @@
             <label style="display: block; margin-bottom: 4px; font-size: 12px; color: var(--muted);">描述</label>
             <textarea id="ontologyDescription" class="kb-input" style="width: 100%; min-height: 88px; resize: vertical;"></textarea>
           </div>
+          <div class="field" style="margin-bottom: 16px;">
+            <label style="display: block; margin-bottom: 4px; font-size: 12px; color: var(--muted);">标记颜色</label>
+            <div class="ontology-color-picker-row">
+              <input type="color" id="ontologyColor" value="#94a3b8" class="ontology-color-input" />
+              <button type="button" id="ontologyColorReset" class="btn sm icon ontology-color-reset" title="重置颜色">
+                <i class="fa-solid fa-rotate-right"></i>
+              </button>
+            </div>
+            <div id="ontologyColorGroups" class="ontology-color-groups"></div>
+          </div>
           <div style="display: flex; justify-content: flex-end; gap: 8px;">
             <button type="button" class="btn" onclick="document.getElementById('ontologyModal').style.display='none'">取消</button>
             <button type="submit" class="btn primary">保存</button>
@@ -3410,10 +3420,10 @@
         };
       }
       const elBtnTheme = document.getElementById("btnTheme");
-      function renderLegend(nodes) {
+      function renderLegend(nodes, edges) {
         const legendEl = document.getElementById("cyLegendContent");
         if (!legendEl) return;
-        
+
         const map = new Map();
         // Always add default entity type
         map.set("default", { color: "#fff", label: "默认实体" });
@@ -3421,17 +3431,31 @@
         if (Array.isArray(nodes)) {
           nodes.forEach(n => {
             const d = n.data || n;
-            if (d.color && d.classLabel) {
-               // Use classId as key to avoid duplicates
-               const key = d.classId || d.classLabel;
+            const nodeType = d.type || d.classLabel;
+            if (nodeType) {
+               const key = nodeType;
                if (!map.has(key)) {
-                 map.set(key, { color: d.color, label: d.classLabel });
+                 map.set(key, { color: d.color || '#94a3b8', label: nodeType });
                }
             }
           });
         }
-        
+
+        const relationLabels = new Set();
+        if (Array.isArray(edges)) {
+          edges.forEach(e => {
+            const d = e.data || e;
+            const label = d.label || d.relation || d.type || "关系";
+            if (label) {
+              relationLabels.add(label);
+            }
+          });
+        }
+
         let html = "";
+        html += `
+          <div style="margin-bottom: 10px; font-size: 12px; font-weight: 600; color: var(--fg);">节点类型</div>
+        `;
         map.forEach((val, key) => {
            let icon = "";
            if (key === "default") {
@@ -3446,18 +3470,45 @@
               </div>
            `;
         });
-        // Add edge and highlight static items
-        html += `
+
+        if (relationLabels.size > 0) {
+          html += `
+            <div style="margin: 14px 0 10px; font-size: 12px; font-weight: 600; color: var(--fg);">关系类型</div>
+          `;
+          relationLabels.forEach(label => {
+            html += `
               <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 4px;">
                 <span style="width: 16px; height: 2px; background: #cbd5e1; display: inline-block;"></span>
-                <span>关系</span>
+                <span>${label}</span>
               </div>
-              <div style="display: flex; gap: 8px; align-items: center;">
-                <span style="width: 16px; height: 16px; border-radius: 4px; background: #fffbeb; border: 1px solid #f59e0b; display: inline-block;"></span>
-                <span>高亮</span>
-              </div>
+            `;
+          });
+        } else {
+          html += `
+            <div style="margin: 14px 0 10px; font-size: 12px; font-weight: 600; color: var(--fg);">关系类型</div>
+            <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 4px;">
+              <span style="width: 16px; height: 2px; background: #cbd5e1; display: inline-block;"></span>
+              <span>关系</span>
+            </div>
+          `;
+        }
+
+        html += `
+          <div style="margin-top: 14px; display: flex; gap: 8px; align-items: center;">
+            <span style="width: 16px; height: 16px; border-radius: 4px; background: #fffbeb; border: 1px solid #f59e0b; display: inline-block;"></span>
+            <span>高亮</span>
+          </div>
         `;
+
         legendEl.innerHTML = html;
+        const legendWrapper = document.getElementById('cyLegend');
+        if (legendWrapper) {
+          legendWrapper.style.display = 'block';
+        }
+        const legendBtn = document.getElementById('cy_btnLegend');
+        if (legendBtn) {
+          legendBtn.classList.add('active');
+        }
       }
 
       function buildCyStyle() {
@@ -8693,7 +8744,7 @@ const KB_VIEW_MODES = new Set(["entry", "table", "vis", "attr", "detail", "clean
           {
             selector: "node",
             style: {
-              "background-color": "#fff",
+              "background-color": (ele) => ele.data("color") || "#fff",
               "border-width": 2,
               "border-color": (ele) => ele.data("color") || "#94a3b8",
               label: "data(label)",
@@ -8917,7 +8968,7 @@ const KB_VIEW_MODES = new Set(["entry", "table", "vis", "attr", "detail", "clean
               edges: edgesRaw.map((e) => e.data || e),
               counts: data.counts,
             };
-            renderLegend(nodesRaw);
+            renderLegend(nodesRaw, edgesRaw);
           } catch {}
           const container = document.getElementById("cy");
           if (!window.kbCy) {
@@ -11343,6 +11394,7 @@ const KB_VIEW_MODES = new Set(["entry", "table", "vis", "attr", "detail", "clean
                   label: nodeData.label || nodeData.name || name,
                   label_zh: nodeData.label_zh || name,
                   color: nodeData.color || '#94a3b8',
+                  type: nodeData.type || nodeData.classLabel || '实体',
                   classId: nodeData.classId,
                   classLabel: nodeData.classLabel,
                   description: nodeData.description || description,
@@ -11400,6 +11452,7 @@ const KB_VIEW_MODES = new Set(["entry", "table", "vis", "attr", "detail", "clean
                 ele.data('label', nd.label || nd.name || name);
                 ele.data('label_zh', nd.label_zh || name);
                 ele.data('description', nd.description || description);
+                if (nd.type !== undefined) ele.data('type', nd.type || nd.classLabel || '实体');
                 if (nd.classId) ele.data('classId', nd.classId);
                 if (nd.classLabel) ele.data('classLabel', nd.classLabel);
                 if (nd.color) ele.data('color', nd.color);

@@ -72,6 +72,20 @@ export function formatNode(row: any) {
     classLabel = cls.name;
   }
 
+  if (row.type) {
+    try {
+      const typeKey = String(row.type).trim();
+      const typeRow = db
+        .query(
+          "SELECT color FROM ontologies WHERE id = ? OR lower(name) = lower(?) OR lower(alias) LIKE ? LIMIT 1",
+        )
+        .get(typeKey, typeKey, `%${typeKey.toLowerCase()}%`) as any;
+      if (typeRow?.color) {
+        color = typeRow.color;
+      }
+    } catch {}
+  }
+
   let image = "";
   try {
     let imageProp = db
@@ -132,12 +146,18 @@ export function formatNode(row: any) {
 
   const link =
     (typeof row.link === "string" && row.link.trim() && row.link.trim()) ||
-    (typeof extraData.link === "string" && extraData.link.trim() && extraData.link.trim()) ||
-    (typeof extraData.url === "string" && extraData.url.trim() && extraData.url.trim()) ||
+    (typeof extraData.link === "string" &&
+      extraData.link.trim() &&
+      extraData.link.trim()) ||
+    (typeof extraData.url === "string" &&
+      extraData.url.trim() &&
+      extraData.url.trim()) ||
     "";
   const video =
     (typeof row.video === "string" && row.video.trim() && row.video.trim()) ||
-    (typeof extraData.video === "string" && extraData.video.trim() && extraData.video.trim()) ||
+    (typeof extraData.video === "string" &&
+      extraData.video.trim() &&
+      extraData.video.trim()) ||
     "";
 
   return {

@@ -182,7 +182,10 @@
                 "
               >
                 <span style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
-                  <span style="font-weight: 600;">${escapeHtml(item.name || "未命名本体")}</span>
+                  <span style="display:flex; align-items:center; gap: 8px;">
+                    <span style="width: 12px; height: 12px; border-radius: 999px; background: ${escapeHtml(item.color || "#94a3b8")}; display: inline-block; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08);"></span>
+                    <span style="font-weight: 600;">${escapeHtml(item.name || "未命名本体")}</span>
+                  </span>
                   <span class="ontology-pill">${propertyCount} 属性</span>
                 </span>
                 <span class="muted" style="font-size: 12px;">
@@ -456,6 +459,7 @@
 
     const parent = options.parent || null;
     const item = options.item || null;
+    const ontologyColorInput = byId("ontologyColor");
     title.textContent =
       mode === "edit" ? "编辑本体" : parent ? "新增子本体" : "新增本体";
     form.dataset.mode = mode;
@@ -464,16 +468,83 @@
       mode === "edit" ? item?.parent_id || "" : parent?.id || "";
     ontologyNameInput.value = item?.name || "";
     ontologyDescriptionInput.value = item?.description || "";
+    if (ontologyColorInput) {
+      ontologyColorInput.value = item?.color || "#94a3b8";
+    }
     ontologyParentNameInput.value =
       mode === "edit"
         ? ontologyItems.find((node) => node.id === item?.parent_id)?.name ||
           "无"
         : parent?.name || "无";
+    renderOntologyColorGroups(item?.color || "#94a3b8");
     modal.style.display = "flex";
     try {
       ontologyNameInput.focus();
       ontologyNameInput.select();
     } catch {}
+  }
+
+  const ONTOLOGY_COLOR_GROUPS = [
+    {
+      label: "基础色",
+      colors: [
+        "#94a3b8",
+        "#22c55e",
+        "#3b82f6",
+        "#f59e0b",
+        "#ef4444",
+        "#8b5cf6",
+        "#10b981",
+        "#f97316",
+      ],
+    },
+    {
+      label: "柔和色",
+      colors: [
+        "#a78bfa",
+        "#fb7185",
+        "#fbbf24",
+        "#34d399",
+        "#38bdf8",
+        "#f472b6",
+        "#60a5fa",
+        "#facc15",
+      ],
+    },
+    {
+      label: "沉稳色",
+      colors: [
+        "#64748b",
+        "#475569",
+        "#334155",
+        "#0f172a",
+        "#e2e8f0",
+        "#cbd5e1",
+        "#94a3b8",
+        "#c084fc",
+      ],
+    },
+  ];
+
+  function renderOntologyColorGroups(selectedColor = "#94a3b8") {
+    const container = byId("ontologyColorGroups");
+    if (!container) return;
+    container.innerHTML = ONTOLOGY_COLOR_GROUPS.map((group) => {
+      return `
+        <div class="ontology-color-group">
+          <div class="ontology-color-group-label">${escapeHtml(group.label)}</div>
+          <div class="ontology-color-swatch-row">
+            ${group.colors
+              .map((color) => {
+                const active =
+                  color.toLowerCase() === selectedColor.toLowerCase();
+                return `<button type="button" class="ontology-color-swatch${active ? " active" : ""}" data-color="${escapeHtml(color)}" title="${escapeHtml(color)}" style="background: ${escapeHtml(color)};"></button>`;
+              })
+              .join("")}
+          </div>
+        </div>
+      `;
+    }).join("");
   }
 
   function closeOntologyModal() {
@@ -688,6 +759,7 @@
         }
 
         try {
+          const color = (byId("ontologyColor")?.value || "").trim() || null;
           const url = appendCurrentDbToUrl(
             new URL(
               mode === "edit"
@@ -698,8 +770,8 @@
           );
           const payload =
             mode === "edit"
-              ? { id, name, description, parent_id: parentId || null }
-              : { name, description, parent_id: parentId || null };
+              ? { id, name, description, parent_id: parentId || null, color }
+              : { name, description, parent_id: parentId || null, color };
           const result = await apiJson(url.toString(), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -712,6 +784,29 @@
           alert("保存本体失败: " + (err?.message || err));
         }
       });
+
+      const ontologyColorGroups = byId("ontologyColorGroups");
+      const ontologyColorInput = byId("ontologyColor");
+      const ontologyColorReset = byId("ontologyColorReset");
+      if (ontologyColorGroups && ontologyColorInput) {
+        ontologyColorGroups.addEventListener("click", (event) => {
+          const target = event.target.closest(".ontology-color-swatch");
+          if (!target) return;
+          const color = target.getAttribute("data-color");
+          if (!color) return;
+          ontologyColorInput.value = color;
+          renderOntologyColorGroups(color);
+        });
+        ontologyColorInput.addEventListener("input", () => {
+          renderOntologyColorGroups(ontologyColorInput.value || "#94a3b8");
+        });
+      }
+      if (ontologyColorReset && ontologyColorInput) {
+        ontologyColorReset.addEventListener("click", () => {
+          ontologyColorInput.value = "#94a3b8";
+          renderOntologyColorGroups("#94a3b8");
+        });
+      }
     }
 
     if (propertyTable && !propertyTable.dataset.boundOntologyTable) {
