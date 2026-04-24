@@ -1433,7 +1433,7 @@
                   <button id="btnSubmit" class="btn wd-btn-primary" type="submit" title="新增实体" aria-label="新增实体">
                     <i class="fa-solid fa-plus"></i>
                   </button>
-                  <button id="btnCancelEdit" class="btn wd-btn-secondary" type="button" style="display:none" title="取消编辑" aria-label="取消编辑">
+                  <button id="btnCancelEdit" class="btn wd-btn-secondary wd-btn-icon" type="button" style="display:none" title="取消编辑" aria-label="取消编辑">
                     <i class="fa-solid fa-xmark"></i>
                   </button>
                   <span id="addMsg" class="wd-msg"></span>
@@ -10532,22 +10532,13 @@ const KB_VIEW_MODES = new Set(["entry", "table", "vis", "attr", "detail", "clean
         }
 
         function getSelectedNodeId() {
-          const ids = [
-            window.kbSelectedNodeId,
-            window.kbCurrentNodeId,
-            window.kbActiveDetailRouteId,
-            window.kbActiveDetailNodeId,
-            window.kbSelectedRowId,
-            window.kbActiveVisNodeId,
-            document.getElementById('fId')?.value,
-            document.getElementById('entityIdBadge')?.textContent,
-          ];
-          for (const id of ids) {
-            if (id && String(id).trim()) return String(id).trim();
-          }
-          if (window.kbSelectedRowIds && window.kbSelectedRowIds.size) {
-            return Array.from(window.kbSelectedRowIds)[0];
-          }
+          const formId = document.getElementById('fId')?.value?.toString().trim();
+          if (formId) return formId;
+          const badgeEl = document.getElementById('entityIdBadge');
+          const badgeId = badgeEl && badgeEl.style.display !== 'none'
+            ? badgeEl.textContent?.toString().trim()
+            : '';
+          if (badgeId) return badgeId;
           return '';
         }
 
@@ -10617,6 +10608,80 @@ const KB_VIEW_MODES = new Set(["entry", "table", "vis", "attr", "detail", "clean
           imageUploadInput.value = '';
           imageUploadInput.click();
         });
+
+        imageWrap.tabIndex = 0;
+        const handlePasteUpload = async (ev) => {
+          const clipboard = ev.clipboardData || window.clipboardData;
+          if (!clipboard) return;
+          let imageFile = null;
+          if (clipboard.files && clipboard.files.length) {
+            imageFile = Array.from(clipboard.files).find((file) => file.type.startsWith('image/')) || null;
+          }
+          if (!imageFile && clipboard.items && clipboard.items.length) {
+            for (const item of Array.from(clipboard.items)) {
+              if (item.type.startsWith('image/')) {
+                imageFile = item.getAsFile();
+                break;
+              }
+            }
+          }
+          if (imageFile) {
+            ev.preventDefault();
+            const reader = new FileReader();
+            reader.onload = async () => {
+              const dataUrl = reader.result;
+              if (typeof dataUrl === 'string') {
+                const selectedId = getSelectedNodeId();
+                if (selectedId) {
+                  await saveEntityImage(selectedId, dataUrl);
+                }
+              }
+            };
+            reader.onerror = () => {
+              alert('读取剪贴板图片失败');
+            };
+            reader.readAsDataURL(imageFile);
+            return;
+          }
+          const text = clipboard.getData && clipboard.getData('text/plain');
+          if (text && /^(data:image\/|https?:\/\/.*\.(?:png|jpe?g|gif|bmp|webp|svg))(\?.*)?$/i.test(text.trim())) {
+            ev.preventDefault();
+            let imageUrl = text.trim();
+            if (imageUrl.startsWith('data:image/')) {
+              const selectedId = getSelectedNodeId();
+              if (selectedId) await saveEntityImage(selectedId, imageUrl);
+              return;
+            }
+            try {
+              const resp = await fetch(imageUrl);
+              if (!resp.ok) throw new Error('下载图片失败');
+              const blob = await resp.blob();
+              if (!blob.type.startsWith('image/')) throw new Error('粘贴内容不是图片');
+              const reader = new FileReader();
+              reader.onload = async () => {
+                const dataUrl = reader.result;
+                if (typeof dataUrl === 'string') {
+                  const selectedId = getSelectedNodeId();
+                  if (selectedId) await saveEntityImage(selectedId, dataUrl);
+                }
+              };
+              reader.onerror = () => {
+                alert('读取粘贴图片失败');
+              };
+              reader.readAsDataURL(blob);
+            } catch (err) {
+              console.error('粘贴图片加载失败', err);
+              alert('粘贴图片失败: ' + (err?.message || ''));
+            }
+          }
+        };
+        imageWrap.addEventListener('paste', handlePasteUpload);
+        const entityHeader = document.getElementById('entityHeader');
+        if (entityHeader) {
+          entityHeader.tabIndex = 0;
+          entityHeader.addEventListener('paste', handlePasteUpload);
+        }
+
         imageWrap.dataset.imageUploadInitialized = 'true';
         imageWrap.style.cursor = 'pointer';
       })();
@@ -10637,6 +10702,38 @@ const KB_VIEW_MODES = new Set(["entry", "table", "vis", "attr", "detail", "clean
       const btnEntityVideoUpload = document.getElementById("btnEntityVideoUpload");
       let uploadedVideoUrl = "";
       let uploadedVideoPoster = "";
+
+      function getCurrentNodeIdForLeftCard() {
+        const formId = document.getElementById('fId')?.value?.toString().trim();
+        if (formId) return formId;
+        const badgeEl = document.getElementById('entityIdBadge');
+        const badgeId = badgeEl && badgeEl.style.display !== 'none'
+          ? badgeEl.textContent?.toString().trim()
+          : '';
+        if (badgeId) return badgeId;
+        return '';
+      }
+
+      const displayName = document.getElementById('entityDisplayName');
+      const displayDesc = document.getElementById('entityDisplayDesc');
+      if (displayName) {
+        displayName.addEventListener('dblclick', () => {
+          const selectedId = getCurrentNodeIdForLeftCard();
+          if (!selectedId) return;
+          enterEditById(selectedId).then(() => {
+            if (fName) fName.focus();
+          }).catch(() => {});
+        });
+      }
+      if (displayDesc) {
+        displayDesc.addEventListener('dblclick', () => {
+          const selectedId = getCurrentNodeIdForLeftCard();
+          if (!selectedId) return;
+          enterEditById(selectedId).then(() => {
+            if (fDesc) fDesc.focus();
+          }).catch(() => {});
+        });
+      }
 
       if (btnEntityLink) {
         btnEntityLink.addEventListener("click", () => {
@@ -10669,24 +10766,6 @@ const KB_VIEW_MODES = new Set(["entry", "table", "vis", "attr", "detail", "clean
           }
         });
 
-        function tryAutoSaveNode() {
-          if (!form) return;
-          const selectedId = fId ? (fId.value || "").trim() : "";
-          const nodeName = fName ? (fName.value || "").trim() : "";
-          if (selectedId || nodeName) {
-            if (addMsg) addMsg.textContent = "视频已上传，正在自动保存...";
-            try {
-              if (typeof form.requestSubmit === "function") {
-                form.requestSubmit();
-              } else {
-                btnSubmit?.click();
-              }
-            } catch (err) {
-              console.warn("自动保存节点失败", err);
-            }
-          }
-        }
-
         fVideo.addEventListener("change", async () => {
           if (!fVideo || !fVideo.files || !fVideo.files.length) return;
           const file = fVideo.files[0];
@@ -10710,8 +10789,7 @@ const KB_VIEW_MODES = new Set(["entry", "table", "vis", "attr", "detail", "clean
               throw new Error("视频上传失败");
             }
             uploadedVideoUrl = uploadResp.url;
-            if (addMsg) addMsg.textContent = "视频已上传，正在自动保存...";
-            tryAutoSaveNode();
+            if (addMsg) addMsg.textContent = "视频已上传，请点击保存以保留更改。";
           } catch (err) {
             if (addMsg) addMsg.textContent = err?.message || "视频上传失败";
             uploadedVideoUrl = "";
@@ -10951,7 +11029,10 @@ const KB_VIEW_MODES = new Set(["entry", "table", "vis", "attr", "detail", "clean
             eLink.href = '#';
             eLink.style.display = 'none';
           }
-          if (eBadge) eBadge.style.display = 'none';
+          if (eBadge) {
+            eBadge.textContent = '';
+            eBadge.style.display = 'none';
+          }
           if (eAliases) eAliases.style.display = 'none';
           updateEntityDescToggle();
           if (eImage) {

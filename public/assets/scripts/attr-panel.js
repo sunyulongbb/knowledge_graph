@@ -67,12 +67,14 @@ if (btnAttrReset) {
     if (entityEditMode) {
       if (entityHeader) entityHeader.style.display = "none";
       if (nodeFormSection) nodeFormSection.style.display = "";
+      if (btnCancelEdit) btnCancelEdit.style.display = "";
       // 聚焦名称输入框
       const fName = document.getElementById("fName");
       if (fName) setTimeout(() => fName.focus(), 100);
     } else {
       if (entityHeader) entityHeader.style.display = "";
       if (nodeFormSection) nodeFormSection.style.display = "none";
+      if (btnCancelEdit) btnCancelEdit.style.display = "none";
     }
   }
 

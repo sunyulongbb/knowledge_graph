@@ -2554,8 +2554,11 @@ body {
   flex-wrap: nowrap;
   padding-top: 4px;
 }
-.wd-form-actions #btnCancelEdit {
-  margin-left: auto;
+#nodeForm .wd-form-actions {
+  justify-content: flex-end;
+}
+#nodeForm .wd-form-actions #btnCancelEdit {
+  margin-left: 6px;
 }
 .wd-form-actions #attrMsg {
   margin-left: 0;
