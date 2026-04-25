@@ -51,6 +51,59 @@ export async function handleCoreKbRoutes(
     "node-videos",
   );
   mkdirSync(NODE_VIDEO_UPLOADS_DIR, { recursive: true });
+  const NODE_IMAGE_UPLOADS_DIR = resolve(
+    import.meta.dir,
+    "..",
+    "..",
+    "..",
+    "uploads",
+    "node-images",
+  );
+  mkdirSync(NODE_IMAGE_UPLOADS_DIR, { recursive: true });
+
+  const resolveFileExtension = (urlPath: string, contentType: string) => {
+    const match = String(urlPath || "").trim().match(/\.([a-z0-9]+)(?:$|\?)/i);
+    if (match) return match[1].toLowerCase();
+    if (contentType) {
+      const lower = contentType.toLowerCase();
+      if (lower.includes("jpeg")) return "jpg";
+      if (lower.includes("png")) return "png";
+      if (lower.includes("gif")) return "gif";
+      if (lower.includes("webp")) return "webp";
+      if (lower.includes("mp4")) return "mp4";
+      if (lower.includes("webm")) return "webm";
+      if (lower.includes("ogg")) return "ogg";
+      if (lower.includes("quicktime")) return "mov";
+    }
+    return "";
+  };
+
+  const downloadRemoteFile = async (
+    fileUrl: string,
+    uploadDir: string,
+    allowedExts: string[],
+    maxSize: number,
+  ) => {
+    const parsed = new URL(fileUrl);
+    const resp = await fetch(parsed.toString());
+    if (!resp.ok) {
+      throw new Error(`下载文件失败：HTTP ${resp.status}`);
+    }
+    const contentType = (resp.headers.get("content-type") || "").toLowerCase();
+    const ext = resolveFileExtension(parsed.pathname, contentType);
+    if (!ext || !allowedExts.includes(ext)) {
+      throw new Error(`不支持的文件类型：${ext || contentType}`);
+    }
+    const arrayBuffer = await resp.arrayBuffer();
+    if (arrayBuffer.byteLength > maxSize) {
+      throw new Error(`文件大小超过限制：${Math.round(arrayBuffer.byteLength / 1024 / 1024)}MB`);
+    }
+    const filename = `${crypto.randomUUID()}.${ext}`;
+    const filePath = resolve(uploadDir, filename);
+    writeFileSync(filePath, Buffer.from(arrayBuffer));
+    const base = uploadDir === NODE_VIDEO_UPLOADS_DIR ? "node-videos" : "node-images";
+    return `/static/uploads/${base}/${filename}`;
+  };
 
   const entryTaskScopeParams = () => (hasProjectScope ? [scopedProjectId] : []);
   const mapEntryTaskRow = (row: any) => {
@@ -1224,6 +1277,9 @@ export async function handleCoreKbRoutes(
       const targetDescription = (body?.targetDescription ?? "")
         .toString()
         .trim();
+      let image = (body?.image ?? "").toString().trim();
+      let video = (body?.video ?? "").toString().trim();
+      const link = (body?.link ?? "").toString().trim();
       const attributesRaw = Array.isArray(body?.attributes)
         ? body.attributes
         : [];
@@ -1256,6 +1312,34 @@ export async function handleCoreKbRoutes(
       summary.targetId = targetResult.node.id;
       if (targetResult.created) summary.createdNodes += 1;
       else summary.reusedNodes += 1;
+      if (image && image.startsWith("http")) {
+        try {
+          image = await downloadRemoteFile(image, NODE_IMAGE_UPLOADS_DIR, [
+            "jpg",
+            "jpeg",
+            "png",
+            "gif",
+            "webp",
+            "svg",
+          ],
+          20 * 1024 * 1024);
+        } catch (err) {
+          console.warn("download image failed", err);
+        }
+      }
+      if (video && video.startsWith("http")) {
+        try {
+          video = await downloadRemoteFile(video, NODE_VIDEO_UPLOADS_DIR, [
+            "mp4",
+            "webm",
+            "ogg",
+            "mov",
+          ],
+          300 * 1024 * 1024);
+        } catch (err) {
+          console.warn("download video failed", err);
+        }
+      }
       let entityOntologyId: string | null = null;
       if (entityType) {
         db.run(
@@ -1265,6 +1349,29 @@ export async function handleCoreKbRoutes(
         const entityClassId = ensureClassRecord(entityType);
         if (entityClassId) assignNodeClass(targetResult.node.id, entityClassId);
         entityOntologyId = ensureOntologyRecord(entityType);
+      }
+      if (image || video || link) {
+        const updates = [] as string[];
+        const params = [] as any[];
+        if (image) {
+          updates.push("image = ?");
+          params.push(image);
+        }
+        if (video) {
+          updates.push("video = ?");
+          params.push(video);
+        }
+        if (link) {
+          updates.push("link = ?");
+          params.push(link);
+        }
+        if (updates.length) {
+          params.push(targetResult.node.id);
+          db.run(
+            `UPDATE nodes SET ${updates.join(", ")}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            params,
+          );
+        }
       }
 
       const targetNameLower = targetName.toLowerCase();
@@ -1565,13 +1672,43 @@ export async function handleCoreKbRoutes(
                   if (attributeChanges.created) totals.createdEdges += 1;
                 }
 
-                // Update extra fields (type, description, aliases, tags)
+                // Update extra fields (type, description, aliases, tags, media)
                 const targetId = targetResult.node.id;
+                let imageUrl = payload.image ? String(payload.image).trim() : "";
+                let videoUrl = payload.video ? String(payload.video).trim() : "";
+                const linkValue = payload.link ? String(payload.link).trim() : "";
+                if (imageUrl && imageUrl.startsWith("http")) {
+                  try {
+                    imageUrl = await downloadRemoteFile(
+                      imageUrl,
+                      NODE_IMAGE_UPLOADS_DIR,
+                      ["jpg", "jpeg", "png", "gif", "webp", "svg"],
+                      20 * 1024 * 1024,
+                    );
+                  } catch (err) {
+                    console.warn("download image failed", err);
+                  }
+                }
+                if (videoUrl && videoUrl.startsWith("http")) {
+                  try {
+                    videoUrl = await downloadRemoteFile(
+                      videoUrl,
+                      NODE_VIDEO_UPLOADS_DIR,
+                      ["mp4", "webm", "ogg", "mov"],
+                      300 * 1024 * 1024,
+                    );
+                  } catch (err) {
+                    console.warn("download video failed", err);
+                  }
+                }
                 if (
                   payload.entityType ||
                   payload.targetDescription ||
                   (Array.isArray(payload.aliases) && payload.aliases.length) ||
-                  (Array.isArray(payload.tags) && payload.tags.length)
+                  (Array.isArray(payload.tags) && payload.tags.length) ||
+                  imageUrl ||
+                  videoUrl ||
+                  linkValue
                 ) {
                   const updateFields: any = {};
                   if (payload.entityType)
@@ -1582,6 +1719,9 @@ export async function handleCoreKbRoutes(
                     updateFields.aliases = JSON.stringify(payload.aliases);
                   if (Array.isArray(payload.tags))
                     updateFields.tags = JSON.stringify(payload.tags);
+                  if (imageUrl) updateFields.image = imageUrl;
+                  if (videoUrl) updateFields.video = videoUrl;
+                  if (linkValue) updateFields.link = linkValue;
                   const setClauses = Object.keys(updateFields)
                     .map((k) => `${k} = ?`)
                     .join(", ");
@@ -1642,6 +1782,55 @@ export async function handleCoreKbRoutes(
     } catch (err) {
       console.error(err);
       return new Response("Batch import failed", { status: 500 });
+    }
+  }
+
+  if (url.pathname === "/api/kb/fetch" && method === "POST") {
+    try {
+      const body = (await req.json()) as any;
+      const targetUrl = String(body?.url || "").trim();
+      if (!targetUrl) {
+        return Response.json({ error: "Missing url" }, { status: 400 });
+      }
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(targetUrl);
+      } catch {
+        return Response.json({ error: "Invalid URL" }, { status: 400 });
+      }
+      if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+        return Response.json({ error: "Only http(s) URLs are allowed" }, { status: 400 });
+      }
+      const forbiddenHosts = [
+        "localhost",
+        "127.0.0.1",
+        "::1",
+        "[::1]",
+        "0.0.0.0",
+      ];
+      if (forbiddenHosts.includes(parsedUrl.hostname)) {
+        return Response.json(
+          { error: "Localhost and loopback addresses are not allowed" },
+          { status: 400 },
+        );
+      }
+      const resp = await fetch(parsedUrl.toString(), {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+        },
+      });
+      const contentType = resp.headers.get("content-type") || "application/json";
+      const bodyText = await resp.text();
+      return new Response(bodyText, {
+        status: resp.status,
+        headers: {
+          "Content-Type": contentType,
+        },
+      });
+    } catch (err) {
+      console.error(err);
+      return Response.json({ error: "Failed to fetch remote URL" }, { status: 500 });
     }
   }
 
@@ -1777,9 +1966,38 @@ export async function handleCoreKbRoutes(
       const desc = body.description || "";
       const aliases = JSON.stringify(body.aliases || []);
       const tags = JSON.stringify(body.tags || []);
-      const image = typeof body.image === "string" ? body.image.trim() : "";
-      const link = typeof body.link === "string" ? body.link.trim() : "";
-      const video = typeof body.video === "string" ? body.video.trim() : "";
+      let image = typeof body.image === "string" ? body.image.trim() : "";
+      let link = typeof body.link === "string" ? body.link.trim() : "";
+      let video = typeof body.video === "string" ? body.video.trim() : "";
+
+      if (image && image.startsWith("http")) {
+        try {
+          image = await downloadRemoteFile(image, NODE_IMAGE_UPLOADS_DIR, [
+            "jpg",
+            "jpeg",
+            "png",
+            "gif",
+            "webp",
+            "svg",
+          ],
+          20 * 1024 * 1024);
+        } catch (err) {
+          console.warn("download image failed", err);
+        }
+      }
+      if (video && video.startsWith("http")) {
+        try {
+          video = await downloadRemoteFile(video, NODE_VIDEO_UPLOADS_DIR, [
+            "mp4",
+            "webm",
+            "ogg",
+            "mov",
+          ],
+          300 * 1024 * 1024);
+        } catch (err) {
+          console.warn("download video failed", err);
+        }
+      }
 
       db.run(
         "INSERT INTO nodes (id, name, type, description, aliases, tags, image, link, video, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -1842,16 +2060,46 @@ export async function handleCoreKbRoutes(
         params.push(body.type !== null ? String(body.type) : null);
       }
       if (body.image !== undefined) {
+        let imageValue = body.image ? String(body.image).trim() : "";
+        if (imageValue && imageValue.startsWith("http")) {
+          try {
+            imageValue = await downloadRemoteFile(imageValue, NODE_IMAGE_UPLOADS_DIR, [
+              "jpg",
+              "jpeg",
+              "png",
+              "gif",
+              "webp",
+              "svg",
+            ],
+            20 * 1024 * 1024);
+          } catch (err) {
+            console.warn("download image failed", err);
+          }
+        }
         updates.push("image = ?");
-        params.push(body.image || "");
+        params.push(imageValue || "");
       }
       if (body.link !== undefined) {
         updates.push("link = ?");
-        params.push(body.link ? body.link.trim() : "");
+        params.push(body.link ? String(body.link).trim() : "");
       }
       if (body.video !== undefined) {
+        let videoValue = body.video ? String(body.video).trim() : "";
+        if (videoValue && videoValue.startsWith("http")) {
+          try {
+            videoValue = await downloadRemoteFile(videoValue, NODE_VIDEO_UPLOADS_DIR, [
+              "mp4",
+              "webm",
+              "ogg",
+              "mov",
+            ],
+            300 * 1024 * 1024);
+          } catch (err) {
+            console.warn("download video failed", err);
+          }
+        }
         updates.push("video = ?");
-        params.push(body.video ? body.video.trim() : "");
+        params.push(videoValue || "");
       }
 
       if (updates.length > 0) {

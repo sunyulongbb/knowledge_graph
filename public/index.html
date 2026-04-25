@@ -1876,14 +1876,7 @@
                 <i class="fa-solid fa-arrow-left"></i>
                 <span style="margin-left: 4px">任务管理</span>
               </button>
-              <button id="btnEntryModeEntity" class="btn sm accent" type="button" data-entry-template="entity_sheet">
-                <i class="fa-solid fa-cube"></i>
-                <span style="margin-left: 4px">实体录入</span>
-              </button>
-              <button id="btnEntryModeRelation" class="btn sm" type="button" data-entry-template="relation_sheet">
-                <i class="fa-solid fa-link"></i>
-                <span style="margin-left: 4px">关系录入</span>
-              </button>
+           
               <span style="border-left:1px solid #ddd;margin:0 6px"></span>
               <button id="btnEntryAddRow" class="btn sm" type="button">
                 <i class="fa-solid fa-plus"></i>
@@ -1892,6 +1885,10 @@
               <button id="btnEntryImportExcel" class="btn sm" type="button">
                 <i class="fa-solid fa-file-arrow-up"></i>
                 <span style="margin-left: 4px">文件导入（Excel/JSON）</span>
+              </button>
+              <button id="btnEntryImportApi" class="btn sm" type="button">
+                <i class="fa-solid fa-cloud-arrow-down"></i>
+                <span style="margin-left: 4px">API 导入</span>
               </button>
               <button id="btnEntryAddColumn" class="btn sm" type="button">
                 <i class="fa-solid fa-table-columns"></i>
@@ -1906,6 +1903,33 @@
                 <span style="margin-left: 4px">导入</span>
               </button>
               <input id="entryExcelFileInput" type="file" accept=".xlsx,.xls,.csv,.json" style="display:none" />
+            </div>
+          </div>
+          <div id="entryApiForm" class="panel" style="display:none; padding: 14px; border: 1px solid var(--border); background: var(--surface-0); margin-top: 12px; gap: 10px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap: 12px; flex-wrap:wrap;">
+              <div>
+                <div style="font-size: 14px; font-weight: 700;">API 导入设置</div>
+                <div class="muted" style="font-size:12px; margin-top:4px;">填写 JSON API 地址，支持路径定位数组以及字段映射。</div>
+              </div>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button id="btnEntryApiSubmit" class="btn sm accent" type="button">开始导入</button>
+                <button id="btnEntryApiCancel" class="btn sm" type="button">取消</button>
+              </div>
+            </div>
+            <div style="display:grid; gap:10px;">
+              <div class="field">
+                <label style="display:block; font-size:13px; margin-bottom:4px;">API 地址</label>
+                <input id="entryApiUrlInput" type="text" class="kb-input" placeholder="https://..." style="width:100%;" />
+              </div>
+              <div class="field">
+                <label style="display:block; font-size:13px; margin-bottom:4px;">数据路径（可选）</label>
+                <input id="entryApiPathInput" type="text" class="kb-input" placeholder="items 或 data.items" style="width:100%;" />
+              </div>
+              <div class="field">
+                <label style="display:block; font-size:13px; margin-bottom:4px;">字段映射（可选）</label>
+                <textarea id="entryApiMappingInput" class="kb-input" rows="3" placeholder="sourceKey=目标列，可换行多映射" style="width:100%; resize:vertical;"></textarea>
+              </div>
+              <div id="entryApiFormTip" class="muted" style="font-size:12px;">支持字段映射与 JSON 路径自动识别，若返回对象请填写 path。</div>
             </div>
           </div>
           <div id="entryManagerView" style="display:flex; flex-direction:column; gap:12px;">
@@ -4703,6 +4727,13 @@
     const btnEntryTaskDelete = document.getElementById("btnEntryTaskDelete");
     const btnEntryAddRow = document.getElementById("btnEntryAddRow");
     const btnEntryImportExcel = document.getElementById("btnEntryImportExcel");
+    const btnEntryImportApi = document.getElementById("btnEntryImportApi");
+    const entryApiForm = document.getElementById("entryApiForm");
+    const entryApiUrlInput = document.getElementById("entryApiUrlInput");
+    const entryApiPathInput = document.getElementById("entryApiPathInput");
+    const entryApiMappingInput = document.getElementById("entryApiMappingInput");
+    const btnEntryApiSubmit = document.getElementById("btnEntryApiSubmit");
+    const btnEntryApiCancel = document.getElementById("btnEntryApiCancel");
     const entryExcelFileInput = document.getElementById("entryExcelFileInput");
     const btnEntryAddColumn = document.getElementById("btnEntryAddColumn");
     const btnEntryClear = document.getElementById("btnEntryClear");
@@ -4795,6 +4826,9 @@
     const ENTRY_SHEET_FIXED_COLUMNS = [
       { title: "名称", name: "name" },
       { title: "类型", name: "type" },
+      { title: "图像", name: "image" },
+      { title: "视频", name: "video" },
+      { title: "链接", name: "link" },
     ];
     const ENTRY_SHEET_DEFAULT_EXTRA_COLUMNS = [
       { title: "别名", name: "aliases" },
@@ -4811,6 +4845,27 @@
     ];
     const ENTRY_SHEET_NAME_COLUMN_KEYS = new Set(["name", "名称"]);
     const ENTRY_SHEET_TYPE_COLUMN_KEYS = new Set(["type", "类型", "entity_type", "实体类型"]);
+    const ENTRY_SHEET_IMAGE_COLUMN_KEYS = new Set([
+      "image",
+      "img",
+      "图像",
+      "图片",
+      "image_url",
+      "图片链接",
+    ]);
+    const ENTRY_SHEET_VIDEO_COLUMN_KEYS = new Set([
+      "video",
+      "视频",
+      "video_url",
+      "视频地址",
+    ]);
+    const ENTRY_SHEET_LINK_COLUMN_KEYS = new Set([
+      "link",
+      "链接",
+      "url",
+      "link_url",
+      "链接地址",
+    ]);
     const ENTRY_SHEET_ALIASES_COLUMN_KEYS = new Set(["aliases", "alias", "别名"]);
     const ENTRY_SHEET_DESCRIPTION_COLUMN_KEYS = new Set(["description", "desc", "描述"]);
     const ENTRY_SHEET_TAGS_COLUMN_KEYS = new Set(["tags", "tag", "标签"]);
@@ -5666,6 +5721,9 @@
       if (btnEntryBackToTasks) {
         btnEntryBackToTasks.style.display = entryActiveScreen === "editor" ? "" : "none";
       }
+      if (entryApiForm && entryActiveScreen !== "editor") {
+        entryApiForm.style.display = "none";
+      }
       if (entryActiveScreen === "editor") {
         if (typeof window.requestAnimationFrame === "function") {
           window.requestAnimationFrame(() => {
@@ -5796,6 +5854,7 @@
       if (btnEntryTaskSave) btnEntryTaskSave.disabled = !hasTask || !entryTaskDirty;
       if (btnEntryAddRow) btnEntryAddRow.disabled = !hasTask || entryActiveScreen !== "editor";
       if (btnEntryImportExcel) btnEntryImportExcel.disabled = !hasTask || entryActiveScreen !== "editor";
+      if (btnEntryImportApi) btnEntryImportApi.disabled = !hasTask || entryActiveScreen !== "editor";
       if (btnEntryAddColumn) btnEntryAddColumn.disabled = !hasTask || entryActiveScreen !== "editor" || getCurrentTaskMode() === ENTRY_TEMPLATE.RELATION_SHEET;
       if (btnEntryClear) btnEntryClear.disabled = !hasTask || entryActiveScreen !== "editor";
       if (btnEntrySubmit) btnEntrySubmit.disabled = !hasTask || entrySubmitInFlight || entryActiveScreen !== "editor";
@@ -6694,6 +6753,196 @@
       };
     }
 
+    function resolveJsonPath(value, path) {
+      if (!path || typeof path !== "string") return value;
+      const parts = String(path)
+        .split(/[\[\].]+/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+      let current = value;
+      for (const part of parts) {
+        if (
+          current &&
+          typeof current === "object" &&
+          Object.prototype.hasOwnProperty.call(current, part)
+        ) {
+          current = current[part];
+        } else {
+          return undefined;
+        }
+      }
+      return current;
+    }
+
+    function extractJsonItemsFromObject(json, path) {
+      if (path) {
+        const found = resolveJsonPath(json, path);
+        if (Array.isArray(found)) return found;
+        if (found && typeof found === "object") return [found];
+        return [];
+      }
+      if (Array.isArray(json)) return json;
+      if (json && typeof json === "object") {
+        const candidates = ["items", "data", "records", "results"];
+        for (const key of candidates) {
+          if (Array.isArray(json[key])) return json[key];
+        }
+        return [json];
+      }
+      return [];
+    }
+
+    function parseJsonFieldMappingInput(raw) {
+      const mapping = new Map();
+      if (!raw || typeof raw !== "string") return mapping;
+      const pairs = String(raw)
+        .split(/[\r\n,;]+/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+      pairs.forEach((pair) => {
+        const sep = pair.includes("=") ? "=" : pair.includes(":") ? ":" : null;
+        if (!sep) return;
+        const parts = pair.split(sep);
+        if (parts.length < 2) return;
+        const source = parts[0].trim();
+        const target = parts.slice(1).join(sep).trim();
+        if (!source || !target) return;
+        mapping.set(normalizeEntryFieldKey(source), {
+          sourcePath: source,
+          targetLabel: target,
+        });
+      });
+      return mapping;
+    }
+
+    function parseJsonFieldMappingFromObject(json) {
+      const mapping = new Map();
+      if (!json || typeof json !== "object" || Array.isArray(json)) return mapping;
+      const raw = json.field_mapping || json._field_mapping || json.mapping;
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) return mapping;
+      Object.entries(raw).forEach(([source, target]) => {
+        if (!source || !target) return;
+        mapping.set(normalizeEntryFieldKey(source), {
+          sourcePath: source,
+          targetLabel: String(target).trim(),
+        });
+      });
+      return mapping;
+    }
+
+    function ensureUniqueColumnName(schema, candidate) {
+      let name = String(candidate || "").trim();
+      if (!name) name = `attr_${entryMultiColumnSerial + 1}`;
+      const normalized = normalizeEntryFieldKey(name);
+      let unique = normalized || name;
+      let suffix = 1;
+      while (
+        (Array.isArray(schema) ? schema : []).some(
+          (col) => normalizeEntryFieldKey(String(col?.name || "")) === normalizeEntryFieldKey(unique),
+        )
+      ) {
+        unique = `${normalized || name}_${suffix}`;
+        suffix += 1;
+      }
+      return unique;
+    }
+
+    function findOrCreateSchemaColumnName(schema, targetLabel) {
+      const normalizedTarget = normalizeEntryFieldKey(targetLabel);
+      const existing = (Array.isArray(schema) ? schema : []).find((col) => {
+        return normalizeEntryFieldKey(col?.name || col?.title || "") === normalizedTarget;
+      });
+      if (existing && existing.name) return existing.name;
+      const title = String(targetLabel || "").trim() || "字段";
+      const columnName = ensureUniqueColumnName(schema, title);
+      schema.push({ title, name: columnName, width: 140 });
+      return columnName;
+    }
+
+    function findJsonPropertyValue(item, keyOrPath) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return undefined;
+      if (!keyOrPath || typeof keyOrPath !== "string") return undefined;
+      const trimmed = String(keyOrPath).trim();
+      const pathValue = resolveJsonPath(item, trimmed);
+      if (pathValue !== undefined) return pathValue;
+      if (Object.prototype.hasOwnProperty.call(item, trimmed)) return item[trimmed];
+      const normalizedKey = normalizeEntryFieldKey(trimmed);
+      for (const rawKey of Object.keys(item)) {
+        if (normalizeEntryFieldKey(rawKey) === normalizedKey) return item[rawKey];
+      }
+      return undefined;
+    }
+
+    function buildJsonImportRows(items, schema, fieldMapping) {
+      const finalSchema = cloneSchema(schema);
+      const columnMapping = new Map();
+      if (fieldMapping && fieldMapping.size) {
+        fieldMapping.forEach((entry) => {
+          const columnName = findOrCreateSchemaColumnName(finalSchema, entry.targetLabel);
+          columnMapping.set(normalizeEntryFieldKey(entry.sourcePath), {
+            sourcePath: entry.sourcePath,
+            columnName,
+          });
+        });
+      }
+
+      const headerMap = buildEntrySchemaHeaderMap(finalSchema);
+      const seenNormalized = new Set(Array.from(headerMap.keys()));
+      items.forEach((item) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) return;
+        Object.keys(item).forEach((rawKey) => {
+          const normalized = normalizeEntryFieldKey(rawKey);
+          if (!normalized || seenNormalized.has(normalized) || columnMapping.has(normalized)) return;
+          seenNormalized.add(normalized);
+          finalSchema.push({ title: rawKey, name: rawKey, width: 140 });
+        });
+      });
+
+      const importedRows = [];
+      items.forEach((item) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) return;
+        const nextRow = createEmptyRow(finalSchema);
+        let hasValue = false;
+        finalSchema.forEach((col) => {
+          const columnName = String(col.name || "");
+          if (!columnName) return;
+          let rawValue;
+          const mappingEntry = Array.from(columnMapping.values()).find(
+            (entry) => entry.columnName === columnName,
+          );
+          if (mappingEntry) {
+            rawValue = findJsonPropertyValue(item, mappingEntry.sourcePath);
+          } else {
+            rawValue = findJsonPropertyValue(item, columnName);
+          }
+          if (rawValue === undefined || rawValue === null) return;
+          let value = "";
+          if (Array.isArray(rawValue)) {
+            value = rawValue
+              .map((item2) =>
+                item2 === undefined || item2 === null
+                  ? ""
+                  : typeof item2 === "object"
+                    ? JSON.stringify(item2)
+                    : String(item2),
+              )
+              .filter(Boolean)
+              .join("\n");
+          } else if (typeof rawValue === "object") {
+            value = JSON.stringify(rawValue);
+          } else {
+            value = normalizeEntryCellString(rawValue);
+          }
+          if (!value) return;
+          nextRow[columnName] = value;
+          hasValue = true;
+        });
+        if (hasValue) importedRows.push(nextRow);
+      });
+
+      return { finalSchema, importedRows, mappedColumns: columnMapping.size };
+    }
+
     function loadJsonRowsFromBuffer(buffer, fileName) {
       let text = "";
       try {
@@ -6707,11 +6956,12 @@
       } catch (err) {
         throw new Error("JSON 格式错误");
       }
-      const items = Array.isArray(json) ? json : json && typeof json === "object" ? [json] : [];
+      const fieldMapping = parseJsonFieldMappingFromObject(json);
+      const items = extractJsonItemsFromObject(json);
       if (!items.length) {
         throw new Error("JSON 文件必须包含对象数组");
       }
-      return items;
+      return { items, fieldMapping };
     }
 
     async function importExcelIntoEntryGrid(file) {
@@ -6725,85 +6975,24 @@
 
       if (lowerName.endsWith(".json")) {
         const schema = Array.isArray(grid.schema) ? grid.schema : getMultiSchema();
-        const headerMap = buildEntrySchemaHeaderMap(schema);
-        const items = loadJsonRowsFromBuffer(buffer, file.name);
-
-        const extraCols = [];
-        const seenNormalized = new Set(Array.from(headerMap.keys()));
-        items.forEach((item) => {
-          if (!item || typeof item !== "object" || Array.isArray(item)) return;
-          Object.keys(item).forEach((rawKey) => {
-            const normalized = normalizeEntryFieldKey(rawKey);
-            if (!normalized || seenNormalized.has(normalized)) return;
-            seenNormalized.add(normalized);
-            extraCols.push({ title: rawKey, name: rawKey, width: 140 });
-          });
-        });
-
-        if (extraCols.length) {
-          entryMultiState.columns = [...cloneSchema(schema), ...extraCols];
-        } else {
-          entryMultiState.columns = cloneSchema(schema);
-        }
-
-        const finalSchema = getMultiSchema();
-        const importedRows = [];
-
-        const findValue = (obj, key) => {
-          if (!obj || typeof obj !== "object" || Array.isArray(obj)) return undefined;
-          if (Object.prototype.hasOwnProperty.call(obj, key)) return obj[key];
-          for (const rawKey of Object.keys(obj)) {
-            if (normalizeEntryFieldKey(rawKey) === normalizeEntryFieldKey(key)) {
-              return obj[rawKey];
-            }
-          }
-          return undefined;
-        };
-
-        items.forEach((item) => {
-          if (!item || typeof item !== "object" || Array.isArray(item)) return;
-          const nextRow = createEmptyRow(finalSchema);
-          let hasValue = false;
-          finalSchema.forEach((col) => {
-            const columnName = String(col.name || "");
-            if (!columnName) return;
-            const rawValue = findValue(item, columnName);
-            if (rawValue === undefined || rawValue === null) return;
-            let value = "";
-            if (Array.isArray(rawValue)) {
-              value = rawValue
-                .map((item2) =>
-                  item2 === undefined || item2 === null
-                    ? ""
-                    : typeof item2 === "object"
-                      ? JSON.stringify(item2)
-                      : String(item2),
-                )
-                .filter(Boolean)
-                .join("\n");
-            } else if (typeof rawValue === "object") {
-              value = JSON.stringify(rawValue);
-            } else {
-              value = normalizeEntryCellString(rawValue);
-            }
-            if (!value) return;
-            nextRow[columnName] = value;
-            hasValue = true;
-          });
-          if (hasValue) {
-            importedRows.push(nextRow);
-          }
-        });
+        const { items, fieldMapping } = loadJsonRowsFromBuffer(buffer, file.name);
+        const { finalSchema, importedRows, mappedColumns } = buildJsonImportRows(
+          items,
+          schema,
+          fieldMapping,
+        );
 
         if (!importedRows.length) {
           throw new Error("JSON 中没有可导入的数据行");
         }
 
+        entryMultiState.columns = finalSchema;
         entryMultiState.rows = materializeTaskRows(importedRows, finalSchema);
         applyEntryTemplateToGrid();
         markEntryTaskDirty(true);
         scheduleEntryTaskSave();
-        setStatus(false, `已导入 JSON：导入 ${importedRows.length} 行，新增 ${extraCols.length} 列`);
+        const mappedHint = mappedColumns ? `，映射 ${mappedColumns} 个字段` : "";
+        setStatus(false, `已导入 JSON：导入 ${importedRows.length} 行${mappedHint}`);
         return;
       }
 
@@ -6870,6 +7059,74 @@
           ? `；编码 ${parsed.encoding}`
           : "";
       setStatus(false, `已导入 Excel：匹配列 ${mappedColumns.length} 个，导入 ${importedRows.length} 行${unmatchedHint}${encodingHint}`);
+    }
+
+    async function importJsonFromApi(url, path, mappingText) {
+      if (!url || !url.trim()) {
+        throw new Error("请填写 API 地址");
+      }
+      const proxyResp = await fetch("/api/kb/fetch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: url.trim(),
+        }),
+      });
+      if (!proxyResp.ok) {
+        let detail = "";
+        try {
+          const errBody = await proxyResp.json();
+          detail = errBody?.error ? `: ${errBody.error}` : "";
+        } catch {
+          detail = "";
+        }
+        throw new Error(`API 请求失败：HTTP ${proxyResp.status}${detail}`);
+      }
+      let json;
+      try {
+        json = await proxyResp.json();
+      } catch (err) {
+        const text = await proxyResp.text();
+        throw new Error(
+          `API 返回内容不是 JSON：${String(text || err?.message || err).slice(0, 200)}`,
+        );
+      }
+      const items = extractJsonItemsFromObject(json, path?.trim());
+      if (!Array.isArray(items) || !items.length) {
+        throw new Error("API 返回的 JSON 中没有可导入的数据数组");
+      }
+      const schema = Array.isArray(entryGridInstance?.schema)
+        ? entryGridInstance.schema
+        : getMultiSchema();
+      const promptMapping = parseJsonFieldMappingInput(mappingText);
+      const metadataMapping = parseJsonFieldMappingFromObject(json);
+      const fieldMapping = new Map([...metadataMapping, ...promptMapping]);
+      const { finalSchema, importedRows, mappedColumns } = buildJsonImportRows(
+        items,
+        schema,
+        fieldMapping,
+      );
+      if (!importedRows.length) {
+        throw new Error("API 返回的 JSON 中没有可导入的数据行");
+      }
+      entryMultiState.columns = finalSchema;
+      entryMultiState.rows = materializeTaskRows(importedRows, finalSchema);
+      applyEntryTemplateToGrid();
+      markEntryTaskDirty(true);
+      scheduleEntryTaskSave();
+      const mappedHint = mappedColumns ? `，映射 ${mappedColumns} 个字段` : "";
+      setStatus(false, `已导入 API JSON：导入 ${importedRows.length} 行${mappedHint}`);
+    }
+
+    async function handleEntryApiSubmit() {
+      if (!entryApiUrlInput) {
+        throw new Error("API 设置未初始化");
+      }
+      const url = String(entryApiUrlInput.value || "").trim();
+      const path = String(entryApiPathInput?.value || "").trim();
+      const mappingText = String(entryApiMappingInput?.value || "").trim();
+      await importJsonFromApi(url, path, mappingText);
+      if (entryApiForm) entryApiForm.style.display = "none";
     }
 
     function splitSimpleList(raw) {
@@ -6956,6 +7213,9 @@
         let targetDescription = "";
         let aliases = [];
         let tags = [];
+        let image = "";
+        let video = "";
+        let link = "";
         const attributes = [];
 
         lowerSchema.forEach((col, colIndex) => {
@@ -6986,6 +7246,18 @@
             tags = splitSimpleList(valueRaw);
             return;
           }
+          if (ENTRY_SHEET_IMAGE_COLUMN_KEYS.has(keyLower)) {
+            image = valueRaw;
+            return;
+          }
+          if (ENTRY_SHEET_VIDEO_COLUMN_KEYS.has(keyLower)) {
+            video = valueRaw;
+            return;
+          }
+          if (ENTRY_SHEET_LINK_COLUMN_KEYS.has(keyLower)) {
+            link = valueRaw;
+            return;
+          }
 
           const values = splitEntryCellValues(valueRaw);
           if (!values.length) return;
@@ -7000,6 +7272,9 @@
           targetDescription,
           aliases,
           tags,
+          image,
+          video,
+          link,
           attributes,
         });
       });
@@ -7231,6 +7506,27 @@
           if (!entryExcelFileInput) return;
           entryExcelFileInput.value = "";
           entryExcelFileInput.click();
+        });
+      }
+      if (btnEntryImportApi) {
+        btnEntryImportApi.addEventListener("click", () => {
+          if (!entryApiForm) return;
+          entryApiForm.style.display = "flex";
+          entryApiForm.scrollIntoView({ behavior: "smooth", block: "start" });
+          entryApiUrlInput?.focus();
+        });
+      }
+      if (btnEntryApiSubmit) {
+        btnEntryApiSubmit.addEventListener("click", () => {
+          handleEntryApiSubmit().catch((err) => {
+            console.error(err);
+            setStatus(false, `API 导入失败：${err?.message || err}`);
+          });
+        });
+      }
+      if (btnEntryApiCancel) {
+        btnEntryApiCancel.addEventListener("click", () => {
+          if (entryApiForm) entryApiForm.style.display = "none";
         });
       }
       if (entryExcelFileInput) {

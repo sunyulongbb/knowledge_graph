@@ -2135,6 +2135,7 @@
 
     let wheelGestureActive = false;
     let wheelGestureTimer = null;
+    const DISCRETE_WHEEL_LOCK_MS = Math.max(scrollDuration, 500);
 
     const handleShortsWheel = async (event) => {
       if (wheelLock) {
@@ -2142,8 +2143,8 @@
         return;
       }
       if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
+      if (Math.abs(event.deltaY) < 10) return;
       event.preventDefault();
-      const direction = event.deltaY > 0 ? 1 : -1;
       if (wheelGestureActive) {
         if (wheelGestureTimer) {
           clearTimeout(wheelGestureTimer);
@@ -2151,17 +2152,21 @@
         wheelGestureTimer = window.setTimeout(() => {
           wheelGestureActive = false;
           wheelGestureTimer = null;
-        }, 220);
+        }, DISCRETE_WHEEL_LOCK_MS);
         return;
       }
 
       wheelGestureActive = true;
+      if (wheelGestureTimer) {
+        clearTimeout(wheelGestureTimer);
+      }
       wheelGestureTimer = window.setTimeout(() => {
         wheelGestureActive = false;
         wheelGestureTimer = null;
-      }, 220);
+      }, DISCRETE_WHEEL_LOCK_MS);
 
       const currentIndex = getCurrentCardIndex();
+      const direction = event.deltaY > 0 ? 1 : -1;
       if (direction > 0) {
         if (currentIndex >= cardCount - 1) {
           if (
@@ -2585,6 +2590,9 @@
     let wheelLock = false;
     let galleryScrollEndTimer = null;
     const scrollDuration = 360;
+    const DISCRETE_WHEEL_LOCK_MS = Math.max(scrollDuration, 500);
+    let wheelGestureActive = false;
+    let wheelGestureTimer = null;
     const cardCount = imageItems.length;
 
     const updateGalleryProgress = (index) => {
@@ -2926,38 +2934,60 @@
       }
     };
 
+    const handleGalleryWheel = async (event) => {
+      if (wheelLock) {
+        event.preventDefault();
+        return;
+      }
+      if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
+      if (Math.abs(event.deltaY) < 10) return;
+      event.preventDefault();
+      if (wheelGestureActive) {
+        if (wheelGestureTimer) {
+          clearTimeout(wheelGestureTimer);
+        }
+        wheelGestureTimer = window.setTimeout(() => {
+          wheelGestureActive = false;
+          wheelGestureTimer = null;
+        }, DISCRETE_WHEEL_LOCK_MS);
+        return;
+      }
+
+      wheelGestureActive = true;
+      if (wheelGestureTimer) {
+        clearTimeout(wheelGestureTimer);
+      }
+      wheelGestureTimer = window.setTimeout(() => {
+        wheelGestureActive = false;
+        wheelGestureTimer = null;
+      }, DISCRETE_WHEEL_LOCK_MS);
+
+      const currentIndex = getCurrentCardIndex();
+      if (event.deltaY > 0) {
+        if (currentIndex >= cardCount - 1) {
+          if (
+            shouldLoadMoreGallery(currentIndex) ||
+            isListScrolledToBottom()
+          ) {
+            window.kbGalleryPendingScrollIndex = currentIndex + 1;
+            await loadMoreGalleryPage();
+          }
+          return;
+        }
+        scrollToCard(currentIndex + 1);
+        if (currentIndex >= cardCount - 2) {
+          window.kbGalleryPendingScrollIndex = currentIndex + 1;
+          loadMoreGalleryPage().catch(() => {});
+        }
+        return;
+      }
+      const prevIndex = Math.max(currentIndex - 1, 0);
+      if (prevIndex !== currentIndex) scrollToCard(prevIndex);
+    };
+
     window.kbGalleryHandlers = {
       scroll: handleGalleryScroll,
-      wheel: async (event) => {
-        if (wheelLock) {
-          event.preventDefault();
-          return;
-        }
-        if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
-        const currentIndex = getCurrentCardIndex();
-        if (event.deltaY > 0) {
-          event.preventDefault();
-          if (currentIndex >= cardCount - 1) {
-            if (
-              shouldLoadMoreGallery(currentIndex) ||
-              isListScrolledToBottom()
-            ) {
-              window.kbGalleryPendingScrollIndex = currentIndex + 1;
-              await loadMoreGalleryPage();
-            }
-            return;
-          }
-          scrollToCard(currentIndex + 1);
-          if (currentIndex >= cardCount - 2) {
-            window.kbGalleryPendingScrollIndex = currentIndex + 1;
-            loadMoreGalleryPage().catch(() => {});
-          }
-          return;
-        }
-        event.preventDefault();
-        const prevIndex = Math.max(currentIndex - 1, 0);
-        if (prevIndex !== currentIndex) scrollToCard(prevIndex);
-      },
+      wheel: handleGalleryWheel,
       click: handleGalleryControlClick,
       keydown: handleGalleryKeydown,
     };

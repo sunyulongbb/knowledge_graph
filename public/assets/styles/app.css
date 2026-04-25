@@ -661,7 +661,7 @@ main {
 }
 /* Hide labels visually when collapsed using opacity/transform so we can animate them */
 .project-entry-label {
-  display: block;
+  display: none;
   margin-left: 0;
   margin-top: 4px;
   white-space: nowrap;
@@ -672,13 +672,13 @@ main {
   text-align: center;
   max-width: 160px;
   width: 100%;
-  opacity: 1;
-  transform: translateY(0);
+  opacity: 0;
+  transform: translateY(-6px);
   transition:
     opacity 180ms ease,
     transform 180ms ease,
     max-width 200ms ease;
-  pointer-events: auto;
+  pointer-events: none;
 }
 .project-sidebar.collapsed .project-entry-label {
   opacity: 0;
