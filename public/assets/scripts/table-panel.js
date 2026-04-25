@@ -95,6 +95,7 @@
       const keyword = tblSearch ? (tblSearch.value || "").trim() : "";
       if (keyword) url.searchParams.set("q", keyword);
       if (tblActiveClassId) url.searchParams.set("class_id", tblActiveClassId);
+      url.searchParams.set("hide_entity", "1");
 
       const resp = await fetch(url);
       if (!resp.ok) throw new Error("HTTP " + resp.status);

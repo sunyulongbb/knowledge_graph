@@ -367,13 +367,29 @@
         skipSidebarSync: true,
       });
     } catch {}
+    const currentDbSuffix = (() => {
+      try {
+        const db = typeof window.getCurrentDbParam === "function"
+          ? window.getCurrentDbParam()
+          : new URL(window.location.href).searchParams.get("db") || "";
+        return db ? `_${db}` : "";
+      } catch {
+        return "";
+      }
+    })();
     try {
       if (window.localStorage) {
         if (targetMode === "gallery") {
-          localStorage.setItem("kbGalleryCurrentNode", nodeId);
+          localStorage.setItem(
+            `kbGalleryCurrentNode${currentDbSuffix}`,
+            nodeId,
+          );
           window.kbGalleryForceFirst = false;
         } else {
-          localStorage.setItem("kbShortsCurrentNode", nodeId);
+          localStorage.setItem(
+            `kbShortsCurrentNode${currentDbSuffix}`,
+            nodeId,
+          );
           window.kbShortsForceFirst = false;
         }
       }
@@ -666,7 +682,17 @@
       ? window.kbShortsNodes
       : [];
     const shortsPageSize = 12;
-    const shortsCacheKey = "kbShortsRandomCache";
+    const currentDbSuffix = (() => {
+      try {
+        const db = typeof window.getCurrentDbParam === "function"
+          ? window.getCurrentDbParam()
+          : new URL(window.location.href).searchParams.get("db") || "";
+        return db ? `_${db}` : "";
+      } catch {
+        return "";
+      }
+    })();
+    const shortsCacheKey = `kbShortsRandomCache${currentDbSuffix}`;
     let shortsTotalNodes = Number(window.kbTableTotalNodes || 0) || 0;
     let shortsLoadingMore = false;
 
@@ -702,10 +728,20 @@
       if (excludeIds && excludeIds.length) {
         url.searchParams.set("exclude_ids", excludeIds.join(","));
       }
+      const currentDbSuffix = (() => {
+        try {
+          const db = typeof window.getCurrentDbParam === "function"
+            ? window.getCurrentDbParam()
+            : new URL(window.location.href).searchParams.get("db") || "";
+          return db ? `_${db}` : "";
+        } catch {
+          return "";
+        }
+      })();
       const currentId =
         String(window.kbShortsPendingSidebarNodeId || "").trim() ||
         String(window.kbSelectedRowId || "").trim() ||
-        String(localStorage.getItem("kbShortsCurrentNode") || "").trim();
+        String(localStorage.getItem(`kbShortsCurrentNode${currentDbSuffix}`) || "").trim();
       if (currentId) {
         url.searchParams.set("current_id", currentId);
       }
@@ -938,8 +974,21 @@
       const targetId = videoItems[index].id;
       if (targetId) {
         try {
+          const currentDbSuffix = (() => {
+            try {
+              const db = typeof window.getCurrentDbParam === "function"
+                ? window.getCurrentDbParam()
+                : new URL(window.location.href).searchParams.get("db") || "";
+              return db ? `_${db}` : "";
+            } catch {
+              return "";
+            }
+          })();
           if (window.localStorage) {
-            localStorage.setItem("kbShortsCurrentNode", targetId);
+            localStorage.setItem(
+              `kbShortsCurrentNode${currentDbSuffix}`,
+              targetId,
+            );
           }
         } catch (err) {
           console.warn("persist shorts current node failed", err);
@@ -1246,7 +1295,19 @@
     let initialNodeId = window.kbSelectedRowId || "";
     try {
       if (!initialNodeId && window.localStorage) {
-        const cachedShortsNode = localStorage.getItem("kbShortsCurrentNode");
+        const currentDbSuffix = (() => {
+          try {
+            const db = typeof window.getCurrentDbParam === "function"
+              ? window.getCurrentDbParam()
+              : new URL(window.location.href).searchParams.get("db") || "";
+            return db ? `_${db}` : "";
+          } catch {
+            return "";
+          }
+        })();
+        const cachedShortsNode = localStorage.getItem(
+          `kbShortsCurrentNode${currentDbSuffix}`,
+        );
         if (cachedShortsNode) {
           initialNodeId = cachedShortsNode;
         }
@@ -1357,7 +1418,17 @@
       ? window.kbShortsNodes
       : [];
     const shortsPageSize = 12;
-    const shortsCacheKey = "kbShortsRandomCache";
+    const currentDbSuffix = (() => {
+      try {
+        const db = typeof window.getCurrentDbParam === "function"
+          ? window.getCurrentDbParam()
+          : new URL(window.location.href).searchParams.get("db") || "";
+        return db ? `_${db}` : "";
+      } catch {
+        return "";
+      }
+    })();
+    const shortsCacheKey = `kbShortsRandomCache${currentDbSuffix}`;
     let shortsTotalNodes = Number(window.kbTableTotalNodes || 0) || 0;
     let shortsLoadingMore = false;
     window.kbShortsMuted = window.kbShortsMuted !== false;
@@ -1742,8 +1813,21 @@
       const targetId = videoItems[index].id;
       if (targetId) {
         try {
+          const currentDbSuffix = (() => {
+            try {
+              const db = typeof window.getCurrentDbParam === "function"
+                ? window.getCurrentDbParam()
+                : new URL(window.location.href).searchParams.get("db") || "";
+              return db ? `_${db}` : "";
+            } catch {
+              return "";
+            }
+          })();
           if (window.localStorage) {
-            localStorage.setItem("kbShortsCurrentNode", targetId);
+            localStorage.setItem(
+              `kbShortsCurrentNode${currentDbSuffix}`,
+              targetId,
+            );
           }
         } catch (err) {
           console.warn("persist shorts current node failed", err);
@@ -2212,7 +2296,19 @@
     let initialNodeId = window.kbSelectedRowId || "";
     try {
       if (!initialNodeId && window.localStorage) {
-        const cachedShortsNode = localStorage.getItem("kbShortsCurrentNode");
+        const currentDbSuffix = (() => {
+          try {
+            const db = typeof window.getCurrentDbParam === "function"
+              ? window.getCurrentDbParam()
+              : new URL(window.location.href).searchParams.get("db") || "";
+            return db ? `_${db}` : "";
+          } catch {
+            return "";
+          }
+        })();
+        const cachedShortsNode = localStorage.getItem(
+          `kbShortsCurrentNode${currentDbSuffix}`,
+        );
         if (cachedShortsNode) {
           initialNodeId = cachedShortsNode;
         }
@@ -2323,7 +2419,17 @@
       ? window.kbGalleryNodes
       : [];
     const galleryPageSize = 12;
-    const galleryCacheKey = "kbGalleryRandomCache";
+    const currentDbSuffix = (() => {
+      try {
+        const db = typeof window.getCurrentDbParam === "function"
+          ? window.getCurrentDbParam()
+          : new URL(window.location.href).searchParams.get("db") || "";
+        return db ? `_${db}` : "";
+      } catch {
+        return "";
+      }
+    })();
+    const galleryCacheKey = `kbGalleryRandomCache${currentDbSuffix}`;
     const galleryCacheLimit = 48;
     const galleryCacheByteLimit = 180000;
     const galleryStatusDelay = 180;
@@ -2420,10 +2526,20 @@
       if (excludeIds && excludeIds.length) {
         url.searchParams.set("exclude_ids", excludeIds.join(","));
       }
+      const currentDbSuffix = (() => {
+        try {
+          const db = typeof window.getCurrentDbParam === "function"
+            ? window.getCurrentDbParam()
+            : new URL(window.location.href).searchParams.get("db") || "";
+          return db ? `_${db}` : "";
+        } catch {
+          return "";
+        }
+      })();
       const currentId =
         String(window.kbGalleryPendingSidebarNodeId || "").trim() ||
         String(window.kbSelectedRowId || "").trim() ||
-        String(localStorage.getItem("kbGalleryCurrentNode") || "").trim();
+        String(localStorage.getItem(`kbGalleryCurrentNode${currentDbSuffix}`) || "").trim();
       if (currentId) url.searchParams.set("current_id", currentId);
       const recentItems = rawList.slice(-18);
       const recentIds = recentItems
@@ -2656,8 +2772,18 @@
       const targetId = imageItems[index].id;
       if (targetId) {
         try {
-          if (window.localStorage) {
-            localStorage.setItem("kbGalleryCurrentNode", targetId);
+          const currentDbSuffix = (() => {
+          try {
+            const db = typeof window.getCurrentDbParam === "function"
+              ? window.getCurrentDbParam()
+              : new URL(window.location.href).searchParams.get("db") || "";
+            return db ? `_${db}` : "";
+          } catch {
+            return "";
+          }
+        })();
+        if (window.localStorage) {
+            localStorage.setItem(`kbGalleryCurrentNode${currentDbSuffix}`, targetId);
           }
         } catch (err) {
           console.warn("persist gallery current node failed", err);
@@ -3004,7 +3130,19 @@
     let initialNodeId = window.kbSelectedRowId || "";
     try {
       if (!initialNodeId && window.localStorage) {
-        const cachedGalleryNode = localStorage.getItem("kbGalleryCurrentNode");
+        const currentDbSuffix = (() => {
+          try {
+            const db = typeof window.getCurrentDbParam === "function"
+              ? window.getCurrentDbParam()
+              : new URL(window.location.href).searchParams.get("db") || "";
+            return db ? `_${db}` : "";
+          } catch {
+            return "";
+          }
+        })();
+        const cachedGalleryNode = localStorage.getItem(
+          `kbGalleryCurrentNode${currentDbSuffix}`,
+        );
         if (cachedGalleryNode) initialNodeId = cachedGalleryNode;
       }
     } catch (err) {

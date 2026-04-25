@@ -2342,6 +2342,34 @@
             <div id="cleanAssignResult" class="clean-tool-result" style="display:none;"></div>
           </div>
 
+          <div class="clean-tool-section">
+            <div class="clean-tool-header">
+              <i class="fa-solid fa-exchange-alt"></i>
+              <span>修改属性类型并同步</span>
+            </div>
+            <div class="clean-tool-body">
+              <select id="cleanTypePropSelect"
+                style="flex:1 1 220px;min-width:160px;height:36px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface-0);color:var(--fg);padding:6px 8px;font-size:13px;">
+                <option value="">选择属性…</option>
+              </select>
+              <select id="cleanTypeSelect"
+                style="flex:1 1 180px;min-width:140px;height:36px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface-0);color:var(--fg);padding:6px 8px;font-size:13px;">
+                <option value="string">文本(string)</option>
+                <option value="wikibase-entityid">实体关系(wikibase-entityid)</option>
+              </select>
+              <label
+                style="display:none;align-items:center;gap:4px;font-size:13px;color:var(--fg);white-space:nowrap;cursor:pointer;">
+                <input type="checkbox" id="cleanTypeDeleteTargets" /> 删除目标节点
+              </label>
+              <button id="btnCleanChangePropType" class="btn" type="button"
+                style="white-space:nowrap;background:#9333ea;color:#fff;border-color:#9333ea;">
+                <i class="fa-solid fa-play"></i>
+                <span style="margin-left:4px">执行修改</span>
+              </button>
+            </div>
+            <div id="cleanTypeResult" class="clean-tool-result" style="display:none;"></div>
+          </div>
+
           <div id="cleanTaskList" class="clean-task-list"></div>
         </div>
 
@@ -7948,7 +7976,7 @@
             console.warn("refreshCleanTasks failed", err);
           }
         });
-        try { loadCleanAttrProperties(); loadCleanDelProperties(); loadCleanAssignTypeProperties(); loadCleanAssignTargetTypes(); } catch { }
+        try { loadCleanAttrProperties(); loadCleanDelProperties(); loadCleanAssignTypeProperties(); loadCleanTypeProperties(); loadCleanAssignTargetTypes(); } catch { }
         if (cleanTaskName) {
           requestAnimationFrame(() => {
             try {
@@ -9351,6 +9379,12 @@
     const cleanAssignTargetTypeList = document.getElementById("cleanAssignTargetTypeList");
     const btnCleanAssignTargetType = document.getElementById("btnCleanAssignTargetType");
     const cleanAssignResult = document.getElementById("cleanAssignResult");
+    const cleanTypePropSelect = document.getElementById("cleanTypePropSelect");
+    const cleanTypeSelect = document.getElementById("cleanTypeSelect");
+    const cleanTypeDeleteTargets = document.getElementById("cleanTypeDeleteTargets");
+    const btnCleanChangePropType = document.getElementById("btnCleanChangePropType");
+    const cleanTypeResult = document.getElementById("cleanTypeResult");
+    const cleanTypePropertyMap = new Map();
 
     async function loadCleanAssignTypeProperties() {
       if (!cleanAssignTypePropSelect) return;
@@ -9378,6 +9412,96 @@
             cleanAssignTypePropSelect.appendChild(opt);
           });
       } catch (e) { console.error("load relation properties for target type assignment failed", e); }
+    }
+
+    async function loadCleanTypeProperties() {
+      if (!cleanTypePropSelect) return;
+      try {
+        const url = new URL("/api/kb/properties", window.location.origin);
+        if (typeof window.appendCurrentDbParam === "function") {
+          const scoped = window.appendCurrentDbParam(url);
+          if (scoped instanceof URL) url.search = scoped.search;
+        }
+        const resp = await fetch(url);
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const items = Array.isArray(data.items) ? data.items : Array.isArray(data) ? data : [];
+        cleanTypePropSelect.innerHTML = '<option value="">选择属性…</option>';
+        cleanTypePropertyMap.clear();
+        items.forEach((p) => {
+          const opt = document.createElement("option");
+          opt.value = p.id;
+          opt.textContent = (p.label || p.name || p.id) + (p.datatype ? ` (${p.datatype})` : "");
+          cleanTypePropSelect.appendChild(opt);
+          cleanTypePropertyMap.set(p.id, p);
+        });
+        refreshCleanTypeUi();
+      } catch (e) {
+        console.error("load clean type properties failed", e);
+      }
+    }
+
+    function refreshCleanTypeUi() {
+      if (!cleanTypePropSelect || !cleanTypeSelect || !cleanTypeDeleteTargets) return;
+      const propId = cleanTypePropSelect.value;
+      const prop = cleanTypePropertyMap.get(propId);
+      const currentType = (prop?.datatype || "string").toString().trim() || "string";
+      if (currentType === "wikibase-entityid") {
+        cleanTypeSelect.value = "string";
+        cleanTypeDeleteTargets.style.display = "flex";
+      } else {
+        cleanTypeSelect.value = "wikibase-entityid";
+        cleanTypeDeleteTargets.style.display = "none";
+        if (cleanTypeDeleteTargets instanceof HTMLInputElement) {
+          cleanTypeDeleteTargets.checked = false;
+        }
+      }
+    }
+
+    if (cleanTypePropSelect) {
+      cleanTypePropSelect.addEventListener("change", refreshCleanTypeUi);
+    }
+
+    if (btnCleanChangePropType) {
+      btnCleanChangePropType.addEventListener("click", async () => {
+        const propId = cleanTypePropSelect ? cleanTypePropSelect.value : "";
+        const propLabel = cleanTypePropSelect ? cleanTypePropSelect.selectedOptions[0]?.textContent || propId : propId;
+        const newDatatype = cleanTypeSelect ? cleanTypeSelect.value : "";
+        const deleteTargets = cleanTypeDeleteTargets ? cleanTypeDeleteTargets.checked : false;
+        if (!propId || !newDatatype) { alert("请选择属性和目标类型"); return; }
+        const msg = `将属性「${propLabel}」类型修改为「${newDatatype}」，并同步属性信息与节点属性值格式` + (deleteTargets ? "，同时删除目标节点" : "") + "，确定执行？";
+        if (!confirm(msg)) return;
+        btnCleanChangePropType.disabled = true;
+        if (cleanTypeResult) { cleanTypeResult.style.display = ""; cleanTypeResult.textContent = "执行中…"; }
+        try {
+          let url = "/api/kb/clean/change-property-type";
+          if (typeof window.appendCurrentDbParam === "function") url = window.appendCurrentDbParam(url);
+          const resp = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ property_id: propId, datatype: newDatatype, delete_targets: deleteTargets }),
+          });
+          if (!resp.ok) throw new Error("HTTP " + resp.status);
+          const result = await resp.json();
+          if (cleanTypeResult) {
+            let output = `匹配 ${result.matched} 条属性，更新 ${result.updated} 条记录`;
+            if (result.deletedNodes) output += `，删除 ${result.deletedNodes} 个目标节点`;
+            cleanTypeResult.textContent = output;
+          }
+          if (typeof loadTablePage === "function") { try { await loadTablePage({ resetPage: false }); } catch { } }
+          try {
+            loadCleanAttrProperties();
+            loadCleanDelProperties();
+            loadCleanAssignTypeProperties();
+            loadCleanTypeProperties();
+          } catch { }
+        } catch (e) {
+          console.error(e);
+          if (cleanTypeResult) cleanTypeResult.textContent = "执行失败：" + (e.message || e);
+        } finally {
+          btnCleanChangePropType.disabled = false;
+        }
+      });
     }
 
     async function loadCleanAssignTargetTypes() {

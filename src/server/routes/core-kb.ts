@@ -12,6 +12,8 @@ import {
   ensureAttributeRecord,
   getNextNumericNodeId,
   parseStoredAttributeValues,
+  normalizeEntityAttributeValues,
+  serializeAttributeValues,
   attributeValuesContainEntityId,
   extractEntityId,
 } from "../utils.ts";
@@ -103,6 +105,24 @@ export async function handleCoreKbRoutes(
     writeFileSync(filePath, Buffer.from(arrayBuffer));
     const base = uploadDir === NODE_VIDEO_UPLOADS_DIR ? "node-videos" : "node-images";
     return `/static/uploads/${base}/${filename}`;
+  };
+
+  const downloadRemoteMedia = async (
+    mediaUrl: string,
+    uploadDir: string,
+    allowedExts: string[],
+    maxSize: number,
+  ) => {
+    const url = (mediaUrl || "").toString().trim();
+    if (!url || !url.toLowerCase().startsWith("http")) {
+      return url;
+    }
+    try {
+      return await downloadRemoteFile(url, uploadDir, allowedExts, maxSize);
+    } catch (err) {
+      console.warn("download media failed", err, url);
+      return "";
+    }
   };
 
   const entryTaskScopeParams = () => (hasProjectScope ? [scopedProjectId] : []);
@@ -891,6 +911,7 @@ export async function handleCoreKbRoutes(
     const limit = parseInt(url.searchParams.get("limit") || "20");
     const offset = parseInt(url.searchParams.get("offset") || "0");
     const classId = (url.searchParams.get("class_id") || "").trim();
+    const hideEntity = (url.searchParams.get("hide_entity") || "").trim();
 
     const likeParam = `%${q}%`;
     const params: any[] = [likeParam];
@@ -904,6 +925,10 @@ export async function handleCoreKbRoutes(
       whereClause += " AND ec.class_id = ?";
       params.push(classId);
       countParams.push(classId);
+    }
+
+    if (hideEntity === "1" || hideEntity.toLowerCase() === "true") {
+      whereClause += " AND lower(trim(n.type)) <> 'entity'";
     }
 
     if (hasProjectScope) {
@@ -1313,32 +1338,20 @@ export async function handleCoreKbRoutes(
       if (targetResult.created) summary.createdNodes += 1;
       else summary.reusedNodes += 1;
       if (image && image.startsWith("http")) {
-        try {
-          image = await downloadRemoteFile(image, NODE_IMAGE_UPLOADS_DIR, [
-            "jpg",
-            "jpeg",
-            "png",
-            "gif",
-            "webp",
-            "svg",
-          ],
-          20 * 1024 * 1024);
-        } catch (err) {
-          console.warn("download image failed", err);
-        }
+        image = await downloadRemoteMedia(
+          image,
+          NODE_IMAGE_UPLOADS_DIR,
+          ["jpg", "jpeg", "png", "gif", "webp", "svg"],
+          20 * 1024 * 1024,
+        );
       }
       if (video && video.startsWith("http")) {
-        try {
-          video = await downloadRemoteFile(video, NODE_VIDEO_UPLOADS_DIR, [
-            "mp4",
-            "webm",
-            "ogg",
-            "mov",
-          ],
-          300 * 1024 * 1024);
-        } catch (err) {
-          console.warn("download video failed", err);
-        }
+        video = await downloadRemoteMedia(
+          video,
+          NODE_VIDEO_UPLOADS_DIR,
+          ["mp4", "webm", "ogg", "mov"],
+          300 * 1024 * 1024,
+        );
       }
       let entityOntologyId: string | null = null;
       if (entityType) {
@@ -1678,28 +1691,20 @@ export async function handleCoreKbRoutes(
                 let videoUrl = payload.video ? String(payload.video).trim() : "";
                 const linkValue = payload.link ? String(payload.link).trim() : "";
                 if (imageUrl && imageUrl.startsWith("http")) {
-                  try {
-                    imageUrl = await downloadRemoteFile(
-                      imageUrl,
-                      NODE_IMAGE_UPLOADS_DIR,
-                      ["jpg", "jpeg", "png", "gif", "webp", "svg"],
-                      20 * 1024 * 1024,
-                    );
-                  } catch (err) {
-                    console.warn("download image failed", err);
-                  }
+                  imageUrl = await downloadRemoteMedia(
+                    imageUrl,
+                    NODE_IMAGE_UPLOADS_DIR,
+                    ["jpg", "jpeg", "png", "gif", "webp", "svg"],
+                    20 * 1024 * 1024,
+                  );
                 }
                 if (videoUrl && videoUrl.startsWith("http")) {
-                  try {
-                    videoUrl = await downloadRemoteFile(
-                      videoUrl,
-                      NODE_VIDEO_UPLOADS_DIR,
-                      ["mp4", "webm", "ogg", "mov"],
-                      300 * 1024 * 1024,
-                    );
-                  } catch (err) {
-                    console.warn("download video failed", err);
-                  }
+                  videoUrl = await downloadRemoteMedia(
+                    videoUrl,
+                    NODE_VIDEO_UPLOADS_DIR,
+                    ["mp4", "webm", "ogg", "mov"],
+                    300 * 1024 * 1024,
+                  );
                 }
                 if (
                   payload.entityType ||
@@ -1971,32 +1976,20 @@ export async function handleCoreKbRoutes(
       let video = typeof body.video === "string" ? body.video.trim() : "";
 
       if (image && image.startsWith("http")) {
-        try {
-          image = await downloadRemoteFile(image, NODE_IMAGE_UPLOADS_DIR, [
-            "jpg",
-            "jpeg",
-            "png",
-            "gif",
-            "webp",
-            "svg",
-          ],
-          20 * 1024 * 1024);
-        } catch (err) {
-          console.warn("download image failed", err);
-        }
+        image = await downloadRemoteMedia(
+          image,
+          NODE_IMAGE_UPLOADS_DIR,
+          ["jpg", "jpeg", "png", "gif", "webp", "svg"],
+          20 * 1024 * 1024,
+        );
       }
       if (video && video.startsWith("http")) {
-        try {
-          video = await downloadRemoteFile(video, NODE_VIDEO_UPLOADS_DIR, [
-            "mp4",
-            "webm",
-            "ogg",
-            "mov",
-          ],
-          300 * 1024 * 1024);
-        } catch (err) {
-          console.warn("download video failed", err);
-        }
+        video = await downloadRemoteMedia(
+          video,
+          NODE_VIDEO_UPLOADS_DIR,
+          ["mp4", "webm", "ogg", "mov"],
+          300 * 1024 * 1024,
+        );
       }
 
       db.run(
@@ -2062,19 +2055,12 @@ export async function handleCoreKbRoutes(
       if (body.image !== undefined) {
         let imageValue = body.image ? String(body.image).trim() : "";
         if (imageValue && imageValue.startsWith("http")) {
-          try {
-            imageValue = await downloadRemoteFile(imageValue, NODE_IMAGE_UPLOADS_DIR, [
-              "jpg",
-              "jpeg",
-              "png",
-              "gif",
-              "webp",
-              "svg",
-            ],
-            20 * 1024 * 1024);
-          } catch (err) {
-            console.warn("download image failed", err);
-          }
+          imageValue = await downloadRemoteMedia(
+            imageValue,
+            NODE_IMAGE_UPLOADS_DIR,
+            ["jpg", "jpeg", "png", "gif", "webp", "svg"],
+            20 * 1024 * 1024,
+          );
         }
         updates.push("image = ?");
         params.push(imageValue || "");
@@ -2086,17 +2072,12 @@ export async function handleCoreKbRoutes(
       if (body.video !== undefined) {
         let videoValue = body.video ? String(body.video).trim() : "";
         if (videoValue && videoValue.startsWith("http")) {
-          try {
-            videoValue = await downloadRemoteFile(videoValue, NODE_VIDEO_UPLOADS_DIR, [
-              "mp4",
-              "webm",
-              "ogg",
-              "mov",
-            ],
-            300 * 1024 * 1024);
-          } catch (err) {
-            console.warn("download video failed", err);
-          }
+          videoValue = await downloadRemoteMedia(
+            videoValue,
+            NODE_VIDEO_UPLOADS_DIR,
+            ["mp4", "webm", "ogg", "mov"],
+            300 * 1024 * 1024,
+          );
         }
         updates.push("video = ?");
         params.push(videoValue || "");
@@ -2537,6 +2518,219 @@ export async function handleCoreKbRoutes(
     } catch (e) {
       console.error(e);
       return new Response("Error assigning target node type", { status: 500 });
+    }
+  }
+
+  if (url.pathname === "/api/kb/clean/change-property-type" && method === "POST") {
+    try {
+      const body = (await req.json()) as any;
+      const propertyId = (body?.property_id || "").toString().trim();
+      const newDatatype = (body?.datatype || "").toString().trim();
+      const deleteTargets = body?.delete_targets === true;
+      if (!propertyId) return new Response("Missing property_id", { status: 400 });
+      if (!newDatatype) return new Response("Missing datatype", { status: 400 });
+      if (!["string", "wikibase-entityid"].includes(newDatatype)) {
+        return new Response("Unsupported datatype", { status: 400 });
+      }
+
+      const property = hasProjectScope
+        ? (db
+            .query(
+              `SELECT * FROM properties WHERE id = ? AND project_id = ? LIMIT 1`,
+            )
+            .get(propertyId, scopedProjectId) as any)
+        : (db
+            .query(
+              "SELECT * FROM properties WHERE id = ? AND project_id IS NULL LIMIT 1",
+            )
+            .get(propertyId) as any);
+      if (!property?.id) return new Response("Property not found", { status: 404 });
+
+      const oldDatatype = (property.datatype || "string").toString().trim() || "string";
+      if (oldDatatype === newDatatype) {
+        return Response.json({
+          success: true,
+          matched: 0,
+          updated: 0,
+          deletedNodes: 0,
+          message: "类型未变化",
+        });
+      }
+
+      const newValuetype = newDatatype === "wikibase-entityid" ? "wikibase-entityid" : null;
+      if (hasProjectScope) {
+        db.run(
+          "UPDATE properties SET datatype = ?, valuetype = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?",
+          [newDatatype, newValuetype, propertyId, scopedProjectId],
+        );
+      } else {
+        db.run(
+          "UPDATE properties SET datatype = ?, valuetype = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id IS NULL",
+          [newDatatype, newValuetype, propertyId],
+        );
+      }
+
+      const attrs = hasProjectScope
+        ? (db
+            .query(
+              `SELECT a.id, a.node_id, a.value, a.datatype FROM attributes a JOIN nodes n ON a.node_id = n.id WHERE a.key = ? AND n.project_id = ?`,
+            )
+            .all(propertyId, scopedProjectId) as any[])
+        : (db
+            .query(
+              "SELECT id, node_id, value, datatype FROM attributes WHERE key = ?",
+            )
+            .all(propertyId) as any[]);
+
+      let updatedCount = 0;
+      const targetNodeIds = new Set<string>();
+
+      for (const attr of attrs) {
+        const values = parseStoredAttributeValues(attr.value, oldDatatype);
+        if (!values.length) {
+          db.run("DELETE FROM attributes WHERE id = ?", [attr.id]);
+          continue;
+        }
+
+        if (oldDatatype === "string" && newDatatype === "wikibase-entityid") {
+          const entityValues: any[] = [];
+          for (const rawValue of values) {
+            const text = rawValue?.toString?.().trim?.() || "";
+            if (!text) continue;
+            let targetId = extractEntityId(rawValue);
+            let targetNode: any = null;
+            if (targetId) {
+              targetNode = hasProjectScope
+                ? (db
+                    .query(
+                      "SELECT id, name FROM nodes WHERE id = ? AND project_id = ?",
+                    )
+                    .get(targetId, scopedProjectId) as any)
+                : (db
+                    .query("SELECT id, name FROM nodes WHERE id = ?")
+                    .get(targetId) as any);
+            }
+            if (!targetNode) {
+              const normalizedName = text;
+              const nodeResult = ensureNodeByName(normalizedName, {
+                ...(hasProjectScope ? { projectId: scopedProjectId } : {}),
+              });
+              targetNode = nodeResult.node;
+            }
+            if (!targetNode?.id) continue;
+            const label = (targetNode.name || "").toString().trim() || targetNode.id;
+            entityValues.push({
+              "entity-type": "item",
+              id: targetNode.id.toString(),
+              label_zh: label,
+              label,
+              name: label,
+            });
+          }
+          if (!entityValues.length) {
+            db.run("DELETE FROM attributes WHERE id = ?", [attr.id]);
+            continue;
+          }
+          const normalizedEntityValues = normalizeEntityAttributeValues(entityValues);
+          if (!normalizedEntityValues.length) {
+            db.run("DELETE FROM attributes WHERE id = ?", [attr.id]);
+            continue;
+          }
+          const serialized = serializeAttributeValues(normalizedEntityValues, "wikibase-entityid");
+          db.run(
+            "UPDATE attributes SET value = ?, datatype = ?, property_name_snapshot = ? WHERE id = ?",
+            [serialized, "wikibase-entityid", property.name || null, attr.id],
+          );
+          updatedCount++;
+          continue;
+        }
+
+        if (oldDatatype === "wikibase-entityid" && newDatatype === "string") {
+          const stringValues: string[] = [];
+          for (const rawValue of values) {
+            const targetId = extractEntityId(rawValue);
+            if (targetId) {
+              targetNodeIds.add(targetId);
+            }
+            if (rawValue && typeof rawValue === "object") {
+              const label =
+                rawValue.label_zh || rawValue.label || rawValue.name || rawValue.id || rawValue["entity-id"] || "";
+              if (label && label.toString().trim()) {
+                stringValues.push(label.toString().trim());
+              }
+            } else if (typeof rawValue === "string" || typeof rawValue === "number") {
+              const valueText = rawValue.toString().trim();
+              if (valueText) stringValues.push(valueText);
+            }
+          }
+
+          const normalized = Array.from(new Set(stringValues.map((v) => v.toString().trim()).filter(Boolean)));
+          if (!normalized.length) {
+            db.run("DELETE FROM attributes WHERE id = ?", [attr.id]);
+            continue;
+          }
+          const serialized = serializeAttributeValues(normalized, "string");
+          db.run(
+            "UPDATE attributes SET value = ?, datatype = ?, property_name_snapshot = ? WHERE id = ?",
+            [serialized, "string", property.name || null, attr.id],
+          );
+          updatedCount++;
+          continue;
+        }
+
+        db.run(
+          "UPDATE attributes SET datatype = ?, property_name_snapshot = ? WHERE id = ?",
+          [newDatatype, property.name || null, attr.id],
+        );
+        updatedCount++;
+      }
+
+      let deletedNodes = 0;
+      if (deleteTargets && targetNodeIds.size > 0) {
+        const deleteNodeSql = hasProjectScope
+          ? `DELETE FROM nodes WHERE id = ? AND ${scopedClause()}`
+          : "DELETE FROM nodes WHERE id = ?";
+        for (const targetId of targetNodeIds) {
+          const exists = hasProjectScope
+            ? (db
+                .query(
+                  `SELECT id FROM nodes WHERE id = ? AND ${scopedClause()}`,
+                )
+                .get(targetId, scopedProjectId) as any)
+            : (db.query("SELECT id FROM nodes WHERE id = ?").get(targetId) as any);
+          if (!exists?.id) continue;
+          db.run("DELETE FROM attributes WHERE node_id = ?", [targetId]);
+          const incomingAttrs = db
+            .query(
+              "SELECT id, value, datatype FROM attributes WHERE datatype = 'wikibase-entityid' AND value LIKE ?",
+            )
+            .all(`%"${targetId}"%`) as any[];
+          for (const incoming of incomingAttrs) {
+            if (
+              attributeValuesContainEntityId(incoming.value, incoming.datatype, targetId)
+            ) {
+              db.run("DELETE FROM attributes WHERE id = ?", [incoming.id]);
+            }
+          }
+          db.run("DELETE FROM entity_classes WHERE entity_id = ?", [targetId]);
+          if (hasProjectScope) {
+            db.run(deleteNodeSql, [targetId, scopedProjectId]);
+          } else {
+            db.run(deleteNodeSql, [targetId]);
+          }
+          deletedNodes++;
+        }
+      }
+
+      return Response.json({
+        success: true,
+        matched: attrs.length,
+        updated: updatedCount,
+        deletedNodes,
+      });
+    } catch (e) {
+      console.error(e);
+      return new Response("Error changing property type", { status: 500 });
     }
   }
 
