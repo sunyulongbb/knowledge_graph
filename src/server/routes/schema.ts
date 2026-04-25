@@ -3,8 +3,6 @@ import { resolve } from "path";
 import { mkdirSync, writeFileSync } from "fs";
 
 const UPLOADS_DIR = resolve(import.meta.dir, "..", "..", "..", "..", "uploads");
-const CLASS_IMAGES_DIR = resolve(UPLOADS_DIR, "class-images");
-mkdirSync(CLASS_IMAGES_DIR, { recursive: true });
 
 function resolveScopedProject(req: Request, url: URL) {
   const directDb = (url.searchParams.get("db") || "").trim();
@@ -1781,6 +1779,12 @@ export async function handleSchemaRoutes(
   // 分类图片上传 API
   if (url.pathname === "/api/kb/classes/upload-image" && method === "POST") {
     try {
+      const scopedProject = resolveScopedProject(req, url);
+      const scopedProjectId = Number(scopedProject?.id || 0) || null;
+      const appFolder = scopedProjectId ? String(scopedProjectId) : "app";
+      const CLASS_IMAGES_DIR = resolve(UPLOADS_DIR, appFolder, "class-images");
+      mkdirSync(CLASS_IMAGES_DIR, { recursive: true });
+
       const formData = await req.formData();
       const file = formData.get("file") as File | null;
       if (!file) {
@@ -1801,7 +1805,7 @@ export async function handleSchemaRoutes(
       writeFileSync(filePath, Buffer.from(arrayBuffer));
 
       // 返回访问 URL
-      const imageUrl = `/static/uploads/class-images/${filename}`;
+      const imageUrl = `/static/uploads/${appFolder}/class-images/${filename}`;
       return Response.json({ url: imageUrl });
     } catch (e) {
       console.error(e);

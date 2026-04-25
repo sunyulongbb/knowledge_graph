@@ -1266,6 +1266,52 @@ if (btnAttrReset) {
     if (attrImageStateText) attrImageStateText.textContent = "";
   }
 
+  async function uploadAttrImageFile(file) {
+    if (!file) return;
+    clearImageUpload();
+    if (attrImageFileName) attrImageFileName.textContent = file.name;
+    if (attrImageStateText)
+      attrImageStateText.textContent = `正在上传：${file.name}`;
+    const uploadUrl = new URL("/api/kb/upload-image", window.location.origin);
+    if (typeof window.appendCurrentDbParam === "function") {
+      const scopedUrl = window.appendCurrentDbParam(uploadUrl);
+      if (scopedUrl instanceof URL) uploadUrl.search = scopedUrl.search;
+    }
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const resp = await fetch(uploadUrl.toString(), {
+        method: "POST",
+        body: formData,
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || "上传失败");
+      }
+      const result = await resp.json();
+      const fileUrl = result.url || "";
+      if (!fileUrl) throw new Error("上传失败");
+      if (attrValueImageUrl) attrValueImageUrl.value = fileUrl;
+      if (attrImagePreviewImg) attrImagePreviewImg.src = fileUrl;
+      if (attrImagePreview) attrImagePreview.style.display = "block";
+      if (attrImageStateText)
+        attrImageStateText.textContent = `已上传：${file.name}`;
+      return fileUrl;
+    } catch (err) {
+      console.error(err);
+      if (attrImageStateText)
+        attrImageStateText.textContent = `上传失败：${err?.message || err}`;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        if (attrImagePreviewImg) attrImagePreviewImg.src = ev.target.result;
+        if (attrImagePreview) attrImagePreview.style.display = "block";
+        if (attrValueImageUrl) attrValueImageUrl.value = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+      return null;
+    }
+  }
+
   // Handle upload button click - trigger file picker
   if (btnAttrImageUpload) {
     btnAttrImageUpload.addEventListener("click", (e) => {
@@ -1282,18 +1328,7 @@ if (btnAttrReset) {
         clearImageUpload();
         return;
       }
-      // Show preview
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        if (attrImagePreviewImg) attrImagePreviewImg.src = ev.target.result;
-        if (attrImagePreview) attrImagePreview.style.display = "block";
-        if (attrImageFileName) attrImageFileName.textContent = file.name;
-        // Fill URL input with data URL
-        if (attrValueImageUrl) attrValueImageUrl.value = ev.target.result;
-        if (attrImageStateText)
-          attrImageStateText.textContent = `已加载: ${file.name}`;
-      };
-      reader.readAsDataURL(file);
+      await uploadAttrImageFile(file);
     });
   }
 
@@ -1305,19 +1340,9 @@ if (btnAttrReset) {
     });
   }
 
-  function handlePastedImage(file) {
+  async function handlePastedImage(file) {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      if (attrImagePreviewImg) attrImagePreviewImg.src = ev.target.result;
-      if (attrImagePreview) attrImagePreview.style.display = "block";
-      if (attrImageFileName)
-        attrImageFileName.textContent = file.name || "clipboard-image";
-      if (attrValueImageUrl) attrValueImageUrl.value = ev.target.result;
-      if (attrImageStateText)
-        attrImageStateText.textContent = `已从剪贴板加载: ${file.name || "剪贴板图像"}`;
-    };
-    reader.readAsDataURL(file);
+    await uploadAttrImageFile(file);
   }
 
   function handleClipboardPaste(event) {

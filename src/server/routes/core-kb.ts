@@ -44,23 +44,18 @@ export async function handleCoreKbRoutes(
       ? `${prefix}project_id = ?`
       : `${prefix}project_id IS NULL`;
   };
-  const NODE_VIDEO_UPLOADS_DIR = resolve(
+  const appFolder = hasProjectScope ? String(scopedProjectId) : "app";
+  const APP_UPLOADS_DIR = resolve(
     import.meta.dir,
     "..",
     "..",
     "..",
     "uploads",
-    "node-videos",
+    appFolder,
   );
+  const NODE_VIDEO_UPLOADS_DIR = resolve(APP_UPLOADS_DIR, "node-videos");
   mkdirSync(NODE_VIDEO_UPLOADS_DIR, { recursive: true });
-  const NODE_IMAGE_UPLOADS_DIR = resolve(
-    import.meta.dir,
-    "..",
-    "..",
-    "..",
-    "uploads",
-    "node-images",
-  );
+  const NODE_IMAGE_UPLOADS_DIR = resolve(APP_UPLOADS_DIR, "node-images");
   mkdirSync(NODE_IMAGE_UPLOADS_DIR, { recursive: true });
 
   const resolveFileExtension = (urlPath: string, contentType: string) => {
@@ -104,7 +99,47 @@ export async function handleCoreKbRoutes(
     const filePath = resolve(uploadDir, filename);
     writeFileSync(filePath, Buffer.from(arrayBuffer));
     const base = uploadDir === NODE_VIDEO_UPLOADS_DIR ? "node-videos" : "node-images";
-    return `/static/uploads/${base}/${filename}`;
+    return `/static/uploads/${appFolder}/${base}/${filename}`;
+  };
+
+  const parseDataUrlImage = (dataUrl: string) => {
+    const match = String(dataUrl || "").trim().match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/);
+    if (!match) return null;
+    return {
+      mime: match[1],
+      base64: match[2],
+    };
+  };
+
+  const saveDataUrlImageToLocal = async (dataUrl: string) => {
+    const parsed = parseDataUrlImage(dataUrl);
+    if (!parsed) return "";
+    const extMap: Record<string, string> = {
+      "image/jpeg": "jpg",
+      "image/jpg": "jpg",
+      "image/png": "png",
+      "image/gif": "gif",
+      "image/webp": "webp",
+      "image/svg+xml": "svg",
+      "image/bmp": "bmp",
+      "image/x-icon": "ico",
+      "image/vnd.microsoft.icon": "ico",
+      "image/avif": "avif",
+      "image/heif": "heif",
+    };
+    const ext = extMap[parsed.mime] || parsed.mime.split("/")[1] || "";
+    if (!ext) {
+      throw new Error(`不支持的图片类型：${parsed.mime}`);
+    }
+    const buffer = Buffer.from(parsed.base64, "base64");
+    const maxSize = 20 * 1024 * 1024;
+    if (buffer.length > maxSize) {
+      throw new Error("图片大小超过限制：20MB");
+    }
+    const filename = `${crypto.randomUUID()}.${ext}`;
+    const filePath = resolve(NODE_IMAGE_UPLOADS_DIR, filename);
+    writeFileSync(filePath, buffer);
+    return `/static/uploads/${appFolder}/node-images/${filename}`;
   };
 
   const downloadRemoteMedia = async (
@@ -1952,11 +1987,41 @@ export async function handleCoreKbRoutes(
       const filePath = resolve(NODE_VIDEO_UPLOADS_DIR, filename);
       const arrayBuffer = await file.arrayBuffer();
       writeFileSync(filePath, Buffer.from(arrayBuffer));
-      const fileUrl = `/static/uploads/node-videos/${filename}`;
+      const fileUrl = `/static/uploads/${appFolder}/node-videos/${filename}`;
       return Response.json({ ok: true, url: fileUrl });
     } catch (e) {
       console.error(e);
       return new Response("Error uploading video", { status: 500 });
+    }
+  }
+
+  if (url.pathname === "/api/kb/upload-image" && method === "POST") {
+    try {
+      const formData = await req.formData();
+      const file = formData.get("file") as File | null;
+      if (!file) {
+        return new Response("No file uploaded", { status: 400 });
+      }
+      const ext = file.name.split(".").pop()?.toLowerCase() || "png";
+      const allowedExts = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "ico", "avif", "heif"];
+      if (!allowedExts.includes(ext)) {
+        return new Response("Invalid image file type", { status: 400 });
+      }
+      const maxSize = 20 * 1024 * 1024;
+      if (typeof file.size === "number" && file.size > maxSize) {
+        return new Response("图片文件过大，请上传不超过 20MB 的图片。", {
+          status: 413,
+        });
+      }
+      const filename = `${crypto.randomUUID()}.${ext}`;
+      const filePath = resolve(NODE_IMAGE_UPLOADS_DIR, filename);
+      const arrayBuffer = await file.arrayBuffer();
+      writeFileSync(filePath, Buffer.from(arrayBuffer));
+      const fileUrl = `/static/uploads/${appFolder}/node-images/${filename}`;
+      return Response.json({ ok: true, url: fileUrl });
+    } catch (e) {
+      console.error(e);
+      return new Response("Error uploading image", { status: 500 });
     }
   }
 
@@ -1971,11 +2036,13 @@ export async function handleCoreKbRoutes(
       const desc = body.description || "";
       const aliases = JSON.stringify(body.aliases || []);
       const tags = JSON.stringify(body.tags || []);
-      let image = typeof body.image === "string" ? body.image.trim() : "";
-      let link = typeof body.link === "string" ? body.link.trim() : "";
-      let video = typeof body.video === "string" ? body.video.trim() : "";
+      let image = body.image != null ? String(body.image).trim() : "";
+      let link = body.link != null ? String(body.link).trim() : "";
+      let video = body.video != null ? String(body.video).trim() : "";
 
-      if (image && image.startsWith("http")) {
+      if (image && image.startsWith("data:image/")) {
+        image = await saveDataUrlImageToLocal(image);
+      } else if (image && image.startsWith("http")) {
         image = await downloadRemoteMedia(
           image,
           NODE_IMAGE_UPLOADS_DIR,
@@ -2054,7 +2121,9 @@ export async function handleCoreKbRoutes(
       }
       if (body.image !== undefined) {
         let imageValue = body.image ? String(body.image).trim() : "";
-        if (imageValue && imageValue.startsWith("http")) {
+        if (imageValue && imageValue.startsWith("data:image/")) {
+          imageValue = await saveDataUrlImageToLocal(imageValue);
+        } else if (imageValue && imageValue.startsWith("http")) {
           imageValue = await downloadRemoteMedia(
             imageValue,
             NODE_IMAGE_UPLOADS_DIR,
@@ -2065,7 +2134,7 @@ export async function handleCoreKbRoutes(
         updates.push("image = ?");
         params.push(imageValue || "");
       }
-      if (body.link !== undefined) {
+      if (body.link !== undefined && body.link !== null) {
         updates.push("link = ?");
         params.push(body.link ? String(body.link).trim() : "");
       }
@@ -2873,9 +2942,25 @@ export async function handleCoreKbRoutes(
       const body = (await req.json()) as any;
       const nodeId = body.node_id || body.entity_id;
       const prop = body.property || body.prop;
-      const value = body.value;
+      let value = body.value;
       const datatype = body.datatype || "string";
       const id = body.id || `attr/${crypto.randomUUID()}`;
+
+      if (datatype === "commonsMedia") {
+        if (typeof value === "string" && value.startsWith("data:image/")) {
+          value = await saveDataUrlImageToLocal(value);
+        } else if (Array.isArray(value)) {
+          const converted = [];
+          for (const item of value) {
+            if (typeof item === "string" && item.startsWith("data:image/")) {
+              converted.push(await saveDataUrlImageToLocal(item));
+            } else {
+              converted.push(item);
+            }
+          }
+          value = converted;
+        }
+      }
 
       const existing = db
         .query("SELECT * FROM attributes WHERE id = ?")

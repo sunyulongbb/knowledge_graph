@@ -1060,6 +1060,17 @@
         }
       });
 
+      const updateCurrentTimeProgress = () => {
+        if (videoToIndexMap.get(videoEl) === activeShortsIndex) {
+          updateShortsProgress(activeShortsIndex, videoEl);
+        }
+      };
+      videoEl.addEventListener("timeupdate", updateCurrentTimeProgress);
+      videoEl.addEventListener("loadedmetadata", updateCurrentTimeProgress);
+      videoEl.addEventListener("ended", () => {
+        updateCurrentTimeProgress();
+      });
+
       observer.observe(videoEl);
       videoToIndexMap.set(videoEl, idx);
       card.appendChild(videoEl);
@@ -1504,11 +1515,11 @@
     const normalizeShortsNodes = (nodes) =>
       dedupeShortsNodes(
         nodes.map((item) => ({
-          label_zh: item.label || "",
-          id: item.id || "",
-          _id: item._id || "",
+          label_zh: item.label_zh || item.label || item.name || "",
+          id: item.id || item._id || "",
+          _id: item._id || item.id || "",
           link: item.link || "",
-          classLabel: item.classLabel || item.type || "",
+          classLabel: item.classLabel || item.type || item.class || "",
           video: item.video || "",
           image: item.image || item.avatar || "",
         })),
@@ -1583,11 +1594,11 @@
         window.kbTableNodes
           .filter((item) => item.video && item.video.trim())
           .map((item) => ({
-            label_zh: item.label || "",
-            id: item.id || "",
-            _id: item._id || "",
+            label_zh: item.label_zh || item.label || item.name || "",
+            id: item.id || item._id || "",
+            _id: item._id || item.id || "",
             link: item.link || "",
-            classLabel: item.classLabel || item.type || "",
+            classLabel: item.classLabel || item.type || item.class || "",
             video: item.video || "",
             image: item.image || item.avatar || "",
           })),
@@ -1646,19 +1657,36 @@
       shortsControls.style.display = count ? "inline-flex" : "none";
     }
 
-    const formatProgress = (index, total) => {
-      if (!total) return "00 / 00";
-      return `${String(index + 1).padStart(2, "0")} / ${String(total).padStart(2, "0")}`;
+    const formatTime = (seconds) => {
+      if (!Number.isFinite(seconds) || seconds <= 0) return "00:00";
+      const sec = Math.floor(seconds % 60);
+      const min = Math.floor(seconds / 60) % 60;
+      const hrs = Math.floor(seconds / 3600);
+      const paddedSec = String(sec).padStart(2, "0");
+      const paddedMin = String(min).padStart(2, "0");
+      if (hrs > 0) {
+        return `${hrs}:${paddedMin}:${paddedSec}`;
+      }
+      return `${paddedMin}:${paddedSec}`;
     };
 
-    if (shortsProgressLabel) {
-      shortsProgressLabel.textContent = count
-        ? formatProgress(0, count)
-        : "00 / 00";
-    }
-    if (shortsProgressBar) {
-      shortsProgressBar.style.width = count ? `${100 / count}%` : "0%";
-    }
+    const updateShortsProgress = (index, videoEl) => {
+      if (shortsProgressLabel) {
+        if (videoEl && videoEl.duration > 0) {
+          shortsProgressLabel.textContent = `${formatTime(videoEl.currentTime)} / ${formatTime(videoEl.duration)}`;
+        } else {
+          shortsProgressLabel.textContent = "00:00 / 00:00";
+        }
+      }
+      if (shortsProgressBar) {
+        if (videoEl && videoEl.duration > 0) {
+          const progress = (videoEl.currentTime / videoEl.duration) * 100;
+          shortsProgressBar.style.width = `${Math.min(100, Math.max(0, progress))}%`;
+        } else {
+          shortsProgressBar.style.width = "0%";
+        }
+      }
+    };
 
     const cacheShortsVideos = async () => {
       if (!count || !("caches" in window)) return;
@@ -1718,16 +1746,6 @@
     let shortsScrollEndTimer = null;
     const scrollDuration = 360;
     const cardCount = videoItems.length;
-
-    const updateShortsProgress = (index) => {
-      if (shortsProgressLabel) {
-        shortsProgressLabel.textContent = formatProgress(index, cardCount);
-      }
-      if (shortsProgressBar) {
-        const progress = cardCount ? ((index + 1) / cardCount) * 100 : 0;
-        shortsProgressBar.style.width = `${progress}%`;
-      }
-    };
 
     const updateMuteButtonState = () => {
       cardElements.forEach((card, index) => {
@@ -1790,7 +1808,7 @@
       if (index === activeShortsIndex) return;
       activeShortsIndex = index;
       updateNavButtons(index);
-      updateShortsProgress(index);
+      updateShortsProgress(index, videoElements[index]);
 
       videoElements.forEach((videoEl, videoIndex) => {
         const card = cardElements[videoIndex];
@@ -2194,6 +2212,33 @@
       if (event.key === "ArrowUp" || event.key === "PageUp") {
         event.preventDefault();
         scrollToCard(Math.max(currentIndex - 1, 0));
+        return;
+      }
+      if (
+        event.key === "ArrowLeft" ||
+        event.key.toLowerCase() === "j" ||
+        event.key === ","
+      ) {
+        event.preventDefault();
+        const activeVideo = videoElements[currentIndex];
+        if (!activeVideo) return;
+        const newTime = Math.max(0, activeVideo.currentTime - 10);
+        activeVideo.currentTime = newTime;
+        updateShortsProgress(currentIndex, activeVideo);
+        return;
+      }
+      if (
+        event.key === "ArrowRight" ||
+        event.key.toLowerCase() === "l" ||
+        event.key === "."
+      ) {
+        event.preventDefault();
+        const activeVideo = videoElements[currentIndex];
+        if (!activeVideo) return;
+        const duration = activeVideo.duration || 0;
+        const newTime = Math.min(duration, activeVideo.currentTime + 10);
+        activeVideo.currentTime = newTime;
+        updateShortsProgress(currentIndex, activeVideo);
         return;
       }
       if (event.key === " " || event.key.toLowerCase() === "k") {

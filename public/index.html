@@ -1644,6 +1644,7 @@
                   <button id="btnEntityVideoUpload" type="button" class="btn wd-btn-icon" title="上传视频">
                     <i class="fa-solid fa-video"></i>
                   </button>
+                  <span id="entityVideoUploadStatus" class="wd-msg" style="margin-left:8px; font-size:0.9rem; display:none;"></span>
                   <span id="entityIdBadge" class="wd-entity-id-badge" style="display:none"></span>
                   <button id="btnEntityEdit" type="button" class="btn wd-btn-icon" title="编辑实体"
                     style="margin-left:8px;">
@@ -1705,6 +1706,14 @@
                   <i class="fa-solid fa-xmark"></i>
                 </button>
                 <span id="addMsg" class="wd-msg"></span>
+                <div id="videoUploadProgress" class="video-upload-progress" style="display:none; margin-top:6px;">
+                  <div class="clean-task-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                    <div class="clean-task-progress-bar">
+                      <div id="videoUploadProgressFill" class="clean-task-progress-fill" style="width:0%"></div>
+                    </div>
+                    <span id="videoUploadProgressText" class="clean-task-progress-text">上传中 0%</span>
+                  </div>
+                </div>
               </div>
             </form>
           </div>
@@ -1715,8 +1724,14 @@
           <div class="wd-section-header">
             <span>关系</span>
             <span id="attrCountBadge" class="wd-count-badge">0</span>
-            <button id="btnShowAttrForm" type="button" class="btn wd-btn-icon wd-btn-primary" title="新增关系"
+            <button id="btnAttrEditSelected" type="button" class="btn wd-btn-icon wd-btn-secondary" title="编辑选中关系"
               style="margin-left:auto;">
+              <i class="fa-solid fa-pen"></i>
+            </button>
+            <button id="btnAttrDeleteSelected" type="button" class="btn wd-btn-icon wd-btn-secondary" title="删除选中关系">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+            <button id="btnShowAttrForm" type="button" class="btn wd-btn-icon wd-btn-primary" title="新增关系">
               <i class="fa-solid fa-plus"></i>
             </button>
           </div>
@@ -11216,17 +11231,13 @@
           nodeImageUploadInput.addEventListener('change', async () => {
             const file = nodeImageUploadInput.files && nodeImageUploadInput.files[0];
             if (!file || !currentContextNode) return;
-            const reader = new FileReader();
-            reader.onload = async () => {
-              const dataUrl = reader.result;
-              if (typeof dataUrl === 'string') {
-                await saveNodeImageAttribute(currentContextNode, dataUrl);
-              }
-            };
-            reader.onerror = () => {
-              alert('读取图片失败');
-            };
-            reader.readAsDataURL(file);
+            try {
+              const imageUrl = await uploadNodeImageFile(file);
+              await saveNodeImageAttribute(currentContextNode, imageUrl);
+            } catch (err) {
+              console.error('节点图像上传失败:', err);
+              alert('节点图像上传失败: ' + (err?.message || err));
+            }
           });
 
           const entityDisplayImageWrap = document.getElementById('entityDisplayImageWrap');
@@ -11931,14 +11942,31 @@
         return '';
       }
 
-      async function saveEntityImage(nodeId, dataUrl) {
+      async function uploadNodeImageFile(file) {
+        if (!file) {
+          throw new Error('未提供图片文件');
+        }
+        const maxSize = 20 * 1024 * 1024;
+        if (file.size > maxSize) {
+          throw new Error('图片文件过大，请上传不超过 20MB 的图片。');
+        }
+        const uploadForm = new FormData();
+        uploadForm.append('file', file);
+        const uploadResp = await apiPostForm('/api/kb/upload-image', uploadForm);
+        if (!uploadResp || !uploadResp.url) {
+          throw new Error('图片上传失败');
+        }
+        return uploadResp.url;
+      }
+
+      async function saveEntityImage(nodeId, imageUrl) {
         const fullId = typeof ensureEntityIdPrefix === 'function' ? ensureEntityIdPrefix(nodeId) : nodeId;
         try {
-          await apiPost('/api/kb/nodes/update', { id: fullId, image: dataUrl });
+          await apiPost('/api/kb/nodes/update', { id: fullId, image: imageUrl });
           const eImage = document.getElementById('entityDisplayImage');
           const eImageWrap = document.getElementById('entityDisplayImageWrap');
           if (eImage) {
-            eImage.src = dataUrl;
+            eImage.src = imageUrl;
             eImage.style.display = '';
             eImage.onerror = () => {
               if (eImageWrap) eImageWrap.classList.add('empty');
@@ -11952,8 +11980,8 @@
           if (window.kbCy && typeof window.kbCy.getElementById === 'function') {
             const node = window.kbCy.getElementById(fullId);
             if (node && (!node.empty || typeof node.empty !== 'function' || !node.empty())) {
-              try { node.data('image', dataUrl); } catch { }
-              try { node.style('background-image', dataUrl); } catch { }
+              try { node.data('image', imageUrl); } catch { }
+              try { node.style('background-image', imageUrl); } catch { }
               try { node.updateStyle(); } catch { }
             }
           }
@@ -11977,17 +12005,13 @@
         if (!file) return;
         const nodeId = getSelectedNodeId();
         if (!nodeId) return;
-        const reader = new FileReader();
-        reader.onload = async () => {
-          const dataUrl = reader.result;
-          if (typeof dataUrl === 'string') {
-            await saveEntityImage(nodeId, dataUrl);
-          }
-        };
-        reader.onerror = () => {
-          alert('读取图片失败');
-        };
-        reader.readAsDataURL(file);
+        try {
+          const imageUrl = await uploadNodeImageFile(file);
+          await saveEntityImage(nodeId, imageUrl);
+        } catch (err) {
+          console.error('节点图像上传失败:', err);
+          alert('节点图像上传失败: ' + (err?.message || err));
+        }
       });
 
       imageWrap.addEventListener('dblclick', () => {
@@ -12016,20 +12040,15 @@
         }
         if (imageFile) {
           ev.preventDefault();
-          const reader = new FileReader();
-          reader.onload = async () => {
-            const dataUrl = reader.result;
-            if (typeof dataUrl === 'string') {
-              const selectedId = getSelectedNodeId();
-              if (selectedId) {
-                await saveEntityImage(selectedId, dataUrl);
-              }
-            }
-          };
-          reader.onerror = () => {
-            alert('读取剪贴板图片失败');
-          };
-          reader.readAsDataURL(imageFile);
+          const selectedId = getSelectedNodeId();
+          if (!selectedId) return;
+          try {
+            const imageUrl = await uploadNodeImageFile(imageFile);
+            await saveEntityImage(selectedId, imageUrl);
+          } catch (err) {
+            console.error('粘贴图片上传失败', err);
+            alert('粘贴图片上传失败: ' + (err?.message || err));
+          }
           return;
         }
         const text = clipboard.getData && clipboard.getData('text/plain');
@@ -12038,7 +12057,18 @@
           let imageUrl = text.trim();
           if (imageUrl.startsWith('data:image/')) {
             const selectedId = getSelectedNodeId();
-            if (selectedId) await saveEntityImage(selectedId, imageUrl);
+            if (!selectedId) return;
+            try {
+              const resp = await fetch(imageUrl);
+              const blob = await resp.blob();
+              const ext = blob.type.split('/').pop() || 'png';
+              const uploadFile = new File([blob], `paste-image.${ext}`, { type: blob.type });
+              const uploadedUrl = await uploadNodeImageFile(uploadFile);
+              await saveEntityImage(selectedId, uploadedUrl);
+            } catch (err) {
+              console.error('粘贴图片上传失败', err);
+              alert('粘贴图片上传失败: ' + (err?.message || err));
+            }
             return;
           }
           try {
@@ -12046,18 +12076,11 @@
             if (!resp.ok) throw new Error('下载图片失败');
             const blob = await resp.blob();
             if (!blob.type.startsWith('image/')) throw new Error('粘贴内容不是图片');
-            const reader = new FileReader();
-            reader.onload = async () => {
-              const dataUrl = reader.result;
-              if (typeof dataUrl === 'string') {
-                const selectedId = getSelectedNodeId();
-                if (selectedId) await saveEntityImage(selectedId, dataUrl);
-              }
-            };
-            reader.onerror = () => {
-              alert('读取粘贴图片失败');
-            };
-            reader.readAsDataURL(blob);
+            const ext = blob.type.split('/').pop() || 'png';
+            const uploadFile = new File([blob], `paste-image.${ext}`, { type: blob.type });
+            const uploadedUrl = await uploadNodeImageFile(uploadFile);
+            const selectedId = getSelectedNodeId();
+            if (selectedId) await saveEntityImage(selectedId, uploadedUrl);
           } catch (err) {
             console.error('粘贴图片加载失败', err);
             alert('粘贴图片失败: ' + (err?.message || ''));
@@ -12085,12 +12108,53 @@
     const fAliases = document.getElementById("fAliases");
     const fTags = document.getElementById("fTags");
     const addMsg = document.getElementById("addMsg");
+    const entityVideoUploadStatus = document.getElementById("entityVideoUploadStatus");
+    const videoUploadProgress = document.getElementById("videoUploadProgress");
+    const videoUploadProgressFill = document.getElementById("videoUploadProgressFill");
+    const videoUploadProgressText = document.getElementById("videoUploadProgressText");
     const btnSubmit = document.getElementById("btnSubmit");
     const btnCancelEdit = document.getElementById("btnCancelEdit");
     const btnEntityLink = document.getElementById("btnEntityLink");
     const btnEntityVideoUpload = document.getElementById("btnEntityVideoUpload");
     let uploadedVideoUrl = "";
     let uploadedVideoPoster = "";
+
+    function updateEntityVideoUploadStatus(text) {
+      if (addMsg) addMsg.textContent = text;
+      if (entityVideoUploadStatus) {
+        entityVideoUploadStatus.textContent = text;
+        entityVideoUploadStatus.style.display = text ? "inline-block" : "none";
+      }
+    }
+
+    async function saveVideoToCurrentNode(videoUrl, posterData) {
+      const currentId = getCurrentNodeIdForLeftCard();
+      if (!currentId) return null;
+      const body = { id: currentId, video: videoUrl };
+      if (posterData) {
+        body.image = posterData;
+      }
+      return await apiPost("/api/kb/nodes/update", body);
+    }
+
+    function setVideoUploadProgress(percent, message) {
+      if (videoUploadProgress) {
+        videoUploadProgress.style.display = "";
+        videoUploadProgress.setAttribute("aria-valuenow", String(percent));
+      }
+      if (videoUploadProgressFill) {
+        videoUploadProgressFill.style.width = `${percent}%`;
+      }
+      if (videoUploadProgressText) {
+        videoUploadProgressText.textContent = message || `上传中 ${percent}%`;
+      }
+    }
+
+    function hideVideoUploadProgress() {
+      if (videoUploadProgress) videoUploadProgress.style.display = "none";
+      if (videoUploadProgressFill) videoUploadProgressFill.style.width = "0%";
+      if (videoUploadProgressText) videoUploadProgressText.textContent = "上传中 0%";
+    }
 
     function getCurrentNodeIdForLeftCard() {
       const formId = document.getElementById('fId')?.value?.toString().trim();
@@ -12124,8 +12188,19 @@
       });
     }
 
+    async function saveLinkToCurrentNode(linkUrl) {
+      const currentId = getCurrentNodeIdForLeftCard();
+      if (!currentId) return null;
+      try {
+        return await apiPost("/api/kb/nodes/update", { id: currentId, link: linkUrl });
+      } catch (err) {
+        console.error("保存节点链接失败", err);
+        return null;
+      }
+    }
+
     if (btnEntityLink) {
-      btnEntityLink.addEventListener("click", () => {
+      btnEntityLink.addEventListener("click", async () => {
         const currentUrl = fLink ? (fLink.value || "").trim() : "";
         const newUrl = window.prompt("请输入外部链接", currentUrl);
         if (newUrl !== null) {
@@ -12139,6 +12214,19 @@
             } else {
               eLink.href = "#";
               eLink.style.display = "none";
+            }
+          }
+          if (value) {
+            const saveResp = await saveLinkToCurrentNode(value);
+            if (saveResp && saveResp.ok) {
+              if (addMsg) addMsg.textContent = "外部链接已保存到节点。";
+            } else if (saveResp) {
+              if (addMsg) addMsg.textContent = "外部链接保存失败，请稍后重试。";
+            }
+          } else {
+            const clearResp = await saveLinkToCurrentNode("");
+            if (clearResp && clearResp.ok) {
+              if (addMsg) addMsg.textContent = "已清除节点外部链接。";
             }
           }
         }
@@ -12165,24 +12253,52 @@
           if (file.size > maxVideoSize) {
             throw new Error("视频文件过大，请上传不超过 300MB 的视频。");
           }
-          const existingImage = document.getElementById("entityDisplayImage")?.src || "";
-          if (existingImage && existingImage.trim()) {
+          const existingImageEl = document.getElementById("entityDisplayImage");
+          const existingImage = existingImageEl?.getAttribute("src") || "";
+          const existingImageVisible = existingImageEl && existingImageEl.style.display !== "none" && existingImage.trim();
+          if (existingImageVisible) {
             uploadedVideoPoster = "";
           } else {
             uploadedVideoPoster = await captureVideoPoster(file);
+            if (uploadedVideoPoster && existingImageEl) {
+              existingImageEl.src = uploadedVideoPoster;
+              existingImageEl.style.display = "";
+              const imageWrapEl = document.getElementById("entityDisplayImageWrap");
+              if (imageWrapEl) imageWrapEl.classList.remove("empty");
+            }
           }
           const uploadForm = new FormData();
           uploadForm.append("file", file);
-          const uploadResp = await apiPostForm("/api/kb/upload-video", uploadForm);
+          updateEntityVideoUploadStatus("正在上传视频 0%...");
+          hideVideoUploadProgress();
+          setVideoUploadProgress(0, "上传中 0%");
+          const uploadResp = await apiPostFormWithProgress(
+            "/api/kb/upload-video",
+            uploadForm,
+            (percent) => {
+              const progressText = `正在上传视频 ${percent}%...`;
+              updateEntityVideoUploadStatus(progressText);
+              setVideoUploadProgress(percent, `上传中 ${percent}%`);
+            }
+          );
           if (!uploadResp || !uploadResp.url) {
             throw new Error("视频上传失败");
           }
           uploadedVideoUrl = uploadResp.url;
-          if (addMsg) addMsg.textContent = "视频已上传，请点击保存以保留更改。";
+          setVideoUploadProgress(100, "上传完成 100%");
+          const saveResp = await saveVideoToCurrentNode(uploadedVideoUrl, uploadedVideoPoster);
+          if (saveResp && saveResp.ok) {
+            updateEntityVideoUploadStatus("视频已上传并已保存到节点。");
+          } else if (saveResp && !saveResp.ok) {
+            updateEntityVideoUploadStatus("视频已上传，但保存到节点失败，请手动保存。");
+          } else {
+            updateEntityVideoUploadStatus("视频已上传，请点击保存以保留更改。");
+          }
         } catch (err) {
-          if (addMsg) addMsg.textContent = err?.message || "视频上传失败";
+          updateEntityVideoUploadStatus(err?.message || "视频上传失败");
           uploadedVideoUrl = "";
           uploadedVideoPoster = "";
+          hideVideoUploadProgress();
           console.error("视频上传错误", err);
         }
       });
@@ -12232,6 +12348,42 @@
         );
       }
       return await resp.json();
+    }
+
+    function apiPostFormWithProgress(url, formData, onProgress) {
+      return new Promise((resolve, reject) => {
+        let finalUrl = url;
+        if (typeof window.appendCurrentDbParam === "function") {
+          finalUrl = window.appendCurrentDbParam(url);
+        }
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", finalUrl, true);
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable && typeof onProgress === "function") {
+            const percent = Math.round((event.loaded / event.total) * 100);
+            onProgress(percent);
+          }
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              resolve(JSON.parse(xhr.responseText));
+            } catch (error) {
+              reject(new Error("无法解析服务器响应"));
+            }
+            return;
+          }
+          let detail = "";
+          try {
+            const j = JSON.parse(xhr.responseText);
+            detail = j.detail || j.error || "";
+          } catch { }
+          reject(new Error("HTTP " + xhr.status + (detail ? ": " + detail : "")));
+        };
+        xhr.onerror = () => reject(new Error("网络错误，视频上传失败"));
+        xhr.onabort = () => reject(new Error("视频上传已取消"));
+        xhr.send(formData);
+      });
     }
 
     function normalizeListValue(value) {
@@ -12365,6 +12517,18 @@
         el.removeAttribute("title");
       }
     }
+    function updateEntityDisplayLink(linkValue) {
+      const eLink = document.getElementById("entityDisplayLink");
+      if (!eLink) return;
+      const value = (linkValue || "").toString().trim();
+      if (value) {
+        eLink.href = value;
+        eLink.style.display = "";
+      } else {
+        eLink.href = "#";
+        eLink.style.display = "none";
+      }
+    }
     function updateEntityDescToggle() {
       const descEl = document.getElementById('entityDisplayDesc');
       const toggleBtn = document.getElementById('entityDescToggle');
@@ -12414,10 +12578,7 @@
         const eImage = document.getElementById('entityDisplayImage');
         if (eName) updateEntityDisplayName(eName, '新建实体');
         if (eDesc) eDesc.textContent = '点击此处添加描述';
-        if (eLink) {
-          eLink.href = '#';
-          eLink.style.display = 'none';
-        }
+        updateEntityDisplayLink('');
         if (eBadge) {
           eBadge.textContent = '';
           eBadge.style.display = 'none';
@@ -12498,17 +12659,8 @@
             eDesc.style.display = 'none';
           }
         }
-        const eLink = document.getElementById('entityDisplayLink');
         const linkUrl = (node?.link || node?.url || "")?.toString().trim();
-        if (eLink) {
-          if (linkUrl) {
-            eLink.href = linkUrl;
-            eLink.style.display = '';
-          } else {
-            eLink.href = '#';
-            eLink.style.display = 'none';
-          }
-        }
+        updateEntityDisplayLink(linkUrl);
         const eImageWrap = document.getElementById('entityDisplayImageWrap');
         const eImage = document.getElementById('entityDisplayImage');
         const imageUrl = node?.image || node?.img || node?.icon || node?.logo || node?.avatar || '';
@@ -12778,6 +12930,7 @@
               desc_zh: description,
               aliases_zh: aliases,
               tags,
+              link,
             }
           );
         } else {
