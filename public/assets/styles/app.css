@@ -2421,6 +2421,7 @@ body {
 }
 .wd-entity-avatar-wrap {
   max-width: 100%;
+  min-width: 64px;
   min-height: 64px;
   border-radius: 16px;
   overflow: hidden;
