@@ -201,7 +201,7 @@
       if (!skipSidebarSync) {
         var fId = window.fId || document.getElementById("fId");
         if (fId && typeof fId === "object") fId.value = id || "";
-        if (id && typeof window.loadAttributes === "function") {
+        if (typeof window.loadAttributes === "function") {
           window.loadAttributes(id);
         }
       }
