@@ -2162,9 +2162,7 @@
                   <th style="width: 32px; text-align: center;">
                     <input type="checkbox" id="chkSelectAll" title="全选/取消全选" style="cursor: pointer;">
                   </th>
-                  <th style="width: 36px">#</th>
                   <th>名称</th>
-                  <th style="width: 140px; text-align: right;">分类</th>
                 </tr>
               </thead>
               <tbody></tbody>
@@ -2190,7 +2188,8 @@
             <label for="tblSort" class="muted" style="font-size: 12px">排序：</label>
             <select id="tblSort" class="kb-select sm">
               <option value="id" selected>按编号</option>
-              <option value="modified_desc">按更新时间</option>
+              <option value="modified_desc">按更新时间↓</option>
+              <option value="modified_asc">按更新时间↑</option>
             </select>
             <select id="tblPageSize" class="kb-select sm">
               <option value="10">10条/页</option>

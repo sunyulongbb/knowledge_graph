@@ -1039,15 +1039,37 @@ export async function handleCoreKbRoutes(
       whereClause += " AND lower(trim(n.type)) <> 'entity'";
     }
 
+    const typeFilter = (url.searchParams.get("type") || "").trim();
+    if (typeFilter) {
+      joinClause +=
+        " LEFT JOIN ontologies ot_filter ON lower(trim(n.type)) = lower(trim(ot_filter.name)) OR lower(trim(n.type)) = lower(trim(ot_filter.id))";
+      whereClause +=
+        " AND (lower(trim(n.type)) = lower(?) OR lower(trim(ot_filter.id)) = lower(?) OR lower(trim(ot_filter.name)) = lower(?))";
+      params.push(typeFilter, typeFilter, typeFilter);
+      countParams.push(typeFilter, typeFilter, typeFilter);
+    }
+
     if (hasProjectScope) {
       whereClause += ` AND ${scopedClause("n")}`;
       params.push(scopedProjectId);
       countParams.push(scopedProjectId);
     }
 
+    const orderBy = (url.searchParams.get("order") || "").trim();
+    let orderClause = " ORDER BY n.rowid DESC";
+    if (orderBy === "modified_desc") {
+      orderClause = " ORDER BY datetime(COALESCE(n.updated_at, n.created_at)) DESC, n.rowid DESC";
+    } else if (orderBy === "modified_asc") {
+      orderClause = " ORDER BY datetime(COALESCE(n.updated_at, n.created_at)) ASC, n.rowid ASC";
+    } else if (orderBy === "created_desc") {
+      orderClause = " ORDER BY datetime(n.created_at) DESC, n.rowid DESC";
+    } else if (orderBy === "created_asc") {
+      orderClause = " ORDER BY datetime(n.created_at) ASC, n.rowid ASC";
+    }
+
     const nodes = db
       .query(
-        `SELECT DISTINCT n.* FROM nodes n${joinClause} ${whereClause} LIMIT ? OFFSET ?`,
+        `SELECT DISTINCT n.* FROM nodes n${joinClause} ${whereClause}${orderClause} LIMIT ? OFFSET ?`,
       )
       .all(...params, limit, offset)
       .map(formatNode);

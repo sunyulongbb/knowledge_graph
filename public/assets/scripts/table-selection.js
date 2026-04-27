@@ -485,10 +485,6 @@
       tdChk.appendChild(chk);
       tr.appendChild(tdChk);
 
-      const tdIdx = document.createElement("td");
-      tdIdx.textContent = String(n.id);
-      tr.appendChild(tdIdx);
-
       const tdName = document.createElement("td");
       const nameWrapper = document.createElement("div");
       nameWrapper.style.display = "inline-flex";
@@ -600,12 +596,6 @@
       tdName.appendChild(nameWrapper);
       tr.appendChild(tdName);
 
-      const tdClass = document.createElement("td");
-      const classification = n.classLabel || n.type || "";
-      tdClass.textContent = classification;
-      tdClass.style.textAlign = "right";
-      if (classification) tdClass.title = classification;
-      tr.appendChild(tdClass);
 
       tr.addEventListener("click", (e) => {
         const target = e.target;

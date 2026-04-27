@@ -60,8 +60,15 @@
     };
 
     try {
-      const [classes, properties] = await Promise.all([
-        fetchJson("/api/kb/classes?status=all"),
+      const ontologyUrl = new URL("/api/kb/ontologies?q=", window.location.origin);
+      if (typeof window.appendCurrentDbParam === "function") {
+        const scopedUrl = window.appendCurrentDbParam(ontologyUrl);
+        if (scopedUrl instanceof URL) {
+          ontologyUrl.search = scopedUrl.search;
+        }
+      }
+      const [ontologies, properties] = await Promise.all([
+        fetchJson(ontologyUrl.toString()),
         fetchJson("/api/kb/properties?status=active"),
       ]);
 
@@ -72,11 +79,11 @@
         defaultOption.value = "";
         defaultOption.textContent = "本体类型";
         tblTypeFilter.appendChild(defaultOption);
-        if (Array.isArray(classes)) {
-          classes.forEach((item) => {
+        if (Array.isArray(ontologies)) {
+          ontologies.forEach((item) => {
             const option = document.createElement("option");
-            option.value = item.id || "";
-            option.textContent = item.name || item.id || "";
+            option.value = item.name || item.label || item.id || "";
+            option.textContent = item.name || item.label || item.id || "";
             if (option.value === currentValue) option.selected = true;
             tblTypeFilter.appendChild(option);
           });
@@ -212,7 +219,7 @@
         : "";
 
       if (keyword) url.searchParams.set("q", keyword);
-      if (tblActiveClassId) url.searchParams.set("class_id", tblActiveClassId);
+      if (tblActiveClassId) url.searchParams.set("type", tblActiveClassId);
       if (propertyId) url.searchParams.set("property_id", propertyId);
       if (propertyValue) url.searchParams.set("property_value", propertyValue);
       url.searchParams.set("hide_entity", "1");
@@ -320,9 +327,41 @@
       });
     }
 
+    const tblSortTimeHeader = document.getElementById("tblSortTimeHeader");
+    const tblSortTimeIcon = document.getElementById("tblSortTimeIcon");
+
+    const updateTimeSortHeader = () => {
+      if (!tblSortSelect || !tblSortTimeIcon) return;
+      const value = tblSortSelect.value;
+      if (value === "modified_desc") {
+        tblSortTimeIcon.textContent = "↓";
+      } else if (value === "modified_asc") {
+        tblSortTimeIcon.textContent = "↑";
+      } else {
+        tblSortTimeIcon.textContent = "";
+      }
+    };
+
     if (tblSortSelect) {
       tblSortSelect.addEventListener("change", () => {
         tblPage = 1;
+        updateTimeSortHeader();
+        loadTablePage();
+      });
+      updateTimeSortHeader();
+    }
+
+    if (tblSortTimeHeader) {
+      tblSortTimeHeader.addEventListener("click", () => {
+        if (!tblSortSelect) return;
+        const current = tblSortSelect.value;
+        if (current === "modified_desc") {
+          tblSortSelect.value = "modified_asc";
+        } else {
+          tblSortSelect.value = "modified_desc";
+        }
+        tblPage = 1;
+        updateTimeSortHeader();
         loadTablePage();
       });
     }
