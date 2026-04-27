@@ -44,7 +44,7 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
       );
       const user = adminDb
         .query(
-          "SELECT username, display_name, avatar, created_at FROM users WHERE username = ?"
+          "SELECT username, display_name, avatar, panel_state, created_at FROM users WHERE username = ?"
         )
         .get(username);
       return Response.json({ success: true, user });
@@ -71,7 +71,7 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
 
       const u = adminDb
         .query(
-          "SELECT username, display_name, password_hash, password_salt, avatar FROM users WHERE username = ?"
+          "SELECT username, display_name, password_hash, password_salt, avatar, panel_state FROM users WHERE username = ?"
         )
         .get(username);
       if (!u) {
@@ -99,6 +99,12 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
         [token, token, username, userRow?.id || null, expires]
       );
 
+      let loginPanelState = null;
+      try {
+        loginPanelState = u.panel_state ? JSON.parse(u.panel_state) : null;
+      } catch {
+        loginPanelState = null;
+      }
       return new Response(
         JSON.stringify({
           success: true,
@@ -106,6 +112,7 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
             username: u.username,
             displayName: u.display_name,
             avatar: u.avatar,
+            panelState: loginPanelState,
           },
         }),
         {
@@ -130,15 +137,22 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
       if (!s) return Response.json({ user: null });
 
       const u = adminDb
-        .query("SELECT username, display_name, avatar FROM users WHERE username = ?")
+        .query("SELECT username, display_name, avatar, panel_state FROM users WHERE username = ?")
         .get(s.username);
       if (!u) return Response.json({ user: null });
 
+      let whoamiPanelState = null;
+      try {
+        whoamiPanelState = u.panel_state ? JSON.parse(u.panel_state) : null;
+      } catch {
+        whoamiPanelState = null;
+      }
       return Response.json({
         user: {
           username: u.username,
           displayName: u.display_name,
           avatar: u.avatar,
+          panelState: whoamiPanelState,
         },
       });
     } catch {
@@ -179,20 +193,52 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
       }
 
       const body: any = await req.json();
-      const displayName = (body.displayName || "").toString().trim();
-      const avatar = (body.avatar || "").toString().trim();
+      const displayName = body.displayName !== undefined ? (body.displayName || "").toString().trim() : undefined;
+      const avatar = body.avatar !== undefined ? (body.avatar || "").toString().trim() : undefined;
+      const panelState = body.panelState !== undefined ? JSON.stringify(body.panelState) : undefined;
 
       try {
-        adminDb.run(
-          "UPDATE users SET display_name = ?, avatar = ?, updated_at = CURRENT_TIMESTAMP WHERE username = ?",
-          [displayName || s.username, avatar || "", s.username]
-        );
+        const updates = [];
+        const params: any[] = [];
+        if (displayName !== undefined) {
+          updates.push("display_name = ?");
+          params.push(displayName || s.username);
+        }
+        if (avatar !== undefined) {
+          updates.push("avatar = ?");
+          params.push(avatar || "");
+        }
+        if (panelState !== undefined) {
+          updates.push("panel_state = ?");
+          params.push(panelState);
+        }
+        if (updates.length) {
+          updates.push("updated_at = CURRENT_TIMESTAMP");
+          adminDb.run(
+            `UPDATE users SET ${updates.join(", ")} WHERE username = ?`,
+            [...params, s.username]
+          );
+        }
       } catch {}
 
       const u = adminDb
-        .query("SELECT username, display_name, avatar FROM users WHERE username = ?")
+        .query("SELECT username, display_name, avatar, panel_state FROM users WHERE username = ?")
         .get(s.username);
-      return Response.json({ success: true, user: u });
+      let updatePanelState = null;
+      try {
+        updatePanelState = u.panel_state ? JSON.parse(u.panel_state) : null;
+      } catch {
+        updatePanelState = null;
+      }
+      return Response.json({
+        success: true,
+        user: {
+          username: u.username,
+          displayName: u.display_name,
+          avatar: u.avatar,
+          panelState: updatePanelState,
+        },
+      });
     } catch {
       return Response.json({ success: false, message: "保存失败" }, { status: 400 });
     }

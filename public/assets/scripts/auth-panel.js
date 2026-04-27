@@ -67,8 +67,12 @@
       const resp = await fetch("/api/auth/whoami", { credentials: "include" });
       if (!resp.ok) return setAuthUser(null);
       const data = await resp.json();
-      if (data && data.user) setAuthUser(data.user);
-      else setAuthUser(null);
+      if (data && data.user) {
+        setAuthUser(data.user);
+        try {
+          if (window.applyUserPanelState) window.applyUserPanelState(data.user.panelState);
+        } catch {}
+      } else setAuthUser(null);
     } catch {
       setAuthUser(null);
     }
@@ -223,6 +227,9 @@
       }
       if (data && data.success) {
         setAuthUser(data.user);
+        try {
+          if (window.applyUserPanelState) window.applyUserPanelState(data.user.panelState);
+        } catch {}
         closeAuthModal();
         try {
           showToast("登录成功");
@@ -306,6 +313,9 @@
         } catch {}
         if (resp2.ok && d2 && d2.success) {
           setAuthUser(d2.user);
+          try {
+            if (window.applyUserPanelState) window.applyUserPanelState(d2.user.panelState);
+          } catch {}
           closeAuthModal();
           return;
         }

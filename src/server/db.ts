@@ -130,6 +130,7 @@ function ensureSharedTables() {
       password_hash TEXT,
       password_salt TEXT,
       avatar TEXT,
+      panel_state TEXT,
       is_admin INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -140,6 +141,7 @@ function ensureSharedTables() {
   runSafe("ALTER TABLE users ADD COLUMN password_hash TEXT");
   runSafe("ALTER TABLE users ADD COLUMN password_salt TEXT");
   runSafe("ALTER TABLE users ADD COLUMN avatar TEXT");
+  runSafe("ALTER TABLE users ADD COLUMN panel_state TEXT");
   runSafe("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0");
   runSafe(
     "ALTER TABLE users ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP",

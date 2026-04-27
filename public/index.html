@@ -1187,6 +1187,79 @@
         padding-right: 12px;
       }
     }
+
+    .center-col {
+      position: relative;
+    }
+
+    .center-panel-toggle-wrap {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    .panel-toggle-btn {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      pointer-events: auto;
+      width: 38px;
+      height: 38px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface-0);
+      color: var(--fg);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+      transition: transform 120ms ease, opacity 120ms ease, background 120ms ease;
+    }
+
+    .panel-toggle-btn:hover {
+      background: var(--surface-1);
+    }
+
+    .panel-toggle-left {
+      left: -18px;
+    }
+
+    .panel-toggle-right {
+      right: -18px;
+    }
+
+    .kb-split.hide-left {
+      grid-template-columns: var(--sidebar-width, 72px) 0 minmax(420px, 4fr) minmax(220px, 1fr)
+        var(--sidebar-width, 72px);
+    }
+
+    .kb-split.hide-right {
+      grid-template-columns: var(--sidebar-width, 72px) minmax(220px, 1fr) minmax(420px, 4fr) 0
+        var(--sidebar-width, 72px);
+    }
+
+    .kb-split.hide-left.hide-right {
+      grid-template-columns: var(--sidebar-width, 72px) 0 minmax(420px, 5fr) 0
+        var(--sidebar-width, 72px);
+    }
+
+    .kb-split.hide-left .editor-panel,
+    .kb-split.hide-right .class-panel {
+      visibility: hidden;
+      width: 0 !important;
+      min-width: 0 !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      border: 0 !important;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    .kb-split.hide-left .editor-panel > *,
+    .kb-split.hide-right .class-panel > * {
+      display: none !important;
+    }
   </style>
 
   <!-- DB Project Card Styles -->
@@ -1879,6 +1952,16 @@
       </div>
       <!-- Center: graph / table panel -->
       <div class="center-col">
+        <div class="center-panel-toggle-wrap">
+          <button id="btnToggleLeftPanel" type="button" class="panel-toggle-btn panel-toggle-left"
+            title="收起左侧节点编辑" aria-label="收起左侧节点编辑">
+            <i class="fa-solid fa-chevron-left"></i>
+          </button>
+          <button id="btnToggleRightPanel" type="button" class="panel-toggle-btn panel-toggle-right"
+            title="收起右侧分类面板" aria-label="收起右侧分类面板">
+            <i class="fa-solid fa-chevron-right"></i>
+          </button>
+        </div>
         <!-- Entry panel -->
         <div id="entryPanel" class="panel entry-panel" style="padding: 12px; display: none">
           <div class="panel-header">
@@ -13395,6 +13478,108 @@
   <script src="/assets/scripts/sidebar-panel.js"></script>
   <script src="/assets/scripts/auth-panel.js"></script>
   <script src="/assets/scripts/db-modal.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const split = document.querySelector('.kb-split');
+      const leftPanel = document.querySelector('.editor-panel');
+      const rightPanel = document.querySelector('.class-panel');
+      const btnLeft = document.getElementById('btnToggleLeftPanel');
+      const btnRight = document.getElementById('btnToggleRightPanel');
+      if (!split || !leftPanel || !rightPanel || !btnLeft || !btnRight) return;
+
+      const refreshToggleState = () => {
+        const leftHidden = split.classList.contains('hide-left');
+        const rightHidden = split.classList.contains('hide-right');
+
+        btnLeft.innerHTML = `<i class="fa-solid fa-chevron-${leftHidden ? 'right' : 'left'}"></i>`;
+        btnLeft.title = leftHidden ? '展开左侧节点编辑' : '收起左侧节点编辑';
+        btnLeft.setAttribute('aria-label', btnLeft.title);
+
+        btnRight.innerHTML = `<i class="fa-solid fa-chevron-${rightHidden ? 'left' : 'right'}"></i>`;
+        btnRight.title = rightHidden ? '展开右侧分类面板' : '收起右侧分类面板';
+        btnRight.setAttribute('aria-label', btnRight.title);
+      };
+
+      const applyPanelState = (state) => {
+        if (!state || typeof state !== 'object') return;
+        split.classList.toggle('hide-left', !!state.hideLeft);
+        split.classList.toggle('hide-right', !!state.hideRight);
+      };
+      window.applyUserPanelState = applyPanelState;
+
+      const savePanelStateToLocal = (state) => {
+        try {
+          window.localStorage.setItem('kb-panel-state', JSON.stringify(state));
+        } catch {
+          /* ignore */
+        }
+      };
+
+      const persistPanelState = async () => {
+        const panelState = {
+          hideLeft: split.classList.contains('hide-left'),
+          hideRight: split.classList.contains('hide-right'),
+        };
+        savePanelStateToLocal(panelState);
+        try {
+          await fetch('/api/auth/update_profile', {
+            method: 'POST',
+            credentials: 'include',
+            keepalive: true,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ panelState }),
+          });
+        } catch {
+          /* ignore */
+        }
+      };
+
+      const loadPanelState = async () => {
+        let loaded = false;
+        try {
+          const resp = await fetch('/api/auth/whoami', { credentials: 'include' });
+          if (resp.ok) {
+            const data = await resp.json();
+            const state = data?.user?.panelState;
+            if (state && typeof state === 'object') {
+              applyPanelState(state);
+              loaded = true;
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+        if (!loaded) {
+          try {
+            const stored = window.localStorage.getItem('kb-panel-state');
+            if (stored) {
+              const state = JSON.parse(stored);
+              applyPanelState(state);
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+      };
+
+      btnLeft.addEventListener('click', () => {
+        split.classList.toggle('hide-left');
+        refreshToggleState();
+        persistPanelState();
+      });
+
+      btnRight.addEventListener('click', () => {
+        split.classList.toggle('hide-right');
+        refreshToggleState();
+        persistPanelState();
+      });
+
+      window.addEventListener('pagehide', persistPanelState);
+      loadPanelState().finally(refreshToggleState);
+    });
+  </script>
   <script src="/assets/scripts/ui-shell.js"></script>
 </body>
 
