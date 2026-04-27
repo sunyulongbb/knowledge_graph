@@ -369,9 +369,10 @@
     } catch {}
     const currentDbSuffix = (() => {
       try {
-        const db = typeof window.getCurrentDbParam === "function"
-          ? window.getCurrentDbParam()
-          : new URL(window.location.href).searchParams.get("db") || "";
+        const db =
+          typeof window.getCurrentDbParam === "function"
+            ? window.getCurrentDbParam()
+            : new URL(window.location.href).searchParams.get("db") || "";
         return db ? `_${db}` : "";
       } catch {
         return "";
@@ -386,10 +387,13 @@
           );
           window.kbGalleryForceFirst = false;
         } else {
-          localStorage.setItem(
-            `kbShortsCurrentNode${currentDbSuffix}`,
-            nodeId,
-          );
+          localStorage.removeItem(`kbShortsRandomCache${currentDbSuffix}`);
+          window.kbShortsNodes = [];
+          window.kbShortsPendingScrollIndex = null;
+          window.kbShortsPendingSidebarNodeId = null;
+          window.kbShortsSidebarHydratedId = null;
+          window.kbShortsPendingAnchorKey = "";
+          localStorage.setItem(`kbShortsCurrentNode${currentDbSuffix}`, nodeId);
           window.kbShortsForceFirst = false;
         }
       }
@@ -408,9 +412,38 @@
     const rawList = Array.isArray(window.kbTableNodes)
       ? window.kbTableNodes
       : [];
+
+    const keyword =
+      typeof tblSearch !== "undefined" && tblSearch
+        ? (tblSearch.value || "").trim().toLowerCase()
+        : "";
+
+    const filteredList = rawList.filter((n) => {
+      if (!n || typeof n !== "object") return false;
+
+      if (keyword) {
+        const text = [
+          n.label_zh,
+          n.label,
+          n.name,
+          n.id,
+          n.classLabel,
+          n.type,
+          n.description,
+          n.desc_zh,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!text.includes(keyword)) return false;
+      }
+
+      return true;
+    });
+
     const frag = document.createDocumentFragment();
 
-    rawList.forEach((n) => {
+    filteredList.forEach((n) => {
       const tr = document.createElement("tr");
       tr.tabIndex = -1;
       tr.setAttribute("data-id", n._id || n.id || "");
@@ -684,9 +717,10 @@
     const shortsPageSize = 12;
     const currentDbSuffix = (() => {
       try {
-        const db = typeof window.getCurrentDbParam === "function"
-          ? window.getCurrentDbParam()
-          : new URL(window.location.href).searchParams.get("db") || "";
+        const db =
+          typeof window.getCurrentDbParam === "function"
+            ? window.getCurrentDbParam()
+            : new URL(window.location.href).searchParams.get("db") || "";
         return db ? `_${db}` : "";
       } catch {
         return "";
@@ -730,9 +764,10 @@
       }
       const currentDbSuffix = (() => {
         try {
-          const db = typeof window.getCurrentDbParam === "function"
-            ? window.getCurrentDbParam()
-            : new URL(window.location.href).searchParams.get("db") || "";
+          const db =
+            typeof window.getCurrentDbParam === "function"
+              ? window.getCurrentDbParam()
+              : new URL(window.location.href).searchParams.get("db") || "";
           return db ? `_${db}` : "";
         } catch {
           return "";
@@ -741,7 +776,9 @@
       const currentId =
         String(window.kbShortsPendingSidebarNodeId || "").trim() ||
         String(window.kbSelectedRowId || "").trim() ||
-        String(localStorage.getItem(`kbShortsCurrentNode${currentDbSuffix}`) || "").trim();
+        String(
+          localStorage.getItem(`kbShortsCurrentNode${currentDbSuffix}`) || "",
+        ).trim();
       if (currentId) {
         url.searchParams.set("current_id", currentId);
       }
@@ -976,9 +1013,10 @@
         try {
           const currentDbSuffix = (() => {
             try {
-              const db = typeof window.getCurrentDbParam === "function"
-                ? window.getCurrentDbParam()
-                : new URL(window.location.href).searchParams.get("db") || "";
+              const db =
+                typeof window.getCurrentDbParam === "function"
+                  ? window.getCurrentDbParam()
+                  : new URL(window.location.href).searchParams.get("db") || "";
               return db ? `_${db}` : "";
             } catch {
               return "";
@@ -1308,9 +1346,10 @@
       if (!initialNodeId && window.localStorage) {
         const currentDbSuffix = (() => {
           try {
-            const db = typeof window.getCurrentDbParam === "function"
-              ? window.getCurrentDbParam()
-              : new URL(window.location.href).searchParams.get("db") || "";
+            const db =
+              typeof window.getCurrentDbParam === "function"
+                ? window.getCurrentDbParam()
+                : new URL(window.location.href).searchParams.get("db") || "";
             return db ? `_${db}` : "";
           } catch {
             return "";
@@ -1431,9 +1470,10 @@
     const shortsPageSize = 12;
     const currentDbSuffix = (() => {
       try {
-        const db = typeof window.getCurrentDbParam === "function"
-          ? window.getCurrentDbParam()
-          : new URL(window.location.href).searchParams.get("db") || "";
+        const db =
+          typeof window.getCurrentDbParam === "function"
+            ? window.getCurrentDbParam()
+            : new URL(window.location.href).searchParams.get("db") || "";
         return db ? `_${db}` : "";
       } catch {
         return "";
@@ -1529,9 +1569,7 @@
       const allowDuplicates = options.allowDuplicates === true;
       const tableList = normalizeShortsNodes(nodes);
       const existingKeys = new Set(
-        rawList
-          .map((item) => normalizeShortsNodeKey(item))
-          .filter(Boolean),
+        rawList.map((item) => normalizeShortsNodeKey(item)).filter(Boolean),
       );
       const newItems = tableList.filter((item) => {
         const key = normalizeShortsNodeKey(item);
@@ -1546,12 +1584,12 @@
       rawList = dedupeShortsNodes(rawList);
       window.kbShortsNodes = rawList;
       saveShortsCache(rawList);
-      await renderShortsList();
       return true;
     };
 
     const loadMoreShortsPage = async (retryCount = 0) => {
       if (shortsLoadingMore) return;
+      let appended = false;
       shortsLoadingMore = true;
       setShortsStatus("正在加载更多视频...");
       try {
@@ -1561,7 +1599,7 @@
         const nodes = await fetchShortsRandomBatch(
           canUseFreshOnly ? excludeIds : [],
         );
-        const appended = await appendShortsNodes(nodes, {
+        appended = await appendShortsNodes(nodes, {
           allowDuplicates: !canUseFreshOnly,
         });
         if (!appended && retryCount < 2) {
@@ -1570,7 +1608,10 @@
             const replayAppended = await appendShortsNodes(replayNodes, {
               allowDuplicates: true,
             });
-            if (replayAppended) return;
+            if (replayAppended) {
+              appended = true;
+              return;
+            }
           }
           return await loadMoreShortsPage(retryCount + 1);
         }
@@ -1579,6 +1620,13 @@
       } finally {
         shortsLoadingMore = false;
         setShortsStatus("");
+      }
+      if (
+        appended &&
+        window.kbViewMode === "shorts" &&
+        typeof renderShortsList === "function"
+      ) {
+        await renderShortsList();
       }
     };
 
@@ -1833,9 +1881,10 @@
         try {
           const currentDbSuffix = (() => {
             try {
-              const db = typeof window.getCurrentDbParam === "function"
-                ? window.getCurrentDbParam()
-                : new URL(window.location.href).searchParams.get("db") || "";
+              const db =
+                typeof window.getCurrentDbParam === "function"
+                  ? window.getCurrentDbParam()
+                  : new URL(window.location.href).searchParams.get("db") || "";
               return db ? `_${db}` : "";
             } catch {
               return "";
@@ -2298,10 +2347,7 @@
       const direction = event.deltaY > 0 ? 1 : -1;
       if (direction > 0) {
         if (currentIndex >= cardCount - 1) {
-          if (
-            shouldLoadMoreShorts(currentIndex) ||
-            isListScrolledToBottom()
-          ) {
+          if (shouldLoadMoreShorts(currentIndex) || isListScrolledToBottom()) {
             window.kbShortsPendingScrollIndex = currentIndex + 1;
             await loadMoreShortsPage();
           }
@@ -2343,9 +2389,10 @@
       if (!initialNodeId && window.localStorage) {
         const currentDbSuffix = (() => {
           try {
-            const db = typeof window.getCurrentDbParam === "function"
-              ? window.getCurrentDbParam()
-              : new URL(window.location.href).searchParams.get("db") || "";
+            const db =
+              typeof window.getCurrentDbParam === "function"
+                ? window.getCurrentDbParam()
+                : new URL(window.location.href).searchParams.get("db") || "";
             return db ? `_${db}` : "";
           } catch {
             return "";
@@ -2466,9 +2513,10 @@
     const galleryPageSize = 12;
     const currentDbSuffix = (() => {
       try {
-        const db = typeof window.getCurrentDbParam === "function"
-          ? window.getCurrentDbParam()
-          : new URL(window.location.href).searchParams.get("db") || "";
+        const db =
+          typeof window.getCurrentDbParam === "function"
+            ? window.getCurrentDbParam()
+            : new URL(window.location.href).searchParams.get("db") || "";
         return db ? `_${db}` : "";
       } catch {
         return "";
@@ -2573,9 +2621,10 @@
       }
       const currentDbSuffix = (() => {
         try {
-          const db = typeof window.getCurrentDbParam === "function"
-            ? window.getCurrentDbParam()
-            : new URL(window.location.href).searchParams.get("db") || "";
+          const db =
+            typeof window.getCurrentDbParam === "function"
+              ? window.getCurrentDbParam()
+              : new URL(window.location.href).searchParams.get("db") || "";
           return db ? `_${db}` : "";
         } catch {
           return "";
@@ -2584,7 +2633,9 @@
       const currentId =
         String(window.kbGalleryPendingSidebarNodeId || "").trim() ||
         String(window.kbSelectedRowId || "").trim() ||
-        String(localStorage.getItem(`kbGalleryCurrentNode${currentDbSuffix}`) || "").trim();
+        String(
+          localStorage.getItem(`kbGalleryCurrentNode${currentDbSuffix}`) || "",
+        ).trim();
       if (currentId) url.searchParams.set("current_id", currentId);
       const recentItems = rawList.slice(-18);
       const recentIds = recentItems
@@ -2751,9 +2802,10 @@
     let wheelLock = false;
     let galleryScrollEndTimer = null;
     const scrollDuration = 360;
-    const DISCRETE_WHEEL_LOCK_MS = Math.max(scrollDuration, 500);
+    const DISCRETE_WHEEL_LOCK_MS = Math.max(scrollDuration, 300);
     let wheelGestureActive = false;
     let wheelGestureTimer = null;
+    const GALLERY_WHEEL_DELTA_THRESHOLD = 4;
     const cardCount = imageItems.length;
 
     const updateGalleryProgress = (index) => {
@@ -2818,17 +2870,21 @@
       if (targetId) {
         try {
           const currentDbSuffix = (() => {
-          try {
-            const db = typeof window.getCurrentDbParam === "function"
-              ? window.getCurrentDbParam()
-              : new URL(window.location.href).searchParams.get("db") || "";
-            return db ? `_${db}` : "";
-          } catch {
-            return "";
-          }
-        })();
-        if (window.localStorage) {
-            localStorage.setItem(`kbGalleryCurrentNode${currentDbSuffix}`, targetId);
+            try {
+              const db =
+                typeof window.getCurrentDbParam === "function"
+                  ? window.getCurrentDbParam()
+                  : new URL(window.location.href).searchParams.get("db") || "";
+              return db ? `_${db}` : "";
+            } catch {
+              return "";
+            }
+          })();
+          if (window.localStorage) {
+            localStorage.setItem(
+              `kbGalleryCurrentNode${currentDbSuffix}`,
+              targetId,
+            );
           }
         } catch (err) {
           console.warn("persist gallery current node failed", err);
@@ -3110,8 +3166,9 @@
         event.preventDefault();
         return;
       }
-      if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
-      if (Math.abs(event.deltaY) < 10) return;
+      const deltaY = event.deltaMode === 1 ? event.deltaY * 16 : event.deltaY;
+      if (Math.abs(deltaY) < Math.abs(event.deltaX)) return;
+      if (Math.abs(deltaY) < GALLERY_WHEEL_DELTA_THRESHOLD) return;
       event.preventDefault();
       if (wheelGestureActive) {
         if (wheelGestureTimer) {
@@ -3136,10 +3193,7 @@
       const currentIndex = getCurrentCardIndex();
       if (event.deltaY > 0) {
         if (currentIndex >= cardCount - 1) {
-          if (
-            shouldLoadMoreGallery(currentIndex) ||
-            isListScrolledToBottom()
-          ) {
+          if (shouldLoadMoreGallery(currentIndex) || isListScrolledToBottom()) {
             window.kbGalleryPendingScrollIndex = currentIndex + 1;
             await loadMoreGalleryPage();
           }
@@ -3177,9 +3231,10 @@
       if (!initialNodeId && window.localStorage) {
         const currentDbSuffix = (() => {
           try {
-            const db = typeof window.getCurrentDbParam === "function"
-              ? window.getCurrentDbParam()
-              : new URL(window.location.href).searchParams.get("db") || "";
+            const db =
+              typeof window.getCurrentDbParam === "function"
+                ? window.getCurrentDbParam()
+                : new URL(window.location.href).searchParams.get("db") || "";
             return db ? `_${db}` : "";
           } catch {
             return "";
@@ -3292,30 +3347,6 @@
     if (!btnDeleteSelected) return;
     btnDeleteSelected.addEventListener("click", deleteSelectedRows);
     ensureTableSelectedButtonsState();
-  }
-
-  function bindShortsButton() {
-    const btnShortsMode = document.getElementById("btnShortsMode");
-    if (!btnShortsMode) return;
-    btnShortsMode.addEventListener("click", (e) => {
-      e.preventDefault();
-      window.kbShortsForceFirst = true;
-      if (typeof setViewMode === "function") {
-        setViewMode("shorts");
-      }
-    });
-  }
-
-  function bindGalleryButton() {
-    const btnGalleryMode = document.getElementById("btnGalleryMode");
-    if (!btnGalleryMode) return;
-    btnGalleryMode.addEventListener("click", (e) => {
-      e.preventDefault();
-      window.kbGalleryForceFirst = true;
-      if (typeof setViewMode === "function") {
-        setViewMode("gallery");
-      }
-    });
   }
 
   function bindSelectAll() {
@@ -3432,8 +3463,6 @@
   }
 
   bindDeleteButton();
-  bindShortsButton();
-  bindGalleryButton();
   bindSelectAll();
   bindClearButtons();
 })();

@@ -12,6 +12,12 @@
   const tblSortSelect = document.getElementById("tblSort");
   const tblPageSizeSelect = document.getElementById("tblPageSize");
   const tblSearch = document.getElementById("tblSearch");
+  const tblTypeFilter = document.getElementById("tblTypeFilter");
+  const tblPropertyFilter = document.getElementById("tblPropertyFilter");
+  const tblPropertyFilterValue = document.getElementById(
+    "tblPropertyFilterValue",
+  );
+  const btnClearTableFilter = document.getElementById("btnClearTableFilter");
   const tblCount = document.getElementById("tblCount");
 
   if (tblPageSizeSelect) {
@@ -44,6 +50,111 @@
     }
     if (btnPrevPage) btnPrevPage.disabled = tblPage <= 1;
     if (btnNextPage) btnNextPage.disabled = tblPage >= maxPage;
+  }
+
+  async function loadTableFilters() {
+    const fetchJson = async (url) => {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      return await resp.json();
+    };
+
+    try {
+      const [classes, properties] = await Promise.all([
+        fetchJson("/api/kb/classes?status=all"),
+        fetchJson("/api/kb/properties?status=active"),
+      ]);
+
+      if (tblTypeFilter) {
+        const currentValue = tblTypeFilter.value || "";
+        tblTypeFilter.innerHTML = "";
+        const defaultOption = document.createElement("option");
+        defaultOption.value = "";
+        defaultOption.textContent = "本体类型";
+        tblTypeFilter.appendChild(defaultOption);
+        if (Array.isArray(classes)) {
+          classes.forEach((item) => {
+            const option = document.createElement("option");
+            option.value = item.id || "";
+            option.textContent = item.name || item.id || "";
+            if (option.value === currentValue) option.selected = true;
+            tblTypeFilter.appendChild(option);
+          });
+        }
+      }
+
+      if (tblPropertyFilter) {
+        const currentValue = tblPropertyFilter.value || "";
+        tblPropertyFilter.innerHTML = "";
+        const defaultOption = document.createElement("option");
+        defaultOption.value = "";
+        defaultOption.textContent = "筛选属性";
+        tblPropertyFilter.appendChild(defaultOption);
+        if (Array.isArray(properties)) {
+          properties.forEach((item) => {
+            const option = document.createElement("option");
+            option.value = item.id || item.name || "";
+            option.textContent = item.name || item.id || "";
+            if (option.value === currentValue) option.selected = true;
+            tblPropertyFilter.appendChild(option);
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("load table filters failed", err);
+    }
+  }
+
+  function setPropertyValueOptions(values = []) {
+    if (!tblPropertyFilterValue) return;
+    const currentValue = tblPropertyFilterValue.value || "";
+    tblPropertyFilterValue.innerHTML = "";
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "属性值";
+    tblPropertyFilterValue.appendChild(placeholder);
+    values.forEach((item) => {
+      const option = document.createElement("option");
+      option.value = item.id || item.label || String(item);
+      option.textContent = item.label || item.id || String(item);
+      if (option.value === currentValue) option.selected = true;
+      tblPropertyFilterValue.appendChild(option);
+    });
+  }
+
+  async function loadPropertyValueOptions(propertyId) {
+    if (!propertyId || !tblPropertyFilterValue) {
+      setPropertyValueOptions([]);
+      return;
+    }
+    setPropertyValueOptions([]);
+    const loadingOption = document.createElement("option");
+    loadingOption.value = "";
+    loadingOption.textContent = "加载属性值…";
+    tblPropertyFilterValue.appendChild(loadingOption);
+
+    try {
+      const url = new URL(
+        "/api/kb/property/value_suggestions",
+        window.location.origin,
+      );
+      if (typeof window.appendCurrentDbParam === "function") {
+        const scopedUrl = window.appendCurrentDbParam(url);
+        if (scopedUrl instanceof URL) {
+          url.search = scopedUrl.search;
+        }
+      }
+      url.searchParams.set("property", propertyId);
+      url.searchParams.set("limit", "100");
+      const resp = await fetch(url.toString());
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      const items = Array.isArray(data?.items) ? data.items : [];
+      setPropertyValueOptions(items);
+    } catch (err) {
+      console.warn("load property values failed", err);
+      setPropertyValueOptions([]);
+    }
   }
 
   async function loadTablePage(options = {}) {
@@ -93,8 +204,17 @@
       }
 
       const keyword = tblSearch ? (tblSearch.value || "").trim() : "";
+      const propertyId = tblPropertyFilter
+        ? (tblPropertyFilter.value || "").trim()
+        : "";
+      const propertyValue = tblPropertyFilterValue
+        ? (tblPropertyFilterValue.value || "").trim()
+        : "";
+
       if (keyword) url.searchParams.set("q", keyword);
       if (tblActiveClassId) url.searchParams.set("class_id", tblActiveClassId);
+      if (propertyId) url.searchParams.set("property_id", propertyId);
+      if (propertyValue) url.searchParams.set("property_value", propertyValue);
       url.searchParams.set("hide_entity", "1");
 
       const resp = await fetch(url);
@@ -102,22 +222,13 @@
 
       const data = await resp.json();
       const nodes = Array.isArray(data.nodes) ? data.nodes : [];
-      const tableList = nodes.map((item) => ({
-        label_zh: item.label || "",
-        id: item.id || "",
-        link: item.link || "",
-        classLabel: item.classLabel || item.type || "",
-        video: item.video || "",
-        image: item.image || item.avatar || "",
-      }));
-
-      window.kbTableNodes = tableList;
+      window.kbTableNodes = nodes;
       window.kbTablePage = tblPage;
       window.kbTablePageSize = tblPageSize;
-      window.kbTableTotalNodes = data.total || tableList.length;
+      window.kbTableTotalNodes = data.total || nodes.length;
       try {
         if (window.localStorage) {
-          localStorage.setItem("kbTableNodesCache", JSON.stringify(tableList));
+          localStorage.setItem("kbTableNodesCache", JSON.stringify(nodes));
         }
       } catch (err) {
         console.warn("kbTableNodes cache failed", err);
@@ -129,6 +240,15 @@
         const parts = [`总计 ${tblTotalNodes} 条`];
         if (tblActiveClassLabel) parts.push(`分类 ${tblActiveClassLabel}`);
         else if (tblActiveClassId) parts.push(`分类 ${tblActiveClassId}`);
+        if (propertyId) {
+          const propertyLabel = tblPropertyFilter
+            ? tblPropertyFilter.selectedOptions[0]?.textContent || propertyId
+            : propertyId;
+          parts.push(`属性 ${propertyLabel}`);
+        }
+        if (propertyValue) {
+          parts.push(`值 ${propertyValue}`);
+        }
         tblCount.textContent = parts.join(" · ");
       }
 
@@ -142,7 +262,7 @@
           ? ` · 分类 ${tblActiveClassId}`
           : "";
       if (typeof window.setStatus === "function") {
-        window.setStatus(false, `已加载 ${tableList.length} 条${labelHint}`);
+        window.setStatus(false, `已加载 ${nodes.length} 条${labelHint}`);
       }
     } catch (e) {
       if (typeof window.setStatus === "function") {
@@ -216,6 +336,60 @@
       });
     }
 
+    if (tblTypeFilter) {
+      tblTypeFilter.addEventListener("change", () => {
+        tblPage = 1;
+        tblActiveClassId = tblTypeFilter.value || "";
+        tblActiveClassLabel =
+          tblTypeFilter.selectedOptions[0]?.textContent || "";
+        loadTablePage({
+          classId: tblActiveClassId,
+          classLabel: tblActiveClassLabel,
+          resetPage: false,
+        });
+      });
+    }
+
+    if (tblPropertyFilter) {
+      tblPropertyFilter.addEventListener("change", () => {
+        tblPage = 1;
+        if (tblPropertyFilterValue) {
+          tblPropertyFilterValue.value = "";
+          setPropertyValueOptions([]);
+        }
+        loadPropertyValueOptions(tblPropertyFilter.value || "");
+        loadTablePage();
+      });
+    }
+
+    if (tblPropertyFilterValue) {
+      const refreshOnPropertyValueChange = () => {
+        tblPage = 1;
+        loadTablePage();
+      };
+      tblPropertyFilterValue.addEventListener(
+        "change",
+        refreshOnPropertyValueChange,
+      );
+      tblPropertyFilterValue.addEventListener(
+        "input",
+        refreshOnPropertyValueChange,
+      );
+    }
+
+    if (btnClearTableFilter) {
+      btnClearTableFilter.addEventListener("click", () => {
+        if (tblPropertyFilter) tblPropertyFilter.value = "";
+        if (tblPropertyFilterValue) {
+          tblPropertyFilterValue.value = "";
+          setPropertyValueOptions([]);
+        }
+        tblPage = 1;
+        loadTablePage();
+      });
+    }
+
+    loadTableFilters().catch(() => {});
     loadTablePage();
   }
 

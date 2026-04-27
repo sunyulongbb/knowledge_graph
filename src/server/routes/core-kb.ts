@@ -59,7 +59,9 @@ export async function handleCoreKbRoutes(
   mkdirSync(NODE_IMAGE_UPLOADS_DIR, { recursive: true });
 
   const resolveFileExtension = (urlPath: string, contentType: string) => {
-    const match = String(urlPath || "").trim().match(/\.([a-z0-9]+)(?:$|\?)/i);
+    const match = String(urlPath || "")
+      .trim()
+      .match(/\.([a-z0-9]+)(?:$|\?)/i);
     if (match) return match[1].toLowerCase();
     if (contentType) {
       const lower = contentType.toLowerCase();
@@ -93,17 +95,22 @@ export async function handleCoreKbRoutes(
     }
     const arrayBuffer = await resp.arrayBuffer();
     if (arrayBuffer.byteLength > maxSize) {
-      throw new Error(`文件大小超过限制：${Math.round(arrayBuffer.byteLength / 1024 / 1024)}MB`);
+      throw new Error(
+        `文件大小超过限制：${Math.round(arrayBuffer.byteLength / 1024 / 1024)}MB`,
+      );
     }
     const filename = `${crypto.randomUUID()}.${ext}`;
     const filePath = resolve(uploadDir, filename);
     writeFileSync(filePath, Buffer.from(arrayBuffer));
-    const base = uploadDir === NODE_VIDEO_UPLOADS_DIR ? "node-videos" : "node-images";
+    const base =
+      uploadDir === NODE_VIDEO_UPLOADS_DIR ? "node-videos" : "node-images";
     return `/static/uploads/${appFolder}/${base}/${filename}`;
   };
 
   const parseDataUrlImage = (dataUrl: string) => {
-    const match = String(dataUrl || "").trim().match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/);
+    const match = String(dataUrl || "")
+      .trim()
+      .match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/);
     if (!match) return null;
     return {
       mime: match[1],
@@ -946,6 +953,8 @@ export async function handleCoreKbRoutes(
     const limit = parseInt(url.searchParams.get("limit") || "20");
     const offset = parseInt(url.searchParams.get("offset") || "0");
     const classId = (url.searchParams.get("class_id") || "").trim();
+    const propertyId = (url.searchParams.get("property_id") || "").trim();
+    const propertyValue = (url.searchParams.get("property_value") || "").trim();
     const hideEntity = (url.searchParams.get("hide_entity") || "").trim();
 
     const likeParam = `%${q}%`;
@@ -954,6 +963,70 @@ export async function handleCoreKbRoutes(
 
     let joinClause = "";
     let whereClause = "WHERE n.name LIKE ?";
+    let propertyKeyConditions: string[] = [];
+    const propertyKeys = new Set<string>();
+
+    if (propertyId) {
+      propertyKeys.add(propertyId);
+      if (propertyId.startsWith("property/")) {
+        propertyKeys.add(propertyId.substring(9));
+      }
+      if (/^P\d+$/.test(propertyId)) {
+        const numeric = propertyId.substring(1);
+        propertyKeys.add(numeric);
+        propertyKeys.add(`property/${numeric}`);
+      }
+      if (/^\d+$/.test(propertyId)) {
+        propertyKeys.add(`P${propertyId}`);
+        propertyKeys.add(`property/${propertyId}`);
+      }
+
+      try {
+        const propRow = db
+          .query(
+            "SELECT name, alias FROM properties WHERE id = ? OR lower(name) = lower(?) LIMIT 1",
+          )
+          .get(propertyId, propertyId) as any;
+        if (propRow?.name) {
+          propertyKeys.add(propRow.name);
+        }
+        if (propRow?.alias) {
+          try {
+            const parsed = JSON.parse(propRow.alias);
+            if (Array.isArray(parsed)) {
+              parsed.forEach((aliasItem: any) => {
+                if (aliasItem) propertyKeys.add(String(aliasItem).trim());
+              });
+            }
+          } catch {
+            if (typeof propRow.alias === "string") {
+              propertyKeys.add(propRow.alias);
+            }
+          }
+        }
+      } catch {}
+    }
+
+    if (propertyId || propertyValue) {
+      joinClause +=
+        " INNER JOIN attributes a ON (a.node_id = n.id OR REPLACE(a.node_id, 'entity/', '') = n.id)";
+    }
+    if (propertyKeys.size > 0) {
+      const placeholders = Array.from(propertyKeys)
+        .map(() => "?")
+        .join(",");
+      whereClause += ` AND a.key IN (${placeholders})`;
+      Array.from(propertyKeys).forEach((key) => {
+        params.push(key);
+        countParams.push(key);
+      });
+    }
+    if (propertyValue) {
+      whereClause += " AND lower(a.value) LIKE ?";
+      const valueParam = `%${propertyValue.toLowerCase()}%`;
+      params.push(valueParam);
+      countParams.push(valueParam);
+    }
 
     if (classId) {
       joinClause += " INNER JOIN entity_classes ec ON ec.entity_id = n.id";
@@ -1722,9 +1795,15 @@ export async function handleCoreKbRoutes(
 
                 // Update extra fields (type, description, aliases, tags, media)
                 const targetId = targetResult.node.id;
-                let imageUrl = payload.image ? String(payload.image).trim() : "";
-                let videoUrl = payload.video ? String(payload.video).trim() : "";
-                const linkValue = payload.link ? String(payload.link).trim() : "";
+                let imageUrl = payload.image
+                  ? String(payload.image).trim()
+                  : "";
+                let videoUrl = payload.video
+                  ? String(payload.video).trim()
+                  : "";
+                const linkValue = payload.link
+                  ? String(payload.link).trim()
+                  : "";
                 if (imageUrl && imageUrl.startsWith("http")) {
                   imageUrl = await downloadRemoteMedia(
                     imageUrl,
@@ -1839,7 +1918,10 @@ export async function handleCoreKbRoutes(
         return Response.json({ error: "Invalid URL" }, { status: 400 });
       }
       if (!["http:", "https:"].includes(parsedUrl.protocol)) {
-        return Response.json({ error: "Only http(s) URLs are allowed" }, { status: 400 });
+        return Response.json(
+          { error: "Only http(s) URLs are allowed" },
+          { status: 400 },
+        );
       }
       const forbiddenHosts = [
         "localhost",
@@ -1860,7 +1942,8 @@ export async function handleCoreKbRoutes(
           Accept: "application/json",
         },
       });
-      const contentType = resp.headers.get("content-type") || "application/json";
+      const contentType =
+        resp.headers.get("content-type") || "application/json";
       const bodyText = await resp.text();
       return new Response(bodyText, {
         status: resp.status,
@@ -1870,7 +1953,10 @@ export async function handleCoreKbRoutes(
       });
     } catch (err) {
       console.error(err);
-      return Response.json({ error: "Failed to fetch remote URL" }, { status: 500 });
+      return Response.json(
+        { error: "Failed to fetch remote URL" },
+        { status: 500 },
+      );
     }
   }
 
@@ -2003,7 +2089,18 @@ export async function handleCoreKbRoutes(
         return new Response("No file uploaded", { status: 400 });
       }
       const ext = file.name.split(".").pop()?.toLowerCase() || "png";
-      const allowedExts = ["jpg", "jpeg", "png", "gif", "webp", "svg", "bmp", "ico", "avif", "heif"];
+      const allowedExts = [
+        "jpg",
+        "jpeg",
+        "png",
+        "gif",
+        "webp",
+        "svg",
+        "bmp",
+        "ico",
+        "avif",
+        "heif",
+      ];
       if (!allowedExts.includes(ext)) {
         return new Response("Invalid image file type", { status: 400 });
       }
@@ -2590,14 +2687,19 @@ export async function handleCoreKbRoutes(
     }
   }
 
-  if (url.pathname === "/api/kb/clean/change-property-type" && method === "POST") {
+  if (
+    url.pathname === "/api/kb/clean/change-property-type" &&
+    method === "POST"
+  ) {
     try {
       const body = (await req.json()) as any;
       const propertyId = (body?.property_id || "").toString().trim();
       const newDatatype = (body?.datatype || "").toString().trim();
       const deleteTargets = body?.delete_targets === true;
-      if (!propertyId) return new Response("Missing property_id", { status: 400 });
-      if (!newDatatype) return new Response("Missing datatype", { status: 400 });
+      if (!propertyId)
+        return new Response("Missing property_id", { status: 400 });
+      if (!newDatatype)
+        return new Response("Missing datatype", { status: 400 });
       if (!["string", "wikibase-entityid"].includes(newDatatype)) {
         return new Response("Unsupported datatype", { status: 400 });
       }
@@ -2613,9 +2715,11 @@ export async function handleCoreKbRoutes(
               "SELECT * FROM properties WHERE id = ? AND project_id IS NULL LIMIT 1",
             )
             .get(propertyId) as any);
-      if (!property?.id) return new Response("Property not found", { status: 404 });
+      if (!property?.id)
+        return new Response("Property not found", { status: 404 });
 
-      const oldDatatype = (property.datatype || "string").toString().trim() || "string";
+      const oldDatatype =
+        (property.datatype || "string").toString().trim() || "string";
       if (oldDatatype === newDatatype) {
         return Response.json({
           success: true,
@@ -2626,7 +2730,8 @@ export async function handleCoreKbRoutes(
         });
       }
 
-      const newValuetype = newDatatype === "wikibase-entityid" ? "wikibase-entityid" : null;
+      const newValuetype =
+        newDatatype === "wikibase-entityid" ? "wikibase-entityid" : null;
       if (hasProjectScope) {
         db.run(
           "UPDATE properties SET datatype = ?, valuetype = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?",
@@ -2687,7 +2792,8 @@ export async function handleCoreKbRoutes(
               targetNode = nodeResult.node;
             }
             if (!targetNode?.id) continue;
-            const label = (targetNode.name || "").toString().trim() || targetNode.id;
+            const label =
+              (targetNode.name || "").toString().trim() || targetNode.id;
             entityValues.push({
               "entity-type": "item",
               id: targetNode.id.toString(),
@@ -2700,12 +2806,16 @@ export async function handleCoreKbRoutes(
             db.run("DELETE FROM attributes WHERE id = ?", [attr.id]);
             continue;
           }
-          const normalizedEntityValues = normalizeEntityAttributeValues(entityValues);
+          const normalizedEntityValues =
+            normalizeEntityAttributeValues(entityValues);
           if (!normalizedEntityValues.length) {
             db.run("DELETE FROM attributes WHERE id = ?", [attr.id]);
             continue;
           }
-          const serialized = serializeAttributeValues(normalizedEntityValues, "wikibase-entityid");
+          const serialized = serializeAttributeValues(
+            normalizedEntityValues,
+            "wikibase-entityid",
+          );
           db.run(
             "UPDATE attributes SET value = ?, datatype = ?, property_name_snapshot = ? WHERE id = ?",
             [serialized, "wikibase-entityid", property.name || null, attr.id],
@@ -2723,17 +2833,29 @@ export async function handleCoreKbRoutes(
             }
             if (rawValue && typeof rawValue === "object") {
               const label =
-                rawValue.label_zh || rawValue.label || rawValue.name || rawValue.id || rawValue["entity-id"] || "";
+                rawValue.label_zh ||
+                rawValue.label ||
+                rawValue.name ||
+                rawValue.id ||
+                rawValue["entity-id"] ||
+                "";
               if (label && label.toString().trim()) {
                 stringValues.push(label.toString().trim());
               }
-            } else if (typeof rawValue === "string" || typeof rawValue === "number") {
+            } else if (
+              typeof rawValue === "string" ||
+              typeof rawValue === "number"
+            ) {
               const valueText = rawValue.toString().trim();
               if (valueText) stringValues.push(valueText);
             }
           }
 
-          const normalized = Array.from(new Set(stringValues.map((v) => v.toString().trim()).filter(Boolean)));
+          const normalized = Array.from(
+            new Set(
+              stringValues.map((v) => v.toString().trim()).filter(Boolean),
+            ),
+          );
           if (!normalized.length) {
             db.run("DELETE FROM attributes WHERE id = ?", [attr.id]);
             continue;
@@ -2766,7 +2888,9 @@ export async function handleCoreKbRoutes(
                   `SELECT id FROM nodes WHERE id = ? AND ${scopedClause()}`,
                 )
                 .get(targetId, scopedProjectId) as any)
-            : (db.query("SELECT id FROM nodes WHERE id = ?").get(targetId) as any);
+            : (db
+                .query("SELECT id FROM nodes WHERE id = ?")
+                .get(targetId) as any);
           if (!exists?.id) continue;
           db.run("DELETE FROM attributes WHERE node_id = ?", [targetId]);
           const incomingAttrs = db
@@ -2776,7 +2900,11 @@ export async function handleCoreKbRoutes(
             .all(`%"${targetId}"%`) as any[];
           for (const incoming of incomingAttrs) {
             if (
-              attributeValuesContainEntityId(incoming.value, incoming.datatype, targetId)
+              attributeValuesContainEntityId(
+                incoming.value,
+                incoming.datatype,
+                targetId,
+              )
             ) {
               db.run("DELETE FROM attributes WHERE id = ?", [incoming.id]);
             }

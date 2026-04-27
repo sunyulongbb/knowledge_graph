@@ -2135,14 +2135,20 @@
                     background: var(--surface-0);
                     color: var(--fg);
                   " />
+              <select id="tblTypeFilter" class="kb-select sm" style="min-width: 180px; max-width: 220px; margin-left: 8px;">
+                <option value="">本体类型</option>
+              </select>
+              <select id="tblPropertyFilter" class="kb-select sm" style="min-width: 180px; max-width: 220px; margin-left: 8px;">
+                <option value="">筛选属性</option>
+              </select>
+              <select id="tblPropertyFilterValue" class="kb-select sm" style="min-width: 180px; max-width: 220px; margin-left: 8px;">
+                <option value="">属性值</option>
+              </select>
+              <button id="btnClearTableFilter" class="btn icon" title="清除属性筛选" aria-label="清除属性筛选" style="margin-left: 4px;">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
               <button id="btnTableRefresh" class="btn icon" title="刷新列表" aria-label="刷新列表">
                 <i class="fa-solid fa-rotate-right"></i>
-              </button>
-              <button id="btnShortsMode" class="btn icon" title="短视频" aria-label="短视频">
-                <i class="fa-solid fa-play"></i>
-              </button>
-              <button id="btnGalleryMode" class="btn icon" title="图库" aria-label="图库">
-                <i class="fa-solid fa-image"></i>
               </button>
               <button id="btnDeleteSelected" class="btn icon" disabled title="删除选中节点" aria-label="删除选中节点">
                 <i class="fa-solid fa-trash"></i>
@@ -7922,14 +7928,6 @@
       if (btnViewDetail) {
         btnViewDetail.classList.toggle("active", isDetail);
         btnViewDetail.setAttribute("aria-selected", String(isDetail));
-      }
-      if (btnShortsMode) {
-        btnShortsMode.classList.toggle("active", isShorts);
-        btnShortsMode.setAttribute("aria-pressed", String(isShorts));
-      }
-      if (btnGalleryMode) {
-        btnGalleryMode.classList.toggle("active", isGallery);
-        btnGalleryMode.setAttribute("aria-pressed", String(isGallery));
       }
       // 控制工具栏显示
       if (tbTableControls)
