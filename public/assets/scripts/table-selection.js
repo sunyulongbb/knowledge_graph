@@ -78,6 +78,14 @@
     }
   }
 
+  function navigateToDetailPage(nodeId) {
+    if (!nodeId) return;
+    try {
+      setTableSelection("", false);
+    } catch {}
+    window.location.href = buildDetailPageUrl(nodeId);
+  }
+
   function updateSelectedRowStyles() {
     try {
       if (!tblNodes) return;
@@ -338,7 +346,7 @@
       href = "/kb/detail" + (params.toString() ? "?" + params.toString() : "");
     }
     try {
-      window.open(href, "noopener");
+      navigateToDetailPage(primaryId);
       return true;
     } catch {}
     return false;
@@ -515,7 +523,7 @@
           e.preventDefault();
           const rid = tr.getAttribute("data-id") || n._id || n.id || "";
           if (!rid) return;
-          setTableSelection(rid, false);
+          setTableSelection("", false);
           if (typeof setViewMode === "function") {
             setViewMode("detail", { targetNodeId: rid });
           }
@@ -1138,7 +1146,7 @@
       detailBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         if (!item.id) return;
-        window.location.href = buildDetailPageUrl(item.id);
+        navigateToDetailPage(item.id);
       });
       actions.appendChild(detailBtn);
       meta.appendChild(actions);
@@ -1580,10 +1588,35 @@
       window.kbShortsPendingAnchorKey =
         newItems[0]?.__shortsReplayKey || newItems[0]?.id || "";
       window.kbShortsPendingScrollIndex = rawList.length;
+      const startIndex = rawList.length;
       rawList = rawList.concat(newItems);
       rawList = dedupeShortsNodes(rawList);
       window.kbShortsNodes = rawList;
       saveShortsCache(rawList);
+      newItems.forEach((item, idx) => {
+        const nextIndex = startIndex + idx;
+        const addedItem = {
+          id: item._id || item.id || "",
+          label: item.label || "",
+          label_zh: item.label_zh || item.label || "",
+          classLabel: item.classLabel || item.type || "",
+          video: item.video || "",
+          image: item.image || "",
+          replayKey: item.__shortsReplayKey || "",
+        };
+        videoItems.push(addedItem);
+        createShortsCard(addedItem, nextIndex);
+      });
+      cardCount = videoItems.length;
+      if (shortsCount) {
+        shortsCount.textContent = cardCount
+          ? `共 ${cardCount} 条短视频`
+          : "暂无可播放视频";
+      }
+      if (shortsControls) {
+        shortsControls.style.display = cardCount ? "inline-flex" : "none";
+      }
+      updateNavButtons(activeShortsIndex);
       return true;
     };
 
@@ -1620,13 +1653,6 @@
       } finally {
         shortsLoadingMore = false;
         setShortsStatus("");
-      }
-      if (
-        appended &&
-        window.kbViewMode === "shorts" &&
-        typeof renderShortsList === "function"
-      ) {
-        await renderShortsList();
       }
     };
 
@@ -1793,7 +1819,192 @@
     let wheelLock = false;
     let shortsScrollEndTimer = null;
     const scrollDuration = 360;
-    const cardCount = videoItems.length;
+    let cardCount = videoItems.length;
+
+    const createShortsCard = (item, idx) => {
+      const card = document.createElement("div");
+      card.className = "shorts-card is-paused is-portrait";
+      card.dataset.index = String(idx);
+
+      const stage = document.createElement("div");
+      stage.className = "shorts-stage";
+
+      const videoEl = document.createElement("video");
+      videoEl.muted = window.kbShortsMuted !== false;
+      videoEl.loop = true;
+      videoEl.playsInline = true;
+      videoEl.setAttribute("playsinline", "");
+      videoEl.setAttribute("webkit-playsinline", "");
+      videoEl.setAttribute("controlsList", "nodownload");
+      videoEl.style.cursor = "pointer";
+      videoEl.preload = "metadata";
+      const resolvedUrl = (() => {
+        try {
+          return new URL(item.video, window.location.origin).toString();
+        } catch {
+          return item.video;
+        }
+      })();
+      const src = document.createElement("source");
+      src.src = resolvedUrl;
+      const extMatch = resolvedUrl.split("?")[0].match(/\.([a-z0-9]+)$/i);
+      if (extMatch) {
+        src.type = `video/${extMatch[1].toLowerCase()}`;
+      }
+      videoEl.appendChild(src);
+      if (item.image) {
+        try {
+          videoEl.poster = new URL(
+            item.image,
+            window.location.origin,
+          ).toString();
+        } catch {
+          videoEl.poster = item.image;
+        }
+      }
+      videoEl.addEventListener("click", (event) => {
+        event.preventDefault();
+        if (videoEl.paused) {
+          videoEl.play().catch(() => {});
+          card.classList.remove("is-paused");
+        } else {
+          videoEl.pause();
+          card.classList.add("is-paused");
+        }
+      });
+      videoEl.addEventListener("play", () => {
+        card.classList.remove("is-paused");
+      });
+      videoEl.addEventListener("pause", () => {
+        card.classList.add("is-paused");
+      });
+      videoEl.addEventListener("loadedmetadata", () => {
+        try {
+          const width = Number(videoEl.videoWidth || 0);
+          const height = Number(videoEl.videoHeight || 0);
+          if (!width || !height) return;
+          const ratio = width / height;
+          card.classList.remove("is-portrait", "is-landscape", "is-square");
+          if (ratio >= 1.15) {
+            card.classList.add("is-landscape");
+          } else if (ratio >= 0.9) {
+            card.classList.add("is-square");
+          } else {
+            card.classList.add("is-portrait");
+          }
+        } catch (err) {
+          console.warn("shorts video metadata parse failed", err);
+        }
+      });
+
+      const playIndicator = document.createElement("div");
+      playIndicator.className = "shorts-video-play";
+      playIndicator.innerHTML = '<i class="fa-solid fa-play"></i>';
+
+      const muteBadge = document.createElement("div");
+      muteBadge.className = "shorts-video-badge";
+      muteBadge.innerHTML =
+        '<i class="fa-solid fa-volume-xmark"></i><span>静音播放</span>';
+
+      stage.appendChild(videoEl);
+      stage.appendChild(playIndicator);
+      stage.appendChild(muteBadge);
+      card.appendChild(stage);
+
+      const meta = document.createElement("div");
+      meta.className = "shorts-card-meta";
+
+      const metaMain = document.createElement("div");
+      metaMain.className = "shorts-card-meta-main";
+
+      const topLine = document.createElement("div");
+      topLine.className = "shorts-card-meta-topline";
+      const chip = document.createElement("span");
+      chip.className = "shorts-card-chip";
+      chip.textContent = item.classLabel || "未分类";
+      topLine.appendChild(chip);
+      metaMain.appendChild(topLine);
+
+      const title = document.createElement("div");
+      title.className = "shorts-card-title";
+      title.textContent =
+        item.label || item.label_zh || item.id || "未命名节点";
+      metaMain.appendChild(title);
+
+      const label = document.createElement("div");
+      label.className = "shorts-card-label";
+      label.textContent = item.id ? `节点 ID: ${item.id}` : "知识库节点视频";
+      metaMain.appendChild(label);
+
+      const actions = document.createElement("div");
+      actions.className = "shorts-card-actions";
+      const detailBtn = document.createElement("button");
+      detailBtn.type = "button";
+      detailBtn.textContent = "查看节点";
+      detailBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!item.id) return;
+        navigateToDetailPage(item.id);
+      });
+      actions.appendChild(detailBtn);
+      const locateBtn = document.createElement("button");
+      locateBtn.type = "button";
+      locateBtn.textContent = "在表格中定位";
+      locateBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!item.id) return;
+        try {
+          setTableSelection(item.id, true);
+        } catch (err) {
+          console.warn("shorts locate failed", err);
+        }
+      });
+      actions.appendChild(locateBtn);
+
+      meta.appendChild(metaMain);
+      meta.appendChild(actions);
+      card.appendChild(meta);
+
+      const sideActions = document.createElement("div");
+      sideActions.className = "shorts-side-actions";
+
+      const muteWrap = document.createElement("div");
+      muteWrap.className = "shorts-side-action";
+      const muteBtn = document.createElement("button");
+      muteBtn.type = "button";
+      muteBtn.className = "shorts-action-btn";
+      muteBtn.dataset.shortsAction = "mute";
+      muteWrap.appendChild(muteBtn);
+      const muteText = document.createElement("div");
+      muteText.className = "shorts-action-label";
+      muteText.textContent = "声音";
+      muteWrap.appendChild(muteText);
+
+      const detailWrap = document.createElement("div");
+      detailWrap.className = "shorts-side-action";
+      const detailIconBtn = document.createElement("button");
+      detailIconBtn.type = "button";
+      detailIconBtn.className = "shorts-action-btn";
+      detailIconBtn.dataset.shortsAction = "detail";
+      detailIconBtn.innerHTML =
+        '<i class="fa-solid fa-up-right-from-square"></i>';
+      detailWrap.appendChild(detailIconBtn);
+      const detailText = document.createElement("div");
+      detailText.className = "shorts-action-label";
+      detailText.textContent = "详情";
+      detailWrap.appendChild(detailText);
+
+      sideActions.appendChild(muteWrap);
+      sideActions.appendChild(detailWrap);
+      card.appendChild(sideActions);
+
+      observer.observe(videoEl);
+      videoToIndexMap.set(videoEl, idx);
+      videoElements.push(videoEl);
+      cardElements.push(card);
+      shortsList.appendChild(card);
+      return card;
+    };
 
     const updateMuteButtonState = () => {
       cardElements.forEach((card, index) => {
@@ -2065,7 +2276,7 @@
       detailBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         if (!item.id) return;
-        window.location.href = buildDetailPageUrl(item.id);
+        navigateToDetailPage(item.id);
       });
       actions.appendChild(detailBtn);
 
@@ -2209,7 +2420,7 @@
           return;
         }
         if (action === "detail" && currentItem?.id) {
-          window.location.href = buildDetailPageUrl(currentItem.id);
+          navigateToDetailPage(currentItem.id);
           return;
         }
       }
@@ -2982,7 +3193,7 @@
       detailBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         if (!item.id) return;
-        window.location.href = buildDetailPageUrl(item.id);
+        navigateToDetailPage(item.id);
       });
       actions.appendChild(detailBtn);
 
@@ -3110,7 +3321,7 @@
         const cardIndex = Number(parentCard?.dataset.index || -1);
         const currentItem = cardIndex >= 0 ? imageItems[cardIndex] : null;
         if (currentItem?.id) {
-          window.location.href = buildDetailPageUrl(currentItem.id);
+          navigateToDetailPage(currentItem.id);
         }
         return;
       }

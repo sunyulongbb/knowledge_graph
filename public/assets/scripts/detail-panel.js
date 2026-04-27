@@ -525,6 +525,18 @@
       dp.dataset.entityId = fullId;
       window.kbActiveDetailNodeId = fullId;
       window.kbActiveDetailRouteId = routeId || fullId;
+      window.kbSelectedRowId = routeId || fullId;
+      window.kbSelectedRowIds = new Set([window.kbSelectedRowId]);
+      window.kbSelectedNodeId = window.kbSelectedRowId;
+      window.kbCurrentNodeId = window.kbSelectedRowId;
+      window.kbLastAnchorRowId = window.kbSelectedRowId;
+      if (typeof window.loadAttributes === "function") {
+        try {
+          window.loadAttributes(fullId);
+        } catch (err) {
+          console.warn("loadAttributes failed before detail fetch", err);
+        }
+      }
     } catch {}
     // show edit button immediately (fallback) so user can find it even if wiki content fetch fails
     try {
@@ -563,6 +575,18 @@
         window.kbActiveDetailNodeId = canonicalId;
         if (!window.kbActiveDetailRouteId) {
           window.kbActiveDetailRouteId = routeId || canonicalId;
+        }
+        window.kbSelectedRowId = canonicalId;
+        window.kbSelectedRowIds = new Set([canonicalId]);
+        window.kbSelectedNodeId = canonicalId;
+        window.kbCurrentNodeId = canonicalId;
+        window.kbLastAnchorRowId = canonicalId;
+        try {
+          if (typeof window.loadAttributes === "function") {
+            window.loadAttributes(canonicalId);
+          }
+        } catch (err) {
+          console.warn("loadAttributes failed after detail fetch", err);
         }
       } catch {}
       // tags

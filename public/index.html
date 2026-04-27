@@ -8094,6 +8094,24 @@
               if (node && node.length) node.addClass('selected');
             }
           } catch { }
+          try {
+            if (typeof window.loadAttributes === "function") {
+              window.loadAttributes(detailId);
+            }
+          } catch (err) {
+            if (window.console && console.warn) {
+              console.warn("loadAttributes failed on detail view switch", err);
+            }
+          }
+          try {
+            if (typeof window.loadAttributes === "function") {
+              window.loadAttributes(detailId);
+            }
+          } catch (err) {
+            if (window.console && console.warn) {
+              console.warn("loadAttributes failed on detail view switch", err);
+            }
+          }
         }
       } else if (normalized === "table" && hasTargetNode) {
         applyTableSelectionTarget();
