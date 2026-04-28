@@ -647,40 +647,15 @@ export async function handleSchemaRoutes(
   if (url.pathname === "/api/kb/classes" && method === "GET") {
     const q = url.searchParams.get("q") || "";
     const querySql = hasProjectScope
-      ? `WITH RECURSIVE scoped_classes(id) AS (
-           SELECT c.id
-           FROM classes c
-           WHERE c.project_id = ?
-              OR (
-                c.project_id IS NULL
-                AND EXISTS (
-                  SELECT 1
-                  FROM entity_classes ec
-                  INNER JOIN nodes n ON n.id = ec.entity_id
-                  WHERE ec.class_id = c.id AND n.project_id = ?
-                )
-                AND NOT EXISTS (
-                  SELECT 1
-                  FROM entity_classes ec
-                  INNER JOIN nodes n ON n.id = ec.entity_id
-                  WHERE ec.class_id = c.id AND n.project_id <> ?
-                )
-              )
-           UNION
-           SELECT parent.id
-           FROM classes parent
-           INNER JOIN classes child ON child.parent_id = parent.id
-           INNER JOIN scoped_classes scoped ON scoped.id = child.id
-         )
-         SELECT c.*, (
+      ? `SELECT c.*, (
            SELECT COUNT(*)
            FROM entity_classes ec
            INNER JOIN nodes n ON n.id = ec.entity_id
            WHERE ec.class_id = c.id AND n.project_id = ?
          ) AS instance_count
          FROM classes c
-         WHERE c.name LIKE ?
-           AND c.id IN (SELECT id FROM scoped_classes)
+         WHERE (c.project_id = ? OR c.project_id IS NULL)
+           AND c.name LIKE ?
          ORDER BY COALESCE(c.sort_order, c.rowid), c.name`
       : `SELECT c.*, (
            SELECT COUNT(*) FROM entity_classes ec WHERE ec.class_id = c.id
@@ -692,13 +667,7 @@ export async function handleSchemaRoutes(
       .query(querySql)
       .all(
         ...(hasProjectScope
-          ? [
-              scopedProjectId,
-              scopedProjectId,
-              scopedProjectId,
-              scopedProjectId,
-              `%${q}%`,
-            ]
+          ? [scopedProjectId, scopedProjectId, `%${q}%`]
           : [`%${q}%`]),
       )
       .map((row: any) => {
