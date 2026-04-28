@@ -654,7 +654,7 @@ export async function handleSchemaRoutes(
            WHERE ec.class_id = c.id AND n.project_id = ?
          ) AS instance_count
          FROM classes c
-         WHERE (c.project_id = ? OR c.project_id IS NULL)
+         WHERE c.project_id = ?
            AND c.name LIKE ?
          ORDER BY COALESCE(c.sort_order, c.rowid), c.name`
       : `SELECT c.*, (
