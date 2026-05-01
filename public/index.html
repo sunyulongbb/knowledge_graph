@@ -4536,7 +4536,12 @@
           const legendType = item.dataset.legendType;
           const legendRelation = item.dataset.legendRelation;
           const allItems = legendEl.querySelectorAll('.vis-legend-item');
+          const isActive = item.classList.contains('active');
           allItems.forEach(i => i.classList.remove('active'));
+          if (isActive) {
+            clearGraphHighlights();
+            return;
+          }
           if (legendType) {
             highlightNodesByType(legendType);
             item.classList.add('active');
@@ -11000,6 +11005,12 @@
                 selectedEdge.unselect();
                 selectedEdge = null;
               }
+              try {
+                window.kbCy.elements(":selected").unselect();
+              } catch (err) {}
+              try {
+                setTableSelection("", false, { skipDetailRefresh: true });
+              } catch (err) {}
             }
           });
 
@@ -11534,7 +11545,6 @@
               try {
                 setTableSelection("", false, {
                   skipDetailRefresh: true,
-                  skipSidebarSync: true,
                 });
               } catch (e) { }
               try {

@@ -1429,6 +1429,8 @@ if (btnAttrReset) {
       } catch (e) {}
       attrList.innerHTML = "";
       attrPanel.style.display = "none";
+      const badge = document.getElementById("attrCountBadge");
+      if (badge) badge.textContent = "0";
       return;
     }
     try {
