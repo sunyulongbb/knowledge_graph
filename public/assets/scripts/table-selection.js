@@ -597,7 +597,7 @@
       tr.appendChild(tdName);
 
       const tdType = document.createElement("td");
-      tdType.textContent = n.typeLabel || n.classLabel || n.type || "";
+      tdType.textContent = n.typeLabel || n.type || "";
       tdType.style.whiteSpace = "nowrap";
       tr.appendChild(tdType);
 

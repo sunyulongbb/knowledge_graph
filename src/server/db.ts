@@ -72,6 +72,37 @@ function queryGetSafe(sql: string, ...params: any[]) {
   }
 }
 
+function tableExists(name: string) {
+  return !!queryGetSafe(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
+    name,
+  );
+}
+
+function tableHasForeignKeyToNodesOld(name: string) {
+  const fks = queryAllSafe(`PRAGMA foreign_key_list(${name})`);
+  return fks.some((fk: any) => fk?.table === "nodes_old");
+}
+
+function rebuildTableWithSchema(
+  name: string,
+  createSql: string,
+  copyColumns: string[],
+) {
+  const tempName = `${name}_old`;
+  runSafe(`DROP TABLE IF EXISTS ${tempName}`);
+  appDb.run("PRAGMA foreign_keys = OFF");
+  appDb.run(`ALTER TABLE ${name} RENAME TO ${tempName}`);
+  appDb.run(createSql);
+  if (copyColumns.length > 0) {
+    appDb.run(
+      `INSERT INTO ${name} (${copyColumns.join(", ")}) SELECT ${copyColumns.join(", ")} FROM ${tempName}`,
+    );
+  }
+  appDb.run(`DROP TABLE IF EXISTS ${tempName}`);
+  appDb.run("PRAGMA foreign_keys = ON");
+}
+
 function slugifyProjectName(value: string, fallback: string) {
   const normalized = (value || "")
     .toString()
@@ -263,6 +294,68 @@ function ensureSharedTables() {
   runSafe("ALTER TABLE nodes ADD COLUMN image TEXT");
   runSafe("ALTER TABLE nodes ADD COLUMN link TEXT");
   runSafe("ALTER TABLE nodes ADD COLUMN video TEXT");
+
+  const nodeColumns = queryAllSafe("PRAGMA table_info(nodes)");
+  const hasCategoriesColumn = nodeColumns.some(
+    (col: any) => (col?.name || col?.[1]) === "categories",
+  );
+  if (hasCategoriesColumn) {
+    runSafe("DROP TABLE IF EXISTS nodes_old");
+
+    let renameSucceeded = false;
+    try {
+      appDb.run("ALTER TABLE nodes RENAME TO nodes_old");
+      renameSucceeded = true;
+    } catch (err) {
+      console.warn("Failed to rename nodes table for categories migration:", err);
+    }
+
+    if (renameSucceeded) {
+      appDb.run(`
+        CREATE TABLE IF NOT EXISTS nodes (
+          id TEXT PRIMARY KEY,
+          name TEXT,
+          type TEXT,
+          description TEXT,
+          wiki_md TEXT,
+          aliases TEXT,
+          tags TEXT,
+          data TEXT,
+          image TEXT,
+          link TEXT,
+          video TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          project_id INTEGER
+        )
+      `);
+      const desiredCols = [
+        "id",
+        "name",
+        "type",
+        "description",
+        "wiki_md",
+        "aliases",
+        "tags",
+        "data",
+        "image",
+        "link",
+        "video",
+        "created_at",
+        "updated_at",
+        "project_id",
+      ];
+      const existingCols = nodeColumns
+        .map((col: any) => (col?.name || col?.[1]).toString())
+        .filter((name: string) => desiredCols.includes(name));
+      if (existingCols.length > 0) {
+        appDb.run(
+          `INSERT INTO nodes (${existingCols.join(", ")}) SELECT ${existingCols.join(", ")} FROM nodes_old`,
+        );
+      }
+      runSafe("DROP TABLE IF EXISTS nodes_old");
+    }
+  }
   runSafe(
     "CREATE INDEX IF NOT EXISTS idx_nodes_project_id ON nodes(project_id)",
   );
@@ -294,6 +387,42 @@ function ensureSharedTables() {
       FOREIGN KEY(class_id) REFERENCES classes(id) ON DELETE CASCADE
     )
   `);
+
+  if (tableExists("attributes") && tableHasForeignKeyToNodesOld("attributes")) {
+    rebuildTableWithSchema(
+      "attributes",
+      `
+        CREATE TABLE attributes (
+          id TEXT PRIMARY KEY,
+          node_id TEXT,
+          key TEXT,
+          value TEXT,
+          datatype TEXT,
+          property_name_snapshot TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(node_id) REFERENCES nodes(id) ON DELETE CASCADE
+        )
+      `,
+      ["id", "node_id", "key", "value", "datatype", "property_name_snapshot", "created_at"],
+    );
+  }
+
+  if (tableExists("entity_classes") && tableHasForeignKeyToNodesOld("entity_classes")) {
+    rebuildTableWithSchema(
+      "entity_classes",
+      `
+        CREATE TABLE entity_classes (
+          entity_id TEXT,
+          class_id TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY(entity_id, class_id),
+          FOREIGN KEY(entity_id) REFERENCES nodes(id) ON DELETE CASCADE,
+          FOREIGN KEY(class_id) REFERENCES classes(id) ON DELETE CASCADE
+        )
+      `,
+      ["entity_id", "class_id", "created_at"],
+    );
+  }
 
   appDb.run(`
     CREATE TABLE IF NOT EXISTS class_properties (

@@ -3,6 +3,7 @@
   let tblPage = parseInt(urlParams.get("page") || "1", 10);
   let tblPageSize = parseInt(urlParams.get("limit") || "20", 10);
   let tblTotalNodes = 0;
+  let tblActiveType = "";
   let tblActiveClassId = "";
   let tblActiveClassLabel = "";
 
@@ -31,7 +32,8 @@
     const view = (params.get("view") || "").toLowerCase();
     const order = params.get("order") || "";
     const type = params.get("type") || "";
-    return { node, label, view, order, type };
+    const classId = params.get("class_id") || "";
+    return { node, label, view, order, type, classId };
   }
 
   function normalizeClassIdForQuery(rawId) {
@@ -209,7 +211,8 @@
         window.updateUrlParam("order", sortOrder === "id" ? "" : sortOrder);
         window.updateUrlParam("page", tblPage);
         window.updateUrlParam("limit", tblPageSize);
-        window.updateUrlParam("type", tblActiveClassId);
+        window.updateUrlParam("type", tblActiveType);
+        window.updateUrlParam("class_id", tblActiveClassId);
       }
 
       if (sortOrder && sortOrder !== "id") {
@@ -225,7 +228,8 @@
         : "";
 
       if (keyword) url.searchParams.set("q", keyword);
-      if (tblActiveClassId) url.searchParams.set("type", tblActiveClassId);
+      if (tblActiveType) url.searchParams.set("type", tblActiveType);
+      if (tblActiveClassId) url.searchParams.set("class_id", tblActiveClassId);
       if (propertyId) url.searchParams.set("property_id", propertyId);
       if (propertyValue) url.searchParams.set("property_value", propertyValue);
       url.searchParams.set("hide_entity", "1");
@@ -253,6 +257,12 @@
         const parts = [`总计 ${tblTotalNodes} 条`];
         if (tblActiveClassLabel) parts.push(`分类 ${tblActiveClassLabel}`);
         else if (tblActiveClassId) parts.push(`分类 ${tblActiveClassId}`);
+        if (tblActiveType) {
+          const typeLabel = tblTypeFilter
+            ? tblTypeFilter.selectedOptions[0]?.textContent || tblActiveType
+            : tblActiveType;
+          parts.push(`类型 ${typeLabel}`);
+        }
         if (propertyId) {
           const propertyLabel = tblPropertyFilter
             ? tblPropertyFilter.selectedOptions[0]?.textContent || propertyId
@@ -273,7 +283,9 @@
         ? ` · 分类 ${tblActiveClassLabel}`
         : tblActiveClassId
           ? ` · 分类 ${tblActiveClassId}`
-          : "";
+          : tblActiveType
+            ? ` · 类型 ${tblActiveType}`
+            : "";
       if (typeof window.setStatus === "function") {
         window.setStatus(false, `已加载 ${nodes.length} 条${labelHint}`);
       }
@@ -383,20 +395,16 @@
 
     if (tblTypeFilter) {
       if (initial.type) {
-        tblActiveClassId = initial.type;
-        tblActiveClassLabel = initial.type;
+        tblActiveType = initial.type;
         tblTypeFilter.value = initial.type;
+      }
+      if (initial.classId) {
+        tblActiveClassId = normalizeClassIdForQuery(initial.classId);
       }
       tblTypeFilter.addEventListener("change", () => {
         tblPage = 1;
-        tblActiveClassId = tblTypeFilter.value || "";
-        tblActiveClassLabel =
-          tblTypeFilter.selectedOptions[0]?.textContent || "";
-        loadTablePage({
-          classId: tblActiveClassId,
-          classLabel: tblActiveClassLabel,
-          resetPage: false,
-        });
+        tblActiveType = tblTypeFilter.value || "";
+        loadTablePage({ resetPage: false });
       });
     }
 

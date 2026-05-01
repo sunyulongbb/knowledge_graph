@@ -167,6 +167,31 @@ export async function handleCoreKbRoutes(
     }
   };
 
+  const normalizeListValue = (value: any): string[] => {
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => (item || "").toString().trim())
+        .filter(Boolean);
+    }
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed) return [];
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed
+            .map((item) => (item || "").toString().trim())
+            .filter(Boolean);
+        }
+      } catch {}
+      return trimmed
+        .split(/[\n,，;；、|]+/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+    return [];
+  };
+
   const entryTaskScopeParams = () => (hasProjectScope ? [scopedProjectId] : []);
   const mapEntryTaskRow = (row: any) => {
     let schema = [];
@@ -290,6 +315,7 @@ export async function handleCoreKbRoutes(
       console.warn("syncAllPropertyTypesForNode failed", err);
     }
   };
+
 
   const ensureClassRecord = (className: string): string | null => {
     const normalized = (className || "").toString().trim();
@@ -1722,6 +1748,9 @@ export async function handleCoreKbRoutes(
                 const targetDescription = (payload?.targetDescription ?? "")
                   .toString()
                   .trim();
+                const categoriesRaw = Array.isArray(payload?.categories)
+                  ? payload.categories
+                  : [];
                 const attributesRaw = Array.isArray(payload?.attributes)
                   ? payload.attributes
                   : [];
@@ -1887,6 +1916,16 @@ export async function handleCoreKbRoutes(
                   }
                   if (payload.entityType) {
                     const classId = ensureClassRecord(payload.entityType);
+                    if (classId) assignNodeClass(targetId, classId);
+                  }
+                }
+                if (categoriesRaw.length) {
+                  for (const categoryValue of categoriesRaw) {
+                    const categoryName = (categoryValue || "")
+                      .toString()
+                      .trim();
+                    if (!categoryName) continue;
+                    const classId = ensureClassRecord(categoryName);
                     if (classId) assignNodeClass(targetId, classId);
                   }
                 }
@@ -2207,6 +2246,16 @@ export async function handleCoreKbRoutes(
         ],
       );
 
+      if (body.categories !== undefined) {
+        const categoryIds = normalizeListValue(body.categories || []);
+        for (const categoryValue of categoryIds) {
+          const classId = ensureClassRecord(categoryValue);
+          if (classId) {
+            assignNodeClass(id, classId);
+          }
+        }
+      }
+
       const newNode = hasProjectScope
         ? db
             .query(`SELECT * FROM nodes WHERE id = ? AND ${scopedClause()}`)
@@ -2246,6 +2295,16 @@ export async function handleCoreKbRoutes(
       if (body.tags !== undefined) {
         updates.push("tags = ?");
         params.push(JSON.stringify(body.tags));
+      }
+      if (body.categories !== undefined) {
+        const normalizedCategories = normalizeListValue(body.categories || []);
+        db.run("DELETE FROM entity_classes WHERE entity_id = ?", [id]);
+        for (const categoryValue of normalizedCategories) {
+          const classId = ensureClassRecord(categoryValue);
+          if (classId) {
+            assignNodeClass(id, classId);
+          }
+        }
       }
       if (body.type !== undefined) {
         updates.push("type = ?");

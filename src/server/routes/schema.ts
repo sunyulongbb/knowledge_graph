@@ -50,6 +50,9 @@ export async function handleSchemaRoutes(
       .filter(Boolean);
   };
 
+  const normalizeEntityId = (id: string) =>
+    (id || "").toString().trim().replace(/^entity\//, "");
+
   const scopedProject = resolveScopedProject(req, url);
   const scopedProjectId = Number(scopedProject?.id || 0) || null;
   const hasProjectScope = scopedProjectId !== null;

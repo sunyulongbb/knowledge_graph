@@ -5029,6 +5029,14 @@
     const ENTRY_SHEET_ALIASES_COLUMN_KEYS = new Set(["aliases", "alias", "别名"]);
     const ENTRY_SHEET_DESCRIPTION_COLUMN_KEYS = new Set(["description", "desc", "描述"]);
     const ENTRY_SHEET_TAGS_COLUMN_KEYS = new Set(["tags", "tag", "标签"]);
+    const ENTRY_SHEET_CATEGORIES_COLUMN_KEYS = new Set([
+      "categories",
+      "category",
+      "分类",
+      "类别",
+      "class",
+      "classes",
+    ]);
     const ENTRY_RELATION_HEADER_ALIASES = {
       head: ["头实体", "起点实体", "源实体"],
       head_type: ["头实体类型", "头类型", "起点实体类型", "源实体类型"],
@@ -7373,6 +7381,7 @@
         let targetDescription = "";
         let aliases = [];
         let tags = [];
+        let categories = [];
         let image = "";
         let video = "";
         let link = "";
@@ -7406,6 +7415,10 @@
             tags = splitSimpleList(valueRaw);
             return;
           }
+          if (ENTRY_SHEET_CATEGORIES_COLUMN_KEYS.has(keyLower)) {
+            categories = splitSimpleList(valueRaw);
+            return;
+          }
           if (ENTRY_SHEET_IMAGE_COLUMN_KEYS.has(keyLower)) {
             image = valueRaw;
             return;
@@ -7432,6 +7445,7 @@
           targetDescription,
           aliases,
           tags,
+          categories,
           image,
           video,
           link,

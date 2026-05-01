@@ -61,6 +61,8 @@ export function formatNode(row: any) {
       .all(row.id) as any[];
   } catch {}
 
+  const categories = classes.map((cls) => cls.id);
+
   let color = null;
   let classId = null;
   let classLabel = null;
@@ -167,6 +169,10 @@ export function formatNode(row: any) {
       extraData.video.trim()) ||
     "";
 
+  const categoryLabels = classes
+    .filter((cls) => cls && cls.name)
+    .map((cls) => cls.name);
+
   return {
     ...extraData,
     id: row.id,
@@ -187,6 +193,8 @@ export function formatNode(row: any) {
     classId: classId,
     classLabel: classLabel,
     classes: classes,
+    categories,
+    categoryLabels,
     image: image,
     link,
     video,
