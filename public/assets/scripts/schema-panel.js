@@ -2173,13 +2173,32 @@
       (opt) =>
         (opt.value || "").trim().toLowerCase() === normalized.toLowerCase(),
     );
-    if (!existing) {
+    if (existing) {
+      fTypeInput.value = existing.value;
+      return;
+    }
+    const ontology = findOntologyByLabel(normalized);
+    if (ontology?.id) {
+      const existingById = options.find(
+        (opt) => (opt.value || "").trim().toLowerCase() === ontology.id.toLowerCase(),
+      );
+      if (existingById) {
+        fTypeInput.value = existingById.value;
+        return;
+      }
       const opt = document.createElement("option");
-      opt.value = normalized;
-      opt.textContent = `${normalized}（未映射本体）`;
+      opt.value = ontology.id;
+      opt.textContent = ontology.label || ontology.name || ontology.id;
       opt.dataset.dynamic = "1";
       fTypeInput.appendChild(opt);
+      fTypeInput.value = ontology.id;
+      return;
     }
+    const opt = document.createElement("option");
+    opt.value = normalized;
+    opt.textContent = `${normalized}（未映射本体）`;
+    opt.dataset.dynamic = "1";
+    fTypeInput.appendChild(opt);
     fTypeInput.value = normalized;
   }
 
@@ -2196,8 +2215,8 @@
     items.forEach((ontology) => {
       try {
         const opt = document.createElement("option");
-        opt.value = ontology.label || ontology.name || ontology.id;
-        opt.textContent = ontology.label || ontology.name || ontology.id;
+        opt.value = ontology.id || ontology.label || ontology.name || "";
+        opt.textContent = ontology.label || ontology.name || ontology.id || "";
         opt.dataset.ontologyId = ontology.id || "";
         fTypeInput.appendChild(opt);
       } catch {}
@@ -2220,8 +2239,18 @@
     const q = (label || "").trim().toLowerCase();
     if (!q) return null;
     const items = Array.isArray(window.kbOntologies) ? window.kbOntologies : [];
+    const matchByLabelOrName = (it) => {
+      const labelText = (it.label || it.name || "").toString().trim().toLowerCase();
+      if (labelText === q) return true;
+      if (Array.isArray(it.alias)) {
+        return it.alias.some((aliasItem) =>
+          (aliasItem || "").toString().trim().toLowerCase() === q,
+        );
+      }
+      return false;
+    };
     return (
-      items.find((it) => (it.label || it.name || "").toLowerCase() === q) ||
+      items.find(matchByLabelOrName) ||
       items.find((it) => (it.id || "").toLowerCase() === q) ||
       null
     );

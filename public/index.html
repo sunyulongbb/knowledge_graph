@@ -2163,6 +2163,7 @@
                     <input type="checkbox" id="chkSelectAll" title="全选/取消全选" style="cursor: pointer;">
                   </th>
                   <th>名称</th>
+                  <th style="width: 180px">类型</th>
                 </tr>
               </thead>
               <tbody></tbody>
@@ -2370,16 +2371,23 @@
               </button>
             </div>
           </div>
-          <!-- 属性提取到别名工具 -->
+          <!-- 属性值提取到字段工具 -->
           <div class="clean-tool-section">
             <div class="clean-tool-header">
               <i class="fa-solid fa-arrow-right-arrow-left"></i>
-              <span>属性提取到别名</span>
+              <span>属性值提取到字段</span>
             </div>
             <div class="clean-tool-body">
               <select id="cleanAttrPropSelect"
-                style="flex:1 1 200px;min-width:140px;height:36px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface-0);color:var(--fg);padding:6px 8px;font-size:13px;">
+                style="flex:1 1 180px;min-width:140px;height:36px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface-0);color:var(--fg);padding:6px 8px;font-size:13px;">
                 <option value="">选择属性…</option>
+              </select>
+              <select id="cleanAttrTargetField"
+                style="flex:1 1 140px;min-width:140px;height:36px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface-0);color:var(--fg);padding:6px 8px;font-size:13px;">
+                <option value="aliases">别名</option>
+                <option value="name">名称</option>
+                <option value="description">描述</option>
+                <option value="tags">标签</option>
               </select>
               <label
                 style="display:flex;align-items:center;gap:4px;font-size:13px;color:var(--fg);white-space:nowrap;cursor:pointer;">
@@ -2443,6 +2451,27 @@
               仅对关系属性（wikibase-entityid）有效。会将目标节点设置为该类型，同时同步本体关联与属性模型。
             </div>
             <div id="cleanAssignResult" class="clean-tool-result" style="display:none;"></div>
+          </div>
+
+          <div class="clean-tool-section">
+            <div class="clean-tool-header">
+              <i class="fa-solid fa-arrows-rotate"></i>
+              <span>实体类型标准化</span>
+            </div>
+            <div class="clean-tool-body">
+              <select id="cleanNormalizeTypeSelect" multiple size="5"
+                style="flex:1 1 260px;min-width:220px;height:auto;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface-0);color:var(--fg);padding:6px 8px;font-size:13px;">
+              </select>
+              <button id="btnCleanNormalizeType" class="btn" type="button"
+                style="white-space:nowrap;background:#10b981;color:#fff;border-color:#10b981;">
+                <i class="fa-solid fa-play"></i>
+                <span style="margin-left:4px">标准化类型</span>
+              </button>
+            </div>
+            <div style="font-size:12px;color:var(--muted);margin-top:8px;">
+              将所选本体类型对应的实体节点 type 字段统一为该本体类型的 id。支持多选。
+            </div>
+            <div id="cleanNormalizeTypeResult" class="clean-tool-result" style="display:none;"></div>
           </div>
 
           <div class="clean-tool-section">
@@ -8071,7 +8100,7 @@
             console.warn("refreshCleanTasks failed", err);
           }
         });
-        try { loadCleanAttrProperties(); loadCleanDelProperties(); loadCleanAssignTypeProperties(); loadCleanTypeProperties(); loadCleanAssignTargetTypes(); } catch { }
+        try { loadCleanAttrProperties(); loadCleanDelProperties(); loadCleanAssignTypeProperties(); loadCleanTypeProperties(); loadCleanAssignTargetTypes(); loadCleanNormalizeTypes(); } catch { }
         if (cleanTaskName) {
           requestAnimationFrame(() => {
             try {
@@ -9389,6 +9418,7 @@
 
     // ── 属性提取到别名工具 ──
     const cleanAttrPropSelect = document.getElementById("cleanAttrPropSelect");
+    const cleanAttrTargetField = document.getElementById("cleanAttrTargetField");
     const cleanAttrRemoveAfter = document.getElementById("cleanAttrRemoveAfter");
     const cleanAttrDeleteTargets = document.getElementById("cleanAttrDeleteTargets");
     const btnCleanAttrToAlias = document.getElementById("btnCleanAttrToAlias");
@@ -9420,10 +9450,12 @@
       btnCleanAttrToAlias.addEventListener("click", async () => {
         const propId = cleanAttrPropSelect ? cleanAttrPropSelect.value : "";
         if (!propId) { alert("请选择要提取的属性"); return; }
+        const targetField = cleanAttrTargetField ? cleanAttrTargetField.value : "aliases";
         const propLabel = cleanAttrPropSelect.selectedOptions[0]?.textContent || propId;
+        const targetLabel = cleanAttrTargetField ? cleanAttrTargetField.selectedOptions[0]?.textContent || targetField : targetField;
         const remove = cleanAttrRemoveAfter ? cleanAttrRemoveAfter.checked : false;
         const deleteTargets = cleanAttrDeleteTargets ? cleanAttrDeleteTargets.checked : false;
-        let confirmMsg = `将属性「${propLabel}」的值提取到别名中`;
+        let confirmMsg = `将属性「${propLabel}」的值提取到${targetLabel}中`;
         if (remove) confirmMsg += "，并删除原属性";
         if (deleteTargets) confirmMsg += "，并删除目标节点";
         confirmMsg += "，确定执行？";
@@ -9437,7 +9469,12 @@
           const resp = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ property_id: propId, remove, delete_targets: deleteTargets }),
+            body: JSON.stringify({
+              property_id: propId,
+              target_field: targetField,
+              remove,
+              delete_targets: deleteTargets,
+            }),
           });
           if (!resp.ok) throw new Error("HTTP " + resp.status);
           const result = await resp.json();
@@ -9492,12 +9529,79 @@
     const cleanAssignTargetTypeList = document.getElementById("cleanAssignTargetTypeList");
     const btnCleanAssignTargetType = document.getElementById("btnCleanAssignTargetType");
     const cleanAssignResult = document.getElementById("cleanAssignResult");
+    const cleanNormalizeTypeSelect = document.getElementById("cleanNormalizeTypeSelect");
+    const btnCleanNormalizeType = document.getElementById("btnCleanNormalizeType");
+    const cleanNormalizeTypeResult = document.getElementById("cleanNormalizeTypeResult");
     const cleanTypePropSelect = document.getElementById("cleanTypePropSelect");
     const cleanTypeSelect = document.getElementById("cleanTypeSelect");
     const cleanTypeDeleteTargets = document.getElementById("cleanTypeDeleteTargets");
     const btnCleanChangePropType = document.getElementById("btnCleanChangePropType");
     const cleanTypeResult = document.getElementById("cleanTypeResult");
     const cleanTypePropertyMap = new Map();
+
+    async function loadCleanNormalizeTypes() {
+      if (!cleanNormalizeTypeSelect) return;
+      try {
+        const url = new URL("/api/kb/ontologies", window.location.origin);
+        if (typeof window.appendCurrentDbParam === "function") {
+          const scoped = window.appendCurrentDbParam(url);
+          if (scoped instanceof URL) url.search = scoped.search;
+        }
+        const resp = await fetch(url.toString());
+        if (!resp.ok) return;
+        const items = await resp.json();
+        cleanNormalizeTypeSelect.innerHTML = "";
+        if (Array.isArray(items) && items.length) {
+          items.forEach((ontology) => {
+            if (!ontology || !ontology.id) return;
+            const opt = document.createElement("option");
+            opt.value = ontology.id;
+            opt.textContent = ontology.label || ontology.name || ontology.id;
+            cleanNormalizeTypeSelect.appendChild(opt);
+          });
+        }
+      } catch (e) {
+        console.error("load clean normalize types failed", e);
+      }
+    }
+
+    async function normalizeCleanNodeTypes() {
+      if (!cleanNormalizeTypeSelect || !btnCleanNormalizeType) return;
+      const selectedIds = Array.from(cleanNormalizeTypeSelect.selectedOptions || [])
+        .map((opt) => (opt.value || "").trim())
+        .filter(Boolean);
+      if (!selectedIds.length) {
+        alert("请选择要标准化的本体类型");
+        return;
+      }
+      const msg = `将 ${selectedIds.length} 个本体类型对应的实体节点 type 字段标准化为本体 id，确定执行？`;
+      if (!confirm(msg)) return;
+      btnCleanNormalizeType.disabled = true;
+      if (cleanNormalizeTypeResult) {
+        cleanNormalizeTypeResult.style.display = "";
+        cleanNormalizeTypeResult.textContent = "执行中…";
+      }
+      try {
+        let url = "/api/kb/clean/normalize-node-types";
+        if (typeof window.appendCurrentDbParam === "function") url = window.appendCurrentDbParam(url);
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ontology_ids: selectedIds }),
+        });
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        const result = await resp.json();
+        if (cleanNormalizeTypeResult) {
+          cleanNormalizeTypeResult.textContent = `匹配 ${result.matched} 条节点，标准化 ${result.updated} 条节点类型。`;
+        }
+        if (typeof loadTablePage === "function") { try { await loadTablePage({ resetPage: false }); } catch {} }
+      } catch (e) {
+        console.error(e);
+        if (cleanNormalizeTypeResult) cleanNormalizeTypeResult.textContent = "执行失败：" + (e.message || e);
+      } finally {
+        btnCleanNormalizeType.disabled = false;
+      }
+    }
 
     async function loadCleanAssignTypeProperties() {
       if (!cleanAssignTypePropSelect) return;
@@ -9698,6 +9802,10 @@
           btnCleanAssignTargetType.disabled = false;
         }
       });
+    }
+
+    if (btnCleanNormalizeType) {
+      btnCleanNormalizeType.addEventListener("click", normalizeCleanNodeTypes);
     }
 
     if (btnCleanDelAttr) {

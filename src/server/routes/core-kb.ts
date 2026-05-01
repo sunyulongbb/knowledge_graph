@@ -300,16 +300,16 @@ export async function handleCoreKbRoutes(
             .query(
               `SELECT id
                FROM classes
-               WHERE lower(name) = lower(?)
+               WHERE (id = ? OR lower(name) = lower(?))
                  AND project_id = ?
                LIMIT 1`,
             )
-            .get(normalized, scopedProjectId) as any)
+            .get(normalized, normalized, scopedProjectId) as any)
         : (db
             .query(
-              "SELECT id FROM classes WHERE lower(name) = lower(?) AND project_id IS NULL LIMIT 1",
+              "SELECT id FROM classes WHERE (id = ? OR lower(name) = lower(?)) AND project_id IS NULL LIMIT 1",
             )
-            .get(normalized) as any);
+            .get(normalized, normalized) as any);
       if (existing?.id) return String(existing.id);
 
       const id = `class/${crypto.randomUUID()}`;
@@ -381,16 +381,16 @@ export async function handleCoreKbRoutes(
             .query(
               `SELECT id
                FROM ontologies
-               WHERE lower(name) = lower(?)
+               WHERE (id = ? OR lower(name) = lower(?))
                  AND project_id = ?
                LIMIT 1`,
             )
-            .get(normalized, scopedProjectId) as any)
+            .get(normalized, normalized, scopedProjectId) as any)
         : (db
             .query(
-              "SELECT id FROM ontologies WHERE lower(name) = lower(?) AND project_id IS NULL LIMIT 1",
+              "SELECT id FROM ontologies WHERE (id = ? OR lower(name) = lower(?)) AND project_id IS NULL LIMIT 1",
             )
-            .get(normalized) as any);
+            .get(normalized, normalized) as any);
       if (existing?.id) return String(existing.id);
 
       const id = `ontology/${crypto.randomUUID()}`;
@@ -450,7 +450,11 @@ export async function handleCoreKbRoutes(
     }
   };
 
-  const syncNodeTypeLabel = (nodeId: string, typeName: string) => {
+  const syncNodeTypeLabel = (
+    nodeId: string,
+    typeName: string,
+    options: { forceOverwrite?: boolean } = {},
+  ) => {
     const nid = (nodeId || "")
       .toString()
       .trim()
@@ -466,11 +470,15 @@ export async function handleCoreKbRoutes(
             .get(nid, scopedProjectId) as any)
         : (db.query("SELECT id, type FROM nodes WHERE id = ?").get(nid) as any);
       if (!node?.id) return;
+      const ontologyId = ensureOntologyRecord(normalizedType);
+      const typeToSave = ontologyId || normalizedType;
       const currentType = (node.type || "").toString().trim();
-      if (currentType === normalizedType) return;
+      const hasType = currentType && currentType.toLowerCase() !== "entity";
+      if (hasType && !options.forceOverwrite) return;
+      if (currentType === typeToSave) return;
       db.run(
         "UPDATE nodes SET type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        [normalizedType, nid],
+        [typeToSave, nid],
       );
     } catch (err) {
       console.warn("syncNodeTypeLabel failed", err);
@@ -572,7 +580,7 @@ export async function handleCoreKbRoutes(
           console.warn("link class property failed", err);
         }
       }
-      syncNodeTypeLabel(headNodeId, sourceType);
+      syncNodeTypeLabel(headNodeId, sourceType, { forceOverwrite: true });
     }
     if (targetType) {
       const tailClassId = ensureClassRecord(targetType);
@@ -580,7 +588,7 @@ export async function handleCoreKbRoutes(
       if (tailClassId) {
         assignNodeClass(tailNodeId, tailClassId);
       }
-      syncNodeTypeLabel(tailNodeId, targetType);
+      syncNodeTypeLabel(tailNodeId, targetType, { forceOverwrite: false });
     }
     if (headOntologyId) {
       linkOntologyProperty(headOntologyId, propertyId);
@@ -1042,11 +1050,11 @@ export async function handleCoreKbRoutes(
     const typeFilter = (url.searchParams.get("type") || "").trim();
     if (typeFilter) {
       joinClause +=
-        " LEFT JOIN ontologies ot_filter ON lower(trim(n.type)) = lower(trim(ot_filter.name)) OR lower(trim(n.type)) = lower(trim(ot_filter.id))";
+        " LEFT JOIN ontologies ot_filter ON lower(trim(n.type)) = lower(trim(ot_filter.id))";
       whereClause +=
-        " AND (lower(trim(n.type)) = lower(?) OR lower(trim(ot_filter.id)) = lower(?) OR lower(trim(ot_filter.name)) = lower(?))";
-      params.push(typeFilter, typeFilter, typeFilter);
-      countParams.push(typeFilter, typeFilter, typeFilter);
+        " AND (lower(trim(n.type)) = lower(?) OR lower(trim(ot_filter.id)) = lower(?))";
+      params.push(typeFilter, typeFilter);
+      countParams.push(typeFilter, typeFilter);
     }
 
     if (hasProjectScope) {
@@ -1485,13 +1493,14 @@ export async function handleCoreKbRoutes(
       }
       let entityOntologyId: string | null = null;
       if (entityType) {
+        entityOntologyId = ensureOntologyRecord(entityType);
+        const entityTypeToSave = entityOntologyId || entityType;
         db.run(
           "UPDATE nodes SET type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-          [entityType, targetResult.node.id],
+          [entityTypeToSave, targetResult.node.id],
         );
         const entityClassId = ensureClassRecord(entityType);
         if (entityClassId) assignNodeClass(targetResult.node.id, entityClassId);
-        entityOntologyId = ensureOntologyRecord(entityType);
       }
       if (image || video || link) {
         const updates = [] as string[];
@@ -1852,8 +1861,12 @@ export async function handleCoreKbRoutes(
                   linkValue
                 ) {
                   const updateFields: any = {};
-                  if (payload.entityType)
-                    updateFields.type = payload.entityType;
+                  let entityTypeToSave: string | null = null;
+                  if (payload.entityType) {
+                    const ontologyId = ensureOntologyRecord(payload.entityType);
+                    entityTypeToSave = ontologyId || payload.entityType;
+                    updateFields.type = entityTypeToSave;
+                  }
                   if (payload.targetDescription)
                     updateFields.description = payload.targetDescription;
                   if (Array.isArray(payload.aliases))
@@ -2407,8 +2420,44 @@ export async function handleCoreKbRoutes(
       const propertyId = body.property_id;
       if (!propertyId)
         return new Response("Missing property_id", { status: 400 });
+      const targetField = String(body.target_field || "aliases").trim();
       const removeAfter = body.remove === true;
       const deleteTargets = body.delete_targets === true;
+      const allowedTargetFields = new Set(["aliases", "tags", "description", "name"]);
+      if (!allowedTargetFields.has(targetField)) {
+        return new Response("Invalid target_field", { status: 400 });
+      }
+
+      const normalizeStoredArray = (raw: any): string[] => {
+        if (Array.isArray(raw)) {
+          return raw.map((item) => String(item || "").trim()).filter(Boolean);
+        }
+        if (typeof raw === "string") {
+          try {
+            const parsed = JSON.parse(raw || "[]");
+            if (Array.isArray(parsed)) {
+              return parsed
+                .map((item) => String(item || "").trim())
+                .filter(Boolean);
+            }
+          } catch {
+            return raw
+              .split(/[\n,，;、]+/)
+              .map((item) => item.trim())
+              .filter(Boolean);
+          }
+        }
+        return [];
+      };
+
+      const appendTextValues = (current: string, values: string[]) => {
+        const deduped = values.filter(
+          (value) => value && !current.includes(value),
+        );
+        if (!deduped.length) return current;
+        if (!current) return deduped.join("；");
+        return `${current}\n${deduped.join("；")}`;
+      };
 
       // 查找所有拥有该属性的节点
       const attrs = hasProjectScope
@@ -2461,23 +2510,56 @@ export async function handleCoreKbRoutes(
 
         // 获取当前节点的别名
         const nodeRow = db
-          .query("SELECT aliases FROM nodes WHERE id = ?")
+          .query(
+            "SELECT name, description, aliases, tags FROM nodes WHERE id = ?",
+          )
           .get(attr.node_id) as any;
         if (!nodeRow) continue;
 
-        let currentAliases: string[] = [];
-        try {
-          currentAliases = JSON.parse(nodeRow.aliases || "[]");
-        } catch {}
-        if (!Array.isArray(currentAliases)) currentAliases = [];
+        let updated = false;
+        const updates: string[] = [];
+        const params: any[] = [];
 
-        // 合并去重
-        const merged = Array.from(new Set([...currentAliases, ...newAliases]));
-        db.run("UPDATE nodes SET aliases = ? WHERE id = ?", [
-          JSON.stringify(merged),
-          attr.node_id,
-        ]);
-        updatedCount++;
+        if (targetField === "aliases" || targetField === "tags") {
+          const existing = normalizeStoredArray(nodeRow[targetField]);
+          const merged = Array.from(new Set([...existing, ...newAliases]));
+          updates.push(`${targetField} = ?`);
+          params.push(JSON.stringify(merged));
+          updated = merged.length > existing.length;
+        } else if (targetField === "description") {
+          const currentDescription = String(nodeRow.description || "").trim();
+          const nextDescription = appendTextValues(
+            currentDescription,
+            newAliases,
+          );
+          if (nextDescription !== currentDescription) {
+            updates.push("description = ?");
+            params.push(nextDescription);
+            updated = true;
+          }
+        } else if (targetField === "name") {
+          const currentName = String(nodeRow.name || "").trim();
+          const extraNames = newAliases.filter(
+            (value) => value && value !== currentName,
+          );
+          if (extraNames.length) {
+            const nextName = currentName
+              ? `${currentName} / ${extraNames.join(" / ")}`
+              : extraNames.join(" / ");
+            updates.push("name = ?");
+            params.push(nextName);
+            updated = true;
+          }
+        }
+
+        if (updated) {
+          params.push(attr.node_id);
+          db.run(
+            `UPDATE nodes SET ${updates.join(", ")}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            params,
+          );
+          updatedCount++;
+        }
 
         // 删除属性
         if (removeAfter) {
@@ -2519,12 +2601,36 @@ export async function handleCoreKbRoutes(
         }
       }
 
+      let propertyDeleted = false;
+      if (removeAfter) {
+        try {
+          db.run("DELETE FROM ontology_properties WHERE property_id = ?", [propertyId]);
+          db.run("DELETE FROM class_properties WHERE property_id = ?", [propertyId]);
+          db.run(
+            "DELETE FROM property_properties WHERE parent_property_id = ? OR child_property_id = ?",
+            [propertyId, propertyId],
+          );
+          if (hasProjectScope) {
+            db.run(
+              "DELETE FROM properties WHERE id = ? AND project_id = ?",
+              [propertyId, scopedProjectId],
+            );
+          } else {
+            db.run("DELETE FROM properties WHERE id = ? AND project_id IS NULL", [propertyId]);
+          }
+          propertyDeleted = true;
+        } catch (err) {
+          console.warn("delete extracted property failed", err);
+        }
+      }
+
       return Response.json({
         success: true,
         matched: attrs.length,
         updated: updatedCount,
         removed: removedCount,
         deletedNodes,
+        propertyDeleted,
       });
     } catch (e) {
       console.error(e);
@@ -2706,6 +2812,70 @@ export async function handleCoreKbRoutes(
     } catch (e) {
       console.error(e);
       return new Response("Error assigning target node type", { status: 500 });
+    }
+  }
+
+  if (
+    url.pathname === "/api/kb/clean/normalize-node-types" &&
+    method === "POST"
+  ) {
+    try {
+      const body = (await req.json()) as any;
+      const ontologyIds = Array.isArray(body.ontology_ids)
+        ? body.ontology_ids.map((id: any) => (id || "").toString().trim())
+        : [];
+      const selectedIds = Array.from(new Set(ontologyIds)).filter(Boolean);
+      if (!selectedIds.length)
+        return new Response("Missing ontology_ids", { status: 400 });
+
+      const placeholders = selectedIds.map(() => "?").join(",");
+      const rows = hasProjectScope
+        ? (db
+            .query(
+              `SELECT id, name FROM ontologies WHERE project_id = ? AND id IN (${placeholders})`,
+            )
+            .all(scopedProjectId, ...selectedIds) as any[])
+        : (db
+            .query(
+              `SELECT id, name FROM ontologies WHERE project_id IS NULL AND id IN (${placeholders})`,
+            )
+            .all(...selectedIds) as any[]);
+
+      let matched = 0;
+      let updated = 0;
+      for (const ontology of rows) {
+        const ontologyId = (ontology?.id || "").toString().trim();
+        const ontologyName = (ontology?.name || "").toString().trim();
+        if (!ontologyId) continue;
+
+        const whereClause = hasProjectScope
+          ? `${scopedClause()} AND (lower(trim(type)) = lower(?) OR lower(trim(type)) = lower(?))`
+          : `(lower(trim(type)) = lower(?) OR lower(trim(type)) = lower(?))`;
+        const countSql = `SELECT COUNT(*) AS count FROM nodes WHERE ${whereClause}`;
+        const countRow = hasProjectScope
+          ? (db.query(countSql).get(scopedProjectId, ontologyId, ontologyName) as any)
+          : (db.query(countSql).get(ontologyId, ontologyName) as any);
+        const count = countRow?.count || 0;
+        if (count <= 0) continue;
+
+        matched += count;
+        const updateSql = `UPDATE nodes SET type = ?, updated_at = CURRENT_TIMESTAMP WHERE ${whereClause}`;
+        if (hasProjectScope) {
+          db.run(updateSql, ontologyId, scopedProjectId, ontologyId, ontologyName);
+        } else {
+          db.run(updateSql, ontologyId, ontologyId, ontologyName);
+        }
+        updated += count;
+      }
+
+      return Response.json({
+        success: true,
+        matched,
+        updated,
+      });
+    } catch (e) {
+      console.error(e);
+      return new Response("Error normalizing node types", { status: 500 });
     }
   }
 

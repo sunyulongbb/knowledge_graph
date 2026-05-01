@@ -72,16 +72,23 @@ export function formatNode(row: any) {
     classLabel = cls.name;
   }
 
+  let typeLabel = "";
   if (row.type) {
     try {
       const typeKey = String(row.type).trim();
       const typeRow = db
         .query(
-          "SELECT color FROM ontologies WHERE id = ? OR lower(name) = lower(?) OR lower(alias) LIKE ? LIMIT 1",
+          "SELECT id, name, alias, color FROM ontologies WHERE id = ? OR lower(name) = lower(?) OR lower(alias) LIKE ? LIMIT 1",
         )
         .get(typeKey, typeKey, `%${typeKey.toLowerCase()}%`) as any;
       if (typeRow?.color) {
         color = typeRow.color;
+      }
+      if (typeRow) {
+        typeLabel = typeRow.name || typeRow.alias || row.type;
+      }
+      if (!classLabel && typeRow) {
+        classLabel = typeRow.alias || typeRow.name || row.type;
       }
     } catch {}
   }
@@ -168,6 +175,7 @@ export function formatNode(row: any) {
     label: row.name,
     label_zh: extraData.label_zh ?? row.name,
     type: row.type,
+    typeLabel: typeLabel || row.type || "",
     description: row.description ?? descZhFromExtra ?? "",
     desc_zh: descZhFromExtra || row.description || "",
     created_at: row.created_at || null,

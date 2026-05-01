@@ -30,7 +30,8 @@
     const label = params.get("label") || "";
     const view = (params.get("view") || "").toLowerCase();
     const order = params.get("order") || "";
-    return { node, label, view, order };
+    const type = params.get("type") || "";
+    return { node, label, view, order, type };
   }
 
   function normalizeClassIdForQuery(rawId) {
@@ -82,11 +83,15 @@
         if (Array.isArray(ontologies)) {
           ontologies.forEach((item) => {
             const option = document.createElement("option");
-            option.value = item.name || item.label || item.id || "";
+            option.value = item.id || item.name || item.label || "";
             option.textContent = item.name || item.label || item.id || "";
             if (option.value === currentValue) option.selected = true;
             tblTypeFilter.appendChild(option);
           });
+        }
+        if (!tblActiveClassLabel && tblTypeFilter.value) {
+          tblActiveClassLabel =
+            tblTypeFilter.selectedOptions[0]?.textContent || tblTypeFilter.value;
         }
       }
 
@@ -204,6 +209,7 @@
         window.updateUrlParam("order", sortOrder === "id" ? "" : sortOrder);
         window.updateUrlParam("page", tblPage);
         window.updateUrlParam("limit", tblPageSize);
+        window.updateUrlParam("type", tblActiveClassId);
       }
 
       if (sortOrder && sortOrder !== "id") {
@@ -376,6 +382,11 @@
     }
 
     if (tblTypeFilter) {
+      if (initial.type) {
+        tblActiveClassId = initial.type;
+        tblActiveClassLabel = initial.type;
+        tblTypeFilter.value = initial.type;
+      }
       tblTypeFilter.addEventListener("change", () => {
         tblPage = 1;
         tblActiveClassId = tblTypeFilter.value || "";

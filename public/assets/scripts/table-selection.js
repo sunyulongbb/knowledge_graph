@@ -596,6 +596,10 @@
       tdName.appendChild(nameWrapper);
       tr.appendChild(tdName);
 
+      const tdType = document.createElement("td");
+      tdType.textContent = n.typeLabel || n.classLabel || n.type || "";
+      tdType.style.whiteSpace = "nowrap";
+      tr.appendChild(tdType);
 
       tr.addEventListener("click", (e) => {
         const target = e.target;
