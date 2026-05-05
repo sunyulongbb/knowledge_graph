@@ -1514,7 +1514,7 @@ export async function handleCoreKbRoutes(
           video,
           NODE_VIDEO_UPLOADS_DIR,
           ["mp4", "webm", "ogg", "mov"],
-          300 * 1024 * 1024,
+          500 * 1024 * 1024,
         );
       }
       let entityOntologyId: string | null = null;
@@ -1877,7 +1877,7 @@ export async function handleCoreKbRoutes(
                     videoUrl,
                     NODE_VIDEO_UPLOADS_DIR,
                     ["mp4", "webm", "ogg", "mov"],
-                    300 * 1024 * 1024,
+                    500 * 1024 * 1024,
                   );
                 }
                 if (
@@ -2137,9 +2137,9 @@ export async function handleCoreKbRoutes(
       if (!allowedExts.includes(ext)) {
         return new Response("Invalid video file type", { status: 400 });
       }
-      const maxSize = 300 * 1024 * 1024;
+      const maxSize = 500 * 1024 * 1024;
       if (typeof file.size === "number" && file.size > maxSize) {
-        return new Response("视频文件过大，请上传不超过 300MB 的视频。", {
+        return new Response("视频文件过大，请上传不超过 500MB 的视频。", {
           status: 413,
         });
       }
@@ -2226,7 +2226,7 @@ export async function handleCoreKbRoutes(
           video,
           NODE_VIDEO_UPLOADS_DIR,
           ["mp4", "webm", "ogg", "mov"],
-          300 * 1024 * 1024,
+          500 * 1024 * 1024,
         );
       }
 
@@ -2336,7 +2336,7 @@ export async function handleCoreKbRoutes(
             videoValue,
             NODE_VIDEO_UPLOADS_DIR,
             ["mp4", "webm", "ogg", "mov"],
-            300 * 1024 * 1024,
+            500 * 1024 * 1024,
           );
         }
         updates.push("video = ?");

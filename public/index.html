@@ -12479,9 +12479,9 @@
         if (!file) return;
         if (addMsg) addMsg.textContent = "正在上传视频...";
         try {
-          const maxVideoSize = 300 * 1024 * 1024;
+          const maxVideoSize = 500 * 1024 * 1024;
           if (file.size > maxVideoSize) {
-            throw new Error("视频文件过大，请上传不超过 300MB 的视频。");
+            throw new Error("视频文件过大，请上传不超过 500MB 的视频。");
           }
           const existingImageEl = document.getElementById("entityDisplayImage");
           const existingImage = existingImageEl?.getAttribute("src") || "";
@@ -13003,9 +13003,9 @@
           posterData = uploadedVideoPoster;
         }
         if (videoFile) {
-          const maxVideoSize = 300 * 1024 * 1024;
+          const maxVideoSize = 500 * 1024 * 1024;
           if (videoFile.size > maxVideoSize) {
-            addMsg.textContent = "视频文件过大，请上传不超过 300MB 的视频。";
+            addMsg.textContent = "视频文件过大，请上传不超过 500MB 的视频。";
             return;
           }
           if (!videoData) {

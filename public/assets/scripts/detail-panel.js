@@ -507,8 +507,9 @@
     return "entity/" + raw;
   }
 
-  async function showNodeDetailInline(nodeId) {
+  async function showNodeDetailInline(nodeId, options = {}) {
     if (!nodeId) return;
+    const preserveSidebarState = options && options.preserveSidebarState === true;
     const routeId = (nodeId ?? "").toString().trim();
     const fullId = normalizeEntityIdForApi(routeId);
     const dp = document.getElementById("detailPanel");
@@ -525,12 +526,14 @@
       dp.dataset.entityId = fullId;
       window.kbActiveDetailNodeId = fullId;
       window.kbActiveDetailRouteId = routeId || fullId;
-      window.kbSelectedRowId = routeId || fullId;
-      window.kbSelectedRowIds = new Set([window.kbSelectedRowId]);
-      window.kbSelectedNodeId = window.kbSelectedRowId;
-      window.kbCurrentNodeId = window.kbSelectedRowId;
-      window.kbLastAnchorRowId = window.kbSelectedRowId;
-      if (typeof window.loadAttributes === "function") {
+      if (!preserveSidebarState) {
+        window.kbSelectedRowId = routeId || fullId;
+        window.kbSelectedRowIds = new Set([window.kbSelectedRowId]);
+        window.kbSelectedNodeId = window.kbSelectedRowId;
+        window.kbCurrentNodeId = window.kbSelectedRowId;
+        window.kbLastAnchorRowId = window.kbSelectedRowId;
+      }
+      if (!preserveSidebarState && typeof window.loadAttributes === "function") {
         try {
           window.loadAttributes(fullId);
         } catch (err) {
@@ -576,13 +579,15 @@
         if (!window.kbActiveDetailRouteId) {
           window.kbActiveDetailRouteId = routeId || canonicalId;
         }
-        window.kbSelectedRowId = canonicalId;
-        window.kbSelectedRowIds = new Set([canonicalId]);
-        window.kbSelectedNodeId = canonicalId;
-        window.kbCurrentNodeId = canonicalId;
-        window.kbLastAnchorRowId = canonicalId;
+        if (!preserveSidebarState) {
+          window.kbSelectedRowId = canonicalId;
+          window.kbSelectedRowIds = new Set([canonicalId]);
+          window.kbSelectedNodeId = canonicalId;
+          window.kbCurrentNodeId = canonicalId;
+          window.kbLastAnchorRowId = canonicalId;
+        }
         try {
-          if (typeof window.loadAttributes === "function") {
+          if (!preserveSidebarState && typeof window.loadAttributes === "function") {
             window.loadAttributes(canonicalId);
           }
         } catch (err) {

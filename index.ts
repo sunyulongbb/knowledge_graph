@@ -12,6 +12,7 @@ const port = parseInt(process.env.PORT || "8080");
 const server = Bun.serve({
   port: port,
   idleTimeout: 255,
+  maxRequestBodySize: 500 * 1024 * 1024,
   async fetch(req) {
     const method = req.method;
     let url: URL | null = null;

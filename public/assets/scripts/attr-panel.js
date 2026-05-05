@@ -725,7 +725,8 @@ if (btnAttrReset) {
     const frag = document.createDocumentFragment();
     let lastReadOnlyProp = null;
     let lastEditableProp = null;
-    for (const it of displayItems) {
+    for (let itemIndex = 0; itemIndex < displayItems.length; itemIndex++) {
+      const it = displayItems[itemIndex];
       // If rendering detail (read-only) and value is an array (or a
       // JSON-encoded array string), render each element as its own row
       // so multi-valued properties appear one-per-line. For editable
@@ -744,8 +745,17 @@ if (btnAttrReset) {
         }
       }
       const values = Array.isArray(rawVal) ? rawVal : [rawVal];
+      const currentPropKey = canonicalizePropertyId(it?.property) || "";
+      const nextItem = displayItems[itemIndex + 1] || null;
+      const nextPropKey = nextItem
+        ? canonicalizePropertyId(nextItem?.property) || ""
+        : "";
+      const isLastItemOfPropertyGroup =
+        !nextItem || currentPropKey !== nextPropKey;
       for (let vi = 0; vi < values.length; vi++) {
         const valItem = values[vi];
+        const isLastValue = vi === values.length - 1;
+        const showQuickAddBtn = isLastValue && isLastItemOfPropertyGroup;
         const row = document.createElement("div");
         row.style.display = "flex";
         row.style.alignItems = "center";
@@ -815,19 +825,44 @@ if (btnAttrReset) {
         val.style.fontSize = "12px";
         val.style.padding = "2px 6px";
         val.style.borderRadius = "4px";
+        const valDtype = pickUiDatatype(it) || it.datatype;
+        const renderAsMediaThumb = shouldRenderAsMediaThumb(
+          it,
+          valItem,
+          valDtype,
+        );
         // For detail panel we want multi-line visible values; allow wrapping there.
         if (readOnly) {
           val.style.whiteSpace = "normal";
         } else {
-          val.style.whiteSpace = "nowrap";
-          val.style.overflow = "hidden";
-          val.style.textOverflow = "ellipsis";
+          if (renderAsMediaThumb) {
+            val.style.whiteSpace = "normal";
+            val.style.overflow = "visible";
+            val.style.textOverflow = "clip";
+            val.style.display = "flex";
+            val.style.alignItems = "center";
+            val.style.minHeight = "76px";
+          } else {
+            val.style.whiteSpace = "nowrap";
+            val.style.overflow = "hidden";
+            val.style.textOverflow = "ellipsis";
+          }
         }
-        const valDtype = pickUiDatatype(it) || it.datatype;
         try {
-          val.innerHTML = renderAttrValue(valDtype, valItem);
+          val.innerHTML = renderAsMediaThumb
+            ? renderMediaThumbHtml(valItem)
+            : renderAttrValue(valDtype, valItem);
         } catch (e) {
           val.textContent = formatAttrValue(valDtype, valItem);
+        }
+        if (String(valDtype || "").toLowerCase() === "wikibase-entityid") {
+          val.style.cursor = "pointer";
+          val.title = "点击查看该对象详情";
+          val.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openEntityDetailFromAttrValue(valItem);
+          });
         }
         row.appendChild(label);
         row.appendChild(val);
@@ -868,6 +903,43 @@ if (btnAttrReset) {
           });
         }
         frag.appendChild(row);
+        if (!readOnly && showQuickAddBtn) {
+          const addRow = document.createElement("div");
+          addRow.style.display = "flex";
+          addRow.style.alignItems = "center";
+          addRow.style.gap = "6px";
+          addRow.style.padding = "4px 0";
+
+          const addLabel = document.createElement("div");
+          addLabel.style.flex = "0 0 140px";
+          addLabel.style.color = "var(--muted)";
+          addLabel.style.fontSize = "12px";
+          addLabel.textContent = "";
+
+          const addActionWrap = document.createElement("div");
+          addActionWrap.style.flex = "1";
+          addActionWrap.style.fontSize = "12px";
+          addActionWrap.style.padding = "2px 6px";
+          addActionWrap.style.borderRadius = "4px";
+
+          const quickAddBtn = document.createElement("button");
+          quickAddBtn.type = "button";
+          quickAddBtn.className = "btn sm";
+          quickAddBtn.title = `为${it?.property_label_zh || it?.property || "该属性"}新增属性值`;
+          quickAddBtn.setAttribute("aria-label", quickAddBtn.title);
+          quickAddBtn.style.padding = "2px 10px";
+          quickAddBtn.innerHTML = '<i class="fa-solid fa-plus"></i><span style="margin-left:6px;">新增属性值</span>';
+          quickAddBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openQuickAddAttrForProperty(it, nodeId, addRow);
+          });
+
+          addActionWrap.appendChild(quickAddBtn);
+          addRow.appendChild(addLabel);
+          addRow.appendChild(addActionWrap);
+          frag.appendChild(addRow);
+        }
       }
     }
     container.appendChild(frag);
@@ -1047,6 +1119,109 @@ if (btnAttrReset) {
     const match = trimmed.match(/^(?:entity\/)?([QPLE]\d+)$/i);
     if (!match) return "";
     return match[1].toUpperCase();
+  }
+
+  function extractEntityIdFromAttrValue(value) {
+    try {
+      if (!value && value !== 0) return "";
+      const candidates = [
+        value?.id,
+        value?.["entity-id"],
+        value?.entity_id,
+        value?.entityId,
+        value?.["numeric-id"],
+        value?.numeric_id,
+        value?.numericId,
+        value?.value?.id,
+        value?.value?.["entity-id"],
+        value?.value?.entity_id,
+        value?.value?.entityId,
+        value?.value?.["numeric-id"],
+        value?.value?.numeric_id,
+        value?.value?.numericId,
+      ];
+      for (const candidate of candidates) {
+        if (!candidate && candidate !== 0) continue;
+        const text = String(candidate).trim();
+        if (!text) continue;
+        if (typeof stripEntityIdPrefix === "function") {
+          return stripEntityIdPrefix(text) || text;
+        }
+        return text.replace(/^entity\//i, "");
+      }
+      if (typeof value === "string") {
+        const parsed = parseEntityIdFromInput(value);
+        if (parsed) return parsed;
+        const trimmed = value.trim();
+        if (trimmed) {
+          if (typeof stripEntityIdPrefix === "function") {
+            return stripEntityIdPrefix(trimmed) || trimmed;
+          }
+          return trimmed.replace(/^entity\//i, "");
+        }
+      }
+    } catch {}
+    return "";
+  }
+
+  function openEntityDetailFromAttrValue(value) {
+    try {
+      const routeId = extractEntityIdFromAttrValue(value);
+      if (!routeId) return false;
+      const preservedSidebarState = {
+        selectedRowId: window.kbSelectedRowId,
+        selectedRowIds: window.kbSelectedRowIds
+          ? new Set(window.kbSelectedRowIds)
+          : new Set(),
+        selectedNodeId: window.kbSelectedNodeId,
+        currentNodeId: window.kbCurrentNodeId,
+        lastAnchorRowId: window.kbLastAnchorRowId,
+        formId:
+          document.getElementById("fId")?.value?.toString().trim() || "",
+      };
+      const canonicalId =
+        typeof normalizeEntityIdForApi === "function"
+          ? normalizeEntityIdForApi(routeId)
+          : typeof ensureEntityIdPrefix === "function"
+            ? ensureEntityIdPrefix(routeId)
+            : routeId;
+      window.kbActiveDetailRouteId = routeId;
+      window.kbActiveDetailNodeId = canonicalId || routeId;
+      const restoreSidebarState = () => {
+        try {
+          window.kbSelectedRowId = preservedSidebarState.selectedRowId || "";
+          window.kbSelectedRowIds = new Set(
+            preservedSidebarState.selectedRowIds || [],
+          );
+          window.kbSelectedNodeId = preservedSidebarState.selectedNodeId || "";
+          window.kbCurrentNodeId = preservedSidebarState.currentNodeId || "";
+          window.kbLastAnchorRowId = preservedSidebarState.lastAnchorRowId || "";
+          const formIdEl = document.getElementById("fId");
+          if (formIdEl) formIdEl.value = preservedSidebarState.formId || "";
+        } catch {}
+      };
+      if (typeof showNodeDetailInline === "function") {
+        Promise.resolve(
+          showNodeDetailInline(routeId, { preserveSidebarState: true }),
+        ).finally(restoreSidebarState);
+        restoreSidebarState();
+        try {
+          window.kbViewMode = "detail";
+        } catch {}
+        return true;
+      }
+      if (typeof setViewMode === "function") {
+        setViewMode("detail", { targetNodeId: routeId });
+        return true;
+      }
+      if (typeof focusNode === "function") {
+        focusNode(canonicalId || routeId, { fit: false, duration: 180 });
+        return true;
+      }
+    } catch (err) {
+      console.error("openEntityDetailFromAttrValue failed", err);
+    }
+    return false;
   }
 
   function updateEntitySelectionPreview(label, id) {
@@ -1604,6 +1779,135 @@ if (btnAttrReset) {
     }
   }
 
+  function resolveCommonsMediaSrc(value) {
+    try {
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          const nested = resolveCommonsMediaSrc(item);
+          if (nested) return nested;
+        }
+        return "";
+      }
+      if (value && typeof value === "object") {
+        const candidateKeys = [
+          "url",
+          "href",
+          "src",
+          "image",
+          "imageUrl",
+          "filename",
+          "fileName",
+          "title",
+          "name",
+          "value",
+        ];
+        for (const key of candidateKeys) {
+          const nested = resolveCommonsMediaSrc(value[key]);
+          if (nested) return nested;
+        }
+        return "";
+      }
+      const raw = String(value || "").trim();
+      if (!raw) return "";
+      if (
+        (raw.startsWith('"') && raw.endsWith('"')) ||
+        (raw.startsWith("'") && raw.endsWith("'"))
+      ) {
+        return resolveCommonsMediaSrc(raw.slice(1, -1));
+      }
+      if (
+        (raw.startsWith("[") && raw.endsWith("]")) ||
+        (raw.startsWith("{") && raw.endsWith("}"))
+      ) {
+        try {
+          return resolveCommonsMediaSrc(JSON.parse(raw));
+        } catch {}
+      }
+      if (/[\r\n,]/.test(raw)) {
+        const parts = raw
+          .split(/[\r\n,]+/)
+          .map((part) => part.trim())
+          .filter(Boolean);
+        for (const part of parts) {
+          const nested = resolveCommonsMediaSrc(part);
+          if (nested) return nested;
+        }
+      }
+      if (
+        /^data:image\//i.test(raw) ||
+        /^https?:\/\//i.test(raw) ||
+        raw.startsWith("//") ||
+        raw.startsWith("/") ||
+        raw.startsWith("./") ||
+        raw.startsWith("../")
+      ) {
+        return raw;
+      }
+      const normalized = raw
+        .replace(/^File:/i, "")
+        .replace(/^Image:/i, "")
+        .trim();
+      if (!normalized) return "";
+      return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(normalized)}`;
+    } catch {
+      return "";
+    }
+  }
+
+  function isMediaLikeProperty(item) {
+    try {
+      const text = (
+        item?.property_label_zh ||
+        item?.property_label ||
+        item?.property ||
+        item?.label_zh ||
+        item?.label ||
+        ""
+      )
+        .toString()
+        .trim()
+        .toLowerCase();
+      if (!text) return false;
+      return (
+        text.includes("照片") ||
+        text.includes("图片") ||
+        text.includes("图像") ||
+        text.includes("image") ||
+        text.includes("photo") ||
+        text.includes("media")
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  function shouldRenderAsMediaThumb(item, value, dtype) {
+    try {
+      if (String(dtype || "").toLowerCase() === "commonsmedia") return true;
+      const src = resolveCommonsMediaSrc(value);
+      if (!src) return false;
+      if (
+        /^data:image\//i.test(src) ||
+        /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i.test(src) ||
+        src.startsWith("/static/") ||
+        src.startsWith("/uploads/") ||
+        src.startsWith("/node-images/")
+      ) {
+        return true;
+      }
+      return isMediaLikeProperty(item);
+    } catch {
+      return false;
+    }
+  }
+
+  function renderMediaThumbHtml(value) {
+    const src = resolveCommonsMediaSrc(value);
+    if (!src) return '<span class="prop-val null">(空)</span>';
+    const safeSrc = escapeHtml(src);
+    return `<a class="prop-val commonsmedia-link" href="${safeSrc}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;"><img class="prop-val commonsmedia" src="${safeSrc}" alt="media" style="display:block;max-width:72px;max-height:72px;border-radius:6px;border:1px solid var(--border);object-fit:contain;background:var(--surface-1);" /></a>`;
+  }
+
   // Escape HTML in text nodes
   function escapeHtml(s) {
     if (s == null) return "";
@@ -1669,6 +1973,7 @@ if (btnAttrReset) {
           const href = escapeHtml(String(v || ""));
           return `<a class="prop-val url" href="${href}" target="_blank" rel="noopener noreferrer">${href}</a>`;
         }
+        if (dt === "commonsmedia") return renderMediaThumbHtml(v);
         if (dt === "quantity") {
           const txt = `${v?.amount ?? ""}${v?.unit ? " " + v.unit : ""}`;
           return `<span class="prop-val quantity">${escapeHtml(txt)}</span>`;
@@ -1710,6 +2015,84 @@ if (btnAttrReset) {
     };
 
     return getInner() + qualifierHtml;
+  }
+
+  function openQuickAddAttrForProperty(item, nodeId, anchorRow) {
+    if (!item || !nodeId || !anchorRow) return;
+    resetEditingRow();
+    ensureAttrInlineEditorLayout();
+    try {
+      if (
+        window.kbSelectedAttrIds &&
+        typeof window.kbSelectedAttrIds.clear === "function"
+      ) {
+        window.kbSelectedAttrIds.clear();
+      }
+      window.kbLastAttrAnchorId = "";
+      updateAttrSelectionStyles();
+      ensureAttrButtonsState();
+    } catch {}
+
+    if (attrForm && attrFormBody) {
+      attrFormBody.style.display = "";
+      attrFormBody.classList.remove("collapsed");
+      attrFormBody.classList.add("inline-editing");
+      attrForm.classList.add("value-only-editing");
+      anchorRow.insertAdjacentElement("afterend", attrFormBody);
+    }
+
+    currentAttrEditingRow = anchorRow;
+    anchorRow.classList.add("attr-editing-hidden");
+
+    try {
+      resetAttrForm();
+      currentAttrEditingRow = anchorRow;
+      anchorRow.classList.add("attr-editing-hidden");
+      if (attrForm) attrForm.classList.add("value-only-editing");
+    } catch {}
+
+    const propertyId = item.property || "";
+    const propertyLabel = item.property_label_zh || propertyId;
+    const dtype = pickUiDatatype(item) || item.datatype || "string";
+
+    if (typeof setSelectedSchemaProp === "function") {
+      setSelectedSchemaProp(propertyId, propertyLabel);
+    } else {
+      window.kbSelectedSchemaPropId = propertyId;
+      window.kbSelectedSchemaPropLabel = propertyLabel;
+    }
+
+    if (attrId) attrId.value = "";
+    if (attrProp) attrProp.value = propertyId;
+    if (attrPropLabel) attrPropLabel.value = propertyLabel;
+    if (attrType) attrType.value = dtype;
+    updateDatatypeUI(
+      dtype,
+      item?.datavalue?.type || item?.datavalue_type || item?.valuetype || "",
+    );
+    try {
+      attrValue.value = "";
+      attrValueUrl.value = "";
+      attrValueDate.value = "";
+      attrValueAmount.value = "";
+      attrValueUnit.value = "";
+      attrValueLat.value = "";
+      attrValueLon.value = "";
+      attrValueMonoText.value = "";
+      attrValueMonoLang.value = "";
+      if (attrValueQualifier) attrValueQualifier.value = "";
+      clearImageUpload();
+      clearEntitySearchState();
+      if (attrMsg) attrMsg.textContent = "";
+    } catch {}
+
+    const visibleInput =
+      document.querySelector(
+        '#attrDatatypeGroups .dtype-group[style*="display: flex"] input:not([type="hidden"]), #attrDatatypeGroups .dtype-group[style*="display:flex"] input:not([type="hidden"])',
+      ) || attrValue;
+    if (visibleInput && typeof visibleInput.focus === "function") {
+      setTimeout(() => visibleInput.focus(), 0);
+    }
   }
 
   function fillAttrForm(nodeId, it, valueIndex = -1) {
