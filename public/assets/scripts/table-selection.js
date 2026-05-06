@@ -498,6 +498,35 @@
     return `${diffYears} 年前`;
   }
 
+  function openVideoLightbox(videoUrl, startTime, muted) {
+    const overlay = document.createElement("div");
+    overlay.className = "kb-lightbox-overlay kb-video-lightbox";
+
+    const video = document.createElement("video");
+    video.className = "kb-lightbox-video";
+    video.src = videoUrl;
+    video.controls = true;
+    video.playsInline = true;
+    video.muted = !!muted;
+    video.loop = true;
+    video.autoplay = true;
+    if (startTime) video.currentTime = startTime;
+    overlay.appendChild(video);
+
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "kb-lightbox-close";
+    closeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+    const close = () => { video.pause(); overlay.remove(); document.removeEventListener("keydown", onKey); };
+    closeBtn.addEventListener("click", (e) => { e.stopPropagation(); close(); });
+    overlay.appendChild(closeBtn);
+
+    const onKey = (e) => { if (e.key === "Escape") close(); };
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(overlay);
+    video.play().catch(() => {});
+  }
+
   function buildPreviewVideoElement(node, videoUrl, posterUrl) {
     const wrap = document.createElement("div");
     wrap.className = "table-feed-video-wrap";
@@ -531,21 +560,34 @@
 
     wrap.style.cursor = "pointer";
     wrap.tabIndex = 0;
-    wrap.setAttribute("aria-label", "视频播放区，点击播放/暂停，← → 快退/快进");
+    wrap.setAttribute("aria-label", "视频播放区，点击播放/暂停，双击放大，← → 快退/快进");
 
+    // Single click: play/pause
+    let clickTimer = null;
     wrap.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      if (video.paused) {
-        // Pause all other videos
-        document.querySelectorAll(".table-feed-video").forEach((v) => {
-          if (v !== video && !v.paused) v.pause();
-        });
-        video.play().catch(() => {});
-      } else {
-        video.pause();
-      }
-      wrap.focus();
+      if (clickTimer) return; // suppress click when dblclick fires
+      clickTimer = setTimeout(() => {
+        clickTimer = null;
+        if (video.paused) {
+          document.querySelectorAll(".table-feed-video").forEach((v) => {
+            if (v !== video && !v.paused) v.pause();
+          });
+          video.play().catch(() => {});
+        } else {
+          video.pause();
+        }
+        wrap.focus();
+      }, 220);
+    });
+
+    // Double click: open fullscreen lightbox
+    wrap.addEventListener("dblclick", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
+      openVideoLightbox(videoUrl, video.currentTime, video.muted);
     });
 
     wrap.addEventListener("keydown", (e) => {
@@ -567,6 +609,62 @@
     return wrap;
   }
 
+  function openImageLightbox(imageList, startIndex) {
+    let current = startIndex || 0;
+
+    const overlay = document.createElement("div");
+    overlay.className = "kb-lightbox-overlay";
+
+    const img = document.createElement("img");
+    img.className = "kb-lightbox-img";
+
+    const counter = document.createElement("div");
+    counter.className = "kb-lightbox-counter";
+
+    const setImage = (idx) => {
+      current = (idx + imageList.length) % imageList.length;
+      img.src = imageList[current];
+      counter.textContent = imageList.length > 1 ? `${current + 1} / ${imageList.length}` : "";
+    };
+
+    const close = () => { overlay.remove(); document.removeEventListener("keydown", onKey); };
+
+    const onKey = (e) => {
+      if (e.key === "Escape") { close(); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); setImage(current + 1); }
+      else if (e.key === "ArrowLeft") { e.preventDefault(); setImage(current - 1); }
+    };
+
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+
+    if (imageList.length > 1) {
+      const prev = document.createElement("button");
+      prev.className = "kb-lightbox-btn kb-lightbox-prev";
+      prev.innerHTML = '<i class="fa-solid fa-chevron-left"></i>';
+      prev.addEventListener("click", (e) => { e.stopPropagation(); setImage(current - 1); });
+
+      const next = document.createElement("button");
+      next.className = "kb-lightbox-btn kb-lightbox-next";
+      next.innerHTML = '<i class="fa-solid fa-chevron-right"></i>';
+      next.addEventListener("click", (e) => { e.stopPropagation(); setImage(current + 1); });
+
+      overlay.appendChild(prev);
+      overlay.appendChild(next);
+    }
+
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "kb-lightbox-close";
+    closeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+    closeBtn.addEventListener("click", (e) => { e.stopPropagation(); close(); });
+
+    overlay.appendChild(img);
+    overlay.appendChild(counter);
+    overlay.appendChild(closeBtn);
+    document.body.appendChild(overlay);
+    document.addEventListener("keydown", onKey);
+    setImage(current);
+  }
+
   function buildImageStripElement(node, imageList) {
     const strip = document.createElement("div");
     strip.className = "table-feed-img-strip";
@@ -574,11 +672,11 @@
       const item = document.createElement("button");
       item.type = "button";
       item.className = "table-feed-img-strip-item";
-      item.title = "打开图库";
+      item.title = "放大查看";
       item.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        openMediaViewForNode("gallery", node);
+        openImageLightbox(imageList, index);
       });
       const img = document.createElement("img");
       img.alt = node?.label_zh || node?.label || node?.name || `图片 ${index + 1}`;
@@ -638,7 +736,7 @@
       const hasImage = imageList.length > 0;
       const hasVideo = Boolean(videoUrl);
       const showImageMedia = hasImage && !hasVideo;
-      const label = (n.label_zh || n.label || n.name || "未命名节点").trim();
+      const label = (n.label_zh || n.label || n.name || "").trim();
       const desc = (n.desc_zh || n.description || "").trim();
       const tags = normalizeStringList(n.tags);
       const aliases = normalizeStringList(n.aliases_zh || n.aliases);
@@ -685,10 +783,8 @@
           avatarImg.src = avatarImageUrl;
         }
         avatar.appendChild(avatarImg);
-      } else {
-        avatar.textContent = (label[0] || "节").toUpperCase();
+        header.appendChild(avatar);
       }
-      header.appendChild(avatar);
 
       const meta = document.createElement("div");
       meta.className = "table-feed-meta";
@@ -804,13 +900,6 @@
 
       header.appendChild(actions);
       card.appendChild(header);
-
-      if (desc) {
-        const body = document.createElement("div");
-        body.className = "table-feed-body";
-        body.textContent = desc;
-        card.appendChild(body);
-      }
 
       if (tags.length) {
         const tagList = document.createElement("div");

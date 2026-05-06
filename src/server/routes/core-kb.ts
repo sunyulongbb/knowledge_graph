@@ -2285,11 +2285,19 @@ export async function handleCoreKbRoutes(
       let id = body.id;
       if (!id) id = getNextNumericNodeId();
       id = id.toString();
-      const name = body.name || "New Node";
+      const name =
+        body.name !== undefined && body.name !== null
+          ? String(body.name).trim()
+          : "";
       const type = body.type !== undefined ? String(body.type) : null;
       const desc = body.description || "";
       const aliases = JSON.stringify(body.aliases || []);
       const tags = JSON.stringify(body.tags || []);
+      const mentions =
+        body.mentions && typeof body.mentions === "object"
+          ? body.mentions
+          : {};
+      const dataJson = JSON.stringify({ mentions });
       let image = body.image != null ? String(body.image).trim() : "";
       let link = body.link != null ? String(body.link).trim() : "";
       let video = body.video != null ? String(body.video).trim() : "";
@@ -2314,7 +2322,7 @@ export async function handleCoreKbRoutes(
       }
 
       db.run(
-        "INSERT INTO nodes (id, name, type, description, aliases, tags, image, link, video, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO nodes (id, name, type, description, aliases, tags, data, image, link, video, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
           id,
           name,
@@ -2322,6 +2330,7 @@ export async function handleCoreKbRoutes(
           desc,
           aliases,
           tags,
+          dataJson,
           image,
           link,
           video,
@@ -2378,6 +2387,21 @@ export async function handleCoreKbRoutes(
       if (body.tags !== undefined) {
         updates.push("tags = ?");
         params.push(JSON.stringify(body.tags));
+      }
+      if (body.mentions !== undefined) {
+        let existingData: Record<string, any> = {};
+        try {
+          const existingNode = hasProjectScope
+            ? db
+                .query(`SELECT data FROM nodes WHERE id = ? AND ${scopedClause()}`)
+                .get(id, scopedProjectId)
+            : db.query("SELECT data FROM nodes WHERE id = ?").get(id);
+          existingData = existingNode?.data ? JSON.parse(existingNode.data) : {};
+        } catch {}
+        const mentionPayload =
+          body.mentions && typeof body.mentions === "object" ? body.mentions : {};
+        updates.push("data = ?");
+        params.push(JSON.stringify({ ...existingData, mentions: mentionPayload }));
       }
       if (body.categories !== undefined) {
         const normalizedCategories = normalizeListValue(body.categories || []);

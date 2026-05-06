@@ -1703,10 +1703,8 @@
                 </div>
                 <div class="social-compose-main">
                   <div class="social-compose-meta-row">
-                    <strong class="social-compose-author">实体创建</strong>
-                    <span class="social-compose-sep">·</span>
-                    <button id="btnAddOntologyChip" class="social-ontology-trigger" type="button">添加本体</button>
-                    <select id="composerTypeSelect" class="social-ontology-select" aria-label="添加本体">
+                    <button id="btnAddOntologyChip" class="social-ontology-trigger" type="button"><i class="fa-solid fa-tag"></i> 添加本体</button>
+                    <select id="composerTypeSelect" class="social-ontology-select" aria-label="添加本体" style="display:none;">
                       <option value="">请选择本体</option>
                     </select>
                     <a id="entityDisplayLink" class="wd-entity-link" href="#" target="_blank" rel="noreferrer noopener"
@@ -1732,14 +1730,7 @@
                 <button id="btnEntityLink" type="button" class="btn wd-btn-icon" title="设置外部链接">
                   <i class="fa-solid fa-link"></i>
                 </button>
-                <button id="btnEntityEdit" type="button" class="btn wd-btn-icon" title="编辑实体">
-                  <i class="fa-solid fa-pen"></i>
-                </button>
-                <button id="btnCancelEdit" class="btn wd-btn-secondary wd-btn-icon" type="button" style="display:none"
-                  title="取消编辑" aria-label="取消编辑">
-                  <i class="fa-solid fa-xmark"></i>
-                </button>
-                <span id="entityVideoUploadStatus" class="wd-msg" style="margin-left:4px; font-size:0.9rem; display:none;"></span>
+                <span id="entityVideoUploadStatus" style="display:none;"></span>
                 <span id="addMsg" class="wd-msg"></span>
                 <span id="entityIdBadge" class="wd-entity-id-badge" style="display:none"></span>
                 <button id="btnSubmit" class="btn wd-btn-primary social-submit-btn" type="submit" title="发布实体" aria-label="发布实体">
@@ -1751,7 +1742,7 @@
                   <div class="clean-task-progress-bar">
                     <div id="videoUploadProgressFill" class="clean-task-progress-fill" style="width:0%"></div>
                   </div>
-                  <span id="videoUploadProgressText" class="clean-task-progress-text">上传中 0%</span>
+                  <span id="videoUploadProgressText" style="display:none;"></span>
                 </div>
               </div>
               <p id="entityDisplayDesc" class="wd-entity-desc" style="display:none"></p>
@@ -7779,6 +7770,7 @@
       const normalized = normalizeViewModeInput(mode) || "table";
       const skipRouteUpdate = options.skipRouteUpdate === true;
       const replaceRoute = options.replaceRoute === true;
+      const focusDetailOnly = options.focusDetailOnly === true;
       const entryTaskIdRaw =
         options.entryTaskId === undefined || options.entryTaskId === null
           ? ""
@@ -7827,8 +7819,12 @@
       if (kbViewModeInitialized && previousMode === normalized) {
         if (normalized === "detail" && hasTargetNode) {
           try {
-            showNodeDetailInline(targetNodeIdRaw);
-            enterEditById(targetNodeIdRaw);
+            showNodeDetailInline(targetNodeIdRaw, {
+              preserveSidebarState: focusDetailOnly,
+            });
+            if (!focusDetailOnly) {
+              enterEditById(targetNodeIdRaw);
+            }
           } catch { }
           if (!skipRouteUpdate) {
             const routeNode =
@@ -8098,10 +8094,16 @@
 
       } else if (isDetail) {
         // 优先显示kbSelectedNodeId
-        let detailId = window.kbSelectedNodeId || targetNodeIdRaw || (window.kbSelectedRowId || "").trim() || (document.getElementById("fId")?.value || "").trim();
+        let detailId =
+          targetNodeIdRaw ||
+          window.kbSelectedNodeId ||
+          (window.kbSelectedRowId || "").trim() ||
+          (document.getElementById("fId")?.value || "").trim();
         if (detailId) {
           try {
-            showNodeDetailInline(detailId);
+            showNodeDetailInline(detailId, {
+              preserveSidebarState: focusDetailOnly,
+            });
             // 高亮cy节点
             if (window.kbCy) {
               window.kbCy.nodes().removeClass('selected');
@@ -10452,10 +10454,14 @@
         try {
           // 保证每个节点都带有 image 字段，避免 Cytoscape 报错
           nodesRaw.forEach(n => {
-            if (n.data) {
-              if (!('image' in n.data)) n.data.image = '';
-            } else {
-              if (!('image' in n)) n.image = '';
+            const nodeData = n.data || n;
+            if (!('image' in nodeData)) nodeData.image = '';
+
+            // 名称可为空；为了保证关系图可读性，图上显示 label 回退到节点 id
+            const nodeId = (nodeData.id || nodeData._id || '').toString().trim();
+            const displayLabel = (nodeData.label_zh || nodeData.label || nodeData.name || '').toString().trim();
+            if (!displayLabel && nodeId) {
+              nodeData.label = nodeId;
             }
           });
           window.kbData = {
@@ -12372,11 +12378,7 @@
     window.kbPendingEntityImageDataUrl = "";
 
     function updateEntityVideoUploadStatus(text) {
-      if (addMsg) addMsg.textContent = text;
-      if (entityVideoUploadStatus) {
-        entityVideoUploadStatus.textContent = text;
-        entityVideoUploadStatus.style.display = text ? "inline-block" : "none";
-      }
+      // text notifications removed, progress bar only
     }
 
     async function saveVideoToCurrentNode(videoUrl, posterData) {
@@ -12499,7 +12501,6 @@
         if (!fVideo || !fVideo.files || !fVideo.files.length) return;
         const file = fVideo.files[0];
         if (!file) return;
-        if (addMsg) addMsg.textContent = "正在上传视频...";
         try {
           const maxVideoSize = 500 * 1024 * 1024;
           if (file.size > maxVideoSize) {
@@ -12521,33 +12522,30 @@
           }
           const uploadForm = new FormData();
           uploadForm.append("file", file);
-          updateEntityVideoUploadStatus("正在上传视频 0%...");
+          updateEntityVideoUploadStatus("");
           hideVideoUploadProgress();
-          setVideoUploadProgress(0, "上传中 0%");
+          setVideoUploadProgress(0, "");
           const uploadResp = await apiPostFormWithProgress(
             "/api/kb/upload-video",
             uploadForm,
             (percent) => {
-              const progressText = `正在上传视频 ${percent}%...`;
-              updateEntityVideoUploadStatus(progressText);
-              setVideoUploadProgress(percent, `上传中 ${percent}%`);
+              setVideoUploadProgress(percent, "");
             }
           );
           if (!uploadResp || !uploadResp.url) {
             throw new Error("视频上传失败");
           }
           uploadedVideoUrl = uploadResp.url;
-          setVideoUploadProgress(100, "上传完成 100%");
+          setVideoUploadProgress(100, "");
           const saveResp = await saveVideoToCurrentNode(uploadedVideoUrl, uploadedVideoPoster);
           if (saveResp && saveResp.ok) {
-            updateEntityVideoUploadStatus("视频已上传并已保存到节点。");
+            // uploaded ok
           } else if (saveResp && !saveResp.ok) {
-            updateEntityVideoUploadStatus("视频已上传，但保存到节点失败，请手动保存。");
+            // save failed
           } else {
-            updateEntityVideoUploadStatus("视频已上传，请点击保存以保留更改。");
+            // not saved yet
           }
         } catch (err) {
-          updateEntityVideoUploadStatus(err?.message || "视频上传失败");
           uploadedVideoUrl = "";
           uploadedVideoPoster = "";
           hideVideoUploadProgress();
@@ -12754,10 +12752,68 @@
       });
     }
     const fType = document.getElementById("fType");
+    window.kbComposerMentionEntityMap = window.kbComposerMentionEntityMap || Object.create(null);
+    const MENTION_LABEL_REGEX = /@([^\s#@，,。.!！？；;：:）)\]}>》」』】]+)/g;
+
+    function createComposerMentionChip(label, entityId) {
+      const chip = document.createElement('a');
+      chip.className = 'composer-mention-chip';
+      chip.contentEditable = 'false';
+      chip.dataset.entityId = entityId || '';
+      chip.dataset.entityLabel = label || '';
+      chip.href = '#';
+      chip.tabIndex = -1;
+      chip.textContent = '@' + (label || '');
+      chip.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const id = chip.dataset.entityId || '';
+        if (id && typeof window.setViewMode === 'function') {
+          window.setViewMode('detail', {
+            targetNodeId: id,
+            focusDetailOnly: true,
+          });
+        }
+      });
+      return chip;
+    }
+
+    function renderComposerMentionsFromText(el, text) {
+      if (!el) return;
+      const src = (text || '').toString();
+      const map = window.kbComposerMentionEntityMap || Object.create(null);
+      const mentionRegex = MENTION_LABEL_REGEX;
+      let last = 0;
+      let matched = false;
+      const frag = document.createDocumentFragment();
+      let m;
+      while ((m = mentionRegex.exec(src)) !== null) {
+        const label = (m[1] || '').trim();
+        const full = m[0] || '';
+        const idx = m.index;
+        if (idx > last) frag.appendChild(document.createTextNode(src.slice(last, idx)));
+        const entityId = map[label] || '';
+        if (entityId) {
+          frag.appendChild(createComposerMentionChip(label, entityId));
+          matched = true;
+        } else {
+          frag.appendChild(document.createTextNode(full));
+        }
+        last = idx + full.length;
+      }
+      if (last < src.length) frag.appendChild(document.createTextNode(src.slice(last)));
+      if (!matched) {
+        el.textContent = src;
+        return;
+      }
+      el.innerHTML = '';
+      el.appendChild(frag);
+    }
+
     function updateEntityDisplayName(el, name) {
       if (!el) return;
       const fullName = (name || "").trim();
-      el.textContent = fullName || "";
+      renderComposerMentionsFromText(el, fullName || "");
       if (fullName) {
         el.title = fullName;
       } else {
@@ -12798,6 +12854,34 @@
       toggleBtn.style.display = '';
       toggleBtn.textContent = expanded ? '收起' : '展开';
     }
+
+    function collectComposerMentionMap(rawText) {
+      const text = (rawText || '').toString();
+      const globalMap = window.kbComposerMentionEntityMap || Object.create(null);
+      const filtered = Object.create(null);
+
+      // 1) 优先从当前已插入的 mention chip 采集，避免标点和零宽字符干扰
+      if (entityDisplayName) {
+        const chips = entityDisplayName.querySelectorAll('.composer-mention-chip[data-entity-id][data-entity-label]');
+        chips.forEach((chip) => {
+          const label = (chip.dataset.entityLabel || '').trim();
+          const entityId = (chip.dataset.entityId || '').trim();
+          if (label && entityId) filtered[label] = entityId;
+        });
+      }
+
+      // 2) 兜底：对纯文本中的 @mention 做匹配，只保留已知映射
+      let m;
+      while ((m = MENTION_LABEL_REGEX.exec(text)) !== null) {
+        const label = (m[1] || '').trim();
+        if (!label || filtered[label]) continue;
+        const entityId = globalMap[label];
+        if (entityId) {
+          filtered[label] = entityId;
+        }
+      }
+      return filtered;
+    }
     function resetFormToAdd() {
       fId.value = "";
       fName.value = "";
@@ -12807,14 +12891,15 @@
       uploadedVideoUrl = "";
       uploadedVideoPoster = "";
       window.kbPendingEntityImageDataUrl = "";
+      window.kbComposerMentionEntityMap = Object.create(null);
       fAliases.value = "";
       fTags.value = "";
       if (fType) fType.value = "";
       if (composerTypeSelect) composerTypeSelect.value = "";
+      try { syncComposerTypeOptions(); } catch { }
       btnSubmit.textContent = '发布';
       btnSubmit.title = '发布实体';
       btnSubmit.setAttribute('aria-label', '发布实体');
-      btnCancelEdit.style.display = "none";
       addMsg.textContent = "";
       // Reset entity header
       try {
@@ -12884,6 +12969,10 @@
       fAliases.value = toListString(aliasSource);
       const tagSource = node?.tags ?? node?.tag_list ?? [];
       fTags.value = toListString(tagSource);
+      window.kbComposerMentionEntityMap =
+        node && node.mentions && typeof node.mentions === 'object'
+          ? { ...node.mentions }
+          : Object.create(null);
       if (fLink) fLink.value = (node?.link || node?.url || "")?.toString().trim();
       if (fLink) fLink.value = (node?.link || node?.url || "")?.toString().trim();
       if (fVideo) fVideo.value = "";
@@ -12892,10 +12981,10 @@
       window.kbPendingEntityImageDataUrl = "";
       if (fType) fType.value = node?.type || "";
       if (composerTypeSelect) composerTypeSelect.value = node?.type || "";
+      try { syncComposerTypeOptions(); } catch { }
       btnSubmit.textContent = '保存';
       btnSubmit.title = '保存修改';
       btnSubmit.setAttribute('aria-label', '保存修改');
-      btnCancelEdit.style.display = "";
       // Update entity header
       try {
         const eName = document.getElementById('entityDisplayName');
@@ -12903,7 +12992,7 @@
         const eBadge = document.getElementById('entityIdBadge');
         const eAliases = document.getElementById('entityDisplayAliases');
         const eAliasVals = document.getElementById('entityAliasValues');
-        if (eName) updateEntityDisplayName(eName, nameVal || '未命名实体');
+        if (eName) updateEntityDisplayName(eName, nameVal || '');
         if (eDesc) {
           if (descVal && descVal.trim()) {
             eDesc.textContent = descVal;
@@ -13016,10 +13105,7 @@
       const videoFile = fVideo?.files?.[0];
       const aliases = parseListInput(fAliases.value || "");
       const tags = parseListInput(fTags.value || "");
-      if (!name) {
-        addMsg.textContent = "请输入名称";
-        return;
-      }
+      const mentionMap = collectComposerMentionMap(entityDisplayName?.innerText || '');
       try {
         const isEdit = !!(fId.value && fId.value.trim());
         const nodeType = fType ? (fType.value || "").trim() : "";
@@ -13036,9 +13122,7 @@
             return;
           }
           if (!videoData) {
-            addMsg.textContent = "正在提取视频关键帧…";
             posterData = await captureVideoPoster(videoFile);
-            addMsg.textContent = "正在上传视频文件…";
             const uploadForm = new FormData();
             uploadForm.append("file", videoFile);
             const uploadResp = await apiPostForm("/api/kb/upload-video", uploadForm);
@@ -13056,6 +13140,7 @@
           link,
           aliases,
           tags,
+          mentions: mentionMap,
           type: nodeType || null,
           ...(finalImageData ? { image: finalImageData } : {}),
           ...(videoData ? { video: videoData } : {}),
@@ -13092,18 +13177,25 @@
             ? "保存失败"
             : "创建失败";
 
+        if (res?.ok) {
+          hideVideoUploadProgress();
+        }
+
         const nodeData = res?.node;
         const nodeId = nodeData?._id || nodeData?.id;
 
         if (!isEdit && nodeData && window.kbCy) {
           // 新增节点：直接添加到 cytoscape 图中
           try {
+            const graphDisplayLabel =
+              (nodeData.label || nodeData.label_zh || nodeData.name || '').toString().trim() ||
+              (nodeId || '').toString().trim();
             const newCyNode = {
               group: 'nodes',
               data: {
                 id: nodeId,
-                label: nodeData.label || nodeData.name || name,
-                label_zh: nodeData.label_zh || name,
+                label: graphDisplayLabel,
+                label_zh: nodeData.label_zh || '',
                 color: nodeData.color || '#94a3b8',
                 type: nodeData.type || nodeData.classLabel || '实体',
                 classId: nodeData.classId,
@@ -13160,8 +13252,11 @@
             const ele = window.kbCy.getElementById(nodeId);
             if (ele && ele.length > 0) {
               const nd = nodeData || {};
-              ele.data('label', nd.label || nd.name || name);
-              ele.data('label_zh', nd.label_zh || name);
+              const graphDisplayLabel =
+                (nd.label || nd.label_zh || nd.name || '').toString().trim() ||
+                (nodeId || '').toString().trim();
+              ele.data('label', graphDisplayLabel);
+              ele.data('label_zh', nd.label_zh || '');
               ele.data('description', nd.description || description);
               if (nd.type !== undefined) ele.data('type', nd.type || nd.classLabel || '实体');
               if (nd.classId) ele.data('classId', nd.classId);
@@ -13253,6 +13348,7 @@
     function syncComposerToHiddenFields() {
       if (!entityDisplayName) return;
       const rawText = (entityDisplayName.innerText || '')
+        .replace(/\u200B/g, '')
         .replace(/\u00A0/g, ' ')
         .replace(/\r\n?/g, '\n');
       const normalized = rawText.replace(/\n{3,}/g, '\n\n').trim();
@@ -13296,13 +13392,201 @@
 
     if (entityDisplayName) {
       entityDisplayName.addEventListener('input', syncComposerToHiddenFields);
+      entityDisplayName.addEventListener('paste', (event) => {
+        event.preventDefault();
+        const plainText = (event.clipboardData?.getData('text/plain') || '').replace(/\r\n?/g, '\n');
+        if (!plainText) return;
+
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+          const range = sel.getRangeAt(0);
+          range.deleteContents();
+          const textNode = document.createTextNode(plainText);
+          range.insertNode(textNode);
+          range.setStartAfter(textNode);
+          range.setEndAfter(textNode);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        } else {
+          entityDisplayName.appendChild(document.createTextNode(plainText));
+        }
+        syncComposerToHiddenFields();
+      });
       entityDisplayName.addEventListener('keydown', (event) => {
         if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
           event.preventDefault();
           syncComposerToHiddenFields();
           if (form && typeof form.requestSubmit === 'function') form.requestSubmit();
         }
+        // @mention 下拉导航
+        const mentionDrop = document.getElementById('composerMentionDropdown');
+        if (mentionDrop && mentionDrop.style.display !== 'none') {
+          const items = mentionDrop.querySelectorAll('.composer-mention-item');
+          let cur = mentionDrop.querySelector('.composer-mention-item.active');
+          let curIdx = cur ? Array.from(items).indexOf(cur) : -1;
+          if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            const next = (curIdx + 1) % items.length;
+            items.forEach(el => el.classList.remove('active'));
+            items[next].classList.add('active');
+            items[next].scrollIntoView({ block: 'nearest' });
+          } else if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            const prev = (curIdx - 1 + items.length) % items.length;
+            items.forEach(el => el.classList.remove('active'));
+            items[prev].classList.add('active');
+            items[prev].scrollIntoView({ block: 'nearest' });
+          } else if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey) {
+            const active = mentionDrop.querySelector('.composer-mention-item.active');
+            if (active) { event.preventDefault(); active.click(); }
+          } else if (event.key === 'Escape') {
+            mentionDrop.style.display = 'none';
+          }
+        }
       });
+
+      // @mention 搜索逻辑
+      (function setupMentionSearch() {
+        let mentionTimer = null;
+        let mentionStart = null; // position tracking via marker
+
+        function getAtMentionQuery() {
+          const sel = window.getSelection();
+          if (!sel || !sel.rangeCount) return null;
+          const range = sel.getRangeAt(0);
+          if (!entityDisplayName.contains(range.startContainer)) return null;
+          // Get text before cursor in current text node
+          const node = range.startContainer;
+          if (node.nodeType !== Node.TEXT_NODE) return null;
+          const textBefore = node.textContent.slice(0, range.startOffset);
+          const atIdx = textBefore.lastIndexOf('@');
+          if (atIdx < 0) return null;
+          const query = textBefore.slice(atIdx + 1);
+          // If there's a space after @, close
+          if (query.includes(' ')) return null;
+          return { query, atIdx, textNode: node };
+        }
+
+        function closeDropdown() {
+          const d = document.getElementById('composerMentionDropdown');
+          if (d) d.style.display = 'none';
+        }
+
+        function insertMention(node, label) {
+          // Find the @query range and replace with a styled chip element
+          const sel = window.getSelection();
+          if (!sel || !sel.rangeCount) return;
+          const ctx = getAtMentionQuery();
+          if (!ctx) return;
+          const { atIdx, textNode } = ctx;
+          const cursorOffset = sel.getRangeAt(0).startOffset;
+          const before = textNode.textContent.slice(0, atIdx);
+          const after = textNode.textContent.slice(cursorOffset);
+
+          // Build chip element
+          const entityId = node._id || node.id || '';
+          if (label && entityId) {
+            window.kbComposerMentionEntityMap[label] = entityId;
+          }
+          const chip = createComposerMentionChip(label, entityId);
+
+          // Split the textNode and insert chip
+          const beforeNode = document.createTextNode(before);
+          const afterNode = document.createTextNode('\u200B' + after);
+          const parent = textNode.parentNode;
+          parent.insertBefore(beforeNode, textNode);
+          parent.insertBefore(chip, textNode);
+          parent.insertBefore(afterNode, textNode);
+          parent.removeChild(textNode);
+
+          // Move cursor to after chip
+          const newRange = document.createRange();
+          newRange.setStart(afterNode, 1);
+          newRange.collapse(true);
+          sel.removeAllRanges();
+          sel.addRange(newRange);
+          closeDropdown();
+          syncComposerToHiddenFields();
+        }
+
+        function renderMentionDropdown(nodes, query) {
+          let drop = document.getElementById('composerMentionDropdown');
+          if (!drop) {
+            drop = document.createElement('div');
+            drop.id = 'composerMentionDropdown';
+            drop.style.cssText = 'position:absolute;z-index:9999;background:var(--surface-0,#fff);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.12);min-width:200px;max-width:320px;max-height:240px;overflow-y:auto;padding:4px 0;display:none;';
+            document.body.appendChild(drop);
+          }
+          drop.innerHTML = '';
+          if (!nodes.length) { drop.style.display = 'none'; return; }
+          nodes.forEach((n, idx) => {
+            const label = n.label_zh || n.label || n.name || n._id || n.id || '';
+            const type = n.type || n.entity_type || '';
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'composer-mention-item' + (idx === 0 ? ' active' : '');
+            item.style.cssText = 'display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:8px 14px;border:none;background:transparent;cursor:pointer;font-size:13px;color:var(--fg);';
+            const nameSpan = document.createElement('span');
+            nameSpan.style.fontWeight = '500';
+            nameSpan.textContent = label;
+            item.appendChild(nameSpan);
+            if (type) {
+              const typeSpan = document.createElement('span');
+              typeSpan.style.cssText = 'margin-left:auto;font-size:11px;color:var(--muted);';
+              typeSpan.textContent = type;
+              item.appendChild(typeSpan);
+            }
+            item.addEventListener('mouseenter', () => {
+              drop.querySelectorAll('.composer-mention-item').forEach(el => el.classList.remove('active'));
+              item.classList.add('active');
+            });
+            item.addEventListener('click', () => insertMention(n, label));
+            drop.appendChild(item);
+          });
+          // Position below cursor
+          const sel = window.getSelection();
+          if (sel && sel.rangeCount) {
+            const rect = sel.getRangeAt(0).getBoundingClientRect();
+            drop.style.display = 'block';
+            drop.style.left = Math.min(rect.left, window.innerWidth - 340) + 'px';
+            drop.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+          }
+        }
+
+        async function fetchMentions(query) {
+          const url = new URL('/api/kb/entity_search', window.location.origin);
+          url.searchParams.set('q', query || '');
+          url.searchParams.set('limit', '8');
+          if (typeof window.appendCurrentDbParam === 'function') {
+            const su = window.appendCurrentDbParam(url);
+            if (su instanceof URL) url.search = su.search;
+          }
+          try {
+            const resp = await fetch(url.toString());
+            if (!resp.ok) return [];
+            const data = await resp.json();
+            return Array.isArray(data.nodes) ? data.nodes : [];
+          } catch { return []; }
+        }
+
+        entityDisplayName.addEventListener('input', () => {
+          clearTimeout(mentionTimer);
+          const ctx = getAtMentionQuery();
+          if (!ctx) { closeDropdown(); return; }
+          const { query } = ctx;
+          mentionTimer = setTimeout(async () => {
+            const nodes = await fetchMentions(query);
+            renderMentionDropdown(nodes, query);
+          }, 200);
+        });
+
+        document.addEventListener('click', (e) => {
+          const drop = document.getElementById('composerMentionDropdown');
+          if (drop && !drop.contains(e.target) && e.target !== entityDisplayName) {
+            closeDropdown();
+          }
+        });
+      })();
     }
 
     if (fDesc) {
@@ -13367,6 +13651,15 @@
         composerTypeSelect.innerHTML = fType.innerHTML;
       }
       composerTypeSelect.value = fType.value || '';
+      if (btnAddOntologyChip) {
+        const selectedOpt = Array.from(composerTypeSelect.options || []).find(
+          (opt) => opt.value === composerTypeSelect.value,
+        );
+        const selectedText = (selectedOpt?.textContent || '').trim();
+        btnAddOntologyChip.innerHTML = selectedOpt && selectedOpt.value
+          ? `<i class="fa-solid fa-tag"></i> ${selectedText}`
+          : '<i class="fa-solid fa-tag"></i> 添加本体';
+      }
     }
 
     if (fType && composerTypeSelect) {
@@ -13379,12 +13672,49 @@
       fType.addEventListener('change', syncComposerTypeOptions);
       composerTypeSelect.addEventListener('change', () => {
         fType.value = composerTypeSelect.value || '';
+        fType.dispatchEvent(new Event('input', { bubbles: true }));
+        fType.dispatchEvent(new Event('change', { bubbles: true }));
       });
     }
 
     if (btnAddOntologyChip && composerTypeSelect) {
-      btnAddOntologyChip.addEventListener('click', () => {
-        composerTypeSelect.focus();
+      // Build floating dropdown for ontology selection
+      const ontologyDropdown = document.createElement('div');
+      ontologyDropdown.id = 'ontologyDropdown';
+      ontologyDropdown.className = 'ontology-floating-dropdown';
+      ontologyDropdown.style.display = 'none';
+      btnAddOntologyChip.parentElement.style.position = 'relative';
+      btnAddOntologyChip.insertAdjacentElement('afterend', ontologyDropdown);
+
+      function buildOntologyDropdown() {
+        ontologyDropdown.innerHTML = '';
+        const options = Array.from(composerTypeSelect.options);
+        options.forEach((opt) => {
+          const item = document.createElement('button');
+          item.type = 'button';
+          item.className = 'ontology-dropdown-item' + (opt.value === composerTypeSelect.value ? ' selected' : '');
+          item.textContent = opt.textContent;
+          item.dataset.value = opt.value;
+          item.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            composerTypeSelect.value = opt.value;
+            composerTypeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+            ontologyDropdown.style.display = 'none';
+            buildOntologyDropdown();
+          });
+          ontologyDropdown.appendChild(item);
+        });
+      }
+
+      btnAddOntologyChip.addEventListener('click', (e) => {
+        e.stopPropagation();
+        buildOntologyDropdown();
+        const isVisible = ontologyDropdown.style.display !== 'none';
+        ontologyDropdown.style.display = isVisible ? 'none' : 'block';
+      });
+
+      document.addEventListener('click', () => {
+        ontologyDropdown.style.display = 'none';
       });
     }
 

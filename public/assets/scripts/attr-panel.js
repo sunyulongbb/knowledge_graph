@@ -718,6 +718,15 @@ if (btnAttrReset) {
       }
     }
 
+    // 将相同属性名的条目排在一起（稳定排序，保留原有相对顺序）
+    displayItems = [...displayItems].sort((a, b) => {
+      const ka = canonicalizePropertyId(a?.property) || a?.property_label_zh || a?.property || "";
+      const kb = canonicalizePropertyId(b?.property) || b?.property_label_zh || b?.property || "";
+      if (ka < kb) return -1;
+      if (ka > kb) return 1;
+      return 0;
+    });
+
     const frag = document.createDocumentFragment();
     let lastReadOnlyProp = null;
     let lastEditableProp = null;
@@ -862,6 +871,56 @@ if (btnAttrReset) {
         }
         row.appendChild(label);
         row.appendChild(val);
+        // Inline delete button for editable lists
+        if (!readOnly) {
+          const delBtn = document.createElement("button");
+          delBtn.type = "button";
+          delBtn.className = "attr-row-del-btn";
+          delBtn.title = "删除该条关系";
+          delBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+          delBtn.style.cssText = "flex:0 0 auto;padding:2px 6px;border:none;background:transparent;color:var(--muted);cursor:pointer;border-radius:4px;font-size:12px;opacity:0;transition:opacity 0.15s;";
+          delBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            if (!confirm("确定删除该条关系？")) return;
+            const nodeIdRaw = (fId.value || "").trim();
+            const nodeId = nodeIdRaw.startsWith("entity/") ? nodeIdRaw : "entity/" + nodeIdRaw;
+            const parts = dataId.split("::");
+            const attrDbId = parts[0];
+            const valueIndex = parts.length > 1 ? parseInt(parts[1], 10) : -1;
+            try {
+              const originalItem = Array.isArray(window.kbAttrItems)
+                ? window.kbAttrItems.find((x) => x.id === attrDbId)
+                : null;
+              if (originalItem && Array.isArray(originalItem.value) && valueIndex >= 0) {
+                const newArray = originalItem.value.filter((_, idx) => idx !== valueIndex);
+                if (newArray.length === 0) {
+                  await deleteAttr(attrDbId);
+                } else {
+                  const saveUrl = new URL("/api/kb/attributes/save", window.location.origin);
+                  if (typeof window.appendCurrentDbParam === "function") {
+                    const su = window.appendCurrentDbParam(saveUrl);
+                    if (su instanceof URL) saveUrl.search = su.search;
+                  }
+                  await fetch(saveUrl.toString(), {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ id: attrDbId, node_id: nodeId, property: originalItem.property, datatype: originalItem.datatype, value: newArray }),
+                  });
+                }
+              } else {
+                await deleteAttr(attrDbId);
+              }
+              window.kbSelectedAttrIds.delete(dataId);
+              await loadAttributes(nodeId);
+            } catch (err) {
+              console.error(err);
+              alert("删除失败: " + (err.message || err));
+            }
+          });
+          row.appendChild(delBtn);
+          row.addEventListener("mouseenter", () => { delBtn.style.opacity = "1"; });
+          row.addEventListener("mouseleave", () => { delBtn.style.opacity = "0"; });
+        }
         // Selection/edit behavior only for editable lists (not detail view)
         if (!readOnly) {
           row.addEventListener("click", (e) => {
