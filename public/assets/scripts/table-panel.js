@@ -6,6 +6,7 @@
   let tblActiveType = "";
   let tblActiveClassId = "";
   let tblActiveClassLabel = "";
+  const EMPTY_TYPE_FILTER = "__EMPTY_NODE_TYPE__";
 
   const btnPrevPage = document.getElementById("btnPrevPage");
   const btnNextPage = document.getElementById("btnNextPage");
@@ -31,7 +32,7 @@
     const label = params.get("label") || "";
     const view = (params.get("view") || "").toLowerCase();
     const order = params.get("order") || "";
-    const type = params.get("type") || "";
+    const type = params.has("type") ? params.get("type") || EMPTY_TYPE_FILTER : "";
     const classId = params.get("class_id") || "";
     return { node, label, view, order, type, classId };
   }
@@ -82,6 +83,13 @@
         defaultOption.value = "";
         defaultOption.textContent = "本体类型";
         tblTypeFilter.appendChild(defaultOption);
+
+        const emptyTypeOption = document.createElement("option");
+        emptyTypeOption.value = EMPTY_TYPE_FILTER;
+        emptyTypeOption.textContent = "无类型";
+        if (emptyTypeOption.value === currentValue) emptyTypeOption.selected = true;
+        tblTypeFilter.appendChild(emptyTypeOption);
+
         if (Array.isArray(ontologies)) {
           ontologies.forEach((item) => {
             const option = document.createElement("option");
@@ -211,12 +219,11 @@
         window.updateUrlParam("order", sortOrder === "id" ? "" : sortOrder);
         window.updateUrlParam("page", tblPage);
         window.updateUrlParam("limit", tblPageSize);
-        window.updateUrlParam("type", tblActiveType);
+        window.updateUrlParam(
+          "type",
+          tblActiveType === EMPTY_TYPE_FILTER ? EMPTY_TYPE_FILTER : tblActiveType,
+        );
         window.updateUrlParam("class_id", tblActiveClassId);
-      }
-
-      if (sortOrder && sortOrder !== "id") {
-        url.searchParams.set("order", sortOrder);
       }
 
       const keyword = tblSearch ? (tblSearch.value || "").trim() : "";
@@ -228,7 +235,11 @@
         : "";
 
       if (keyword) url.searchParams.set("q", keyword);
-      if (tblActiveType) url.searchParams.set("type", tblActiveType);
+      if (tblActiveType === EMPTY_TYPE_FILTER) {
+        url.searchParams.set("type", "");
+      } else if (tblActiveType) {
+        url.searchParams.set("type", tblActiveType);
+      }
       if (tblActiveClassId) url.searchParams.set("class_id", tblActiveClassId);
       if (propertyId) url.searchParams.set("property_id", propertyId);
       if (propertyValue) url.searchParams.set("property_value", propertyValue);
@@ -258,9 +269,11 @@
         if (tblActiveClassLabel) parts.push(`分类 ${tblActiveClassLabel}`);
         else if (tblActiveClassId) parts.push(`分类 ${tblActiveClassId}`);
         if (tblActiveType) {
-          const typeLabel = tblTypeFilter
-            ? tblTypeFilter.selectedOptions[0]?.textContent || tblActiveType
-            : tblActiveType;
+          const typeLabel = tblActiveType === EMPTY_TYPE_FILTER
+            ? "无类型"
+            : tblTypeFilter
+              ? tblTypeFilter.selectedOptions[0]?.textContent || tblActiveType
+              : tblActiveType;
           parts.push(`类型 ${typeLabel}`);
         }
         if (propertyId) {

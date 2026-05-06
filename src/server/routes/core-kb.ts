@@ -1083,14 +1083,28 @@ export async function handleCoreKbRoutes(
     }
 
     if (hideEntity === "1" || hideEntity.toLowerCase() === "true") {
-      whereClause += " AND lower(trim(n.type)) <> 'entity'";
+      whereClause += " AND (n.type IS NULL OR lower(trim(n.type)) <> 'entity')";
     }
 
+    const EMPTY_TYPE_FILTER = "__EMPTY_NODE_TYPE__";
     const typeFilterRaw = url.searchParams.get("type");
     if (typeFilterRaw !== null) {
       const typeFilter = typeFilterRaw.trim();
-      if (typeFilter === "") {
+      if (typeFilter === "" || typeFilter === EMPTY_TYPE_FILTER) {
         whereClause += " AND (n.type IS NULL OR TRIM(n.type) = '')";
+        try {
+          writeFileSync(
+            resolve(import.meta.dir, "..", "..", "debug_empty_type.log"),
+            `typeFilterRaw=${typeFilterRaw}\n` +
+              `query=SELECT COUNT(*) FROM nodes WHERE type IS NULL OR TRIM(type) = ''\n` +
+              `count=${JSON.stringify(
+                db.query(
+                  "SELECT COUNT(*) AS count FROM nodes WHERE type IS NULL OR TRIM(type) = ''"
+                ).get(...[]),
+              )}\n`,
+          );
+        } catch {
+        }
       } else {
         joinClause +=
           " LEFT JOIN ontologies ot_filter ON lower(trim(n.type)) = lower(trim(ot_filter.id))";
@@ -2221,7 +2235,7 @@ export async function handleCoreKbRoutes(
       if (!id) id = getNextNumericNodeId();
       id = id.toString();
       const name = body.name || "New Node";
-      const type = body.type || "entity";
+      const type = body.type !== undefined ? String(body.type) : null;
       const desc = body.description || "";
       const aliases = JSON.stringify(body.aliases || []);
       const tags = JSON.stringify(body.tags || []);

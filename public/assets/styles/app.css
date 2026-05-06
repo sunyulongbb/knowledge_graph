@@ -2481,6 +2481,13 @@ body {
   text-overflow: ellipsis;
   word-break: normal;
 }
+.wd-entity-name[contenteditable="true"] {
+  outline: none;
+}
+.wd-entity-name[contenteditable="true"]:empty:before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+}
 .wd-entity-id-badge {
   display: none;
 }

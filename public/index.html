@@ -1704,33 +1704,33 @@
               <div class="wd-entity-header-title-row"
                 style="align-items:center; gap:8px; display:flex; flex-wrap:nowrap; width:100%;">
                 <div style="display:flex; align-items:center; gap:8px; flex-wrap:nowrap;">
-                  <h2 id="entityDisplayName" class="wd-entity-name">新建实体</h2>
+                  <h2 id="entityDisplayName" class="wd-entity-name" contenteditable="true" spellcheck="false" data-placeholder="新建实体"></h2>
                   <a id="entityDisplayLink" class="wd-entity-link" href="#" target="_blank" rel="noreferrer noopener"
                     title="外部链接" style="display:none;color:var(--link);font-size:0.9rem;">
                     <i class="fa-solid fa-link"></i>
                   </a>
                 </div>
-                <div class="wd-entity-header-actions">
-                  <button id="btnEntityLink" type="button" class="btn wd-btn-icon" title="设置外部链接">
-                    <i class="fa-solid fa-link"></i>
-                  </button>
-                  <button id="btnEntityVideoUpload" type="button" class="btn wd-btn-icon" title="上传视频">
-                    <i class="fa-solid fa-video"></i>
-                  </button>
-                  <span id="entityVideoUploadStatus" class="wd-msg" style="margin-left:8px; font-size:0.9rem; display:none;"></span>
-                  <span id="entityIdBadge" class="wd-entity-id-badge" style="display:none"></span>
-                  <button id="btnEntityEdit" type="button" class="btn wd-btn-icon" title="编辑实体"
-                    style="margin-left:8px;">
-                    <i class="fa-solid fa-pen"></i>
-                  </button>
-                </div>
               </div>
-              <p id="entityDisplayDesc" class="wd-entity-desc">点击此处添加描述</p>
+              <p id="entityDisplayDesc" class="wd-entity-desc" style="display:none"></p>
               <button id="entityDescToggle" type="button" class="wd-desc-toggle" style="display:none;">展开</button>
             </div>
           </div>
           <div id="entityDisplayAliases" class="wd-entity-aliases" style="display:none">
             <span id="entityAliasValues" class="wd-alias-values"></span>
+          </div>
+          <div class="wd-entity-header-actions wd-entity-header-bottom-actions">
+            <button id="btnEntityLink" type="button" class="btn wd-btn-icon" title="设置外部链接">
+              <i class="fa-solid fa-link"></i>
+            </button>
+            <button id="btnEntityVideoUpload" type="button" class="btn wd-btn-icon" title="上传视频">
+              <i class="fa-solid fa-video"></i>
+            </button>
+            <span id="entityVideoUploadStatus" class="wd-msg" style="margin-left:8px; font-size:0.9rem; display:none;"></span>
+            <span id="entityIdBadge" class="wd-entity-id-badge" style="display:none"></span>
+            <button id="btnEntityEdit" type="button" class="btn wd-btn-icon" title="编辑实体"
+              style="margin-left:8px;">
+              <i class="fa-solid fa-pen"></i>
+            </button>
           </div>
         </div>
 
@@ -12732,15 +12732,10 @@
       });
     }
     const fType = document.getElementById("fType");
-    function truncateEntityName(name) {
-      const maxChars = 6;
-      const chars = Array.from(name || "");
-      return chars.length <= maxChars ? name : chars.slice(0, maxChars).join("") + "...";
-    }
     function updateEntityDisplayName(el, name) {
       if (!el) return;
       const fullName = (name || "").trim();
-      el.textContent = truncateEntityName(fullName || "");
+      el.textContent = fullName || "";
       if (fullName) {
         el.title = fullName;
       } else {
@@ -12806,8 +12801,11 @@
         const eAliases = document.getElementById('entityDisplayAliases');
         const eImageWrap = document.getElementById('entityDisplayImageWrap');
         const eImage = document.getElementById('entityDisplayImage');
-        if (eName) updateEntityDisplayName(eName, '新建实体');
-        if (eDesc) eDesc.textContent = '点击此处添加描述';
+        if (eName) updateEntityDisplayName(eName, '');
+        if (eDesc) {
+          eDesc.textContent = '';
+          eDesc.style.display = 'none';
+        }
         updateEntityDisplayLink('');
         if (eBadge) {
           eBadge.textContent = '';
@@ -13206,12 +13204,34 @@
     // Sync entity header live as user types in the form
     fName.addEventListener('input', () => {
       const el = document.getElementById('entityDisplayName');
-      if (el) updateEntityDisplayName(el, fName.value || (fId.value ? '未命名实体' : '新建实体'));
+      if (el) updateEntityDisplayName(el, fName.value || '');
     });
+    const entityDisplayName = document.getElementById('entityDisplayName');
+    if (entityDisplayName) {
+      entityDisplayName.addEventListener('input', () => {
+        const nameValue = (entityDisplayName.textContent || '').trim();
+        if (fName.value !== nameValue) {
+          fName.value = nameValue;
+        }
+      });
+      entityDisplayName.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          fName.focus();
+        }
+      });
+    }
     fDesc.addEventListener('input', () => {
       const el = document.getElementById('entityDisplayDesc');
       if (el) {
-        el.textContent = fDesc.value || '点击此处添加描述';
+        const descValue = fDesc.value.trim();
+        if (descValue) {
+          el.textContent = descValue;
+          el.style.display = '';
+        } else {
+          el.textContent = '';
+          el.style.display = 'none';
+        }
         updateEntityDescToggle();
       }
     });

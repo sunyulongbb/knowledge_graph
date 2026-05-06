@@ -45,7 +45,26 @@ if (!existsSync(APP_DB_PATH)) {
 }
 
 const appDb = new Database(APP_DB_PATH);
-appDb.run("PRAGMA foreign_keys = ON");
+try {
+  appDb.run("PRAGMA foreign_keys = ON");
+} catch (err) {
+  console.warn("SQLite foreign_keys pragma failed:", err);
+}
+try {
+  appDb.run("PRAGMA busy_timeout = 5000");
+} catch (err) {
+  console.warn("SQLite busy_timeout pragma failed:", err);
+}
+try {
+  appDb.run("PRAGMA journal_mode = WAL");
+} catch (err) {
+  console.warn("SQLite WAL pragma failed:", err);
+}
+try {
+  appDb.run("PRAGMA synchronous = NORMAL");
+} catch (err) {
+  console.warn("SQLite synchronous pragma failed:", err);
+}
 
 export let adminDb: any = appDb;
 export let db = appDb;
