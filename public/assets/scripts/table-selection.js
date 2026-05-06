@@ -86,10 +86,23 @@
     window.location.href = buildDetailPageUrl(nodeId);
   }
 
+  function getListItemSelector() {
+    return ".entity-list-item";
+  }
+
+  function getListItems() {
+    try {
+      if (!tblNodes) return [];
+      return Array.from(tblNodes.querySelectorAll(getListItemSelector()));
+    } catch {
+      return [];
+    }
+  }
+
   function updateSelectedRowStyles() {
     try {
       if (!tblNodes) return;
-      const rows = tblNodes.querySelectorAll("tbody tr");
+      const rows = getListItems();
       rows.forEach((tr) => {
         const rid = tr.getAttribute("data-id") || "";
         const selected =
@@ -103,7 +116,7 @@
   function syncCheckboxStates() {
     try {
       if (!tblNodes) return;
-      const checkboxes = tblNodes.querySelectorAll("tbody .row-checkbox");
+      const checkboxes = tblNodes.querySelectorAll(".row-checkbox");
       let checkedCount = 0;
       checkboxes.forEach((chk) => {
         const rid = chk.getAttribute("data-id") || "";
@@ -242,7 +255,7 @@
         setTableSelection(id);
         return;
       }
-      const rows = Array.from(tblNodes.querySelectorAll("tbody tr"));
+      const rows = getListItems();
       const ids = rows.map((tr) => tr.getAttribute("data-id") || "");
       const a = ids.indexOf(window.kbLastAnchorRowId || "");
       const b = ids.indexOf(id || "");
@@ -272,12 +285,7 @@
   }
 
   function getTableRows() {
-    try {
-      if (!tblNodes) return [];
-      return Array.from(tblNodes.querySelectorAll("tbody tr")) || [];
-    } catch {
-      return [];
-    }
+    return getListItems();
   }
 
   function focusRowElement(row) {
@@ -330,14 +338,14 @@
     );
     let href = "";
     if (target) {
-      const link = target.querySelector("td:nth-child(2) a");
+      const link = target.querySelector(".table-feed-name");
       if (link && link.href) {
         href = link.href;
       }
     }
     if (!href) {
       const label = target
-        ? target.querySelector("td:nth-child(2) a")?.textContent || ""
+        ? target.querySelector(".table-feed-name")?.textContent || ""
         : "";
       const params = new URLSearchParams();
       params.set("id", primaryId);
@@ -411,11 +419,159 @@
     }
   }
 
+  function normalizeStringList(value) {
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => String(item || "").trim())
+        .filter(Boolean);
+    }
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed) return [];
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed
+            .map((item) => String(item || "").trim())
+            .filter(Boolean);
+        }
+      } catch {}
+      return trimmed
+        .split(/[\n,，;；、|]+/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+    return [];
+  }
+
+  // Collect images from relationship attributes (_attr_images injected by entity_search API)
+  function collectNodeImages(node) {
+    const raw = node?._attr_images;
+    if (Array.isArray(raw) && raw.length > 0) return raw;
+    return [];
+  }
+
+  // Collect avatar image from node's own image field (not attr images)
+  function collectNodeAvatarImage(node) {
+    const raw = node?.image;
+    if (!raw) return "";
+    const trimmed = String(raw).trim();
+    if (!trimmed) return "";
+    if (trimmed.startsWith("[")) {
+      try {
+        const arr = JSON.parse(trimmed);
+        if (Array.isArray(arr) && arr[0]) return String(arr[0]).trim();
+      } catch {}
+    }
+    return trimmed;
+  }
+
+  function collectNodeVideo(node) {
+    const candidates = [
+      node?.video,
+      node?.video_url,
+      node?.videoUrl,
+      node?.media_video,
+    ];
+    for (const candidate of candidates) {
+      const value = String(candidate || "").trim();
+      if (value) return value;
+    }
+    return "";
+  }
+
+  function formatRelativeTime(rawValue) {
+    if (!rawValue) return "";
+    const date = new Date(rawValue);
+    if (Number.isNaN(date.getTime())) return "";
+    const diffMs = Date.now() - date.getTime();
+    const diffMinutes = Math.max(0, Math.floor(diffMs / 60000));
+    if (diffMinutes < 1) return "刚刚";
+    if (diffMinutes < 60) return `${diffMinutes} 分钟前`;
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) return `${diffHours} 小时前`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 30) return `${diffDays} 天前`;
+    const diffMonths = Math.floor(diffDays / 30);
+    if (diffMonths < 12) return `${diffMonths} 个月前`;
+    const diffYears = Math.floor(diffMonths / 12);
+    return `${diffYears} 年前`;
+  }
+
+  function buildPreviewVideoElement(node, videoUrl, posterUrl) {
+    const wrap = document.createElement("div");
+    wrap.className = "table-feed-video-wrap";
+
+    const video = document.createElement("video");
+    video.className = "table-feed-video";
+    video.src = videoUrl;
+    video.controls = false;
+    video.preload = "metadata";
+    video.playsInline = true;
+    video.muted = false;
+    video.loop = true;
+    if (posterUrl) video.poster = posterUrl;
+    wrap.appendChild(video);
+
+    // Mute toggle button
+    const muteBtn = document.createElement("button");
+    muteBtn.type = "button";
+    muteBtn.className = "table-feed-mute-btn";
+    muteBtn.title = "静音/取消静音";
+    muteBtn.innerHTML = '<i class="fa-solid fa-volume-high"></i>';
+    muteBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      video.muted = !video.muted;
+      muteBtn.innerHTML = video.muted
+        ? '<i class="fa-solid fa-volume-xmark"></i>'
+        : '<i class="fa-solid fa-volume-high"></i>';
+    });
+    wrap.appendChild(muteBtn);
+
+    wrap.style.cursor = "pointer";
+    wrap.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (video.paused) {
+        video.play().catch(() => {});
+      } else {
+        video.pause();
+      }
+    });
+
+    return wrap;
+  }
+
+  function buildImageStripElement(node, imageList) {
+    const strip = document.createElement("div");
+    strip.className = "table-feed-img-strip";
+    imageList.forEach((imageUrl, index) => {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "table-feed-img-strip-item";
+      item.title = "打开图库";
+      item.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openMediaViewForNode("gallery", node);
+      });
+      const img = document.createElement("img");
+      img.alt = node?.label_zh || node?.label || node?.name || `图片 ${index + 1}`;
+      img.loading = "lazy";
+      try {
+        img.src = new URL(imageUrl, window.location.origin).toString();
+      } catch {
+        img.src = imageUrl;
+      }
+      item.appendChild(img);
+      strip.appendChild(item);
+    });
+    return strip;
+  }
+
   function renderTableList() {
     if (!tblNodes) return;
-
-    const tbody = tblNodes.querySelector("tbody");
-    if (!tbody) return;
 
     const rawList = Array.isArray(window.kbTableNodes)
       ? window.kbTableNodes
@@ -452,49 +608,70 @@
     const frag = document.createDocumentFragment();
 
     filteredList.forEach((n) => {
-      const tr = document.createElement("tr");
+      const imageList = collectNodeImages(n);  // attr images for body strip
+      const avatarImageUrl = collectNodeAvatarImage(n); // node.image for avatar
+      const videoUrl = collectNodeVideo(n);
+      const hasImage = imageList.length > 0;
+      const hasVideo = Boolean(videoUrl);
+      const showImageMedia = hasImage && !hasVideo;
+      const label = (n.label_zh || n.label || n.name || "未命名节点").trim();
+      const desc = (n.desc_zh || n.description || "").trim();
+      const tags = normalizeStringList(n.tags);
+      const aliases = normalizeStringList(n.aliases_zh || n.aliases);
+      const typeLabel = (n.typeLabel || n.classLabel || n.type || "未分类").trim();
+      const relativeTime = formatRelativeTime(n.updated_at || n.created_at);
+
+      const tr = document.createElement("article");
+      tr.className = "entity-list-item table-feed-row";
       tr.tabIndex = -1;
       tr.setAttribute("data-id", n._id || n.id || "");
+      tr.setAttribute("role", "listitem");
 
-      const desc = (n.desc_zh || n.description || "").trim();
       if (desc) tr.setAttribute("data-desc", desc);
 
-      // 复选框列
-      const tdChk = document.createElement("td");
-      tdChk.style.textAlign = "center";
-      const chk = document.createElement("input");
-      chk.type = "checkbox";
-      chk.className = "row-checkbox";
-      chk.style.cursor = "pointer";
-      chk.setAttribute("data-id", n._id || n.id || "");
-      chk.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const rid = chk.getAttribute("data-id") || "";
-        if (!rid) return;
-        if (chk.checked) {
-          if (!window.kbSelectedRowIds) window.kbSelectedRowIds = new Set();
-          window.kbSelectedRowIds.add(rid);
-          window.kbLastAnchorRowId = rid;
-        } else {
-          if (window.kbSelectedRowIds) window.kbSelectedRowIds.delete(rid);
-        }
-        updateSelectedRowStyles();
-        syncCheckboxStates();
-        ensureTableSelectedButtonsState();
-      });
-      tdChk.appendChild(chk);
-      tr.appendChild(tdChk);
+      const itemLayout = document.createElement("div");
+      itemLayout.className = "entity-list-item-layout";
 
-      const tdName = document.createElement("td");
-      const nameWrapper = document.createElement("div");
-      nameWrapper.style.display = "inline-flex";
-      nameWrapper.style.alignItems = "center";
-      nameWrapper.style.gap = "6px";
+      const tdName = document.createElement("div");
+      tdName.className = "table-feed-main-cell";
+      const card = document.createElement("article");
+      card.className = "table-feed-card";
+
+      const header = document.createElement("div");
+      header.className = "table-feed-header";
+
+      const avatar = document.createElement("button");
+      avatar.type = "button";
+      avatar.className = "table-feed-avatar";
+      avatar.title = "查看节点详情";
+      avatar.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const rid = tr.getAttribute("data-id") || n._id || n.id || "";
+        if (rid && typeof setViewMode === "function") {
+          setViewMode("detail", { targetNodeId: rid });
+        }
+      });
+      if (avatarImageUrl) {
+        const avatarImg = document.createElement("img");
+        avatarImg.alt = label;
+        try {
+          avatarImg.src = new URL(avatarImageUrl, window.location.origin).toString();
+        } catch {
+          avatarImg.src = avatarImageUrl;
+        }
+        avatar.appendChild(avatarImg);
+      } else {
+        avatar.textContent = (label[0] || "节").toUpperCase();
+      }
+      header.appendChild(avatar);
+
+      const meta = document.createElement("div");
+      meta.className = "table-feed-meta";
 
       const nameLink = document.createElement("a");
-      nameLink.textContent = n.label_zh || n.label || "";
-      nameLink.style.color = "var(--link)";
-      nameLink.style.textDecoration = "none";
+      nameLink.textContent = label;
+      nameLink.className = "table-feed-name";
       nameLink.addEventListener("mouseenter", () => {
         nameLink.style.textDecoration = "underline";
       });
@@ -526,80 +703,139 @@
         } catch {}
       });
 
-      nameWrapper.appendChild(nameLink);
+      const metaTop = document.createElement("div");
+      metaTop.className = "table-feed-meta-top";
+      metaTop.appendChild(nameLink);
 
-      const hasImage = Boolean(
-        n.image || n.avatar || n.icon || n.logo || n.img,
-      );
-      const hasVideo = Boolean(n.video);
-      if (hasImage || hasVideo) {
-        const mediaContainer = document.createElement("span");
-        mediaContainer.style.display = "inline-flex";
-        mediaContainer.style.alignItems = "center";
-        mediaContainer.style.gap = "4px";
-        mediaContainer.style.marginLeft = "4px";
+      if (relativeTime) {
+        const timeText = document.createElement("span");
+        timeText.className = "table-feed-time";
+        timeText.textContent = relativeTime;
+        metaTop.appendChild(timeText);
+      }
 
-        if (hasImage) {
-          const imgTag = document.createElement("button");
-          imgTag.type = "button";
-          imgTag.className = "node-media-tag";
-          imgTag.title = "包含图片";
-          imgTag.innerHTML = '<i class="fa-solid fa-image"></i>';
-          imgTag.title = "打开图库";
-          imgTag.addEventListener("click", (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            openMediaViewForNode("gallery", n);
-          });
-          mediaContainer.appendChild(imgTag);
-        }
-        if (hasVideo) {
-          const vidTag = document.createElement("button");
-          vidTag.type = "button";
-          vidTag.className = "node-media-tag";
-          vidTag.title = "包含视频";
-          vidTag.innerHTML = '<i class="fa-solid fa-video"></i>';
-          vidTag.title = "打开短视频";
-          vidTag.addEventListener("click", (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            openMediaViewForNode("shorts", n);
-          });
-          mediaContainer.appendChild(vidTag);
-        }
+      meta.appendChild(metaTop);
 
-        nameWrapper.appendChild(mediaContainer);
+      const metaSub = document.createElement("div");
+      metaSub.className = "table-feed-subline";
+
+      const typeChip = document.createElement("span");
+      typeChip.className = "table-feed-type-chip";
+      typeChip.textContent = typeLabel || "未分类";
+      metaSub.appendChild(typeChip);
+
+      if (aliases.length) {
+        const aliasText = document.createElement("span");
+        aliasText.className = "table-feed-aliases";
+        aliasText.textContent = aliases.slice(0, 2).map((item) => `@${item}`).join(" ");
+        metaSub.appendChild(aliasText);
+      }
+
+      header.appendChild(meta);
+
+      const actions = document.createElement("div");
+      actions.className = "table-feed-top-actions";
+      if (showImageMedia) {
+        const imgTag = document.createElement("button");
+        imgTag.type = "button";
+        imgTag.className = "node-media-tag";
+        imgTag.innerHTML = '<i class="fa-solid fa-image"></i>';
+        imgTag.title = "打开图库";
+        imgTag.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openMediaViewForNode("gallery", n);
+        });
+        actions.appendChild(imgTag);
+      }
+      if (hasVideo) {
+        const vidTag = document.createElement("button");
+        vidTag.type = "button";
+        vidTag.className = "node-media-tag";
+        vidTag.innerHTML = '<i class="fa-solid fa-video"></i>';
+        vidTag.title = "打开短视频";
+        vidTag.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openMediaViewForNode("shorts", n);
+        });
+        actions.appendChild(vidTag);
       }
 
       if (n.link) {
         try {
           const externalLink = document.createElement("a");
+          externalLink.className = "table-feed-external-link";
           externalLink.href = n.link;
           externalLink.target = "_blank";
           externalLink.rel = "noreferrer noopener";
           externalLink.title = "外部链接";
-          externalLink.style.display = "inline-flex";
-          externalLink.style.alignItems = "center";
-          externalLink.style.justifyContent = "center";
-          externalLink.style.color = "var(--link)";
-          externalLink.style.textDecoration = "none";
-          externalLink.style.fontSize = "0.9rem";
-          externalLink.style.marginLeft = "4px";
           externalLink.innerHTML = '<i class="fa-solid fa-link"></i>';
           externalLink.addEventListener("click", (e) => {
             e.stopPropagation();
           });
-          nameWrapper.appendChild(externalLink);
+          actions.appendChild(externalLink);
         } catch {}
       }
 
-      tdName.appendChild(nameWrapper);
-      tr.appendChild(tdName);
+      header.appendChild(actions);
+      card.appendChild(header);
 
-      const tdType = document.createElement("td");
-      tdType.textContent = n.typeLabel || n.type || "";
-      tdType.style.whiteSpace = "nowrap";
-      tr.appendChild(tdType);
+      if (desc) {
+        const body = document.createElement("div");
+        body.className = "table-feed-body";
+        body.textContent = desc;
+        card.appendChild(body);
+      }
+
+      if (tags.length) {
+        const tagList = document.createElement("div");
+        tagList.className = "table-feed-tag-list";
+        tags.slice(0, 5).forEach((tag) => {
+          const chip = document.createElement("span");
+          chip.className = "table-feed-tag-chip";
+          chip.textContent = `#${tag}`;
+          tagList.appendChild(chip);
+        });
+        card.appendChild(tagList);
+      }
+
+      if (hasVideo) {
+        card.appendChild(buildPreviewVideoElement(n, videoUrl, avatarImageUrl || ""));
+      }
+
+      if (showImageMedia) {
+        card.appendChild(buildImageStripElement(n, imageList));
+      }
+
+      const footer = document.createElement("div");
+      footer.className = "table-feed-footer";
+      footer.innerHTML = `
+        <button type="button" class="table-feed-action-btn"><i class="fa-regular fa-heart"></i><span>${imageList.length || 0}</span></button>
+        <button type="button" class="table-feed-action-btn"><i class="fa-regular fa-comment"></i><span>${aliases.length || 0}</span></button>
+        <button type="button" class="table-feed-action-btn"><i class="fa-solid fa-retweet"></i><span>${tags.length || 0}</span></button>
+        <button type="button" class="table-feed-action-btn table-feed-action-primary"><i class="fa-regular fa-paper-plane"></i><span>查看</span></button>
+      `;
+      Array.from(footer.querySelectorAll("button")).forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const rid = tr.getAttribute("data-id") || n._id || n.id || "";
+          if (rid && typeof setViewMode === "function") {
+            setViewMode("detail", { targetNodeId: rid });
+          }
+        });
+      });
+      card.appendChild(footer);
+
+      tdName.appendChild(card);
+  itemLayout.appendChild(tdName);
+
+  const tdType = document.createElement("div");
+      tdType.className = "table-feed-side-cell";
+      tdType.innerHTML = `<span class="table-feed-side-chip">${typeLabel || "未分类"}</span>`;
+  itemLayout.appendChild(tdType);
+  tr.appendChild(itemLayout);
 
       tr.addEventListener("click", (e) => {
         const target = e.target;
@@ -672,11 +908,32 @@
       frag.appendChild(tr);
     });
 
-    tbody.innerHTML = "";
-    tbody.appendChild(frag);
+    tblNodes.innerHTML = "";
+    tblNodes.appendChild(frag);
+
+    // Auto-play videos when scrolled into view, pause when scrolled out
+    if (window._kbVideoObserver) {
+      try { window._kbVideoObserver.disconnect(); } catch {}
+    }
+    window._kbVideoObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          const video = entry.target;
+          if (entry.isIntersecting) {
+            video.play().catch(() => {});
+          } else {
+            video.pause();
+          }
+        });
+      },
+      { threshold: 0.4 }
+    );
+    tblNodes.querySelectorAll(".table-feed-video").forEach((v) => {
+      window._kbVideoObserver.observe(v);
+    });
 
     try {
-      const rows = Array.from(tblNodes.querySelectorAll("tbody tr"));
+      const rows = getListItems();
       const has = rows.some(
         (tr) => (tr.getAttribute("data-id") || "") === window.kbSelectedRowId,
       );

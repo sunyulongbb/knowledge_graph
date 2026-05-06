@@ -2102,7 +2102,7 @@
         <div id="tablePanel" class="panel" style="padding: 8px 10px">
           <div class="panel-header">
             <div class="panel-title">
-              <span>节点表格</span>
+              <span>实体列表</span>
               <span id="tblCount" class="panel-subtitle"></span>
             </div>
             <div id="tbTableControls" class="table-toolbar panel-actions">
@@ -2135,18 +2135,7 @@
             </div>
           </div>
           <div class="tbl-wrap">
-            <table class="tbl" id="tblNodes">
-              <thead>
-                <tr>
-                  <th style="width: 32px; text-align: center;">
-                    <input type="checkbox" id="chkSelectAll" title="全选/取消全选" style="cursor: pointer;">
-                  </th>
-                  <th>名称</th>
-                  <th style="width: 180px">类型</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
+            <div id="tblNodes" class="entity-list" role="list" aria-label="实体列表"></div>
           </div>
           <div id="tblPagination" style="
                 margin: 12px auto 0;

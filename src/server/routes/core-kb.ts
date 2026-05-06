@@ -1146,6 +1146,57 @@ export async function handleCoreKbRoutes(
       )
       .get(...countParams) as any;
 
+    // Attach image attributes for each returned node
+    if (nodes.length > 0) {
+      const nodeIds = nodes.map((n: any) => n.id || n._id).filter(Boolean);
+      const placeholders = nodeIds.map(() => "?").join(",");
+      const imageAttrs = db
+        .query(
+          `SELECT node_id, key, value, property_name_snapshot FROM attributes WHERE node_id IN (${placeholders})`,
+        )
+        .all(...nodeIds) as any[];
+
+      const isImageUrl = (v: string) =>
+        /\.(jpe?g|png|gif|webp|avif|bmp|svg|heic)(\?.*)?$/i.test(v) ||
+        /^data:image\//i.test(v) ||
+        /\/node-images\//i.test(v) ||
+        /\/static\/uploads\//i.test(v);
+
+      const attrImagesByNodeId: Record<string, string[]> = {};
+      for (const attr of imageAttrs) {
+        if (!attr.value) continue;
+        const urls: string[] = [];
+        const raw = String(attr.value).trim();
+        if (raw.startsWith("[")) {
+          try {
+            const arr = JSON.parse(raw);
+            if (Array.isArray(arr)) {
+              arr.forEach((item: any) => {
+                const s = typeof item === "string" ? item.trim() : (item?.url || item?.src || "");
+                if (s && isImageUrl(s)) urls.push(s);
+              });
+            }
+          } catch {}
+        } else if (isImageUrl(raw)) {
+          urls.push(raw);
+        }
+        if (urls.length > 0) {
+          const nid = attr.node_id;
+          if (!attrImagesByNodeId[nid]) attrImagesByNodeId[nid] = [];
+          attrImagesByNodeId[nid].push(...urls);
+        }
+      }
+
+      for (const node of nodes as any[]) {
+        const nid = node.id || node._id;
+        const imgs = attrImagesByNodeId[nid];
+        if (imgs && imgs.length > 0) {
+          // deduplicate
+          node._attr_images = Array.from(new Set(imgs));
+        }
+      }
+    }
+
     return Response.json({ nodes, total: total?.count || 0 });
   }
 
