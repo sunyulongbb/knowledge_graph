@@ -534,6 +534,10 @@
       e.preventDefault();
       e.stopPropagation();
       if (video.paused) {
+        // Pause all other videos
+        document.querySelectorAll(".table-feed-video").forEach((v) => {
+          if (v !== video && !v.paused) v.pause();
+        });
         video.play().catch(() => {});
       } else {
         video.pause();
@@ -912,6 +916,7 @@
     tblNodes.appendChild(frag);
 
     // Auto-play videos when scrolled into view, pause when scrolled out
+    // Only one video plays at a time
     if (window._kbVideoObserver) {
       try { window._kbVideoObserver.disconnect(); } catch {}
     }
@@ -920,6 +925,10 @@
         entries.forEach((entry) => {
           const video = entry.target;
           if (entry.isIntersecting) {
+            // Pause all other playing videos first
+            tblNodes.querySelectorAll(".table-feed-video").forEach((v) => {
+              if (v !== video && !v.paused) v.pause();
+            });
             video.play().catch(() => {});
           } else {
             video.pause();
