@@ -992,11 +992,24 @@ export async function handleCoreKbRoutes(
     const hideEntity = (url.searchParams.get("hide_entity") || "").trim();
 
     const likeParam = `%${q}%`;
-    const params: any[] = [likeParam];
-    const countParams: any[] = [likeParam];
+    const params: any[] = [
+      likeParam,
+      likeParam,
+      likeParam,
+      likeParam,
+      likeParam,
+    ];
+    const countParams: any[] = [
+      likeParam,
+      likeParam,
+      likeParam,
+      likeParam,
+      likeParam,
+    ];
 
     let joinClause = "";
-    let whereClause = "WHERE n.name LIKE ?";
+    let whereClause =
+      "WHERE (COALESCE(n.name, '') LIKE ? OR COALESCE(n.aliases, '') LIKE ? OR COALESCE(n.description, '') LIKE ? OR COALESCE(n.type, '') LIKE ? OR COALESCE(n.id, '') LIKE ?)";
     let propertyKeyConditions: string[] = [];
     const propertyKeys = new Set<string>();
 
@@ -1073,14 +1086,19 @@ export async function handleCoreKbRoutes(
       whereClause += " AND lower(trim(n.type)) <> 'entity'";
     }
 
-    const typeFilter = (url.searchParams.get("type") || "").trim();
-    if (typeFilter) {
-      joinClause +=
-        " LEFT JOIN ontologies ot_filter ON lower(trim(n.type)) = lower(trim(ot_filter.id))";
-      whereClause +=
-        " AND (lower(trim(n.type)) = lower(?) OR lower(trim(ot_filter.id)) = lower(?))";
-      params.push(typeFilter, typeFilter);
-      countParams.push(typeFilter, typeFilter);
+    const typeFilterRaw = url.searchParams.get("type");
+    if (typeFilterRaw !== null) {
+      const typeFilter = typeFilterRaw.trim();
+      if (typeFilter === "") {
+        whereClause += " AND (n.type IS NULL OR TRIM(n.type) = '')";
+      } else {
+        joinClause +=
+          " LEFT JOIN ontologies ot_filter ON lower(trim(n.type)) = lower(trim(ot_filter.id))";
+        whereClause +=
+          " AND (lower(trim(n.type)) = lower(?) OR lower(trim(ot_filter.id)) = lower(?))";
+        params.push(typeFilter, typeFilter);
+        countParams.push(typeFilter, typeFilter);
+      }
     }
 
     if (hasProjectScope) {
@@ -3187,12 +3205,12 @@ export async function handleCoreKbRoutes(
       const rows = hasProjectScope
         ? (db
             .query(
-              `SELECT DISTINCT type FROM nodes WHERE ${scopedClause()} AND type IS NOT NULL AND TRIM(type) <> ''`,
+              `SELECT DISTINCT type FROM nodes WHERE ${scopedClause()}`,
             )
             .all(scopedProjectId) as any[])
         : (db
             .query(
-              "SELECT DISTINCT type FROM nodes WHERE type IS NOT NULL AND TRIM(type) <> ''",
+              "SELECT DISTINCT type FROM nodes",
             )
             .all() as any[]);
       const types = rows

@@ -73,6 +73,23 @@
         }
       };
     }
+    // Add paste event to the entire modal for logo upload
+    modal.addEventListener('paste', function(e) {
+      const items = e.clipboardData.items;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          const file = items[i].getAsFile();
+          if (logoInput) {
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            logoInput.files = dt.files;
+            logoInput.dispatchEvent(new Event('change'));
+          }
+          e.preventDefault(); // Prevent default paste behavior
+          break;
+        }
+      }
+    });
     const form = modal.querySelector('#appSettingsForm');
     if (form) {
       form.onsubmit = async function (e) {
