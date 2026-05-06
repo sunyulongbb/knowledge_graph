@@ -736,8 +736,13 @@
       const hasImage = imageList.length > 0;
       const hasVideo = Boolean(videoUrl);
       const showImageMedia = hasImage && !hasVideo;
-      const label = (n.label_zh || n.label || n.name || "").trim();
-      const desc = (n.desc_zh || n.description || "").trim();
+      const _nameFirst = (n.label_zh || n.label || n.name || "").trim();
+      const _descFull = (n.desc_zh || n.description || "").trim();
+      // 如果 description 包含多行（即 composer 多行输入保存后），以 description 为主展示名称
+      const label = (_descFull && _descFull !== _nameFirst)
+        ? _descFull
+        : _nameFirst;
+      const desc = "";
       const tags = normalizeStringList(n.tags);
       const aliases = normalizeStringList(n.aliases_zh || n.aliases);
       const typeLabel = (n.typeLabel || n.classLabel || n.type || "未分类").trim();

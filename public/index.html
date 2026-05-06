@@ -12992,7 +12992,10 @@
         const eBadge = document.getElementById('entityIdBadge');
         const eAliases = document.getElementById('entityDisplayAliases');
         const eAliasVals = document.getElementById('entityAliasValues');
-        if (eName) updateEntityDisplayName(eName, nameVal || '');
+        if (eName) {
+          const composerText = (descVal && descVal.trim()) ? descVal : (nameVal || '');
+          updateEntityDisplayName(eName, composerText);
+        }
         if (eDesc) {
           if (descVal && descVal.trim()) {
             eDesc.textContent = descVal;
