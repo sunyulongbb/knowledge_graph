@@ -1693,103 +1693,82 @@
       </aside>
       <!-- Left: Wikidata-style entity editor panel -->
       <div class="panel column-panel editor-panel">
-        <!-- Entity header (Wikidata-style) -->
-
-        <div id="entityHeader" class="wd-entity-header">
-          <div class="wd-entity-header-top">
-            <div id="entityDisplayImageWrap" class="wd-entity-avatar-wrap empty">
-              <img id="entityDisplayImage" alt="节点图像" style="display:none;" />
-            </div>
-            <div class="wd-entity-header-meta">
-              <div class="wd-entity-header-title-row"
-                style="align-items:center; gap:8px; display:flex; flex-wrap:nowrap; width:100%;">
-                <div style="display:flex; align-items:center; gap:8px; flex-wrap:nowrap;">
-                  <h2 id="entityDisplayName" class="wd-entity-name" contenteditable="true" spellcheck="false" data-placeholder="新建实体"></h2>
-                  <a id="entityDisplayLink" class="wd-entity-link" href="#" target="_blank" rel="noreferrer noopener"
-                    title="外部链接" style="display:none;color:var(--link);font-size:0.9rem;">
-                    <i class="fa-solid fa-link"></i>
-                  </a>
+        <!-- Entity social composer card -->
+        <div id="nodeFormSection" class="wd-section social-compose-form-shell">
+          <form id="nodeForm" class="wd-form social-compose-form">
+            <div id="entityHeader" class="wd-entity-header social-compose-card">
+              <div class="social-compose-top">
+                <div id="entityDisplayImageWrap" class="wd-entity-avatar-wrap empty social-avatar-wrap">
+                  <img id="entityDisplayImage" alt="节点图像" style="display:none;" />
+                </div>
+                <div class="social-compose-main">
+                  <div class="social-compose-meta-row">
+                    <strong class="social-compose-author">实体创建</strong>
+                    <span class="social-compose-sep">·</span>
+                    <button id="btnAddOntologyChip" class="social-ontology-trigger" type="button">添加本体</button>
+                    <select id="composerTypeSelect" class="social-ontology-select" aria-label="添加本体">
+                      <option value="">请选择本体</option>
+                    </select>
+                    <a id="entityDisplayLink" class="wd-entity-link" href="#" target="_blank" rel="noreferrer noopener"
+                      title="外部链接" style="display:none;color:var(--link);font-size:0.9rem;">
+                      <i class="fa-solid fa-link"></i>
+                    </a>
+                  </div>
+                  <div id="entityDisplayName" class="wd-entity-name social-compose-input" contenteditable="true" spellcheck="false"
+                    data-placeholder="有什么新鲜事吗？"></div>
+                  <div class="social-compose-hint">支持换行、#添加标签、@引用实体，粘贴图片可直接上传</div>
+                  <div id="entityDisplayAliases" class="wd-entity-aliases" style="display:none">
+                    <span id="entityAliasValues" class="wd-alias-values"></span>
+                  </div>
                 </div>
               </div>
-              <p id="entityDisplayDesc" class="wd-entity-desc" style="display:none"></p>
-              <button id="entityDescToggle" type="button" class="wd-desc-toggle" style="display:none;">展开</button>
-            </div>
-          </div>
-          <div id="entityDisplayAliases" class="wd-entity-aliases" style="display:none">
-            <span id="entityAliasValues" class="wd-alias-values"></span>
-          </div>
-          <div class="wd-entity-header-actions wd-entity-header-bottom-actions">
-            <button id="btnEntityLink" type="button" class="btn wd-btn-icon" title="设置外部链接">
-              <i class="fa-solid fa-link"></i>
-            </button>
-            <button id="btnEntityVideoUpload" type="button" class="btn wd-btn-icon" title="上传视频">
-              <i class="fa-solid fa-video"></i>
-            </button>
-            <span id="entityVideoUploadStatus" class="wd-msg" style="margin-left:8px; font-size:0.9rem; display:none;"></span>
-            <span id="entityIdBadge" class="wd-entity-id-badge" style="display:none"></span>
-            <button id="btnEntityEdit" type="button" class="btn wd-btn-icon" title="编辑实体"
-              style="margin-left:8px;">
-              <i class="fa-solid fa-pen"></i>
-            </button>
-          </div>
-        </div>
-
-        <!-- Collapsible node form (hidden by default, shown on edit/create) -->
-        <div id="nodeFormSection" class="wd-section" style="display:none;">
-          <div class="wd-section-header">
-            <i class="fa-solid fa-pen-to-square wd-section-icon"></i>
-            <span>基本信息</span>
-          </div>
-          <div id="nodeFormBody" class="wd-section-body">
-            <form id="nodeForm" class="wd-form">
-              <input type="hidden" id="fId" />
-              <div class="wd-field">
-                <label class="wd-field-label" for="fName">名称 <span class="wd-required">*</span></label>
-                <input id="fName" type="text" class="wd-input" placeholder="例如：乔治·华盛顿" required />
-              </div>
-              <div class="wd-field">
-                <label class="wd-field-label" for="fDesc">描述</label>
-                <textarea id="fDesc" class="wd-input" placeholder="简要描述"
-                  style="min-height:80px;resize:vertical;"></textarea>
-              </div>
-              <input id="fLink" type="url" style="display:none" />
-              <input id="fVideo" type="file" accept="video/*" style="display:none" />
-              <div class="wd-field">
-                <label class="wd-field-label" for="fAliases">别名</label>
-                <input id="fAliases" type="text" class="wd-input" placeholder="用逗号分隔，如：华盛顿, Washington" />
-              </div>
-              <div class="wd-field-row">
-                <div class="wd-field" style="flex:1">
-                  <label class="wd-field-label" for="fTags">标签</label>
-                  <input id="fTags" type="text" class="wd-input" placeholder="总统, 美国" />
-                </div>
-                <div class="wd-field" style="flex:1">
-                  <label class="wd-field-label" for="fType">类型</label>
-                  <select id="fType" class="wd-input">
-                    <option value="">请选择本体类型</option>
-                  </select>
-                </div>
-              </div>
-              <div class="wd-form-actions">
-                <button id="btnSubmit" class="btn wd-btn-primary" type="submit" title="新增实体" aria-label="新增实体">
-                  <i class="fa-solid fa-plus"></i>
+              <div class="social-compose-toolbar">
+                <button id="btnEntityImageUpload" type="button" class="btn wd-btn-icon" title="上传图片">
+                  <i class="fa-regular fa-image"></i>
+                </button>
+                <button id="btnEntityVideoUpload" type="button" class="btn wd-btn-icon" title="上传视频">
+                  <i class="fa-solid fa-video"></i>
+                </button>
+                <button id="btnEntityLink" type="button" class="btn wd-btn-icon" title="设置外部链接">
+                  <i class="fa-solid fa-link"></i>
+                </button>
+                <button id="btnEntityEdit" type="button" class="btn wd-btn-icon" title="编辑实体">
+                  <i class="fa-solid fa-pen"></i>
                 </button>
                 <button id="btnCancelEdit" class="btn wd-btn-secondary wd-btn-icon" type="button" style="display:none"
                   title="取消编辑" aria-label="取消编辑">
                   <i class="fa-solid fa-xmark"></i>
                 </button>
+                <span id="entityVideoUploadStatus" class="wd-msg" style="margin-left:4px; font-size:0.9rem; display:none;"></span>
                 <span id="addMsg" class="wd-msg"></span>
-                <div id="videoUploadProgress" class="video-upload-progress" style="display:none; margin-top:6px;">
-                  <div class="clean-task-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-                    <div class="clean-task-progress-bar">
-                      <div id="videoUploadProgressFill" class="clean-task-progress-fill" style="width:0%"></div>
-                    </div>
-                    <span id="videoUploadProgressText" class="clean-task-progress-text">上传中 0%</span>
+                <span id="entityIdBadge" class="wd-entity-id-badge" style="display:none"></span>
+                <button id="btnSubmit" class="btn wd-btn-primary social-submit-btn" type="submit" title="发布实体" aria-label="发布实体">
+                  发布
+                </button>
+              </div>
+              <div id="videoUploadProgress" class="video-upload-progress" style="display:none; margin-top:6px;">
+                <div class="clean-task-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                  <div class="clean-task-progress-bar">
+                    <div id="videoUploadProgressFill" class="clean-task-progress-fill" style="width:0%"></div>
                   </div>
+                  <span id="videoUploadProgressText" class="clean-task-progress-text">上传中 0%</span>
                 </div>
               </div>
-            </form>
-          </div>
+              <p id="entityDisplayDesc" class="wd-entity-desc" style="display:none"></p>
+              <button id="entityDescToggle" type="button" class="wd-desc-toggle" style="display:none;">展开</button>
+            </div>
+
+            <input type="hidden" id="fId" />
+            <input id="fName" type="text" class="wd-input" placeholder="例如：乔治·华盛顿" style="display:none" />
+            <textarea id="fDesc" class="wd-input" placeholder="简要描述" style="display:none"></textarea>
+            <input id="fLink" type="url" style="display:none" />
+            <input id="fVideo" type="file" accept="video/*" style="display:none" />
+            <input id="fAliases" type="text" class="wd-input" placeholder="用逗号分隔，如：华盛顿, Washington" style="display:none" />
+            <input id="fTags" type="text" class="wd-input" placeholder="总统, 美国" style="display:none" />
+            <select id="fType" class="wd-input" style="display:none">
+              <option value="">请选择本体类型</option>
+            </select>
+          </form>
         </div>
 
         <!-- 关系 / 属性区块 (Wikidata-style) -->
@@ -12189,6 +12168,23 @@
         return uploadResp.url;
       }
 
+      function setPendingEntityImagePreview(imageUrl) {
+        const eImage = document.getElementById('entityDisplayImage');
+        const eImageWrap = document.getElementById('entityDisplayImageWrap');
+        if (!eImage || !eImageWrap) return;
+        if (imageUrl) {
+          eImage.src = imageUrl;
+          eImage.style.display = '';
+          eImageWrap.classList.remove('empty');
+          window.kbPendingEntityImageDataUrl = imageUrl;
+        } else {
+          eImage.src = '';
+          eImage.style.display = 'none';
+          eImageWrap.classList.add('empty');
+          window.kbPendingEntityImageDataUrl = '';
+        }
+      }
+
       async function saveEntityImage(nodeId, imageUrl) {
         const fullId = typeof ensureEntityIdPrefix === 'function' ? ensureEntityIdPrefix(nodeId) : nodeId;
         try {
@@ -12234,10 +12230,21 @@
         const file = imageUploadInput.files && imageUploadInput.files[0];
         if (!file) return;
         const nodeId = getSelectedNodeId();
-        if (!nodeId) return;
+        if (!nodeId) {
+          try {
+            const dataUrl = await readFileAsDataUrl(file);
+            setPendingEntityImagePreview((dataUrl || '').toString());
+            if (addMsg) addMsg.textContent = '图片已添加，发布后将自动保存。';
+          } catch (err) {
+            console.error('读取本地图片失败:', err);
+            if (addMsg) addMsg.textContent = '图片读取失败';
+          }
+          return;
+        }
         try {
           const imageUrl = await uploadNodeImageFile(file);
           await saveEntityImage(nodeId, imageUrl);
+          window.kbPendingEntityImageDataUrl = '';
         } catch (err) {
           console.error('节点图像上传失败:', err);
           alert('节点图像上传失败: ' + (err?.message || err));
@@ -12246,11 +12253,18 @@
 
       imageWrap.addEventListener('dblclick', () => {
         const selectedId = getSelectedNodeId();
-        if (!selectedId) return;
+        if (!selectedId && addMsg) {
+          addMsg.textContent = '可先选择图片，发布后会自动保存到实体。';
+        }
         currentContextNode = selectedId;
         imageUploadInput.value = '';
         imageUploadInput.click();
       });
+
+      window.kbTriggerEntityImageUpload = () => {
+        imageUploadInput.value = '';
+        imageUploadInput.click();
+      };
 
       imageWrap.tabIndex = 0;
       const handlePasteUpload = async (ev) => {
@@ -12271,10 +12285,20 @@
         if (imageFile) {
           ev.preventDefault();
           const selectedId = getSelectedNodeId();
-          if (!selectedId) return;
+          if (!selectedId) {
+            try {
+              const dataUrl = await readFileAsDataUrl(imageFile);
+              setPendingEntityImagePreview((dataUrl || '').toString());
+              if (addMsg) addMsg.textContent = '图片已粘贴，发布后自动保存。';
+            } catch (err) {
+              console.error('粘贴图片读取失败', err);
+            }
+            return;
+          }
           try {
             const imageUrl = await uploadNodeImageFile(imageFile);
             await saveEntityImage(selectedId, imageUrl);
+            window.kbPendingEntityImageDataUrl = '';
           } catch (err) {
             console.error('粘贴图片上传失败', err);
             alert('粘贴图片上传失败: ' + (err?.message || err));
@@ -12285,9 +12309,13 @@
         if (text && /^(data:image\/|https?:\/\/.*\.(?:png|jpe?g|gif|bmp|webp|svg))(\?.*)?$/i.test(text.trim())) {
           ev.preventDefault();
           let imageUrl = text.trim();
+          const selectedId = getSelectedNodeId();
+          if (!selectedId) {
+            setPendingEntityImagePreview(imageUrl);
+            if (addMsg) addMsg.textContent = '图片地址已粘贴，发布后自动保存。';
+            return;
+          }
           if (imageUrl.startsWith('data:image/')) {
-            const selectedId = getSelectedNodeId();
-            if (!selectedId) return;
             try {
               const resp = await fetch(imageUrl);
               const blob = await resp.blob();
@@ -12295,6 +12323,7 @@
               const uploadFile = new File([blob], `paste-image.${ext}`, { type: blob.type });
               const uploadedUrl = await uploadNodeImageFile(uploadFile);
               await saveEntityImage(selectedId, uploadedUrl);
+              window.kbPendingEntityImageDataUrl = '';
             } catch (err) {
               console.error('粘贴图片上传失败', err);
               alert('粘贴图片上传失败: ' + (err?.message || err));
@@ -12309,8 +12338,8 @@
             const ext = blob.type.split('/').pop() || 'png';
             const uploadFile = new File([blob], `paste-image.${ext}`, { type: blob.type });
             const uploadedUrl = await uploadNodeImageFile(uploadFile);
-            const selectedId = getSelectedNodeId();
-            if (selectedId) await saveEntityImage(selectedId, uploadedUrl);
+            await saveEntityImage(selectedId, uploadedUrl);
+            window.kbPendingEntityImageDataUrl = '';
           } catch (err) {
             console.error('粘贴图片加载失败', err);
             alert('粘贴图片失败: ' + (err?.message || ''));
@@ -12346,8 +12375,12 @@
     const btnCancelEdit = document.getElementById("btnCancelEdit");
     const btnEntityLink = document.getElementById("btnEntityLink");
     const btnEntityVideoUpload = document.getElementById("btnEntityVideoUpload");
+    const btnEntityImageUpload = document.getElementById("btnEntityImageUpload");
+    const btnAddOntologyChip = document.getElementById("btnAddOntologyChip");
+    const composerTypeSelect = document.getElementById("composerTypeSelect");
     let uploadedVideoUrl = "";
     let uploadedVideoPoster = "";
+    window.kbPendingEntityImageDataUrl = "";
 
     function updateEntityVideoUploadStatus(text) {
       if (addMsg) addMsg.textContent = text;
@@ -12784,12 +12817,14 @@
       if (fVideo) fVideo.value = "";
       uploadedVideoUrl = "";
       uploadedVideoPoster = "";
+      window.kbPendingEntityImageDataUrl = "";
       fAliases.value = "";
       fTags.value = "";
       if (fType) fType.value = "";
-      btnSubmit.innerHTML = '<i class="fa-solid fa-plus"></i>';
-      btnSubmit.title = '新增实体';
-      btnSubmit.setAttribute('aria-label', '新增实体');
+      if (composerTypeSelect) composerTypeSelect.value = "";
+      btnSubmit.textContent = '发布';
+      btnSubmit.title = '发布实体';
+      btnSubmit.setAttribute('aria-label', '发布实体');
       btnCancelEdit.style.display = "none";
       addMsg.textContent = "";
       // Reset entity header
@@ -12865,8 +12900,10 @@
       if (fVideo) fVideo.value = "";
       uploadedVideoUrl = "";
       uploadedVideoPoster = "";
+      window.kbPendingEntityImageDataUrl = "";
       if (fType) fType.value = node?.type || "";
-      btnSubmit.innerHTML = '<i class="fa-solid fa-floppy-disk"></i>';
+      if (composerTypeSelect) composerTypeSelect.value = node?.type || "";
+      btnSubmit.textContent = '保存';
       btnSubmit.title = '保存修改';
       btnSubmit.setAttribute('aria-label', '保存修改');
       btnCancelEdit.style.display = "";
@@ -12981,6 +13018,9 @@
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       addMsg.textContent = "";
+      try {
+        if (typeof syncComposerToHiddenFields === 'function') syncComposerToHiddenFields();
+      } catch { }
       const name = (fName.value || "").trim();
       const description = (fDesc.value || "").trim();
       const link = fLink ? (fLink.value || "").trim() : "";
@@ -13019,6 +13059,8 @@
             videoData = uploadResp.url;
           }
         }
+        const pendingHeaderImage = (window.kbPendingEntityImageDataUrl || "").toString().trim();
+        const finalImageData = pendingHeaderImage || posterData || "";
         const baseBody = {
           name,
           description,
@@ -13026,7 +13068,7 @@
           aliases,
           tags,
           type: nodeType || null,
-          ...(posterData ? { image: posterData } : {}),
+          ...(finalImageData ? { image: finalImageData } : {}),
           ...(videoData ? { video: videoData } : {}),
         };
         const body = isEdit
@@ -13164,6 +13206,9 @@
         } else {
           resetFormToAdd();
         }
+        if (res?.ok) {
+          window.kbPendingEntityImageDataUrl = "";
+        }
         setTimeout(() => {
           addMsg.textContent = "";
         }, 2000);
@@ -13201,40 +13246,92 @@
       });
     });
 
-    // Sync entity header live as user types in the form
-    fName.addEventListener('input', () => {
-      const el = document.getElementById('entityDisplayName');
-      if (el) updateEntityDisplayName(el, fName.value || '');
-    });
+    // Social composer sync: multiline input, #标签, @引用, 本体选择
     const entityDisplayName = document.getElementById('entityDisplayName');
-    if (entityDisplayName) {
-      entityDisplayName.addEventListener('input', () => {
-        const nameValue = (entityDisplayName.textContent || '').trim();
-        if (fName.value !== nameValue) {
-          fName.value = nameValue;
+
+    function extractComposerList(rawText, prefix) {
+      const text = (rawText || '').toString();
+      const regex = new RegExp(`(^|\\s)\\${prefix}([^\\s#@]+)`, 'g');
+      const result = [];
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        const token = (match[2] || '').trim();
+        if (token) result.push(token);
+      }
+      return Array.from(new Set(result));
+    }
+
+    function syncComposerToHiddenFields() {
+      if (!entityDisplayName) return;
+      const rawText = (entityDisplayName.innerText || '')
+        .replace(/\u00A0/g, ' ')
+        .replace(/\r\n?/g, '\n');
+      const normalized = rawText.replace(/\n{3,}/g, '\n\n').trim();
+      const lines = normalized
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+      const primaryName = lines[0] || '';
+
+      if (fName && fName.value !== primaryName) {
+        fName.value = primaryName;
+      }
+      if (fDesc && fDesc.value !== normalized) {
+        fDesc.value = normalized;
+      }
+
+      const tags = extractComposerList(rawText, '#');
+      const mentions = extractComposerList(rawText, '@');
+      if (fTags) fTags.value = tags.join(', ');
+      if (fAliases) fAliases.value = mentions.join(', ');
+
+      const aliasWrap = document.getElementById('entityDisplayAliases');
+      const aliasValues = document.getElementById('entityAliasValues');
+      if (aliasWrap && aliasValues) {
+        if (mentions.length) {
+          aliasValues.textContent = mentions.map((name) => `@${name}`).join(' ');
+          aliasWrap.style.display = '';
+        } else {
+          aliasValues.textContent = '';
+          aliasWrap.style.display = 'none';
         }
+      }
+    }
+
+    if (fName) {
+      fName.addEventListener('input', () => {
+        if (!entityDisplayName || document.activeElement === entityDisplayName) return;
+        updateEntityDisplayName(entityDisplayName, fName.value || '');
       });
+    }
+
+    if (entityDisplayName) {
+      entityDisplayName.addEventListener('input', syncComposerToHiddenFields);
       entityDisplayName.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') {
+        if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
           event.preventDefault();
-          fName.focus();
+          syncComposerToHiddenFields();
+          if (form && typeof form.requestSubmit === 'function') form.requestSubmit();
         }
       });
     }
-    fDesc.addEventListener('input', () => {
-      const el = document.getElementById('entityDisplayDesc');
-      if (el) {
-        const descValue = fDesc.value.trim();
-        if (descValue) {
-          el.textContent = descValue;
-          el.style.display = '';
-        } else {
-          el.textContent = '';
-          el.style.display = 'none';
+
+    if (fDesc) {
+      fDesc.addEventListener('input', () => {
+        const el = document.getElementById('entityDisplayDesc');
+        if (el) {
+          const descValue = fDesc.value.trim();
+          if (descValue) {
+            el.textContent = descValue;
+            el.style.display = '';
+          } else {
+            el.textContent = '';
+            el.style.display = 'none';
+          }
+          updateEntityDescToggle();
         }
-        updateEntityDescToggle();
-      }
-    });
+      });
+    }
     const btnEntityDescToggle = document.getElementById('entityDescToggle');
     if (btnEntityDescToggle) {
       btnEntityDescToggle.addEventListener('click', () => {
@@ -13246,21 +13343,69 @@
         btnEntityDescToggle.textContent = expanded ? '收起' : '展开';
       });
     }
-    fAliases.addEventListener('input', () => {
-      const el = document.getElementById('entityDisplayAliases');
-      const vals = document.getElementById('entityAliasValues');
-      if (el && vals) {
-        const v = (fAliases.value || '').trim();
-        if (v) { vals.textContent = v; el.style.display = ''; }
-        else { el.style.display = 'none'; }
+    if (fAliases) {
+      fAliases.addEventListener('input', () => {
+        const el = document.getElementById('entityDisplayAliases');
+        const vals = document.getElementById('entityAliasValues');
+        if (el && vals) {
+          const v = (fAliases.value || '').trim();
+          if (v) {
+            vals.textContent = v
+              .split(/[\s,，;；、]+/)
+              .map((it) => (it ? (it.startsWith('@') ? it : `@${it}`) : ''))
+              .filter(Boolean)
+              .join(' ');
+            el.style.display = '';
+          } else {
+            vals.textContent = '';
+            el.style.display = 'none';
+          }
+        }
+      });
+    }
+
+    if (fTags) {
+      fTags.addEventListener('input', () => {
+        try {
+          if (typeof window.refreshTagListHighlight === 'function') window.refreshTagListHighlight();
+        } catch { }
+      });
+    }
+
+    function syncComposerTypeOptions() {
+      if (!composerTypeSelect || !fType) return;
+      if (composerTypeSelect.innerHTML !== fType.innerHTML) {
+        composerTypeSelect.innerHTML = fType.innerHTML;
       }
-    });
-    // Refresh right sidebar tag highlights when entity tags change
-    fTags.addEventListener('input', () => {
-      try {
-        if (typeof window.refreshTagListHighlight === 'function') window.refreshTagListHighlight();
-      } catch { }
-    });
+      composerTypeSelect.value = fType.value || '';
+    }
+
+    if (fType && composerTypeSelect) {
+      syncComposerTypeOptions();
+      const typeObserver = new MutationObserver(() => {
+        syncComposerTypeOptions();
+      });
+      typeObserver.observe(fType, { childList: true, subtree: true, attributes: true });
+
+      fType.addEventListener('change', syncComposerTypeOptions);
+      composerTypeSelect.addEventListener('change', () => {
+        fType.value = composerTypeSelect.value || '';
+      });
+    }
+
+    if (btnAddOntologyChip && composerTypeSelect) {
+      btnAddOntologyChip.addEventListener('click', () => {
+        composerTypeSelect.focus();
+      });
+    }
+
+    if (btnEntityImageUpload) {
+      btnEntityImageUpload.addEventListener('click', () => {
+        if (typeof window.kbTriggerEntityImageUpload === 'function') {
+          window.kbTriggerEntityImageUpload();
+        }
+      });
+    }
 
     // Click to edit
     async function enterEditById(nodeId) {

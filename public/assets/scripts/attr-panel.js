@@ -67,17 +67,13 @@ if (btnAttrReset) {
 
   function setEntityEditMode(edit) {
     entityEditMode = !!edit;
+    // 社媒式创建卡片统一常驻显示，不再进行头部/表单二选一切换。
+    if (entityHeader) entityHeader.style.display = "";
+    if (nodeFormSection) nodeFormSection.style.display = "";
+    if (btnCancelEdit) btnCancelEdit.style.display = entityEditMode ? "" : "none";
     if (entityEditMode) {
-      if (entityHeader) entityHeader.style.display = "none";
-      if (nodeFormSection) nodeFormSection.style.display = "";
-      if (btnCancelEdit) btnCancelEdit.style.display = "";
-      // 聚焦名称输入框
-      const fName = document.getElementById("fName");
-      if (fName) setTimeout(() => fName.focus(), 100);
-    } else {
-      if (entityHeader) entityHeader.style.display = "";
-      if (nodeFormSection) nodeFormSection.style.display = "none";
-      if (btnCancelEdit) btnCancelEdit.style.display = "none";
+      const composer = document.getElementById("entityDisplayName");
+      if (composer) setTimeout(() => composer.focus(), 100);
     }
   }
 
