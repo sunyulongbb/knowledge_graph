@@ -530,6 +530,9 @@
     wrap.appendChild(muteBtn);
 
     wrap.style.cursor = "pointer";
+    wrap.tabIndex = 0;
+    wrap.setAttribute("aria-label", "视频播放区，点击播放/暂停，← → 快退/快进");
+
     wrap.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -541,6 +544,23 @@
         video.play().catch(() => {});
       } else {
         video.pause();
+      }
+      wrap.focus();
+    });
+
+    wrap.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        e.stopPropagation();
+        video.currentTime = Math.min(video.duration || 0, video.currentTime + 5);
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        e.stopPropagation();
+        video.currentTime = Math.max(0, video.currentTime - 5);
+      } else if (e.key === " ") {
+        e.preventDefault();
+        e.stopPropagation();
+        if (video.paused) { video.play().catch(() => {}); } else { video.pause(); }
       }
     });
 
@@ -940,6 +960,12 @@
     tblNodes.querySelectorAll(".table-feed-video").forEach((v) => {
       window._kbVideoObserver.observe(v);
     });
+
+    // Keyboard seek: ArrowRight +5s, ArrowLeft -5s — bound directly on each video element
+    if (window._kbVideoKeyHandler) {
+      document.removeEventListener("keydown", window._kbVideoKeyHandler);
+      window._kbVideoKeyHandler = null;
+    }
 
     try {
       const rows = getListItems();
