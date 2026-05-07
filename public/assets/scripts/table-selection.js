@@ -794,39 +794,9 @@
       const meta = document.createElement("div");
       meta.className = "table-feed-meta";
 
-      const nameLink = document.createElement("a");
+      const nameLink = document.createElement("span");
       nameLink.textContent = label;
       nameLink.className = "table-feed-name";
-      nameLink.addEventListener("mouseenter", () => {
-        nameLink.style.textDecoration = "underline";
-      });
-      nameLink.addEventListener("mouseleave", () => {
-        nameLink.style.textDecoration = "none";
-      });
-
-      try {
-        const id = n._id || n.id || "";
-        const label = n.label_zh || n.label || "";
-        const params = new URLSearchParams();
-        if (id) params.set("id", id);
-        else if (label) params.set("label", label);
-        nameLink.href =
-          "/kb/detail" + (params.toString() ? "?" + params.toString() : "");
-        nameLink.rel = "noreferrer noopener";
-      } catch {}
-
-      nameLink.addEventListener("click", (e) => {
-        try {
-          if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
-          e.preventDefault();
-          const rid = tr.getAttribute("data-id") || n._id || n.id || "";
-          if (!rid) return;
-          setTableSelection("", false);
-          if (typeof setViewMode === "function") {
-            setViewMode("detail", { targetNodeId: rid });
-          }
-        } catch {}
-      });
 
       const metaTop = document.createElement("div");
       metaTop.className = "table-feed-meta-top";

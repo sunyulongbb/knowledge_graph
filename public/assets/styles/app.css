@@ -3760,6 +3760,8 @@ body {
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+  position: relative;
+  padding-right: 74px;
 }
 
 .table-feed-name {
@@ -3775,6 +3777,10 @@ body {
 .table-feed-time {
   font-size: 13px;
   color: var(--muted);
+  position: absolute;
+  top: 0;
+  right: 0;
+  white-space: nowrap;
 }
 
 .table-feed-subline {
