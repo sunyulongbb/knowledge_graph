@@ -1,0 +1,2781 @@
+﻿// 关系面板重展示轻编辑模式
+const byId =
+  (window.kbApp &&
+    kbApp.dom &&
+    typeof kbApp.dom.byId === "function" &&
+    kbApp.dom.byId) ||
+  ((id) => document.getElementById(id));
+const attrForm = byId("attrForm");
+const btnShowAttrForm = byId("btnShowAttrForm");
+const attrFormBody = byId("attrFormBody");
+function resetEditingRow() {
+  if (typeof window.kbResetAttrEditingRow === "function") {
+    window.kbResetAttrEditingRow();
+    return;
+  }
+  const hiddenRow = document.querySelector("#attrList .attr-editing-hidden");
+  if (hiddenRow) hiddenRow.classList.remove("attr-editing-hidden");
+  if (attrFormBody) attrFormBody.classList.remove("inline-editing");
+}
+// 默认只展示关系列表，隐藏表单
+if (attrFormBody) attrFormBody.style.display = "none";
+if (btnShowAttrForm) {
+  btnShowAttrForm.addEventListener("click", function () {
+    resetEditingRow();
+    if (typeof resetAttrForm === "function") {
+      resetAttrForm();
+    }
+    if (attrFormBody) {
+      attrFormBody.style.display = "";
+      attrFormBody.classList.remove("collapsed");
+    }
+    const attrList = byId("attrList");
+    if (attrList && attrFormBody && attrList.parentNode) {
+      attrList.parentNode.insertBefore(attrFormBody, attrList);
+    }
+    const header = btnShowAttrForm.closest(".wd-section-header");
+    const collapseBtn = header
+      ? header.querySelector(".wd-collapse-btn")
+      : null;
+    if (collapseBtn) collapseBtn.classList.remove("collapsed");
+  });
+}
+if (attrForm) {
+  attrForm.addEventListener("submit", function () {
+    setTimeout(() => {
+      if (attrFormBody) attrFormBody.style.display = "none";
+      resetEditingRow();
+    }, 200);
+  });
+}
+// 取消编辑时也隐藏表单，显示新增按钮
+const btnAttrReset = byId("btnAttrReset");
+if (btnAttrReset) {
+  btnAttrReset.addEventListener("click", function () {
+    if (attrFormBody) attrFormBody.style.display = "none";
+    resetEditingRow();
+  });
+}
+(function () {
+  // 展示/编辑模式切换逻辑
+  const entityHeader = document.getElementById("entityHeader");
+  const nodeFormSection = document.getElementById("nodeFormSection");
+  const btnEntityEdit = document.getElementById("btnEntityEdit");
+  const btnCancelEdit = document.getElementById("btnCancelEdit");
+  const nodeForm = document.getElementById("nodeForm");
+  let entityEditMode = false;
+
+  function setEntityEditMode(edit) {
+    entityEditMode = !!edit;
+    // 社媒式创建卡片统一常驻显示，不再进行头部/表单二选一切换。
+    if (entityHeader) entityHeader.style.display = "";
+    if (nodeFormSection) nodeFormSection.style.display = "";
+    if (btnCancelEdit) btnCancelEdit.style.display = entityEditMode ? "" : "none";
+    if (entityEditMode) {
+      const composer = document.getElementById("entityDisplayName");
+      if (composer) setTimeout(() => composer.focus(), 100);
+    }
+  }
+
+  if (btnEntityEdit) {
+    btnEntityEdit.addEventListener("click", function () {
+      setEntityEditMode(true);
+    });
+  }
+  if (btnCancelEdit) {
+    btnCancelEdit.addEventListener("click", function (e) {
+      e.preventDefault();
+      // 只切换回只读模式，并强制刷新展示区为当前节点数据（不是表单内容）
+      setEntityEditMode(false);
+      if (typeof window.renderEntityHeader === "function") {
+        window.renderEntityHeader();
+      } else if (window.kbCurrentNodeData) {
+        // 兼容：手动刷新展示区为当前节点数据
+        var node = window.kbCurrentNodeData;
+        var name = node?.label_zh || node?.label || node?.name || "新建实体";
+        var desc =
+          node?.desc_zh ||
+          node?.description ||
+          node?.desc ||
+          "点击此处添加描述";
+        var aliases = node?.aliases_zh || node?.aliases || node?.alias || [];
+        var displayName = document.getElementById("entityDisplayName");
+        var displayDesc = document.getElementById("entityDisplayDesc");
+        var displayAliases = document.getElementById("entityDisplayAliases");
+        var aliasValues = document.getElementById("entityAliasValues");
+        if (displayName) displayName.textContent = name;
+        if (displayDesc) displayDesc.textContent = desc;
+        if (displayAliases && aliasValues) {
+          var arr = Array.isArray(aliases)
+            ? aliases
+            : typeof aliases === "string"
+              ? aliases.split(",")
+              : [];
+          arr = arr
+            .map(function (a) {
+              return a.trim();
+            })
+            .filter(Boolean);
+          aliasValues.innerHTML = arr
+            .map(function (a) {
+              return '<span class="wd-alias-item">' + a + "</span>";
+            })
+            .join("");
+          displayAliases.style.display = arr.length ? "" : "none";
+        }
+      }
+    });
+  }
+  if (nodeForm) {
+    nodeForm.addEventListener("submit", function () {
+      setTimeout(() => setEntityEditMode(false), 200); // 提交后延迟切回展示
+    });
+  }
+
+  // 默认进入展示模式
+  setEntityEditMode(false);
+})();
+(function () {
+  // Attribute Manager JS
+  // ----------------------
+  const shared = window.kbApp || {};
+  const state = shared.state || {};
+  const dom = shared.dom || {};
+  const byId = dom.byId || ((id) => document.getElementById(id));
+  const attrPanel = byId("attrPanel");
+  const attrForm = byId("attrForm");
+  const attrId = byId("attrId");
+  const attrProp = byId("attrProp");
+  const attrPropLabel = byId("attrPropLabel");
+  const attrType = byId("attrType");
+  const attrValue = byId("attrValue");
+  // New datatype-specific inputs
+  const attrValueUrl = byId("attrValueUrl");
+  const attrValueDate = byId("attrValueDate");
+  const attrValueAmount = byId("attrValueAmount");
+  const attrValueUnit = byId("attrValueUnit");
+  const attrValueLat = byId("attrValueLat");
+  const attrValueLon = byId("attrValueLon");
+  const attrValueMonoText = byId("attrValueMonoText");
+  const attrValueMonoLang = byId("attrValueMonoLang");
+  // wikibase-entityid inputs
+  const attrEntitySearchInput = byId("attrEntitySearchInput");
+  const attrEntitySearchResults = byId("attrEntitySearchResults");
+  const attrEntitySearchResultsWrap = byId("attrEntitySearchResultsWrap");
+  const attrEntitySearchStatus = byId("attrEntitySearchStatus");
+  const attrEntitySelectedPreview = byId("attrEntitySelectedPreview");
+  const attrValueEntityType = byId("attrValueEntityType");
+  const attrValueEntityId = byId("attrValueEntityId");
+  const attrValueEntityNumericId = byId("attrValueEntityNumericId");
+  const attrValueQualifier = byId("attrValueQualifier");
+  const btnAttrQualifierToggle = byId("btnAttrQualifierToggle");
+  const attrPropSearchInput = byId("attrPropSearch");
+  const attrDatatypeHint = byId("attrDatatypeHint");
+  const attrDatatypeGroups = byId("attrDatatypeGroups");
+  const attrMsg = byId("attrMsg");
+  const attrList = byId("attrList");
+  const btnAttrSave = byId("btnAttrSave");
+  const btnAttrReset = byId("btnAttrReset");
+  const btnAttrEditSelected = byId("btnAttrEditSelected");
+  const btnAttrDeleteSelected = byId("btnAttrDeleteSelected");
+  let currentAttrEditingRow = null;
+
+  function ensureAttrInlineEditorLayout() {
+    if (!attrForm) return;
+    const editRow = attrForm.querySelector(".wd-attr-edit-row");
+    const valueWrap = byId("attrValueWrap");
+    const propPicker = byId("attrPropPicker");
+    if (!editRow || !valueWrap || !propPicker) return;
+
+    let propCell = editRow.querySelector(".wd-prop-cell");
+    if (!propCell) {
+      propCell = document.createElement("div");
+      propCell.className = "wd-prop-cell";
+    }
+
+    const currentProp = byId("attrCurrentProp");
+    if (currentProp && propCell.firstElementChild !== currentProp) {
+      propCell.appendChild(currentProp);
+    }
+    if (propCell.lastElementChild !== propPicker) {
+      propCell.appendChild(propPicker);
+    }
+    if (editRow.firstElementChild !== propCell) {
+      editRow.insertBefore(propCell, valueWrap);
+    }
+  }
+
+  function resetEditingRow() {
+    if (currentAttrEditingRow) {
+      currentAttrEditingRow.classList.remove("attr-editing-hidden");
+      currentAttrEditingRow = null;
+    }
+    if (attrFormBody) attrFormBody.classList.remove("inline-editing");
+  }
+
+  window.kbResetAttrEditingRow = resetEditingRow;
+
+  function openAttrEditorForRow(row, it, valueIndex, nodeId) {
+    if (!row) return;
+    resetEditingRow();
+    ensureAttrInlineEditorLayout();
+    try {
+      if (
+        window.kbSelectedAttrIds &&
+        typeof window.kbSelectedAttrIds.clear === "function"
+      ) {
+        window.kbSelectedAttrIds.clear();
+      }
+      window.kbLastAttrAnchorId = "";
+      updateAttrSelectionStyles();
+      ensureAttrButtonsState();
+    } catch {}
+    if (attrForm && attrFormBody && btnShowAttrForm) {
+      attrFormBody.style.display = "";
+      attrFormBody.classList.remove("collapsed");
+      attrFormBody.classList.add("inline-editing");
+      attrForm.classList.add("value-only-editing");
+      if (row.parentNode) {
+        row.insertAdjacentElement("afterend", attrFormBody);
+      }
+    }
+    currentAttrEditingRow = row;
+    row.classList.add("attr-editing-hidden");
+    try {
+      fillAttrForm(nodeId, it, valueIndex);
+    } catch (err) {
+      console.error("fillAttrForm failed", err);
+      if (window.attrId) window.attrId.value = it?.id || "";
+    }
+    const visibleInput =
+      document.querySelector(
+        '#attrDatatypeGroups .dtype-group[style*="display: flex"] input:not([type="hidden"]), #attrDatatypeGroups .dtype-group[style*="display:flex"] input:not([type="hidden"])',
+      ) || attrValue;
+    if (visibleInput && typeof visibleInput.focus === "function") {
+      setTimeout(() => visibleInput.focus(), 0);
+    } else if (attrValue) {
+      setTimeout(() => attrValue.focus(), 0);
+    }
+  }
+  // commonsMedia (image) inputs
+  const attrValueImage = byId("attrValueImage");
+  const attrImagePreview = byId("attrImagePreview");
+  const attrImagePreviewImg = byId("attrImagePreviewImg");
+  const attrImageFileName = byId("attrImageFileName");
+  const btnAttrImageClear = byId("btnAttrImageClear");
+  const attrValueImageUrl = byId("attrValueImageUrl");
+  const btnAttrImageUpload = byId("btnAttrImageUpload");
+  const attrImageStateText = byId("attrImageStateText");
+  if (typeof state.bindAlias === "function") {
+    state.bindAlias("kbSelectedAttrIds", "selectedAttrIds", () => new Set());
+    state.bindAlias("kbLastAttrAnchorId", "lastAttrAnchorId", "");
+    state.bindAlias("kbAttrCache", "attrCache", () => new Map());
+    state.bindAlias(
+      "kbPropertySuggestionCache",
+      "propertySuggestionCache",
+      () => new Map(),
+    );
+  }
+  let attrEntitySearchItems = [];
+
+  function mapDatatypeToUi(datatype, datavalueType) {
+    // 数值类型（valuetype / datavalue_type）优先，其次才看 datatype
+    const dv = (datavalueType || "").toString().toLowerCase();
+    const dt = (datatype || "").toString().toLowerCase();
+
+    // --- 数值类型优先判断 ---
+    if (dv === "wikibase-entityid" || dv.startsWith("wikibase-"))
+      return "wikibase-entityid";
+    if (dv === "globecoordinate" || dv === "globe-coordinate")
+      return "globecoordinate";
+    if (dv === "commonsmedia") return "commonsMedia";
+    if (["string", "url", "time", "quantity", "monolingualtext"].includes(dv))
+      return dv;
+
+    // --- 回退到 datatype ---
+    if (dt === "wikibase-entityid" || dt.startsWith("wikibase-"))
+      return "wikibase-entityid";
+    if (dt === "globe-coordinate" || dt === "globecoordinate")
+      return "globecoordinate";
+    if (dt === "commonsmedia") return "commonsMedia";
+    if (["string", "url", "time", "quantity", "monolingualtext"].includes(dt))
+      return dt;
+
+    if (dv) return dv;
+    if (dt) return dt;
+    return "string";
+  }
+
+  function pickUiDatatype(item) {
+    if (!item || typeof item !== "object") return "";
+    if (item.ui_datatype) return item.ui_datatype;
+    // 兼容 datavalue.type / valuetype（属性表）和 datavalue_type（属性记录）几种字段名
+    const valueType =
+      item.datavalue?.type || item.datavalue_type || item.valuetype || "";
+    return mapDatatypeToUi(item.datatype, valueType);
+  }
+
+  if (!window.kbPropertySuggestionCache)
+    window.kbPropertySuggestionCache = new Map();
+
+  const PROPERTY_SUGGESTION_TTL = 5 * 60 * 1000;
+
+  function normalizeEntitySearchItem(raw) {
+    if (!raw) return null;
+    if (typeof raw === "string") {
+      const id = raw.trim();
+      if (!id) return null;
+      const entityType = inferEntityTypeFromId(id);
+      const numericMatch = id.match(/(\d+)/);
+      const numericId = numericMatch ? numericMatch[1] : "";
+      const numericValue = numericId ? Number(numericId) : undefined;
+      const valueObj = {
+        id,
+        "entity-type": entityType,
+        entity_type: entityType,
+      };
+      if (numericValue !== undefined && !Number.isNaN(numericValue)) {
+        valueObj["numeric-id"] = numericValue;
+        valueObj.numeric_id = numericValue;
+      }
+      return {
+        id,
+        label: id,
+        entity_type: entityType,
+        numeric_id: numericId,
+        count: 0,
+        value: valueObj,
+      };
+    }
+    if (typeof raw !== "object") return null;
+    const source = raw;
+    const valueObjRaw =
+      source.value && typeof source.value === "object" ? source.value : {};
+    const valueObj = { ...valueObjRaw };
+    const id =
+      source.id ||
+      source.entity_id ||
+      valueObj.id ||
+      (source.value && source.value.id)
+        ? String(
+            source.id ||
+              source.entity_id ||
+              valueObj.id ||
+              (source.value && source.value.id),
+          ).trim()
+        : "";
+    if (!id) return null;
+    if (!valueObj.id) valueObj.id = id;
+
+    let entityType =
+      source.entity_type ||
+      source["entity-type"] ||
+      valueObj["entity-type"] ||
+      valueObj.entity_type;
+    if (!entityType) entityType = inferEntityTypeFromId(id);
+    valueObj["entity-type"] = entityType;
+    valueObj.entity_type = entityType;
+
+    let numericId =
+      source.numeric_id ??
+      source["numeric-id"] ??
+      valueObj["numeric-id"] ??
+      valueObj.numeric_id;
+    if (numericId === undefined || numericId === null || numericId === "") {
+      const match = id.match(/(\d+)/);
+      numericId = match ? match[1] : "";
+    }
+    let numericIdStr = "";
+    if (numericId !== undefined && numericId !== null) {
+      numericIdStr = String(numericId).trim();
+      if (numericIdStr) {
+        const numericNumber = Number(numericIdStr);
+        if (!Number.isNaN(numericNumber)) {
+          valueObj["numeric-id"] = numericNumber;
+          valueObj.numeric_id = numericNumber;
+        } else {
+          valueObj["numeric-id"] = numericIdStr;
+          valueObj.numeric_id = numericIdStr;
+        }
+      } else {
+        numericIdStr = "";
+      }
+    }
+
+    const label =
+      source.label ||
+      source.entity_label ||
+      source.entity_label_zh ||
+      valueObj.entity_label_zh ||
+      valueObj.label ||
+      valueObj.label_zh ||
+      id;
+    if (label && !valueObj.entity_label_zh) valueObj.entity_label_zh = label;
+
+    return {
+      id,
+      label,
+      entity_type: entityType,
+      numeric_id: numericIdStr,
+      count:
+        typeof source.count === "number" && Number.isFinite(source.count)
+          ? source.count
+          : 0,
+      value: valueObj,
+    };
+  }
+
+  function canonicalizePropertyId(prop) {
+    if (prop === null || typeof prop === "undefined") return "";
+    let raw = String(prop).trim();
+    if (!raw) return "";
+    if (raw.includes("/")) {
+      raw = raw.split("/").pop() || raw;
+    }
+    raw = raw.replace(/^property\//i, "");
+    if (!raw) return "";
+    const upper = raw.toUpperCase();
+    const prefixed = upper.match(/^P\s*0*(\d+)$/);
+    if (prefixed && prefixed[1]) {
+      const num = parseInt(prefixed[1], 10);
+      return Number.isFinite(num) ? `${num}` : `${prefixed[1]}`;
+    }
+    if (/^\d+$/.test(upper)) {
+      const num = parseInt(upper, 10);
+      return Number.isFinite(num) ? `${num}` : `${upper}`;
+    }
+    const anyDigits = upper.match(/(\d+)/);
+    if (anyDigits && anyDigits[1]) {
+      const num = parseInt(anyDigits[1], 10);
+      if (Number.isFinite(num)) return `P${num}`;
+    }
+    return upper;
+  }
+
+  function propertyIdToApiPath(prop) {
+    // For the new backend, we use the ID directly without 'property/' prefix
+    return prop;
+  }
+
+  function samePropertyId(a, b) {
+    if (!a || !b) return false;
+    const left = canonicalizePropertyId(a);
+    const right = canonicalizePropertyId(b);
+    if (!left || !right) return false;
+    return left === right;
+  }
+
+  // Render attribute list into a container element using the same DOM/behavior
+  function renderAttrList(container, items, nodeId) {
+    if (!container) return;
+    container.innerHTML = "";
+    if (!Array.isArray(items) || !items.length) {
+      container.innerHTML = '<div class="muted">暂无属性</div>';
+      return;
+    }
+    const readOnly = container.id === "detailAttrList";
+
+    let displayItems = items;
+    // Special handling for images in detail view
+    if (readOnly) {
+      console.log("Rendering attribute list with image handling", items);
+      const imageItems = items.filter((it) => {
+        return it.property_label_zh === "图像";
+      });
+
+      if (imageItems.length > 0) {
+        // Collect all valid image sources
+        const imageUrls = [];
+        imageItems.forEach((it) => {
+          let rawVal = it.value;
+          if (typeof rawVal === "string") {
+            const trimmed = rawVal.trim();
+            if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+              try {
+                const parsed = JSON.parse(trimmed);
+                if (Array.isArray(parsed)) rawVal = parsed;
+              } catch {}
+            }
+          }
+          const values = Array.isArray(rawVal) ? rawVal : [rawVal];
+          values.forEach((v) => {
+            if (!v) return;
+            let src = String(v);
+            // If it looks like a filename and not a URL, try Wikimedia Commons
+            if (
+              !src.startsWith("http") &&
+              !src.startsWith("//") &&
+              !src.startsWith("data:")
+            ) {
+              src = `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(src)}`;
+            }
+            imageUrls.push(src);
+          });
+        });
+
+        if (imageUrls.length > 0) {
+          if (imageUrls.length === 1) {
+            // Single image display
+            const imgContainer = document.createElement("div");
+            imgContainer.style.marginBottom = "12px";
+            imgContainer.style.display = "flex";
+            imgContainer.style.justifyContent = "center";
+
+            const img = document.createElement("img");
+            img.src = imageUrls[0];
+            img.style.display = "block";
+            img.style.width = "100%";
+            img.style.height = "auto";
+            img.style.boxSizing = "border-box";
+            img.style.maxHeight = "300px";
+            img.style.borderRadius = "4px";
+            img.style.border = "1px solid var(--border)";
+            img.style.objectFit = "contain";
+            img.style.backgroundColor = "var(--surface-1)";
+            img.style.cursor = "zoom-in";
+            img.onclick = () => window.open(imageUrls[0], "_blank");
+
+            imgContainer.appendChild(img);
+            container.appendChild(imgContainer);
+          } else {
+            // Carousel display
+            const carousel = document.createElement("div");
+            carousel.className = "carousel-container";
+
+            const slides = document.createElement("div");
+            slides.className = "carousel-slides";
+
+            imageUrls.forEach((src) => {
+              const slide = document.createElement("div");
+              slide.className = "carousel-slide";
+              const img = document.createElement("img");
+              img.src = src;
+              // responsive: fill slide width and preserve aspect ratio
+              img.style.display = "block";
+              img.style.width = "100%";
+              img.style.height = "auto";
+              img.style.boxSizing = "border-box";
+              img.style.maxHeight = "100%";
+              img.style.borderRadius = "4px";
+              img.style.objectFit = "contain";
+              img.style.backgroundColor = "var(--surface-1)";
+              img.style.cursor = "zoom-in";
+              img.onclick = () => window.open(src, "_blank");
+              slide.appendChild(img);
+              slides.appendChild(slide);
+            });
+
+            carousel.appendChild(slides);
+
+            // Controls
+            const prevBtn = document.createElement("button");
+            prevBtn.className = "carousel-prev";
+            prevBtn.innerHTML = "&#10094;";
+
+            const nextBtn = document.createElement("button");
+            nextBtn.className = "carousel-next";
+            nextBtn.innerHTML = "&#10095;";
+
+            const dots = document.createElement("div");
+            dots.className = "carousel-dots";
+
+            imageUrls.forEach((_, i) => {
+              const dot = document.createElement("span");
+              dot.className = `carousel-dot ${i === 0 ? "active" : ""}`;
+              dot.onclick = (e) => {
+                e.stopPropagation();
+                goToSlide(i);
+              };
+              dots.appendChild(dot);
+            });
+
+            carousel.appendChild(prevBtn);
+            carousel.appendChild(nextBtn);
+            carousel.appendChild(dots);
+
+            container.appendChild(carousel);
+
+            // Carousel Logic
+            let currentIndex = 0;
+            const slideCount = imageUrls.length;
+            // Hint to browser for smoother transforms
+            slides.style.willChange = "transform";
+
+            // Update transform using pixels (more reliable than % when layout changes)
+            function updateTransform() {
+              const offset = currentIndex * carousel.clientWidth;
+              slides.style.transform = `translate3d(-${offset}px,0,0)`;
+            }
+
+            function updateDots() {
+              const allDots = dots.querySelectorAll(".carousel-dot");
+              allDots.forEach((d, i) =>
+                d.classList.toggle("active", i === currentIndex),
+              );
+            }
+
+            function goToSlide(index) {
+              if (index < 0) index = slideCount - 1;
+              if (index >= slideCount) index = 0;
+              currentIndex = index;
+              updateTransform();
+              updateDots();
+            }
+
+            prevBtn.onclick = (e) => {
+              e.stopPropagation();
+              goToSlide(currentIndex - 1);
+            };
+
+            nextBtn.onclick = (e) => {
+              e.stopPropagation();
+              goToSlide(currentIndex + 1);
+            };
+
+            // Make sure transform is correct after images load or on resize
+            const imgs = slides.querySelectorAll("img");
+            let imgsLoaded = 0;
+            if (imgs.length) {
+              imgs.forEach((img) => {
+                if (img.complete) {
+                  imgsLoaded++;
+                } else {
+                  img.addEventListener("load", () => {
+                    imgsLoaded++;
+                    if (imgsLoaded === imgs.length) updateTransform();
+                  });
+                }
+              });
+            }
+
+            // Ensure correct position on first render and on window resize
+            requestAnimationFrame(() => {
+              updateTransform();
+              updateDots();
+            });
+            window.addEventListener("resize", () => updateTransform());
+
+            // Basic pointer swipe support for touch/drag
+            (function enableSwipe() {
+              let isPointerDown = false;
+              let startX = 0;
+              let lastClientX = 0;
+
+              carousel.addEventListener("pointerdown", (ev) => {
+                // don't start drag when pressing on controls
+                if (
+                  ev.target.closest(
+                    ".carousel-prev, .carousel-next, .carousel-dot",
+                  )
+                )
+                  return;
+                isPointerDown = true;
+                startX = ev.clientX;
+                lastClientX = ev.clientX;
+                carousel.setPointerCapture &&
+                  carousel.setPointerCapture(ev.pointerId);
+                // disable transition while dragging
+                slides.style.transition = "none";
+              });
+
+              carousel.addEventListener("pointermove", (ev) => {
+                if (!isPointerDown) return;
+                const dx = ev.clientX - startX;
+                const offset = -currentIndex * carousel.clientWidth + dx;
+                slides.style.transform = `translate3d(${offset}px,0,0)`;
+                lastClientX = ev.clientX;
+              });
+
+              function endPointer(ev) {
+                if (!isPointerDown) return;
+                isPointerDown = false;
+                try {
+                  carousel.releasePointerCapture &&
+                    carousel.releasePointerCapture(ev.pointerId);
+                } catch (e) {}
+                // restore transition
+                slides.style.transition = "";
+                const dx = lastClientX - startX;
+                if (Math.abs(dx) > carousel.clientWidth * 0.15) {
+                  if (dx > 0) goToSlide(currentIndex - 1);
+                  else goToSlide(currentIndex + 1);
+                } else {
+                  updateTransform(); // snap back
+                }
+              }
+
+              ["pointerup", "pointercancel", "pointerleave"].forEach((evt) =>
+                carousel.addEventListener(evt, endPointer),
+              );
+            })();
+          }
+        }
+
+        // Filter out images from the list
+        displayItems = items.filter((it) => {
+          return it.property_label_zh !== "图像";
+        });
+      }
+    }
+
+    // 将相同属性名的条目排在一起（稳定排序，保留原有相对顺序）
+    displayItems = [...displayItems].sort((a, b) => {
+      const ka = canonicalizePropertyId(a?.property) || a?.property_label_zh || a?.property || "";
+      const kb = canonicalizePropertyId(b?.property) || b?.property_label_zh || b?.property || "";
+      if (ka < kb) return -1;
+      if (ka > kb) return 1;
+      return 0;
+    });
+
+    const frag = document.createDocumentFragment();
+    let lastReadOnlyProp = null;
+    let lastEditableProp = null;
+    for (let itemIndex = 0; itemIndex < displayItems.length; itemIndex++) {
+      const it = displayItems[itemIndex];
+      // If rendering detail (read-only) and value is an array (or a
+      // JSON-encoded array string), render each element as its own row
+      // so multi-valued properties appear one-per-line. For editable
+      // lists (left panel) keep original single-row behavior.
+      let rawVal = it.value;
+      // try to parse JSON-encoded array values
+      if (typeof rawVal === "string") {
+        const trimmed = rawVal.trim();
+        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) rawVal = parsed;
+          } catch {
+            // ignore parse errors and treat as string
+          }
+        }
+      }
+      const values = Array.isArray(rawVal) ? rawVal : [rawVal];
+      const currentPropKey = canonicalizePropertyId(it?.property) || "";
+      const nextItem = displayItems[itemIndex + 1] || null;
+      const nextPropKey = nextItem
+        ? canonicalizePropertyId(nextItem?.property) || ""
+        : "";
+      const isLastItemOfPropertyGroup =
+        !nextItem || currentPropKey !== nextPropKey;
+      for (let vi = 0; vi < values.length; vi++) {
+        const valItem = values[vi];
+        const isLastValue = vi === values.length - 1;
+        const showQuickAddBtn = isLastValue && isLastItemOfPropertyGroup;
+        const row = document.createElement("div");
+        row.style.display = "flex";
+        row.style.alignItems = "center";
+        row.style.gap = "6px";
+        row.style.padding = "4px 0";
+        // Use the attribute id for editable rows; for detail rows append index
+        // to ensure each rendered row has a unique data-id when in detail mode.
+        const dataId = `${it.id}::${vi}`;
+        row.setAttribute("data-id", dataId);
+        // detail panel should be display-only (no selection/edit)
+        row.style.cursor = readOnly ? "default" : "pointer";
+        const label = document.createElement("div");
+        label.style.flex = "0 0 140px";
+        label.style.color = "var(--muted)";
+        label.style.fontSize = "12px";
+        let showLabel = "";
+        try {
+          if (readOnly) {
+            const preferLabel =
+              typeof it?.property_label_zh === "string"
+                ? it.property_label_zh.trim()
+                : "";
+            const helperLabel =
+              typeof getAttributeLabel === "function"
+                ? getAttributeLabel(it) || ""
+                : "";
+            const curLabel = preferLabel || helperLabel;
+            const canonicalProp = canonicalizePropertyId(it?.property);
+            const rawProp = typeof it?.property === "string" ? it.property : "";
+            if (
+              !canonicalProp ||
+              !lastReadOnlyProp ||
+              canonicalProp !== lastReadOnlyProp
+            ) {
+              const base = curLabel || "";
+              showLabel = base || rawProp;
+              lastReadOnlyProp = canonicalProp || null;
+            } else {
+              showLabel = "";
+            }
+          } else {
+            const canonicalProp = canonicalizePropertyId(it?.property);
+            const preferLabel =
+              typeof it?.property_label_zh === "string"
+                ? it.property_label_zh.trim()
+                : "";
+            const labelToUse = preferLabel || canonicalProp || "";
+            if (
+              !canonicalProp ||
+              !lastEditableProp ||
+              canonicalProp !== lastEditableProp
+            ) {
+              showLabel = labelToUse;
+              lastEditableProp = canonicalProp || null;
+            } else {
+              showLabel = "";
+            }
+          }
+        } catch (e) {
+          showLabel = readOnly
+            ? `${it.property || ""}`
+            : it?.property_label_zh || "";
+        }
+        label.textContent = showLabel;
+        const val = document.createElement("div");
+        val.style.flex = "1";
+        val.style.fontSize = "12px";
+        val.style.padding = "2px 6px";
+        val.style.borderRadius = "4px";
+        const valDtype = pickUiDatatype(it) || it.datatype;
+        const renderAsMediaThumb = shouldRenderAsMediaThumb(
+          it,
+          valItem,
+          valDtype,
+        );
+        // For detail panel we want multi-line visible values; allow wrapping there.
+        if (readOnly) {
+          val.style.whiteSpace = "normal";
+        } else {
+          if (renderAsMediaThumb) {
+            val.style.whiteSpace = "normal";
+            val.style.overflow = "visible";
+            val.style.textOverflow = "clip";
+            val.style.display = "flex";
+            val.style.alignItems = "center";
+            val.style.minHeight = "76px";
+          } else {
+            val.style.whiteSpace = "nowrap";
+            val.style.overflow = "hidden";
+            val.style.textOverflow = "ellipsis";
+          }
+        }
+        try {
+          val.innerHTML = renderAsMediaThumb
+            ? renderMediaThumbHtml(valItem)
+            : renderAttrValue(valDtype, valItem);
+        } catch (e) {
+          val.textContent = formatAttrValue(valDtype, valItem);
+        }
+        if (String(valDtype || "").toLowerCase() === "wikibase-entityid") {
+          val.style.cursor = "pointer";
+          val.title = "点击查看该对象详情";
+          val.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openEntityDetailFromAttrValue(valItem);
+          });
+        }
+        row.appendChild(label);
+        row.appendChild(val);
+        // Inline delete button for editable lists
+        if (!readOnly) {
+          const delBtn = document.createElement("button");
+          delBtn.type = "button";
+          delBtn.className = "attr-row-del-btn";
+          delBtn.title = "删除该条关系";
+          delBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+          delBtn.style.cssText = "flex:0 0 auto;padding:2px 6px;border:none;background:transparent;color:var(--muted);cursor:pointer;border-radius:4px;font-size:12px;opacity:0;transition:opacity 0.15s;";
+          delBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            if (!confirm("确定删除该条关系？")) return;
+            const nodeIdRaw = (fId.value || "").trim();
+            const nodeId = nodeIdRaw.startsWith("entity/") ? nodeIdRaw : "entity/" + nodeIdRaw;
+            const parts = dataId.split("::");
+            const attrDbId = parts[0];
+            const valueIndex = parts.length > 1 ? parseInt(parts[1], 10) : -1;
+            try {
+              const originalItem = Array.isArray(window.kbAttrItems)
+                ? window.kbAttrItems.find((x) => x.id === attrDbId)
+                : null;
+              if (originalItem && Array.isArray(originalItem.value) && valueIndex >= 0) {
+                const newArray = originalItem.value.filter((_, idx) => idx !== valueIndex);
+                if (newArray.length === 0) {
+                  await deleteAttr(attrDbId);
+                } else {
+                  const saveUrl = new URL("/api/kb/attributes/save", window.location.origin);
+                  if (typeof window.appendCurrentDbParam === "function") {
+                    const su = window.appendCurrentDbParam(saveUrl);
+                    if (su instanceof URL) saveUrl.search = su.search;
+                  }
+                  await fetch(saveUrl.toString(), {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ id: attrDbId, node_id: nodeId, property: originalItem.property, datatype: originalItem.datatype, value: newArray }),
+                  });
+                }
+              } else {
+                await deleteAttr(attrDbId);
+              }
+              window.kbSelectedAttrIds.delete(dataId);
+              await loadAttributes(nodeId);
+            } catch (err) {
+              console.error(err);
+              alert("删除失败: " + (err.message || err));
+            }
+          });
+          row.appendChild(delBtn);
+          row.addEventListener("mouseenter", () => { delBtn.style.opacity = "1"; });
+          row.addEventListener("mouseleave", () => { delBtn.style.opacity = "0"; });
+        }
+        // Selection/edit behavior only for editable lists (not detail view)
+        if (!readOnly) {
+          row.addEventListener("click", (e) => {
+            const idsInOrder = Array.from(
+              container.querySelectorAll("div[data-id]"),
+            ).map((el) => el.getAttribute("data-id"));
+            if (
+              e.shiftKey &&
+              window.kbLastAttrAnchorId &&
+              idsInOrder.includes(window.kbLastAttrAnchorId)
+            ) {
+              const start = idsInOrder.indexOf(window.kbLastAttrAnchorId);
+              const end = idsInOrder.indexOf(dataId);
+              const [a, b] = start < end ? [start, end] : [end, start];
+              window.kbSelectedAttrIds.clear();
+              idsInOrder
+                .slice(a, b + 1)
+                .forEach((x) => window.kbSelectedAttrIds.add(x));
+            } else if (e.ctrlKey || e.metaKey) {
+              if (window.kbSelectedAttrIds.has(dataId))
+                window.kbSelectedAttrIds.delete(dataId);
+              else window.kbSelectedAttrIds.add(dataId);
+              window.kbLastAttrAnchorId = dataId;
+            } else {
+              window.kbSelectedAttrIds.clear();
+              window.kbSelectedAttrIds.add(dataId);
+              window.kbLastAttrAnchorId = dataId;
+            }
+            updateAttrSelectionStyles();
+            ensureAttrButtonsState();
+          });
+          row.addEventListener("dblclick", (e) => {
+            e.stopPropagation();
+            openAttrEditorForRow(row, it, vi, nodeId);
+          });
+        }
+        frag.appendChild(row);
+        if (!readOnly && showQuickAddBtn) {
+          const addRow = document.createElement("div");
+          addRow.style.display = "flex";
+          addRow.style.alignItems = "center";
+          addRow.style.gap = "6px";
+          addRow.style.padding = "4px 0";
+
+          const addLabel = document.createElement("div");
+          addLabel.style.flex = "0 0 140px";
+          addLabel.style.color = "var(--muted)";
+          addLabel.style.fontSize = "12px";
+          addLabel.textContent = "";
+
+          const addActionWrap = document.createElement("div");
+          addActionWrap.style.flex = "1";
+          addActionWrap.style.fontSize = "12px";
+          addActionWrap.style.padding = "2px 6px";
+          addActionWrap.style.borderRadius = "4px";
+
+          const quickAddBtn = document.createElement("button");
+          quickAddBtn.type = "button";
+          quickAddBtn.className = "btn sm";
+          quickAddBtn.title = `为${it?.property_label_zh || it?.property || "该属性"}新增属性值`;
+          quickAddBtn.setAttribute("aria-label", quickAddBtn.title);
+          quickAddBtn.style.padding = "2px 10px";
+          quickAddBtn.innerHTML = '<i class="fa-solid fa-plus"></i><span style="margin-left:6px;">新增属性值</span>';
+          quickAddBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openQuickAddAttrForProperty(it, nodeId, addRow);
+          });
+
+          addActionWrap.appendChild(quickAddBtn);
+          addRow.appendChild(addLabel);
+          addRow.appendChild(addActionWrap);
+          frag.appendChild(addRow);
+        }
+      }
+    }
+    container.appendChild(frag);
+    // only update selection/styles for interactive attrList (left panel)
+    if (!readOnly) {
+      updateAttrSelectionStyles();
+      ensureAttrButtonsState();
+    }
+  }
+
+  function normalizeEntityIdForCompare(id) {
+    try {
+      if (typeof normalizeEntityIdForApi === "function") {
+        const normalized = normalizeEntityIdForApi(id || "");
+        return (normalized || "").trim();
+      }
+    } catch {}
+    return (id || "").toString().trim();
+  }
+
+  function isDetailPanelShowingEntity(nodeId) {
+    try {
+      if (!nodeId) return false;
+      const detailPanelEl = document.getElementById("detailPanel");
+      if (!detailPanelEl || detailPanelEl.style.display === "none")
+        return false;
+      const panelId =
+        (detailPanelEl.dataset && detailPanelEl.dataset.entityId) ||
+        window.kbActiveDetailNodeId ||
+        window.kbActiveDetailRouteId ||
+        "";
+      if (!panelId) return false;
+      return (
+        normalizeEntityIdForCompare(panelId) ===
+        normalizeEntityIdForCompare(nodeId)
+      );
+    } catch (err) {
+      console.error("isDetailPanelShowingEntity failed", err);
+      return false;
+    }
+  }
+
+  function syncDetailAttrList(items, nodeId) {
+    try {
+      if (!isDetailPanelShowingEntity(nodeId)) return;
+      const detailListEl = document.getElementById("detailAttrList");
+      if (!detailListEl) return;
+      renderAttrList(
+        detailListEl,
+        Array.isArray(items) ? items : [],
+        normalizeEntityIdForCompare(nodeId),
+      );
+    } catch (err) {
+      console.error("syncDetailAttrList failed", err);
+    }
+  }
+
+  if (btnAttrQualifierToggle) {
+    btnAttrQualifierToggle.addEventListener("click", () => {
+      if (!attrValueQualifier || !attrValueQualifier.parentElement) return;
+      const row = attrValueQualifier.parentElement;
+      const isOpen = row.style.display !== "none" && row.style.display !== "";
+      if (!isOpen) {
+        row.style.display = "flex";
+        btnAttrQualifierToggle.classList.add("active");
+        setTimeout(() => {
+          attrValueQualifier.focus();
+        }, 0);
+      } else {
+        row.style.display = "none";
+        btnAttrQualifierToggle.classList.remove("active");
+      }
+    });
+  }
+
+  function resetAttrForm() {
+    window.kbEditingValueIndex = -1;
+    ensureAttrInlineEditorLayout();
+    resetEditingRow();
+    if (attrForm) attrForm.classList.remove("value-only-editing");
+    try {
+      if (
+        window.kbSelectedAttrIds &&
+        typeof window.kbSelectedAttrIds.clear === "function"
+      ) {
+        window.kbSelectedAttrIds.clear();
+      }
+    } catch (e) {}
+    window.kbSelectedSchemaPropId = "";
+    window.kbSelectedSchemaPropLabel = "";
+    const currentPropEl = byId("attrCurrentProp");
+    if (currentPropEl) {
+      currentPropEl.textContent = "当前属性：未选择";
+    }
+    if (attrPropSearchInput) {
+      attrPropSearchInput.value = "";
+    }
+    const attrPropPickerList = byId("attrPropPickerList");
+    if (attrPropPickerList) {
+      attrPropPickerList.selectedIndex = -1;
+    }
+    attrId.value = "";
+    attrProp.value = "";
+    attrPropLabel.value = "";
+    attrType.value = "string";
+    try {
+      attrValue.value = "";
+    } catch {}
+    if (attrValueQualifier && attrValueQualifier.parentElement) {
+      attrValueQualifier.parentElement.style.display = "none";
+      attrValueQualifier.value = "";
+    }
+    if (btnAttrQualifierToggle) {
+      btnAttrQualifierToggle.classList.remove("active");
+    }
+    try {
+      attrValueUrl.value = "";
+      attrValueDate.value = "";
+      attrValueAmount.value = "";
+      attrValueUnit.value = "";
+      attrValueLat.value = "";
+      attrValueLon.value = "";
+      attrValueMonoText.value = "";
+      attrValueMonoLang.value = "";
+    } catch {}
+    // Clear image upload
+    clearImageUpload();
+    clearEntitySearchState();
+    attrMsg.textContent = "";
+    updateDatatypeUI("string");
+    try {
+      updateAttrSelectionStyles();
+      ensureAttrButtonsState();
+    } catch (e) {}
+  }
+
+  function updateDatatypeUI(dtype, valueType) {
+    const normalized = mapDatatypeToUi(dtype, valueType) || "string";
+    if (btnAttrQualifierToggle) {
+      btnAttrQualifierToggle.style.display = "inline-flex";
+    }
+    // 动态获取 attrDatatypeGroups，确保能正确找到元素
+    const groupsContainer = document.getElementById("attrDatatypeGroups");
+    const groups = groupsContainer
+      ? groupsContainer.querySelectorAll(".dtype-group")
+      : [];
+    groups.forEach((g) => {
+      const gDtype = g.getAttribute("data-dtype");
+      const shouldShow = gDtype === normalized;
+      if (shouldShow) {
+        g.style.display = "flex";
+      } else {
+        g.style.display = "none";
+      }
+    });
+    const hintEl = document.getElementById("attrDatatypeHint");
+    if (hintEl) {
+      const parts = [`数据类型：${normalized || "string"}`];
+      if (valueType) parts.push(`数值类型：${valueType}`);
+      hintEl.textContent = parts.join("　");
+    }
+  }
+
+  function inferEntityTypeFromId(entityId) {
+    if (!entityId) return "item";
+    const c = entityId.charAt(0).toUpperCase();
+    if (c === "Q") return "item";
+    if (c === "P") return "property";
+    if (c === "L") return "lexeme";
+    if (c === "E") return "entity";
+    return "item";
+  }
+
+  function parseEntityIdFromInput(value) {
+    if (!value || typeof value !== "string") return "";
+    const trimmed = value.trim();
+    const match = trimmed.match(/^(?:entity\/)?([QPLE]\d+)$/i);
+    if (!match) return "";
+    return match[1].toUpperCase();
+  }
+
+  function extractEntityIdFromAttrValue(value) {
+    try {
+      if (!value && value !== 0) return "";
+      const candidates = [
+        value?.id,
+        value?.["entity-id"],
+        value?.entity_id,
+        value?.entityId,
+        value?.["numeric-id"],
+        value?.numeric_id,
+        value?.numericId,
+        value?.value?.id,
+        value?.value?.["entity-id"],
+        value?.value?.entity_id,
+        value?.value?.entityId,
+        value?.value?.["numeric-id"],
+        value?.value?.numeric_id,
+        value?.value?.numericId,
+      ];
+      for (const candidate of candidates) {
+        if (!candidate && candidate !== 0) continue;
+        const text = String(candidate).trim();
+        if (!text) continue;
+        if (typeof stripEntityIdPrefix === "function") {
+          return stripEntityIdPrefix(text) || text;
+        }
+        return text.replace(/^entity\//i, "");
+      }
+      if (typeof value === "string") {
+        const parsed = parseEntityIdFromInput(value);
+        if (parsed) return parsed;
+        const trimmed = value.trim();
+        if (trimmed) {
+          if (typeof stripEntityIdPrefix === "function") {
+            return stripEntityIdPrefix(trimmed) || trimmed;
+          }
+          return trimmed.replace(/^entity\//i, "");
+        }
+      }
+    } catch {}
+    return "";
+  }
+
+  function openEntityDetailFromAttrValue(value) {
+    try {
+      const routeId = extractEntityIdFromAttrValue(value);
+      if (!routeId) return false;
+      const preservedSidebarState = {
+        selectedRowId: window.kbSelectedRowId,
+        selectedRowIds: window.kbSelectedRowIds
+          ? new Set(window.kbSelectedRowIds)
+          : new Set(),
+        selectedNodeId: window.kbSelectedNodeId,
+        currentNodeId: window.kbCurrentNodeId,
+        lastAnchorRowId: window.kbLastAnchorRowId,
+        formId:
+          document.getElementById("fId")?.value?.toString().trim() || "",
+      };
+      const canonicalId =
+        typeof normalizeEntityIdForApi === "function"
+          ? normalizeEntityIdForApi(routeId)
+          : typeof ensureEntityIdPrefix === "function"
+            ? ensureEntityIdPrefix(routeId)
+            : routeId;
+      window.kbActiveDetailRouteId = routeId;
+      window.kbActiveDetailNodeId = canonicalId || routeId;
+      const restoreSidebarState = () => {
+        try {
+          window.kbSelectedRowId = preservedSidebarState.selectedRowId || "";
+          window.kbSelectedRowIds = new Set(
+            preservedSidebarState.selectedRowIds || [],
+          );
+          window.kbSelectedNodeId = preservedSidebarState.selectedNodeId || "";
+          window.kbCurrentNodeId = preservedSidebarState.currentNodeId || "";
+          window.kbLastAnchorRowId = preservedSidebarState.lastAnchorRowId || "";
+          const formIdEl = document.getElementById("fId");
+          if (formIdEl) formIdEl.value = preservedSidebarState.formId || "";
+        } catch {}
+      };
+      if (typeof showNodeDetailInline === "function") {
+        Promise.resolve(
+          showNodeDetailInline(routeId, { preserveSidebarState: true }),
+        ).finally(restoreSidebarState);
+        restoreSidebarState();
+        try {
+          window.kbViewMode = "detail";
+        } catch {}
+        return true;
+      }
+      if (typeof setViewMode === "function") {
+        setViewMode("detail", { targetNodeId: routeId });
+        return true;
+      }
+      if (typeof focusNode === "function") {
+        focusNode(canonicalId || routeId, { fit: false, duration: 180 });
+        return true;
+      }
+    } catch (err) {
+      console.error("openEntityDetailFromAttrValue failed", err);
+    }
+    return false;
+  }
+
+  function updateEntitySelectionPreview(label, id) {
+    if (!attrEntitySelectedPreview) return;
+    if (!id) {
+      attrEntitySelectedPreview.style.display = "";
+      attrEntitySelectedPreview.textContent = "当前未选择实体";
+      if (attrEntitySearchInput) attrEntitySearchInput.value = "";
+      return;
+    }
+    const text = label || id;
+    if (attrEntitySearchInput) {
+      attrEntitySearchInput.value = text;
+    }
+    attrEntitySelectedPreview.style.display = "none";
+  }
+
+  function renderEntitySearchResults(items) {
+    if (!attrEntitySearchResults || !attrEntitySearchResultsWrap) return;
+    attrEntitySearchResults.innerHTML = "";
+    const normalized = [];
+    (Array.isArray(items) ? items : []).forEach((raw) => {
+      const norm = normalizeEntitySearchItem(raw);
+      if (norm && norm.id) normalized.push(norm);
+    });
+    attrEntitySearchItems = normalized;
+    if (!attrEntitySearchItems.length) {
+      attrEntitySearchResultsWrap.style.display = "none";
+      attrEntitySearchResults.style.display = "none";
+      return;
+    }
+    const frag = document.createDocumentFragment();
+    attrEntitySearchItems.forEach((it, idx) => {
+      const id = (it?.id || "").toString();
+      const opt = document.createElement("option");
+      opt.value = id;
+      const label = it?.label || id;
+      const countInfo =
+        typeof it?.count === "number" && it.count > 0 ? ` · ${it.count}次` : "";
+      opt.textContent = `${label} (${id})${countInfo}`;
+      if (idx === 0) opt.selected = true;
+      frag.appendChild(opt);
+    });
+    attrEntitySearchResults.appendChild(frag);
+    attrEntitySearchResultsWrap.style.display = "";
+    attrEntitySearchResults.style.display = "block";
+  }
+
+  function applyEntitySelectionById(entityId) {
+    if (
+      !attrValueEntityType ||
+      !attrValueEntityId ||
+      !attrValueEntityNumericId
+    ) {
+      return;
+    }
+    if (!entityId) {
+      attrValueEntityType.value = "";
+      attrValueEntityId.value = "";
+      attrValueEntityNumericId.value = "";
+      updateEntitySelectionPreview("", "");
+      return;
+    }
+    const found = attrEntitySearchItems.find(
+      (it) => (it?.id || "") === entityId,
+    );
+    const id = entityId;
+    const label = found?.label || "";
+    let numericValue = found?.numeric_id || "";
+    if (!numericValue) {
+      const numericMatch = id.match(/(\d+)/);
+      numericValue = numericMatch ? numericMatch[1] : "";
+    }
+    attrValueEntityId.value = id;
+    attrValueEntityNumericId.value = numericValue ? String(numericValue) : "";
+    attrValueEntityType.value = found?.entity_type || inferEntityTypeFromId(id);
+    updateEntitySelectionPreview(label, id);
+    if (attrEntitySearchStatus) {
+      attrEntitySearchStatus.textContent = "";
+    }
+  }
+
+  async function searchEntitiesByKeyword(keyword) {
+    const term = (keyword || "").trim();
+    if (!term) {
+      if (attrEntitySearchStatus)
+        attrEntitySearchStatus.textContent = "请输入检索关键词";
+      renderEntitySearchResults([]);
+      return;
+    }
+    attrEntitySearchStatus.textContent = "检索中…";
+    try {
+      const url = new URL("/api/kb/entity_search", window.location.origin);
+      if (typeof window.appendCurrentDbParam === "function") {
+        const scopedUrl = window.appendCurrentDbParam(url);
+        if (scopedUrl instanceof URL) {
+          url.search = scopedUrl.search;
+        }
+      }
+      url.searchParams.set("limit", 20);
+      url.searchParams.set("offset", 0);
+      url.searchParams.set("q", term);
+      const resp = await fetch(url.toString());
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      const data = await resp.json();
+      const items = Array.isArray(data?.nodes) ? data.nodes : [];
+      renderEntitySearchResults(items);
+      if (!items.length) {
+        attrEntitySearchStatus.textContent = "未找到匹配实体";
+      } else {
+        attrEntitySearchStatus.textContent = `找到 ${items.length} 条结果`;
+        if (attrEntitySearchResults) attrEntitySearchResults.focus();
+      }
+    } catch (err) {
+      console.error("entity search failed", err);
+      attrEntitySearchStatus.textContent = "检索失败";
+      renderEntitySearchResults([]);
+    }
+  }
+
+  async function loadEntitySuggestionsForProperty(propertyId, options = {}) {
+    const prop = (propertyId || "").trim();
+    if (!prop) return;
+    const limit = Number(options.limit || 100);
+    const cacheKey = `${prop}::${limit}`;
+    const now = Date.now();
+    try {
+      const cached = window.kbPropertySuggestionCache.get(cacheKey);
+      if (cached && now - cached.ts < PROPERTY_SUGGESTION_TTL) {
+        renderEntitySearchResults(cached.items);
+        if (attrEntitySearchStatus) {
+          attrEntitySearchStatus.textContent = cached.items.length
+            ? `推荐属性值（${cached.items.length} 条）`
+            : "暂无推荐属性值";
+        }
+        return;
+      }
+    } catch {}
+    if (attrEntitySearchStatus)
+      attrEntitySearchStatus.textContent = "加载推荐属性值…";
+    try {
+      const url = new URL(
+        "/api/kb/property/value_suggestions",
+        window.location.origin,
+      );
+      if (typeof window.appendCurrentDbParam === "function") {
+        const scopedUrl = window.appendCurrentDbParam(url);
+        if (scopedUrl instanceof URL) {
+          url.search = scopedUrl.search;
+        }
+      }
+      url.searchParams.set("property", prop);
+      const currentEntityId = window.kbSelectedRowId || "";
+      if (currentEntityId) {
+        url.searchParams.set("entity_id", currentEntityId);
+      }
+      if (limit && Number.isFinite(limit))
+        url.searchParams.set("limit", String(limit));
+      const resp = await fetch(url.toString());
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      const data = await resp.json();
+      const items = Array.isArray(data?.items) ? data.items : [];
+      try {
+        window.kbPropertySuggestionCache.set(cacheKey, {
+          ts: now,
+          items,
+        });
+      } catch {}
+      const currentProp = (window.kbSelectedSchemaPropId || "").trim();
+      const currentInput = (attrProp?.value || "").trim();
+      if (
+        currentProp &&
+        !samePropertyId(currentProp, prop) &&
+        (!currentInput || !samePropertyId(currentInput, prop))
+      ) {
+        return;
+      }
+      renderEntitySearchResults(items);
+      if (attrEntitySearchStatus) {
+        attrEntitySearchStatus.textContent = items.length
+          ? `推荐属性值（${items.length} 条）`
+          : "暂无推荐属性值";
+      }
+    } catch (err) {
+      console.error("loadEntitySuggestionsForProperty failed", err);
+      if (attrEntitySearchStatus)
+        attrEntitySearchStatus.textContent = "推荐加载失败";
+    }
+  }
+
+  if (typeof window !== "undefined") {
+    window.loadEntitySuggestionsForProperty = loadEntitySuggestionsForProperty;
+  }
+
+  function clearEntitySearchState() {
+    attrEntitySearchItems = [];
+    if (attrEntitySearchResults) {
+      attrEntitySearchResults.innerHTML = "";
+      attrEntitySearchResults.style.display = "none";
+    }
+    if (attrEntitySearchResultsWrap)
+      attrEntitySearchResultsWrap.style.display = "none";
+    if (attrEntitySearchStatus) attrEntitySearchStatus.textContent = "";
+    if (attrEntitySearchInput) attrEntitySearchInput.value = "";
+    if (attrValueEntityType) attrValueEntityType.value = "";
+    if (attrValueEntityId) attrValueEntityId.value = "";
+    if (attrValueEntityNumericId) attrValueEntityNumericId.value = "";
+    updateEntitySelectionPreview("", "");
+  }
+
+  function clearImageUpload() {
+    if (attrValueImage) attrValueImage.value = "";
+    if (attrValueImageUrl) attrValueImageUrl.value = "";
+    if (attrImagePreview) attrImagePreview.style.display = "none";
+    if (attrImagePreviewImg) attrImagePreviewImg.src = "";
+    if (attrImageFileName) attrImageFileName.textContent = "";
+    if (attrImageStateText) attrImageStateText.textContent = "";
+  }
+
+  async function uploadAttrImageFile(file) {
+    if (!file) return;
+    clearImageUpload();
+    if (attrImageFileName) attrImageFileName.textContent = file.name;
+    if (attrImageStateText)
+      attrImageStateText.textContent = `正在上传：${file.name}`;
+    const uploadUrl = new URL("/api/kb/upload-image", window.location.origin);
+    if (typeof window.appendCurrentDbParam === "function") {
+      const scopedUrl = window.appendCurrentDbParam(uploadUrl);
+      if (scopedUrl instanceof URL) uploadUrl.search = scopedUrl.search;
+    }
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const resp = await fetch(uploadUrl.toString(), {
+        method: "POST",
+        body: formData,
+      });
+      if (!resp.ok) {
+        const text = await resp.text();
+        throw new Error(text || "上传失败");
+      }
+      const result = await resp.json();
+      const fileUrl = result.url || "";
+      if (!fileUrl) throw new Error("上传失败");
+      if (attrValueImageUrl) attrValueImageUrl.value = fileUrl;
+      if (attrImagePreviewImg) attrImagePreviewImg.src = fileUrl;
+      if (attrImagePreview) attrImagePreview.style.display = "block";
+      if (attrImageStateText)
+        attrImageStateText.textContent = `已上传：${file.name}`;
+      return fileUrl;
+    } catch (err) {
+      console.error(err);
+      if (attrImageStateText)
+        attrImageStateText.textContent = `上传失败：${err?.message || err}`;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        if (attrImagePreviewImg) attrImagePreviewImg.src = ev.target.result;
+        if (attrImagePreview) attrImagePreview.style.display = "block";
+        if (attrValueImageUrl) attrValueImageUrl.value = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+      return null;
+    }
+  }
+
+  // Handle upload button click - trigger file picker
+  if (btnAttrImageUpload) {
+    btnAttrImageUpload.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (attrValueImage) attrValueImage.click();
+    });
+  }
+
+  // Handle image file selection
+  if (attrValueImage) {
+    attrValueImage.addEventListener("change", async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) {
+        clearImageUpload();
+        return;
+      }
+      await uploadAttrImageFile(file);
+    });
+  }
+
+  // Handle image clear button
+  if (btnAttrImageClear) {
+    btnAttrImageClear.addEventListener("click", (e) => {
+      e.preventDefault();
+      clearImageUpload();
+    });
+  }
+
+  async function handlePastedImage(file) {
+    if (!file) return;
+    await uploadAttrImageFile(file);
+  }
+
+  function extractPastedImageUrl(clipboardData) {
+    if (!clipboardData) return "";
+    const tryResolve = (raw) => {
+      const value = String(raw || "").trim();
+      if (!value) return "";
+      if (/^data:(image|video)\//i.test(value)) return value;
+      if (/^https?:\/\//i.test(value)) return value;
+      return "";
+    };
+    const plain = tryResolve(clipboardData.getData?.("text/plain"));
+    if (plain) return plain;
+    const html = String(clipboardData.getData?.("text/html") || "");
+    if (html) {
+      const match = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+      if (match && match[1]) {
+        const fromHtml = tryResolve(match[1]);
+        if (fromHtml) return fromHtml;
+      }
+    }
+    return "";
+  }
+
+  function handleClipboardPaste(event) {
+    if (!event.clipboardData) return;
+    const items = Array.from(event.clipboardData.items || []);
+    const imageItem = items.find((item) => item.type.startsWith("image/"));
+    if (imageItem) {
+      event.preventDefault();
+      const file = imageItem.getAsFile();
+      if (!file) return;
+      clearImageUpload();
+      handlePastedImage(file);
+      return;
+    }
+    const pastedUrl = extractPastedImageUrl(event.clipboardData);
+    if (!pastedUrl) return;
+    event.preventDefault();
+    if (attrValueImageUrl) {
+      attrValueImageUrl.value = pastedUrl;
+      attrValueImageUrl.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }
+
+  // When user manually types/pastes a URL, update preview
+  if (attrValueImageUrl) {
+    attrValueImageUrl.addEventListener("input", () => {
+      const url = attrValueImageUrl.value.trim();
+      if (url && !url.startsWith("data:")) {
+        if (attrImagePreviewImg) attrImagePreviewImg.src = url;
+        if (attrImagePreview) attrImagePreview.style.display = "block";
+        if (attrImageStateText) attrImageStateText.textContent = "";
+      } else if (!url) {
+        if (attrImagePreview) attrImagePreview.style.display = "none";
+        if (attrImagePreviewImg) attrImagePreviewImg.src = "";
+      }
+    });
+    attrValueImageUrl.addEventListener("paste", handleClipboardPaste);
+  }
+
+  if (attrEntitySearchInput) {
+    attrEntitySearchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const rawValue = attrEntitySearchInput.value || "";
+        const directEntityId = parseEntityIdFromInput(rawValue);
+        if (directEntityId) {
+          applyEntitySelectionById(directEntityId);
+          if (attrEntitySearchStatus)
+            attrEntitySearchStatus.textContent = "已选择实体";
+          if (attrEntitySearchResultsWrap)
+            attrEntitySearchResultsWrap.style.display = "none";
+          return;
+        }
+        searchEntitiesByKeyword(rawValue);
+      }
+    });
+  }
+
+  if (attrEntitySearchResults) {
+    const hideSearchResults = () => {
+      if (attrEntitySearchResultsWrap)
+        attrEntitySearchResultsWrap.style.display = "none";
+      if (attrEntitySearchResults)
+        attrEntitySearchResults.style.display = "none";
+    };
+
+    const selectAndHide = () => {
+      const selectedId = (attrEntitySearchResults.value || "").trim();
+      if (selectedId) {
+        applyEntitySelectionById(selectedId);
+        hideSearchResults();
+      }
+    };
+
+    attrEntitySearchResults.addEventListener("dblclick", selectAndHide);
+  }
+
+  async function loadAttributes(nodeId) {
+    if (!nodeId) {
+      try {
+        resetAttrForm();
+      } catch (e) {}
+      try {
+        if (
+          window.kbSelectedAttrIds &&
+          typeof window.kbSelectedAttrIds.clear === "function"
+        ) {
+          window.kbSelectedAttrIds.clear();
+        }
+      } catch (e) {}
+      try {
+        ensureAttrButtonsState();
+      } catch (e) {}
+      attrList.innerHTML = "";
+      attrPanel.style.display = "none";
+      const badge = document.getElementById("attrCountBadge");
+      if (badge) badge.textContent = "0";
+      return;
+    }
+    try {
+      resetAttrForm();
+    } catch (e) {}
+    try {
+      if (
+        window.kbSelectedAttrIds &&
+        typeof window.kbSelectedAttrIds.clear === "function"
+      ) {
+        window.kbSelectedAttrIds.clear();
+      }
+    } catch (e) {}
+    attrPanel.style.display = "";
+    attrList.innerHTML = '<div class="muted">加载属性中…</div>';
+
+    const fullId = nodeId.startsWith("entity/") ? nodeId : "entity/" + nodeId;
+
+    // Always fetch from server to ensure fresh data
+    const attrUrl = new URL("/api/kb/node/attributes", window.location.origin);
+    if (typeof window.appendCurrentDbParam === "function") {
+      const scopedUrl = window.appendCurrentDbParam(attrUrl);
+      if (scopedUrl instanceof URL) {
+        attrUrl.search = scopedUrl.search;
+      }
+    }
+    attrUrl.searchParams.set("id", fullId);
+    const resp = await fetch(attrUrl.toString());
+    if (!resp.ok) {
+      attrList.innerHTML = '<div class="muted">加载失败</div>';
+      return;
+    }
+    const data = await resp.json();
+    let items = Array.isArray(data.items) ? data.items : [];
+    // store in cache
+    try {
+      window.kbAttrCache.set(fullId, { ts: Date.now(), items: items });
+    } catch {}
+    window.kbAttrItems = items;
+    if (!items.length) {
+      try {
+        resetAttrForm();
+      } catch (e) {}
+    }
+    try {
+      renderAttrList(attrList, items, fullId);
+    } catch (e) {
+      console.error("renderAttrList failed", e);
+    }
+    // Update count badge
+    try {
+      const badge = document.getElementById("attrCountBadge");
+      if (badge) badge.textContent = items.length;
+    } catch {}
+    syncDetailAttrList(items, fullId);
+  }
+
+  // 从 kbAttrItems 同步当前节点图像到 cy 图
+  function syncCyNodeImage(nodeId) {
+    if (!window.kbCy) return;
+    try {
+      const rawId = (nodeId || "").replace(/^entity\//, "");
+      const cyNode = window.kbCy.getElementById(rawId);
+      if (!cyNode || !cyNode.length) return;
+      const items = window.kbAttrItems || [];
+      const imageAttr = items.find(
+        (it) =>
+          it.datatype === "commonsMedia" ||
+          (it.datavalue && it.datavalue.type === "commonsMedia"),
+      );
+      if (imageAttr) {
+        let url = "";
+        const v = imageAttr.value;
+        if (typeof v === "string") url = v;
+        else if (Array.isArray(v) && typeof v[0] === "string") url = v[0];
+        cyNode.data("image", url || "");
+      } else {
+        cyNode.data("image", "");
+      }
+    } catch {}
+  }
+
+  function updateAttrSelectionStyles() {
+    try {
+      // update left attrList
+      try {
+        attrList.querySelectorAll("div[data-id]").forEach((el) => {
+          const id = el.getAttribute("data-id");
+          const valEl = el.children[1];
+          if (window.kbSelectedAttrIds.has(id)) {
+            el.style.background = "";
+            if (valEl) {
+              valEl.style.background = "rgba(79,70,229,0.10)";
+            }
+          } else {
+            el.style.background = "";
+            if (valEl) {
+              valEl.style.background = "";
+            }
+          }
+        });
+      } catch (e) {}
+      // detail infobox is display-only; do not apply selection highlight there
+    } catch {}
+  }
+
+  function ensureAttrButtonsState() {
+    const count = window.kbSelectedAttrIds.size || 0;
+    if (btnAttrEditSelected) btnAttrEditSelected.disabled = count !== 1;
+    if (btnAttrDeleteSelected) btnAttrDeleteSelected.disabled = count === 0;
+  }
+
+  function extractDateString(value) {
+    try {
+      if (value == null) return "";
+      let raw = "";
+      if (typeof value === "string") {
+        raw = value;
+      } else if (typeof value === "object") {
+        if (typeof value.date === "string" && value.date.trim())
+          raw = value.date;
+        else if (typeof value.time === "string" && value.time.trim())
+          raw = value.time;
+        else if (typeof value.value === "string" && value.value.trim())
+          raw = value.value;
+      }
+      raw = (raw || "").trim();
+      if (!raw) return "";
+      if (raw.startsWith("+")) raw = raw.slice(1);
+      if (raw.includes("T")) raw = raw.split("T")[0];
+      return raw;
+    } catch {
+      return "";
+    }
+  }
+
+  function formatAttrValue(dtype, v) {
+    try {
+      if (dtype === "wikibase-entityid") {
+        try {
+          if (!v) return "";
+          // Prefer a human-readable Chinese label when available
+          const lbl =
+            v["entity_label_zh"] ??
+            v.entity_label_zh ??
+            v["label_zh"] ??
+            v.label_zh ??
+            null;
+          if (lbl != null && String(lbl).trim() !== "") return String(lbl);
+          // Prefer numeric-id, fallback to id
+          const n = v["numeric-id"] ?? v.numeric_id ?? null;
+          if (n != null && n !== "") return String(n);
+          if (v.id) return String(v.id);
+          return JSON.stringify(v);
+        } catch {
+          return JSON.stringify(v);
+        }
+      }
+      if (dtype === "string" || dtype === "url") return String(v || "");
+      if (dtype === "quantity")
+        return `${v?.amount ?? ""}${v?.unit ? " " + v.unit : ""}`;
+      if (dtype === "time") {
+        const txt = extractDateString(v);
+        return txt || JSON.stringify(v);
+      }
+      if (dtype === "globecoordinate")
+        return `${v?.latitude ?? ""}, ${v?.longitude ?? ""}`;
+      return JSON.stringify(v);
+    } catch {
+      return String(v || "");
+    }
+  }
+
+  function resolveCommonsMediaSrc(value) {
+    try {
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          const nested = resolveCommonsMediaSrc(item);
+          if (nested) return nested;
+        }
+        return "";
+      }
+      if (value && typeof value === "object") {
+        const candidateKeys = [
+          "url",
+          "href",
+          "src",
+          "image",
+          "imageUrl",
+          "filename",
+          "fileName",
+          "title",
+          "name",
+          "value",
+        ];
+        for (const key of candidateKeys) {
+          const nested = resolveCommonsMediaSrc(value[key]);
+          if (nested) return nested;
+        }
+        return "";
+      }
+      const raw = String(value || "").trim();
+      if (!raw) return "";
+      if (
+        (raw.startsWith('"') && raw.endsWith('"')) ||
+        (raw.startsWith("'") && raw.endsWith("'"))
+      ) {
+        return resolveCommonsMediaSrc(raw.slice(1, -1));
+      }
+      if (
+        (raw.startsWith("[") && raw.endsWith("]")) ||
+        (raw.startsWith("{") && raw.endsWith("}"))
+      ) {
+        try {
+          return resolveCommonsMediaSrc(JSON.parse(raw));
+        } catch {}
+      }
+      if (/[\r\n,]/.test(raw)) {
+        const parts = raw
+          .split(/[\r\n,]+/)
+          .map((part) => part.trim())
+          .filter(Boolean);
+        for (const part of parts) {
+          const nested = resolveCommonsMediaSrc(part);
+          if (nested) return nested;
+        }
+      }
+      if (
+        /^data:image\//i.test(raw) ||
+        /^https?:\/\//i.test(raw) ||
+        raw.startsWith("//") ||
+        raw.startsWith("/") ||
+        raw.startsWith("./") ||
+        raw.startsWith("../")
+      ) {
+        return raw;
+      }
+      const normalized = raw
+        .replace(/^File:/i, "")
+        .replace(/^Image:/i, "")
+        .trim();
+      if (!normalized) return "";
+      return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(normalized)}`;
+    } catch {
+      return "";
+    }
+  }
+
+  function isMediaLikeProperty(item) {
+    try {
+      const text = (
+        item?.property_label_zh ||
+        item?.property_label ||
+        item?.property ||
+        item?.label_zh ||
+        item?.label ||
+        ""
+      )
+        .toString()
+        .trim()
+        .toLowerCase();
+      if (!text) return false;
+      return (
+        text.includes("照片") ||
+        text.includes("图片") ||
+        text.includes("图像") ||
+        text.includes("image") ||
+        text.includes("photo") ||
+        text.includes("media")
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  function shouldRenderAsMediaThumb(item, value, dtype) {
+    try {
+      if (String(dtype || "").toLowerCase() === "commonsmedia") return true;
+      const src = resolveCommonsMediaSrc(value);
+      if (!src) return false;
+      if (
+        /^data:image\//i.test(src) ||
+        /^data:video\//i.test(src) ||
+        /\.(mov|mp4|webm|ogg|m4v)(\?|#|$)/i.test(src) ||
+        /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i.test(src) ||
+        src.startsWith("/static/") ||
+        src.startsWith("/uploads/") ||
+        src.startsWith("/node-images/")
+      ) {
+        return true;
+      }
+      return isMediaLikeProperty(item);
+    } catch {
+      return false;
+    }
+  }
+
+  function renderMediaThumbHtml(value) {
+    const src = resolveCommonsMediaSrc(value);
+    if (!src) return '<span class="prop-val null">(空)</span>';
+    const safeSrc = escapeHtml(src);
+    const isVideo =
+      /^data:video\//i.test(src) ||
+      /\.(mov|mp4|webm|ogg|m4v)(\?|#|$)/i.test(src) ||
+      /\/node-videos\//i.test(src);
+    if (isVideo) {
+      return `<a class="prop-val commonsmedia-link" href="${safeSrc}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;"><span style="position:relative;display:inline-flex;"><video class="prop-val commonsmedia kb-live-media" src="${safeSrc}" muted loop playsinline preload="metadata" style="display:block;max-width:72px;max-height:72px;border-radius:6px;border:1px solid var(--border);object-fit:cover;background:var(--surface-1);"></video><span class="kb-live-badge">LIVE</span></span></a>`;
+    }
+    return `<a class="prop-val commonsmedia-link" href="${safeSrc}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;"><img class="prop-val commonsmedia" src="${safeSrc}" alt="media" style="display:block;max-width:72px;max-height:72px;border-radius:6px;border:1px solid var(--border);object-fit:contain;background:var(--surface-1);" /></a>`;
+  }
+
+  // Escape HTML in text nodes
+  function escapeHtml(s) {
+    if (s == null) return "";
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      }[c];
+    });
+  }
+
+  // Render attribute value as an HTML string with a span and type-specific class
+  function renderAttrValue(dtype, v) {
+    // By default, do not render qualifier information in relation table values.
+    const getInner = () => {
+      try {
+        const dt = (dtype || "").toLowerCase();
+        let text = "";
+        if (dt === "wikibase-entityid") {
+          try {
+            if (!v) return '<span class="prop-val null">(空)</span>';
+            const lbl =
+              v["entity_label_zh"] ??
+              v.entity_label_zh ??
+              v["label_zh"] ??
+              v.label_zh ??
+              null;
+            if (lbl != null && String(lbl).trim() !== "") text = String(lbl);
+            else if (v["numeric-id"] ?? v.numeric_id)
+              text = String(v["numeric-id"] ?? v.numeric_id);
+            else if (v.id) text = String(v.id);
+            else text = JSON.stringify(v);
+            return `<span class="prop-val entityid">${escapeHtml(text)}</span>`;
+          } catch {
+            return `<span class="prop-val object">${escapeHtml(
+              JSON.stringify(v),
+            )}</span>`;
+          }
+        }
+        if (dt === "string")
+          return `<span class="prop-val string">${escapeHtml(
+            String(v || ""),
+          )}</span>`;
+        if (dt === "monolingualtext") {
+          try {
+            // expect { language: 'en', text: '...' }
+            const lang = v?.language || v?.lang || v?.languageCode || "";
+            const text = v?.text ?? v?.value ?? "";
+            const out = (lang ? `(${lang}) ` : "") + String(text || "");
+            return `<span class="prop-val monolingualtext">${escapeHtml(
+              out,
+            )}</span>`;
+          } catch {
+            return `<span class="prop-val monolingualtext">${escapeHtml(
+              JSON.stringify(v),
+            )}</span>`;
+          }
+        }
+        if (dt === "url") {
+          const href = escapeHtml(String(v || ""));
+          return `<a class="prop-val url" href="${href}" target="_blank" rel="noopener noreferrer">${href}</a>`;
+        }
+        if (dt === "commonsmedia") return renderMediaThumbHtml(v);
+        if (dt === "quantity") {
+          const txt = `${v?.amount ?? ""}${v?.unit ? " " + v.unit : ""}`;
+          return `<span class="prop-val quantity">${escapeHtml(txt)}</span>`;
+        }
+        if (dt === "time") {
+          const txt = extractDateString(v) || JSON.stringify(v);
+          return `<span class="prop-val time">${escapeHtml(txt)}</span>`;
+        }
+        if (dt === "globecoordinate") {
+          const txt = `${v?.latitude ?? ""}, ${v?.longitude ?? ""}`;
+          return `<span class="prop-val globecoordinate">${escapeHtml(
+            txt,
+          )}</span>`;
+        }
+        if (v === null || v === undefined)
+          return `<span class="prop-val null">(空)</span>`;
+        if (typeof v === "number")
+          return `<span class="prop-val number">${escapeHtml(
+            String(v),
+          )}</span>`;
+        if (typeof v === "boolean")
+          return `<span class="prop-val boolean">${escapeHtml(
+            String(v),
+          )}</span>`;
+        if (Array.isArray(v))
+          return `<span class="prop-val array">${escapeHtml(
+            JSON.stringify(v),
+          )}</span>`;
+        if (typeof v === "object")
+          return `<span class="prop-val object">${escapeHtml(
+            JSON.stringify(v),
+          )}</span>`;
+        return `<span class="prop-val string">${escapeHtml(String(v))}</span>`;
+      } catch (e) {
+        return `<span class="prop-val string">${escapeHtml(
+          String(v || ""),
+        )}</span>`;
+      }
+    };
+
+    return getInner() + qualifierHtml;
+  }
+
+  function openQuickAddAttrForProperty(item, nodeId, anchorRow) {
+    if (!item || !nodeId || !anchorRow) return;
+    resetEditingRow();
+    ensureAttrInlineEditorLayout();
+    try {
+      if (
+        window.kbSelectedAttrIds &&
+        typeof window.kbSelectedAttrIds.clear === "function"
+      ) {
+        window.kbSelectedAttrIds.clear();
+      }
+      window.kbLastAttrAnchorId = "";
+      updateAttrSelectionStyles();
+      ensureAttrButtonsState();
+    } catch {}
+
+    if (attrForm && attrFormBody) {
+      attrFormBody.style.display = "";
+      attrFormBody.classList.remove("collapsed");
+      attrFormBody.classList.add("inline-editing");
+      attrForm.classList.add("value-only-editing");
+      anchorRow.insertAdjacentElement("afterend", attrFormBody);
+    }
+
+    currentAttrEditingRow = anchorRow;
+    anchorRow.classList.add("attr-editing-hidden");
+
+    try {
+      resetAttrForm();
+      currentAttrEditingRow = anchorRow;
+      anchorRow.classList.add("attr-editing-hidden");
+      if (attrForm) attrForm.classList.add("value-only-editing");
+    } catch {}
+
+    const propertyId = item.property || "";
+    const propertyLabel = item.property_label_zh || propertyId;
+    const dtype = pickUiDatatype(item) || item.datatype || "string";
+
+    if (typeof setSelectedSchemaProp === "function") {
+      setSelectedSchemaProp(propertyId, propertyLabel);
+    } else {
+      window.kbSelectedSchemaPropId = propertyId;
+      window.kbSelectedSchemaPropLabel = propertyLabel;
+    }
+
+    if (attrId) attrId.value = "";
+    if (attrProp) attrProp.value = propertyId;
+    if (attrPropLabel) attrPropLabel.value = propertyLabel;
+    if (attrType) attrType.value = dtype;
+    updateDatatypeUI(
+      dtype,
+      item?.datavalue?.type || item?.datavalue_type || item?.valuetype || "",
+    );
+    try {
+      attrValue.value = "";
+      attrValueUrl.value = "";
+      attrValueDate.value = "";
+      attrValueAmount.value = "";
+      attrValueUnit.value = "";
+      attrValueLat.value = "";
+      attrValueLon.value = "";
+      attrValueMonoText.value = "";
+      attrValueMonoLang.value = "";
+      if (attrValueQualifier) attrValueQualifier.value = "";
+      clearImageUpload();
+      clearEntitySearchState();
+      if (attrMsg) attrMsg.textContent = "";
+    } catch {}
+
+    const visibleInput =
+      document.querySelector(
+        '#attrDatatypeGroups .dtype-group[style*="display: flex"] input:not([type="hidden"]), #attrDatatypeGroups .dtype-group[style*="display:flex"] input:not([type="hidden"])',
+      ) || attrValue;
+    if (visibleInput && typeof visibleInput.focus === "function") {
+      setTimeout(() => visibleInput.focus(), 0);
+    }
+  }
+
+  function fillAttrForm(nodeId, it, valueIndex = -1) {
+    window.kbEditingValueIndex = valueIndex;
+    attrId.value = it?.id || "";
+    attrProp.value = it?.property || "";
+    attrPropLabel.value = it?.property_label_zh || "";
+    if (attrPropSearchInput) {
+      attrPropSearchInput.value = it?.property_label_zh || it?.property || "";
+    }
+    const dtype = pickUiDatatype(it) || it?.datatype || "string";
+    attrType.value = dtype;
+    updateDatatypeUI(
+      dtype,
+      it?.datavalue?.type || it?.datavalue_type || it?.valuetype || "",
+    );
+
+    if (attrValueQualifier && attrValueQualifier.parentElement) {
+      attrValueQualifier.parentElement.style.display = "none";
+    }
+
+    let val = it?.value;
+    if (
+      (val === null || val === undefined) &&
+      it?.datavalue?.value !== undefined
+    ) {
+      val = it.datavalue.value;
+    }
+    if (typeof val === "string") {
+      const trimmed = val.trim();
+      if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+        try {
+          val = JSON.parse(trimmed);
+        } catch {
+          // keep raw string if parse fails
+        }
+      }
+    }
+    if (valueIndex >= 0 && Array.isArray(val)) {
+      val = val[valueIndex];
+    }
+
+    // Extract qualifier
+    let qualifier = "";
+    if (val && typeof val === "object" && "qualifier" in val) {
+      qualifier = val.qualifier || "";
+    }
+    attrValueQualifier.value = qualifier;
+    if (btnAttrQualifierToggle) {
+      btnAttrQualifierToggle.classList.toggle("active", !!qualifier);
+    }
+
+    // map value back to simple inputs
+    try {
+      attrValue.value = "";
+      attrValueUrl.value = "";
+      attrValueDate.value = "";
+      attrValueAmount.value = "";
+      attrValueUnit.value = "";
+      attrValueLat.value = "";
+      attrValueLon.value = "";
+      attrValueMonoText.value = "";
+      attrValueMonoLang.value = "";
+      clearImageUpload();
+      clearEntitySearchState();
+
+      if (dtype === "time") {
+        const d = extractDateString(val);
+        attrValueDate.value = d;
+      } else if (dtype === "wikibase-entityid") {
+        // value expected as { "entity-type": "item", "id": "Q...", "numeric-id": 123 }
+        try {
+          const v = val || {};
+          const entityId = v.id || "";
+          const numericRaw = v?.["numeric-id"] ?? v?.numeric_id ?? "";
+          attrValueEntityType.value =
+            v?.["entity-type"] ||
+            v?.entity_type ||
+            inferEntityTypeFromId(entityId);
+          attrValueEntityId.value = entityId;
+          attrValueEntityNumericId.value =
+            numericRaw !== null && numericRaw !== undefined
+              ? String(numericRaw)
+              : "";
+          const entityLabel =
+            v?.entity_label_zh || v?.entity_label || v?.label || "";
+          updateEntitySelectionPreview(entityLabel, entityId);
+          if (attrEntitySearchStatus) attrEntitySearchStatus.textContent = "";
+          renderEntitySearchResults([]);
+        } catch {
+          attrValueEntityType.value = "";
+          attrValueEntityId.value = "";
+          attrValueEntityNumericId.value = "";
+          updateEntitySelectionPreview("", "");
+        }
+      } else if (dtype === "quantity") {
+        attrValueAmount.value = val?.amount ?? "";
+        attrValueUnit.value = val?.unit ?? "";
+      } else if (dtype === "globecoordinate") {
+        attrValueLat.value = val?.latitude ?? "";
+        attrValueLon.value = val?.longitude ?? "";
+      } else if (dtype === "url") {
+        attrValueUrl.value = typeof val === "string" ? val : "";
+      } else if (dtype === "monolingualtext") {
+        attrValueMonoText.value = val?.text ?? val?.value ?? "";
+        attrValueMonoLang.value =
+          val?.language ?? val?.lang ?? val?.languageCode ?? "";
+      } else if (dtype === "commonsMedia") {
+        // Handle image value - could be URL or data URL
+        const imageUrl = typeof val === "string" ? val : "";
+        if (imageUrl && attrValueImageUrl) {
+          attrValueImageUrl.value = imageUrl;
+          if (attrImagePreviewImg) attrImagePreviewImg.src = imageUrl;
+          if (attrImagePreview) attrImagePreview.style.display = "block";
+          if (attrImageFileName) {
+            // Extract filename from URL if possible
+            try {
+              const urlObj = new URL(imageUrl);
+              const filename = urlObj.pathname.split("/").pop() || "已上传图片";
+              attrImageFileName.textContent = filename;
+              if (attrImageStateText)
+                attrImageStateText.textContent = `已选择: ${filename}`;
+            } catch {
+              const displayName = imageUrl.startsWith("data:")
+                ? "已上传图片"
+                : imageUrl;
+              attrImageFileName.textContent = displayName;
+              if (attrImageStateText)
+                attrImageStateText.textContent = `已选择: ${displayName}`;
+            }
+          }
+        } else {
+          clearImageUpload();
+        }
+      } else {
+        // string or fallback
+        attrValue.value =
+          typeof val === "string"
+            ? val
+            : val != null
+              ? JSON.stringify(val)
+              : "";
+      }
+    } catch {
+      try {
+        attrValue.value = "";
+        attrValueUrl.value = "";
+        attrValueDate.value = "";
+        attrValueAmount.value = "";
+        attrValueUnit.value = "";
+        attrValueLat.value = "";
+        attrValueLon.value = "";
+        attrValueMonoText.value = "";
+        attrValueMonoLang.value = "";
+        clearImageUpload();
+      } catch {}
+    }
+    // Reflect selection banner and set global selected prop for editing value only
+    try {
+      setSelectedSchemaProp(
+        it?.property || "",
+        it?.property_label_zh || it?.property || "",
+      );
+      // Also set the hidden input values so form submission works
+      if (attrProp) attrProp.value = it?.property || "";
+      if (attrPropLabel)
+        attrPropLabel.value = it?.property_label_zh || it?.property || "";
+    } catch {}
+  }
+
+  async function deleteAttr(edgeId) {
+    // Backend expects path parameter /api/kb/attributes/<edge_id>
+    try {
+      const resp = await fetch(
+        `/api/kb/attributes/${encodeURIComponent(edgeId)}`,
+        { method: "DELETE" },
+      );
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+    } catch (e) {
+      console.error(e);
+      alert("删除失败: " + (e.message || e));
+    }
+  }
+
+  attrForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    attrMsg.textContent = "";
+    const nodeId = (fId.value || "").trim();
+    if (!nodeId) {
+      attrMsg.textContent = "请先选择左侧节点";
+      return;
+    }
+    // Allow editing existing attribute without re-selecting from right panel
+    let prop = (window.kbSelectedSchemaPropId || "").trim();
+    let plabel = (window.kbSelectedSchemaPropLabel || "").trim();
+
+    // If editing existing attribute (attrId has value), use hidden fields if global selection is empty
+    const currentAttrId = (attrId.value || "").trim();
+    if (currentAttrId && !prop) {
+      prop = (attrProp.value || "").trim();
+      plabel = (attrPropLabel.value || "").trim();
+    }
+
+    if (!prop) {
+      attrMsg.textContent = "请在上方属性选择器中点击选择一个属性";
+      return;
+    }
+    const canonicalProp = canonicalizePropertyId(prop);
+    if (!canonicalProp) {
+      attrMsg.textContent = "属性ID无效";
+      return;
+    }
+    const raw = (attrValue.value || "").trim();
+    // Determine datatype from selected schema property cache (if available)
+    let dtype = (attrType.value || "").trim() || "string";
+    try {
+      const clsId = window.kbSelectedClassId;
+      const items = clsId ? window.kbSchemaByClassId?.[clsId] || [] : [];
+      const found = items.find((it) => it.id === prop);
+      if (found) {
+        const mapped =
+          pickUiDatatype(found) || found.datatype || found.datavalue_type;
+        if (mapped) dtype = mapped;
+      }
+    } catch {}
+    attrType.value = dtype;
+    let value = null;
+    if (dtype === "url") {
+      value = (attrValueUrl.value || "").trim();
+      if (!value) {
+        attrMsg.textContent = "请输入URL";
+        return;
+      }
+    } else if (dtype === "time") {
+      const d = (attrValueDate.value || "").trim();
+      if (!d) {
+        attrMsg.textContent = "请选择日期";
+        return;
+      }
+      value = { date: d };
+    } else if (dtype === "quantity") {
+      const amtStr = (attrValueAmount.value || "").trim();
+      if (!amtStr) {
+        attrMsg.textContent = "请输入数值";
+        return;
+      }
+      const amt = parseFloat(amtStr);
+      if (Number.isNaN(amt)) {
+        attrMsg.textContent = "数值格式错误";
+        return;
+      }
+      value = { amount: amt, unit: (attrValueUnit.value || "").trim() };
+    } else if (dtype === "globecoordinate") {
+      const latStr = (attrValueLat.value || "").trim();
+      const lonStr = (attrValueLon.value || "").trim();
+      if (!latStr || !lonStr) {
+        attrMsg.textContent = "请输入经纬度";
+        return;
+      }
+      const lat = parseFloat(latStr);
+      const lon = parseFloat(lonStr);
+      if (Number.isNaN(lat) || Number.isNaN(lon)) {
+        attrMsg.textContent = "经纬度格式错误";
+        return;
+      }
+      value = { latitude: lat, longitude: lon };
+    } else if (dtype === "wikibase-entityid") {
+      let entityType = (attrValueEntityType.value || "").trim();
+      let entityId = (attrValueEntityId.value || "").trim();
+      let numericIdStr = (attrValueEntityNumericId.value || "").trim();
+      let entityLabel = "";
+      if (!entityId) {
+        const directEntityId = parseEntityIdFromInput(
+          attrEntitySearchInput?.value || "",
+        );
+        if (directEntityId) {
+          const normalized = normalizeEntitySearchItem(directEntityId);
+          if (normalized) {
+            entityId = normalized.id;
+            entityType = normalized.entity_type || entityType;
+            numericIdStr = normalized.numeric_id || numericIdStr;
+            entityLabel = normalized.label || "";
+            if (attrValueEntityType) attrValueEntityType.value = entityType;
+            if (attrValueEntityId) attrValueEntityId.value = entityId;
+            if (attrValueEntityNumericId)
+              attrValueEntityNumericId.value = numericIdStr;
+          }
+        }
+      }
+      if (!entityLabel && attrEntitySearchInput) {
+        const rawText = (attrEntitySearchInput.value || "").trim();
+        const directId = parseEntityIdFromInput(rawText);
+        if (directId && rawText !== directId) {
+          entityLabel = rawText;
+        }
+      }
+      if (!entityLabel) {
+        const found = attrEntitySearchItems.find(
+          (it) => (it?.id || "") === entityId,
+        );
+        entityLabel = found?.label || "";
+      }
+      if (!entityType || !entityId || !numericIdStr) {
+        attrMsg.textContent = "请填写全部wikibase-entityid字段";
+        return;
+      }
+      const numericId = parseInt(numericIdStr, 10);
+      if (Number.isNaN(numericId)) {
+        attrMsg.textContent = "numeric-id格式错误";
+        return;
+      }
+      value = {
+        "entity-type": entityType,
+        id: entityId,
+        "numeric-id": numericId,
+      };
+      if (entityLabel) {
+        value.entity_label_zh = entityLabel;
+        value.label = entityLabel;
+      }
+    } else if (dtype === "monolingualtext") {
+      const text = (attrValueMonoText.value || "").trim();
+      const lang = (attrValueMonoLang.value || "").trim();
+      if (!text || !lang) {
+        attrMsg.textContent = "请输入文本和语言代码";
+        return;
+      }
+      value = { text, language: lang };
+    } else if (dtype === "commonsMedia") {
+      // Handle image upload
+      const imageUrl = (attrValueImageUrl.value || "").trim();
+      if (!imageUrl) {
+        attrMsg.textContent = "请选择图片文件";
+        return;
+      }
+      value = imageUrl;
+    } else {
+      // fallback treat as string
+      if (!raw) {
+        attrMsg.textContent = "请输入属性值";
+        return;
+      }
+      value = raw;
+    }
+
+    // Attach qualifier if present and value is an object
+    const qualifier = (attrValueQualifier.value || "").trim();
+    if (qualifier) {
+      if (value && typeof value === "object") {
+        value.qualifier = qualifier;
+      }
+    }
+
+    const body = {
+      id: (attrId.value || "").trim() || undefined,
+      node_id: nodeId,
+      property: canonicalProp,
+      property_label_zh: plabel || undefined,
+      datatype: dtype,
+      value,
+    };
+
+    // Handle array update if editing a specific index
+    if (
+      body.id &&
+      typeof window.kbEditingValueIndex === "number" &&
+      window.kbEditingValueIndex >= 0
+    ) {
+      const originalItem = Array.isArray(window.kbAttrItems)
+        ? window.kbAttrItems.find((it) => it.id === body.id)
+        : null;
+      if (originalItem && Array.isArray(originalItem.value)) {
+        const newArray = [...originalItem.value];
+        if (window.kbEditingValueIndex < newArray.length) {
+          newArray[window.kbEditingValueIndex] = value;
+          body.value = newArray;
+        }
+      }
+    }
+
+    attrMsg.textContent = "保存中…";
+    try {
+      const saveUrl = new URL(
+        "/api/kb/attributes/save",
+        window.location.origin,
+      );
+      if (typeof window.appendCurrentDbParam === "function") {
+        const scopedUrl = window.appendCurrentDbParam(saveUrl);
+        if (scopedUrl instanceof URL) {
+          saveUrl.search = scopedUrl.search;
+        }
+      }
+      const resp = await fetch(saveUrl.toString(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) {
+        let detail = "";
+        try {
+          const j = await resp.json();
+          detail = j?.detail || j?.error || "";
+        } catch {}
+        throw new Error("HTTP " + resp.status + (detail ? ": " + detail : ""));
+      }
+      await resp.json();
+      attrMsg.textContent = "已保存";
+      await loadAttributes(nodeId);
+      // 保存图像属性后同步更新关系图节点
+      syncCyNodeImage(nodeId);
+
+      // 自动将属性绑定到当前节点的类型（如果类型已设置且属性不在模型中）
+      try {
+        const clsId = window.kbSelectedClassId;
+        if (clsId && canonicalProp) {
+          const existing = Array.isArray(window.kbSchemaByClassId?.[clsId])
+            ? window.kbSchemaByClassId[clsId]
+            : [];
+          const alreadyBound = existing.some((it) => it.id === canonicalProp);
+          if (!alreadyBound && typeof window.addClassSchema === "function") {
+            await window.addClassSchema(clsId, canonicalProp);
+            // 更新本地缓存并刷新属性选择器
+            if (!window.kbSchemaByClassId)
+              window.kbSchemaByClassId = Object.create(null);
+            if (!Array.isArray(window.kbSchemaByClassId[clsId])) {
+              window.kbSchemaByClassId[clsId] = [];
+            }
+            window.kbSchemaByClassId[clsId].push({
+              id: canonicalProp,
+              name: plabel || canonicalProp,
+              label: plabel || canonicalProp,
+              datatype: dtype,
+            });
+            if (typeof window.loadAttrPropPicker === "function") {
+              const fTypeEl = document.getElementById("fType");
+              const typeVal = (fTypeEl?.value || "").trim();
+              if (typeVal) await window.loadAttrPropPicker(typeVal);
+            }
+            attrMsg.textContent = "已保存并绑定到类型";
+          }
+        }
+      } catch (bindErr) {
+        console.warn("auto-bind property to class failed", bindErr);
+      }
+
+      // 保存后清除id和表单内容，便于连续录入
+      attrId.value = "";
+      attrProp.value = "";
+      attrPropLabel.value = "";
+      attrType.value = "string";
+      attrValue.value = "";
+      try {
+        attrValueUrl.value = "";
+        attrValueDate.value = "";
+        attrValueAmount.value = "";
+        attrValueUnit.value = "";
+        attrValueLat.value = "";
+        attrValueLon.value = "";
+        attrValueMonoText.value = "";
+        attrValueMonoLang.value = "";
+      } catch {}
+      clearEntitySearchState();
+      updateDatatypeUI("string");
+    } catch (e) {
+      console.error(e);
+      attrMsg.textContent = "保存失败";
+    }
+  });
+
+  btnAttrReset.addEventListener("click", resetAttrForm);
+  if (btnAttrEditSelected)
+    btnAttrEditSelected.addEventListener("click", async () => {
+      if (window.kbSelectedAttrIds.size !== 1) return;
+      const id = Array.from(window.kbSelectedAttrIds)[0];
+      const nodeIdRaw = (fId.value || "").trim();
+      if (!nodeIdRaw) return;
+      // 自动加 entity/ 前缀（如果没有）
+      const nodeId = nodeIdRaw.startsWith("entity/")
+        ? nodeIdRaw
+        : "entity/" + nodeIdRaw;
+      try {
+        const url = new URL("/api/kb/node/attributes", window.location.origin);
+        if (typeof window.appendCurrentDbParam === "function") {
+          const scopedUrl = window.appendCurrentDbParam(url);
+          if (scopedUrl instanceof URL) {
+            url.search = scopedUrl.search;
+          }
+        }
+        url.searchParams.set("id", nodeId);
+        const resp = await fetch(url.toString());
+        const data = await resp.json();
+        const arr = Array.isArray(data.items) ? data.items : [];
+        const found = arr.find((x) => x.id === id);
+        if (found) fillAttrForm(nodeId, found);
+      } catch {}
+    });
+  if (btnAttrDeleteSelected)
+    btnAttrDeleteSelected.addEventListener("click", async () => {
+      if (!window.kbSelectedAttrIds.size) return;
+      if (
+        !confirm(`确定删除选中的 ${window.kbSelectedAttrIds.size} 个属性值？`)
+      )
+        return;
+      const nodeId = (fId.value || "").trim();
+
+      const deletions = new Map();
+      for (const uniqueId of Array.from(window.kbSelectedAttrIds)) {
+        const parts = uniqueId.split("::");
+        const id = parts[0];
+        const index = parts.length > 1 ? parseInt(parts[1], 10) : -1;
+        if (!deletions.has(id)) deletions.set(id, new Set());
+        if (index >= 0) deletions.get(id).add(index);
+      }
+
+      for (const [id, indices] of deletions.entries()) {
+        try {
+          const originalItem = Array.isArray(window.kbAttrItems)
+            ? window.kbAttrItems.find((it) => it.id === id)
+            : null;
+          if (originalItem && Array.isArray(originalItem.value)) {
+            const newArray = originalItem.value.filter(
+              (_, idx) => !indices.has(idx),
+            );
+            if (newArray.length === 0) {
+              await deleteAttr(id);
+            } else {
+              const body = {
+                id: id,
+                node_id: nodeId,
+                property: originalItem.property,
+                datatype: originalItem.datatype,
+                value: newArray,
+              };
+              const saveUrl = new URL(
+                "/api/kb/attributes/save",
+                window.location.origin,
+              );
+              if (typeof window.appendCurrentDbParam === "function") {
+                const scopedUrl = window.appendCurrentDbParam(saveUrl);
+                if (scopedUrl instanceof URL) {
+                  saveUrl.search = scopedUrl.search;
+                }
+              }
+              await fetch(saveUrl.toString(), {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+              });
+            }
+          } else {
+            await deleteAttr(id);
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      window.kbSelectedAttrIds.clear();
+      await loadAttributes(nodeId);
+      syncCyNodeImage(nodeId);
+    });
+
+  window.mapDatatypeToUi = mapDatatypeToUi;
+  window.pickUiDatatype = pickUiDatatype;
+  window.canonicalizePropertyId = canonicalizePropertyId;
+  window.propertyIdToApiPath = propertyIdToApiPath;
+  window.samePropertyId = samePropertyId;
+  window.renderAttrList = renderAttrList;
+  window.syncDetailAttrList = syncDetailAttrList;
+  window.resetAttrForm = resetAttrForm;
+  window.updateDatatypeUI = updateDatatypeUI;
+  window.clearEntitySearchState = clearEntitySearchState;
+  window.loadAttributes = loadAttributes;
+  window.updateAttrSelectionStyles = updateAttrSelectionStyles;
+  window.ensureAttrButtonsState = ensureAttrButtonsState;
+  window.fillAttrForm = fillAttrForm;
+  window.deleteAttr = deleteAttr;
+  window.syncCyNodeImage = syncCyNodeImage;
+  window.addEventListener("kb:url-param-changed", (event) => {
+    const detail = event && event.detail ? event.detail : {};
+    if ((detail.key || "") === "db") {
+      try {
+        resetAttrForm();
+      } catch (e) {}
+    }
+  });
+  window.addEventListener("popstate", () => {
+    try {
+      resetAttrForm();
+    } catch (e) {}
+  });
+})();
