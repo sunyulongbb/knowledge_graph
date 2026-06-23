@@ -3,6 +3,9 @@
   let tblPage = parseInt(urlParams.get("page") || "1", 10);
   let tblPageSize = parseInt(urlParams.get("limit") || "20", 10);
   let tblTotalNodes = 0;
+  let tblLoadedNodes = [];
+  let tblGridLoadingMore = false;
+  let tblGridLoadExhausted = false;
   let tblActiveType = "";
   let tblActiveClassId = "";
   let tblActiveClassLabel = "";
@@ -24,6 +27,7 @@
   const btnTblLayoutToggle = document.getElementById("btnTblLayoutToggle");
   const btnDeleteSelected = document.getElementById("btnDeleteSelected");
   const tblCount = document.getElementById("tblCount");
+  const tblPagination = document.getElementById("tblPagination");
   const getInitialTableLayoutMode = () => {
     let mode = "list";
     try {
@@ -58,6 +62,9 @@
       btnTblLayoutToggle.title =
         normalized === "grid" ? "切换到列表布局" : "切换到网格布局";
     }
+    if (tblPagination) {
+      tblPagination.style.display = normalized === "grid" ? "none" : "";
+    }
     if (typeof window.renderTableList === "function") {
       window.renderTableList();
     }
@@ -87,6 +94,38 @@
       return id.slice("entity/".length) || "";
     }
     return id;
+  }
+
+  function getTableScrollContainer() {
+    const tblNodes = document.getElementById("tblNodes");
+    if (!tblNodes) return null;
+    try {
+      return tblNodes.closest(".tbl-wrap") || tblNodes;
+    } catch {
+      return tblNodes;
+    }
+  }
+
+  function maybeLoadMoreGridRows() {
+    if (window.kbTableLayoutMode !== "grid") return;
+    if (tblGridLoadingMore || tblGridLoadExhausted) return;
+    if (!tblTotalNodes) return;
+    const scrollContainer = getTableScrollContainer();
+    if (!scrollContainer) return;
+    const remaining =
+      scrollContainer.scrollHeight -
+      scrollContainer.scrollTop -
+      scrollContainer.clientHeight;
+    if (remaining > 240) return;
+    if (tblLoadedNodes.length >= tblTotalNodes) {
+      tblGridLoadExhausted = true;
+      return;
+    }
+    tblGridLoadingMore = true;
+    tblPage += 1;
+    loadTablePage({ append: true }).finally(() => {
+      tblGridLoadingMore = false;
+    });
   }
 
   function updateTblPageInfo() {
@@ -229,6 +268,7 @@
 
   async function loadTablePage(options = {}) {
     const opts = options || {};
+    const append = opts.append === true;
     const hasClassId = Object.prototype.hasOwnProperty.call(opts, "classId");
     if (hasClassId) {
       const incomingId = opts.classId || "";
@@ -300,7 +340,27 @@
 
       const data = await resp.json();
       const nodes = Array.isArray(data.nodes) ? data.nodes : [];
-      window.kbTableNodes = nodes;
+      if (append) {
+        const existing = Array.isArray(window.kbTableNodes)
+          ? window.kbTableNodes
+          : [];
+        const seen = new Set(
+          existing.map((item) => String(item?._id || item?.id || "").trim()),
+        );
+        const merged = [...existing];
+        nodes.forEach((item) => {
+          const nodeKey = String(item?._id || item?.id || "").trim();
+          if (nodeKey && seen.has(nodeKey)) return;
+          if (nodeKey) seen.add(nodeKey);
+          merged.push(item);
+        });
+        window.kbTableNodes = merged;
+        tblLoadedNodes = merged;
+      } else {
+        window.kbTableNodes = nodes;
+        tblLoadedNodes = nodes;
+        tblGridLoadExhausted = false;
+      }
       window.kbTablePage = tblPage;
       window.kbTablePageSize = tblPageSize;
       window.kbTableTotalNodes = data.total || nodes.length;
@@ -313,6 +373,10 @@
       }
       tblTotalNodes = window.kbTableTotalNodes;
       updateTblPageInfo();
+      if (tblPagination) {
+        tblPagination.style.display =
+          window.kbTableLayoutMode === "grid" ? "none" : "";
+      }
 
       if (tblCount) {
         const parts = [`总计 ${tblTotalNodes} 条`];
@@ -341,6 +405,11 @@
 
       if (typeof window.renderTableList === "function") {
         window.renderTableList();
+      }
+      if (append && window.kbTableLayoutMode === "grid") {
+        setTimeout(() => {
+          maybeLoadMoreGridRows();
+        }, 0);
       }
 
       if (opts.scrollToTop === true) {
@@ -528,6 +597,19 @@
       });
     }
 
+    const scrollContainer = getTableScrollContainer();
+    if (scrollContainer) {
+      scrollContainer.addEventListener(
+        "scroll",
+        () => {
+          if (window.kbTableLayoutMode === "grid") {
+            maybeLoadMoreGridRows();
+          }
+        },
+        { passive: true },
+      );
+    }
+
     applyTableLayoutMode(getInitialTableLayoutMode());
 
     // 先加载筛选选项，确保下拉框选中项与 tblActiveType 同步，再加载数据，避免竞态导致筛选显示不正确
@@ -537,7 +619,7 @@
         if (tblTypeFilter && tblActiveType) {
           tblTypeFilter.value = tblActiveType;
         }
-        loadTablePage();
+        loadTablePage({ resetPage: true });
       });
   }
 
