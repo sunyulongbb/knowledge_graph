@@ -57,6 +57,8 @@ export async function handleCoreKbRoutes(
   mkdirSync(NODE_VIDEO_UPLOADS_DIR, { recursive: true });
   const NODE_IMAGE_UPLOADS_DIR = resolve(APP_UPLOADS_DIR, "node-images");
   mkdirSync(NODE_IMAGE_UPLOADS_DIR, { recursive: true });
+  const NODE_PDF_UPLOADS_DIR = resolve(APP_UPLOADS_DIR, "node-pdfs");
+  mkdirSync(NODE_PDF_UPLOADS_DIR, { recursive: true });
 
   const resolveFileExtension = (urlPath: string, contentType: string) => {
     const match = String(urlPath || "")
@@ -385,6 +387,27 @@ export async function handleCoreKbRoutes(
     }
     if (options.preserveEmptySlots) return result;
     return Array.from(new Set(result.filter((item) => item !== "")));
+  };
+
+  const normalizePdfValue = (value: any) => {
+    if (typeof value !== "string") return "";
+    return value.trim();
+  };
+
+  const savePdfFile = async (file: File) => {
+    const ext = file.name.split(".").pop()?.toLowerCase() || "pdf";
+    if (ext !== "pdf") {
+      throw new Error("Invalid pdf file type");
+    }
+    const maxSize = 100 * 1024 * 1024;
+    if (typeof file.size === "number" && file.size > maxSize) {
+      throw new Error("PDF文件过大，请上传不超过100MB的文件");
+    }
+    const filename = `${crypto.randomUUID()}.${ext}`;
+    const filePath = resolve(NODE_PDF_UPLOADS_DIR, filename);
+    const arrayBuffer = await file.arrayBuffer();
+    writeFileSync(filePath, Buffer.from(arrayBuffer));
+    return `/static/uploads/${appFolder}/node-pdfs/${filename}`;
   };
 
   const entryTaskScopeParams = () => (hasProjectScope ? [scopedProjectId] : []);
@@ -3242,6 +3265,21 @@ export async function handleCoreKbRoutes(
     }
   }
 
+  if (url.pathname === "/api/kb/upload-pdf" && method === "POST") {
+    try {
+      const formData = await req.formData();
+      const file = formData.get("file") as File | null;
+      if (!file) {
+        return new Response("No file uploaded", { status: 400 });
+      }
+      const fileUrl = await savePdfFile(file);
+      return Response.json({ ok: true, url: fileUrl });
+    } catch (e) {
+      console.error(e);
+      return new Response("Error uploading pdf", { status: 500 });
+    }
+  }
+
   if (url.pathname === "/api/kb/upload-image" && method === "POST") {
     try {
       const formData = await req.formData();
@@ -3304,6 +3342,7 @@ export async function handleCoreKbRoutes(
       let images = normalizeMediaValues(body?.images);
       let covers = normalizeMediaValues(body?.covers);
       let link = body.link != null ? String(body.link).trim() : "";
+      let pdf = normalizePdfValue(body.pdf);
       let videos = normalizeMediaValues(body?.videos);
 
       images = await prepareImageValues(images);
@@ -3311,7 +3350,7 @@ export async function handleCoreKbRoutes(
       videos = await prepareVideoValues(videos);
 
       db.run(
-        "INSERT INTO nodes (id, name, type, description, aliases, tags, data, images, covers, link, videos, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO nodes (id, name, type, description, aliases, tags, data, images, covers, link, pdf, videos, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
           id,
           name,
@@ -3323,6 +3362,7 @@ export async function handleCoreKbRoutes(
           JSON.stringify(images),
           JSON.stringify(covers),
           link,
+          pdf,
           JSON.stringify(videos),
           scopedProjectId,
         ],
@@ -3480,6 +3520,10 @@ export async function handleCoreKbRoutes(
       if (body.link !== undefined && body.link !== null) {
         updates.push("link = ?");
         params.push(body.link ? String(body.link).trim() : "");
+      }
+      if (body.pdf !== undefined) {
+        updates.push("pdf = ?");
+        params.push(normalizePdfValue(body.pdf));
       }
       if (body.videos !== undefined) {
         let incomingVideoValues = Array.isArray(body.videos)

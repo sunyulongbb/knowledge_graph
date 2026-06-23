@@ -305,6 +305,7 @@ function ensureSharedTables() {
       images TEXT,
       covers TEXT,
       link TEXT,
+      pdf TEXT,
       videos TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -315,6 +316,7 @@ function ensureSharedTables() {
   runSafe("ALTER TABLE nodes ADD COLUMN images TEXT");
   runSafe("ALTER TABLE nodes ADD COLUMN covers TEXT");
   runSafe("ALTER TABLE nodes ADD COLUMN link TEXT");
+  runSafe("ALTER TABLE nodes ADD COLUMN pdf TEXT");
   runSafe("ALTER TABLE nodes ADD COLUMN videos TEXT");
 
   const nodeColumns = queryAllSafe("PRAGMA table_info(nodes)");
@@ -369,22 +371,23 @@ function ensureSharedTables() {
 
     if (renameSucceeded) {
       appDb.run(`
-        CREATE TABLE IF NOT EXISTS nodes (
-          id TEXT PRIMARY KEY,
-          name TEXT,
-          type TEXT,
-          description TEXT,
+      CREATE TABLE IF NOT EXISTS nodes (
+        id TEXT PRIMARY KEY,
+        name TEXT,
+        type TEXT,
+        description TEXT,
           wiki_md TEXT,
           aliases TEXT,
           tags TEXT,
-          data TEXT,
-          images TEXT,
-          covers TEXT,
-          link TEXT,
-          videos TEXT,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          project_id INTEGER
+        data TEXT,
+        images TEXT,
+        covers TEXT,
+        link TEXT,
+        pdf TEXT,
+        videos TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        project_id INTEGER
         )
       `);
       const desiredCols = [
@@ -399,6 +402,7 @@ function ensureSharedTables() {
         "images",
         "covers",
         "link",
+        "pdf",
         "videos",
         "created_at",
         "updated_at",
@@ -433,6 +437,10 @@ function ensureSharedTables() {
             END AS videos`;
           }
           return `'' AS videos`;
+        }
+        if (col === "pdf") {
+          if (oldNodeColumns.includes("pdf")) return "pdf AS pdf";
+          return `'' AS pdf`;
         }
         if (oldNodeColumns.includes(col)) return `${col} AS ${col}`;
         if (col === "project_id") return "NULL AS project_id";
@@ -1238,7 +1246,7 @@ function migrateLegacyKnowledgeGraphDatabase() {
       {
         name: "nodes",
         columns:
-          "id, name, type, description, wiki_md, aliases, tags, data, created_at, updated_at",
+          "id, name, type, description, wiki_md, aliases, tags, data, pdf, created_at, updated_at",
       },
       {
         name: "attributes",

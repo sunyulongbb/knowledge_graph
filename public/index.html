@@ -497,6 +497,19 @@
       max-width: 100%;
     }
 
+    #wikiTopPdf {
+      width: 100%;
+      max-width: 100%;
+    }
+
+    #wikiTopPdf iframe {
+      width: 100%;
+      min-height: 720px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface-1);
+    }
+
     #wikiTopMedia {
       width: 100%;
       max-width: 100%;
@@ -1993,6 +2006,9 @@
                 <button id="btnEntityVideoUpload" type="button" class="btn wd-btn-icon" title="上传视频">
                   <i class="fa-solid fa-video"></i>
                 </button>
+                <button id="btnEntityPdfUpload" type="button" class="btn wd-btn-icon" title="上传PDF">
+                  <i class="fa-regular fa-file-pdf"></i>
+                </button>
                 <button id="btnEntityLink" type="button" class="btn wd-btn-icon" title="设置外部链接">
                   <i class="fa-solid fa-link"></i>
                 </button>
@@ -2011,6 +2027,14 @@
                   <span id="videoUploadProgressText" style="display:none;"></span>
                 </div>
               </div>
+              <div id="pdfUploadProgress" class="video-upload-progress" style="display:none; margin-top:6px;">
+                <div class="clean-task-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                  <div class="clean-task-progress-bar">
+                    <div id="pdfUploadProgressFill" class="clean-task-progress-fill" style="width:0%"></div>
+                  </div>
+                  <span id="pdfUploadProgressText" style="display:none;"></span>
+                </div>
+              </div>
               <p id="entityDisplayDesc" class="wd-entity-desc" style="display:none"></p>
               <button id="entityDescToggle" type="button" class="wd-desc-toggle" style="display:none;">展开</button>
             </div>
@@ -2020,6 +2044,7 @@
             <textarea id="fDesc" class="wd-input" placeholder="简要描述" style="display:none"></textarea>
             <input id="fLink" type="url" style="display:none" />
             <input id="fVideo" type="file" accept="video/*" style="display:none" />
+            <input id="fPdf" type="file" accept="application/pdf,.pdf" style="display:none" />
             <input id="fAliases" type="text" class="wd-input" placeholder="用逗号分隔，如：华盛顿, Washington" style="display:none" />
             <input id="fTags" type="text" class="wd-input" placeholder="总统, 美国" style="display:none" />
             <select id="fType" class="wd-input" style="display:none">
@@ -3416,6 +3441,7 @@
               <div id="wikiTopDesc" class="desc" style="color: var(--muted)"></div>
               <div id="wikiTopMedia" style="display:none; margin-top: 10px;"></div>
               <div id="wikiTopVideo" style="display:none; margin-top: 10px;"></div>
+              <div id="wikiTopPdf" style="display:none; margin-top: 10px;"></div>
             </div>
             <div style="display: flex; gap: 12px; align-items: flex-start">
               <article id="wikiContent" style="flex: 1; min-width: 0">
@@ -13576,6 +13602,7 @@
     const fDesc = document.getElementById("fDesc");
     const fLink = document.getElementById("fLink");
     const fVideo = document.getElementById("fVideo");
+    const fPdf = document.getElementById("fPdf");
     const fAliases = document.getElementById("fAliases");
     const fTags = document.getElementById("fTags");
     const addMsg = document.getElementById("addMsg");
@@ -13583,15 +13610,20 @@
     const videoUploadProgress = document.getElementById("videoUploadProgress");
     const videoUploadProgressFill = document.getElementById("videoUploadProgressFill");
     const videoUploadProgressText = document.getElementById("videoUploadProgressText");
+    const pdfUploadProgress = document.getElementById("pdfUploadProgress");
+    const pdfUploadProgressFill = document.getElementById("pdfUploadProgressFill");
+    const pdfUploadProgressText = document.getElementById("pdfUploadProgressText");
     const btnSubmit = document.getElementById("btnSubmit");
     const btnCancelEdit = document.getElementById("btnCancelEdit");
     const btnEntityLink = document.getElementById("btnEntityLink");
     const btnEntityVideoUpload = document.getElementById("btnEntityVideoUpload");
+    const btnEntityPdfUpload = document.getElementById("btnEntityPdfUpload");
     const btnEntityImageUpload = document.getElementById("btnEntityImageUpload");
     const btnAddOntologyChip = document.getElementById("btnAddOntologyChip");
     const composerTypeSelect = document.getElementById("composerTypeSelect");
     let uploadedVideoUrl = "";
     let uploadedVideoPoster = "";
+    let uploadedPdfUrl = "";
     window.kbPendingEntityImageDataUrl = "";
 
     function updateEntityVideoUploadStatus(text) {
@@ -13630,6 +13662,26 @@
       if (videoUploadProgress) videoUploadProgress.style.display = "none";
       if (videoUploadProgressFill) videoUploadProgressFill.style.width = "0%";
       if (videoUploadProgressText) videoUploadProgressText.textContent = "上传中 0%";
+    }
+
+    function setPdfUploadProgress(percent, message) {
+      if (pdfUploadProgress) {
+        pdfUploadProgress.style.display = "";
+        pdfUploadProgress.setAttribute("aria-valuenow", String(percent));
+      }
+      if (pdfUploadProgressFill) {
+        pdfUploadProgressFill.style.width = `${percent}%`;
+      }
+      if (pdfUploadProgressText) {
+        pdfUploadProgressText.textContent = message || `上传中 ${percent}%`;
+        pdfUploadProgressText.style.display = "";
+      }
+    }
+
+    function hidePdfUploadProgress() {
+      if (pdfUploadProgress) pdfUploadProgress.style.display = "none";
+      if (pdfUploadProgressFill) pdfUploadProgressFill.style.width = "0%";
+      if (pdfUploadProgressText) pdfUploadProgressText.textContent = "上传中 0%";
     }
 
     function getCurrentNodeIdForLeftCard() {
@@ -13792,6 +13844,87 @@
           uploadedVideoPoster = "";
           hideVideoUploadProgress();
           console.error("视频上传错误", err);
+        }
+      });
+    }
+
+    async function savePdfToCurrentNode(pdfUrl) {
+      const nodeId = (fId && fId.value ? fId.value.trim() : "") || "";
+      if (!nodeId) return { ok: false };
+      return await apiPost("/api/kb/nodes/update", {
+        id: nodeId,
+        pdf: pdfUrl || "",
+      });
+    }
+
+    if (btnEntityPdfUpload && fPdf) {
+      btnEntityPdfUpload.addEventListener("click", () => {
+        if (fPdf) {
+          fPdf.value = "";
+          uploadedPdfUrl = "";
+          fPdf.click();
+        }
+      });
+
+      fPdf.addEventListener("change", async () => {
+        if (!fPdf || !fPdf.files || !fPdf.files.length) return;
+        const file = fPdf.files[0];
+        if (!file) return;
+        try {
+          if (!/\.pdf$/i.test(file.name) && file.type !== "application/pdf") {
+            throw new Error("请上传 PDF 文件");
+          }
+          const uploadForm = new FormData();
+          uploadForm.append("file", file);
+          hidePdfUploadProgress();
+          setPdfUploadProgress(0, "");
+          const uploadResp = await apiPostFormWithProgress(
+            "/api/kb/upload-pdf",
+            uploadForm,
+            (percent) => setPdfUploadProgress(percent, ""),
+          );
+          if (!uploadResp || !uploadResp.url) {
+            throw new Error("PDF上传失败");
+          }
+          uploadedPdfUrl = uploadResp.url;
+          setPdfUploadProgress(100, "上传完成");
+          const saveResp = await savePdfToCurrentNode(uploadedPdfUrl);
+          if (saveResp && saveResp.ok) {
+            const updatedNode =
+              saveResp.node && typeof saveResp.node === "object"
+                ? saveResp.node
+                : null;
+            const normalizeNodeId = (value) =>
+              String(value || "").trim().replace(/^entity\//, "");
+            if (updatedNode) {
+              const updateListNode = (list) => {
+                if (!Array.isArray(list)) return;
+                const hit = list.find(
+                  (item) =>
+                    normalizeNodeId(item?._id || item?.id) ===
+                    normalizeNodeId(updatedNode._id || updatedNode.id),
+                );
+                if (hit) Object.assign(hit, updatedNode);
+              };
+              updateListNode(window.kbTableNodes);
+              updateListNode(window.kbShortsNodes);
+            }
+            if (typeof renderTableList === "function") {
+              renderTableList();
+            }
+            if (updatedNode && typeof setFormToEdit === "function") {
+              setFormToEdit(updatedNode);
+            }
+            if (addMsg) addMsg.textContent = "PDF上传成功";
+          } else if (saveResp && !saveResp.ok) {
+            if (addMsg) addMsg.textContent = "PDF上传成功，但保存到节点失败。";
+          }
+        } catch (err) {
+          uploadedPdfUrl = "";
+          console.error("PDF上传错误", err);
+          if (addMsg) addMsg.textContent = "PDF上传失败：" + (err?.message || err);
+        } finally {
+          hidePdfUploadProgress();
         }
       });
     }
@@ -14364,8 +14497,10 @@
       fDesc.value = "";
       if (fLink) fLink.value = "";
       if (fVideo) fVideo.value = "";
+      if (fPdf) fPdf.value = "";
       uploadedVideoUrl = "";
       uploadedVideoPoster = "";
+      uploadedPdfUrl = "";
       window.kbPendingEntityImageDataUrl = "";
       window.kbComposerMentionEntityMap = Object.create(null);
       fAliases.value = "";
@@ -14452,8 +14587,10 @@
       if (fLink) fLink.value = (node?.link || node?.url || "")?.toString().trim();
       if (fLink) fLink.value = (node?.link || node?.url || "")?.toString().trim();
       if (fVideo) fVideo.value = "";
+      if (fPdf) fPdf.value = "";
       uploadedVideoUrl = "";
       uploadedVideoPoster = "";
+      uploadedPdfUrl = (node?.pdf || "").toString().trim();
       window.kbPendingEntityImageDataUrl = "";
       const nodeTypeValue = (node?.type || "").toString().trim();
       if (fType) fType.value = nodeTypeValue;
@@ -14618,9 +14755,13 @@
         const nodeType = fType ? (fType.value || "").trim() : "";
         let videoData = undefined;
         let posterData = undefined;
+        let pdfData = undefined;
         if (uploadedVideoUrl) {
           videoData = uploadedVideoUrl;
           posterData = uploadedVideoPoster;
+        }
+        if (uploadedPdfUrl) {
+          pdfData = uploadedPdfUrl;
         }
         if (videoFile) {
           const maxVideoSize = 500 * 1024 * 1024;
@@ -14661,6 +14802,7 @@
                 ...(isEdit ? { appendVideos: true } : {}),
               }
             : {}),
+          ...(pdfData ? { pdf: pdfData } : {}),
         };
         const body = isEdit
           ? { id: fId.value.trim(), ...baseBody }
@@ -14725,6 +14867,7 @@
                 description: nodeData.description || description,
                 image: (Array.isArray(nodeData.images) && nodeData.images[0]) || '',
                 link: nodeData.link || '',
+                pdf: nodeData.pdf || '',
               }
             };
 
@@ -14786,6 +14929,7 @@
               if (nd.color) ele.data('color', nd.color);
               if (Array.isArray(nd.images)) ele.data('image', (nd.images[0] || ''));
               if (nd.link !== undefined) ele.data('link', nd.link || '');
+              if (nd.pdf !== undefined) ele.data('pdf', nd.pdf || '');
             }
           } catch (err) {
             console.error('更新图中节点失败:', err);

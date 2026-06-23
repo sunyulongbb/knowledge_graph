@@ -213,6 +213,12 @@ export function formatNode(row: any) {
       extraData.url.trim() &&
       extraData.url.trim()) ||
     "";
+  const pdf =
+    (typeof row.pdf === "string" && row.pdf.trim() && row.pdf.trim()) ||
+    (typeof extraData.pdf === "string" &&
+      extraData.pdf.trim() &&
+      extraData.pdf.trim()) ||
+    "";
   const videosFromRow = normalizeMediaList(row.videos, {
     preserveEmptySlots: true,
   });
@@ -255,6 +261,7 @@ export function formatNode(row: any) {
     covers,
     cover,
     link,
+    pdf,
     videos,
     video,
   };

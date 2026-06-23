@@ -118,6 +118,16 @@
     }
   }
 
+  function isPdfUrl(u) {
+    try {
+      if (!u || typeof u !== "string") return false;
+      const lower = u.split("?")[0].toLowerCase();
+      return /\.pdf$/.test(lower) || /\/node-pdfs\//i.test(lower);
+    } catch {
+      return false;
+    }
+  }
+
   function extractImageUrls(v, allowLoose = false) {
     const out = [];
     try {
@@ -498,6 +508,11 @@
       }
       const wikiView = document.getElementById("wikiView");
       if (wikiView) wikiView.innerHTML = "";
+      const pdfView = document.getElementById("wikiTopPdf");
+      if (pdfView) {
+        pdfView.innerHTML = "";
+        pdfView.style.display = "none";
+      }
       const tagList = document.getElementById("detail_tagList");
       if (tagList) tagList.innerHTML = "";
       // Do not modify btnViewDetail active state here; view mode
@@ -805,6 +820,56 @@
           wikiTopVideo.style.display = "block";
         } else {
           wikiTopVideo.style.display = "none";
+        }
+      }
+      const wikiTopPdf = document.getElementById("wikiTopPdf");
+      if (wikiTopPdf) {
+        wikiTopPdf.innerHTML = "";
+        const pdfUrl = String((doc && doc.pdf) || "").trim();
+        if (pdfUrl && isPdfUrl(pdfUrl)) {
+          const resolvedUrl = (() => {
+            try {
+              return new URL(pdfUrl, window.location.origin).toString();
+            } catch {
+              return pdfUrl;
+            }
+          })();
+          const wrap = document.createElement("div");
+          wrap.style.display = "grid";
+          wrap.style.gap = "8px";
+          wrap.style.width = "100%";
+          const objectEl = document.createElement("object");
+          objectEl.data = `${resolvedUrl}#toolbar=0&view=FitH`;
+          objectEl.type = "application/pdf";
+          objectEl.style.width = "100%";
+          objectEl.style.minHeight = "720px";
+          objectEl.style.border = "1px solid var(--border)";
+          objectEl.style.borderRadius = "12px";
+          objectEl.style.background = "var(--surface-1)";
+          const frame = document.createElement("iframe");
+          frame.src = `${resolvedUrl}#toolbar=0&view=FitH`;
+          frame.title = title + " PDF 预览";
+          frame.style.width = "100%";
+          frame.style.minHeight = "720px";
+          frame.style.border = "1px solid var(--border)";
+          frame.style.borderRadius = "12px";
+          frame.style.background = "var(--surface-1)";
+          frame.setAttribute("loading", "lazy");
+          objectEl.appendChild(frame);
+          wrap.appendChild(objectEl);
+          const link = document.createElement("a");
+          link.href = resolvedUrl;
+          link.target = "_blank";
+          link.rel = "noreferrer noopener";
+          link.textContent = "新窗口打开 PDF";
+          link.style.display = "inline-block";
+          link.style.marginTop = "8px";
+          link.style.color = "var(--link)";
+          wrap.appendChild(link);
+          wikiTopPdf.appendChild(wrap);
+          wikiTopPdf.style.display = "block";
+        } else {
+          wikiTopPdf.style.display = "none";
         }
       }
       document.getElementById("wikiTop").style.display = "";

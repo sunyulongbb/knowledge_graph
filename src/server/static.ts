@@ -34,6 +34,7 @@ export async function serveStaticRoute(req: Request, pathname: string) {
       mov: "video/quicktime",
       avi: "video/x-msvideo",
       mkv: "video/x-matroska",
+      pdf: "application/pdf",
       txt: "text/plain; charset=utf-8",
     };
     const contentType = contentTypes[ext] || "application/octet-stream";
