@@ -3150,66 +3150,47 @@ body {
 
 /* Property picker */
 .wd-prop-picker {
-  margin-bottom: 10px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border);
+  margin-bottom: 0;
+  padding: 0;
+  border: 0;
   position: relative;
-}
-.wd-prop-search-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px;
-  align-items: center;
-  margin-bottom: 6px;
-}
-.wd-prop-search-wrap {
-  position: relative;
-  flex: 1;
+  display: block;
+  width: 100%;
   min-width: 0;
-}
-.wd-prop-search-icon {
-  position: absolute;
-  left: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 12px;
-  color: var(--muted);
-  pointer-events: none;
-}
-.wd-prop-search-wrap .wd-input {
-  padding-left: 30px;
+  overflow: visible;
 }
 .wd-prop-list {
   width: 100%;
-  font-size: 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface-1);
+  font-size: 13px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-0);
   color: inherit;
-  padding: 2px 0;
-  min-height: auto;
-  max-height: none;
-  height: auto;
+  max-height: 280px;
   cursor: pointer;
   outline: none;
   scrollbar-width: thin;
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  right: 0;
+  position: static;
+  top: auto;
+  left: auto;
+  right: auto;
   z-index: 1200;
-  display: none;
+  display: block;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  box-sizing: border-box;
 }
 .wd-prop-picker.open .wd-prop-list {
   display: block;
 }
 .wd-prop-list:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.08);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
 }
 .wd-prop-list option {
-  padding: 4px 8px;
+  padding: 6px 10px;
 }
 .wd-prop-list option:checked {
   font-weight: 600;
@@ -3555,6 +3536,37 @@ body {
   white-space: nowrap;
   color: var(--fg);
 }
+#attrList > div[data-id] > .attr-quick-add-btn {
+  flex: 0 0 auto;
+  opacity: 0;
+  transform: translateY(-2px);
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-0);
+  color: var(--fg);
+  box-shadow: none;
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease,
+    background 120ms ease,
+    border-color 120ms ease;
+}
+#attrList > div[data-id]:hover > .attr-quick-add-btn,
+#attrList > div[data-id] > .attr-quick-add-btn:hover {
+  opacity: 1;
+  transform: translateY(0);
+}
+#attrList > div[data-id] > .attr-quick-add-btn:hover {
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-0));
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border-strong));
+}
+#attrList > div[data-id] > .attr-quick-add-btn i {
+  font-size: 12px;
+}
 #attrList > div[data-id] + div[data-id] {
   margin-top: 10px;
 }
@@ -3570,16 +3582,20 @@ body {
 #attrForm .wd-attr-edit-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 14px;
+  gap: 12px;
   align-items: start;
-  background: var(--surface-0);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-0) 96%, transparent),
+    color-mix(in srgb, var(--surface-1) 80%, transparent)
+  );
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 14px;
 }
 #attrForm .wd-prop-cell {
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  gap: 10px;
+  display: block;
 }
 #attrForm.value-only-editing .wd-prop-cell {
   display: none;
@@ -3590,52 +3606,35 @@ body {
 #attrForm .wd-prop-cell .wd-prop-picker {
   margin-bottom: 0;
   padding-bottom: 0;
-  border-bottom: none;
   width: 100%;
+  border: 0;
+  padding: 0;
+  overflow: visible;
 }
-#attrForm .wd-prop-cell .wd-prop-picker .wd-prop-search-row {
-  gap: 8px;
-}
-#attrForm .wd-prop-cell .wd-prop-search-row {
-  margin-bottom: 0;
-}
-#attrForm .wd-prop-cell .wd-prop-search-wrap,
 #attrForm .wd-prop-cell .wd-input,
 #attrForm .wd-prop-cell .wd-prop-list {
   width: 100%;
 }
-#attrForm .wd-prop-cell .wd-prop-search-icon {
-  display: none;
-}
-#attrForm .wd-prop-cell .wd-prop-search-wrap .wd-input {
-  padding-left: 10px;
-}
-#attrForm .wd-current-prop {
-  min-width: 0;
-  display: none;
-  align-items: center;
-  padding: 11px 12px;
-  border-radius: 12px;
-  background: rgba(79, 70, 229, 0.08);
-  color: var(--fg);
-  font-weight: 600;
+#attrForm .wd-prop-cell .wd-prop-list {
+  border-radius: 14px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 10px;
+  border-color: var(--border-strong);
+  background: var(--surface-0);
   font-size: 13px;
-  line-height: 1.4;
-}
-#attrFormBody.inline-editing #attrForm .wd-current-prop {
-  display: none !important;
 }
 #attrForm .wd-value-wrap {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
   width: 100%;
 }
 #attrForm .wd-value-action-row {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
   flex-wrap: nowrap;
 }
@@ -3654,7 +3653,7 @@ body {
 #attrForm .wd-value-input-row {
   display: flex;
   align-items: stretch;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: nowrap;
 }
 #attrForm .wd-value-input-row > #attrDatatypeGroups {
@@ -3683,7 +3682,17 @@ body {
   flex: 1;
 }
 #attrForm .wd-qualifier-row {
-  margin-top: 2px;
+  margin-top: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-0) 90%, transparent);
+}
+#attrForm .wd-qualifier-row .wd-input {
+  flex: 1;
 }
 #attrList .attr-editing-hidden {
   display: none !important;
@@ -3691,6 +3700,7 @@ body {
 #attrForm .wd-form-actions {
   margin-top: 0;
   padding: 0;
+  justify-content: flex-end;
 }
 #attrForm .wd-form-actions .wd-msg {
   white-space: nowrap;
@@ -3701,7 +3711,7 @@ body {
   }
   #attrForm .wd-value-action-row > .attr-inline-actions {
     width: 100%;
-    justify-content: flex-start;
+    justify-content: flex-end;
   }
 }
 #attrList::-webkit-scrollbar {
@@ -3715,11 +3725,18 @@ body {
 @media (max-width: 900px) {
   #attrForm .wd-attr-edit-row {
     grid-template-columns: minmax(0, 1fr);
-    gap: 12px;
-    padding: 14px 16px;
+    gap: 10px;
+    padding: 12px;
   }
   #attrForm .wd-value-input-row {
     flex-wrap: wrap;
+  }
+  #attrForm .wd-value-action-row {
+    flex-wrap: wrap;
+  }
+  #attrForm .wd-value-action-row > .attr-inline-actions {
+    width: 100%;
+    justify-content: flex-end;
   }
 }
 

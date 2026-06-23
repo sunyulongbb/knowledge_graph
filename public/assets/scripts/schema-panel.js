@@ -2270,9 +2270,9 @@
   // =====================================================
   const attrPropPicker = byId("attrPropPicker");
   const attrPropPickerList = byId("attrPropPickerList");
-  const attrPropPickerStatus = byId("attrPropPickerStatus");
-  const attrPropSearchInput = byId("attrPropSearch");
-  const btnAttrPropSearchAll = byId("btnAttrPropSearchAll");
+  const attrPropPickerStatus = null;
+  const attrPropSearchInput = null;
+  const btnAttrPropSearchAll = null;
   const attrValueQualifier = byId("attrValueQualifier");
 
   let _propPickerCurrentItems = []; // items shown for the active type
@@ -2344,20 +2344,14 @@
   function renderAttrPropPickerItems(items, statusText) {
     if (!attrPropPickerList) return;
     attrPropPickerList.innerHTML = "";
-    if (attrPropPickerStatus)
-      attrPropPickerStatus.textContent = statusText || "";
     if (!items || !items.length) {
       const opt = document.createElement("option");
       opt.disabled = true;
-      opt.textContent = statusText
-        ? "无匹配属性，请尝试其他关键词"
-        : "暂无关联属性，请搜索";
+      opt.textContent = "暂无关联属性";
       attrPropPickerList.appendChild(opt);
-      attrPropPickerList.size = 1;
+      closeAttrPropDropdown();
       return;
     }
-    const visibleRows = Math.min(Math.max(items.length, 1), 12);
-    attrPropPickerList.size = visibleRows;
     const frag = document.createDocumentFragment();
     const selectedPropId = (window.kbSelectedSchemaPropId || "").trim();
     let selectedIndex = -1;
@@ -2368,7 +2362,14 @@
         (typeof pickUiDatatype === "function" ? pickUiDatatype(it) : null) ||
         it.datatype ||
         "";
-      const nameStr = it.label || it.name || it.id || "";
+      const nameStr =
+        it.label ||
+        it.name ||
+        it.property_label ||
+        it.property_name ||
+        it.title ||
+        it.id ||
+        "";
       opt.textContent = nameStr + (uiType ? `  [${uiType}]` : "");
       opt.dataset.propLabel = nameStr;
       opt.dataset.dtype = it.datatype || "";
@@ -2381,9 +2382,16 @@
       frag.appendChild(opt);
     });
     attrPropPickerList.appendChild(frag);
+    if (selectedIndex < 0 && items.length > 0) {
+      selectedIndex = 0;
+      const firstOpt = attrPropPickerList.options[0];
+      if (firstOpt) firstOpt.selected = true;
+    }
     if (selectedIndex >= 0) {
       attrPropPickerList.value = selectedPropId;
-      attrPropPickerList.selectedIndex = selectedIndex;
+      if (selectedPropId) {
+        attrPropPickerList.selectedIndex = selectedIndex;
+      }
       setTimeout(() => {
         const selectedOpt = attrPropPickerList.options[selectedIndex];
         if (selectedOpt && typeof selectedOpt.scrollIntoView === "function") {
@@ -2393,10 +2401,30 @@
         attrPropPickerList.scrollTop = selectedIndex * optionHeight;
       }, 0);
     }
+    closeAttrPropDropdown();
   }
 
   // Wire the <select> change event once to trigger property selection
   if (attrPropPickerList) {
+    if (attrPropPicker) {
+      attrPropPicker.addEventListener("click", (event) => {
+        if (isAttrPropDropdownOpen()) {
+          closeAttrPropDropdown();
+        } else {
+          if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+          openAttrPropDropdown();
+          if (typeof attrPropPickerList.focus === "function") {
+            attrPropPickerList.focus();
+          }
+        }
+      });
+    }
+    attrPropPickerList.addEventListener("mousedown", () => {
+      openAttrPropDropdown();
+    });
     attrPropPickerList.addEventListener("change", () => {
       const opt = attrPropPickerList.options[attrPropPickerList.selectedIndex];
       if (!opt || !opt.value || opt.disabled) return;
@@ -2440,7 +2468,6 @@
       } catch {}
       applySchemaSelectionHighlight();
       closeAttrPropDropdown();
-      if (attrPropSearchInput) attrPropSearchInput.focus();
       // 仅处理实体类型的搜索建议，不重复调用 updateDatatypeUI
       try {
         const uiType =
@@ -2489,66 +2516,25 @@
     });
   }
 
-  /** Search all properties by keyword and render */
-  async function searchAndRenderProps(query, options = {}) {
-    try {
-      if (attrPropPickerStatus) attrPropPickerStatus.textContent = "搜索中…";
-      const url = appendCurrentDbToUrl(
-        new URL("/api/kb/property_search", window.location.origin),
-      );
-      url.searchParams.set("q", query);
-      const searchAll = options?.searchAll !== false;
-      if (!searchAll) {
-        const activeOntologyId = (window.kbSelectedOntologyId || "")
-          .toString()
-          .trim();
-        if (activeOntologyId) {
-          url.searchParams.set("ontology_id", activeOntologyId);
-          url.searchParams.set("association_mode", "linked");
-        }
-        const activeClassId = (window.kbSelectedClassId || "")
-          .toString()
-          .trim();
-        if (!activeOntologyId && activeClassId) {
-          url.searchParams.set("class_id", activeClassId);
-        }
-        const activeType = getCurrentTypeLabelForPropertySearch();
-        if (!activeOntologyId && activeType) {
-          url.searchParams.set("type_name", activeType);
-        }
-      }
-      url.searchParams.set("limit", "40");
-      const data = await apiGet(url.toString());
-      const items = Array.isArray(data?.items) ? data.items : [];
-      const hint = searchAll
-        ? `全局搜索结果 ${items.length} 项`
-        : `关联搜索结果 ${items.length} 项`;
-      renderAttrPropPickerItems(items, hint);
-    } catch (err) {
-      console.error("searchAndRenderProps", err);
-      if (attrPropPickerStatus) attrPropPickerStatus.textContent = "搜索失败";
-    }
-  }
+  document.addEventListener("click", (event) => {
+    if (!attrPropPicker) return;
+    if (attrPropPicker.contains(event.target)) return;
+    closeAttrPropDropdown();
+  });
 
   async function loadAttrPropPicker(typeLabelOrId) {
     const label = (typeLabelOrId || "").trim();
     _propPickerCurrentTypeLabel = label;
-    if (attrPropSearchInput) attrPropSearchInput.value = "";
 
     if (!label) {
-      // 无类型：清空下拉，提示设置类型
+      // 无类型：清空下拉
       window.kbSelectedClassId = null;
       window.kbSelectedOntologyId = null;
       _propPickerCurrentTypeLabel = "";
       _propPickerCurrentItems = [];
       renderAttrPropPickerItems([], "");
-      if (attrPropPickerStatus)
-        attrPropPickerStatus.textContent =
-          "设置节点类型后显示推荐属性，或直接搜索";
       return;
     }
-
-    if (attrPropPickerStatus) attrPropPickerStatus.textContent = "加载中…";
 
     await ensureOntologiesLoaded();
     const ontology = findOntologyByLabel(label);
@@ -2569,12 +2555,7 @@
           ? ontologyData.items
           : [];
         _propPickerCurrentItems = ontologyItems;
-        renderAttrPropPickerItems(
-          ontologyItems,
-          ontologyItems.length
-            ? `${ontology.label || ontology.name} · ${ontologyItems.length} 项本体关联属性`
-            : `${ontology.label || ontology.name} 暂无关联属性，可搜索属性`,
-        );
+        renderAttrPropPickerItems(ontologyItems, "");
         return;
       } catch (err) {
         console.error("load ontology property recommendations", err);
@@ -2605,10 +2586,7 @@
       if (typeItems.length) {
         _propPickerCurrentItems = typeItems;
         window.kbSelectedClassId = cls ? cls.id : null;
-        renderAttrPropPickerItems(
-          typeItems,
-          `${label} · ${typeItems.length} 项类型关联属性`,
-        );
+        renderAttrPropPickerItems(typeItems, "");
         return;
       }
     } catch (err) {
@@ -2619,8 +2597,6 @@
       window.kbSelectedClassId = null;
       _propPickerCurrentItems = [];
       renderAttrPropPickerItems([], "");
-      if (attrPropPickerStatus)
-        attrPropPickerStatus.textContent = `类型"${label}"未注册分类，可搜索属性`;
       return;
     }
 
@@ -2646,19 +2622,13 @@
 
       if (!items.length) {
         renderAttrPropPickerItems([], "");
-        if (attrPropPickerStatus)
-          attrPropPickerStatus.textContent = `${cls.label || cls.name} 暂无关联属性，可搜索添加`;
       } else {
-        renderAttrPropPickerItems(
-          items,
-          `${cls.label || cls.name} · ${items.length} 项推荐属性`,
-        );
+        renderAttrPropPickerItems(items, "");
       }
     } catch (err) {
       console.error("loadAttrPropPicker", err);
       _propPickerCurrentItems = [];
       renderAttrPropPickerItems([], "");
-      if (attrPropPickerStatus) attrPropPickerStatus.textContent = "加载失败";
     }
   }
 
@@ -2684,75 +2654,7 @@
   }
 
   if (attrPropSearchInput) {
-    attrPropSearchInput.addEventListener("click", () => {
-      const q = (attrPropSearchInput.value || "").trim();
-      if (!_propPickerCurrentItems.length && q) {
-        searchAndRenderProps(q, { searchAll: true }).catch(console.error);
-      }
-      openAttrPropDropdown();
-    });
-    attrPropSearchInput.addEventListener("input", () => {
-      clearTimeout(_propPickerSearchTimer);
-      const q = (attrPropSearchInput.value || "").trim();
-      if (!q) {
-        // 搜索清空 → 恢复类型推荐属性
-        if (_propPickerCurrentItems.length) {
-          const clsId = window.kbSelectedClassId;
-          const cls =
-            clsId && Array.isArray(window.kbClasses)
-              ? window.kbClasses.find((c) => c.id === clsId)
-              : null;
-          const prefix = cls ? (cls.label || cls.name) + " · " : "";
-          renderAttrPropPickerItems(
-            _propPickerCurrentItems,
-            `${prefix}${_propPickerCurrentItems.length} 项推荐属性`,
-          );
-          openAttrPropDropdown();
-        } else {
-          renderAttrPropPickerItems([], "");
-          if (attrPropPickerStatus)
-            attrPropPickerStatus.textContent =
-              "设置节点类型后显示推荐属性，或直接搜索";
-          closeAttrPropDropdown();
-        }
-        return;
-      }
-      if (!_propPickerCurrentItems.length) {
-        openAttrPropDropdown();
-      }
-      // 先从当前缓存中过滤
-      // 默认行为：输入即全局搜索
-      _propPickerSearchTimer = setTimeout(() => {
-        searchAndRenderProps(q, { searchAll: true }).catch(console.error);
-      }, 300);
-    });
-    attrPropSearchInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        clearTimeout(_propPickerSearchTimer);
-        const q = (attrPropSearchInput.value || "").trim();
-        if (q)
-          searchAndRenderProps(q, { searchAll: true }).catch(console.error);
-      }
-    });
-    attrPropSearchInput.addEventListener("blur", () => {
-      setTimeout(() => {
-        if (
-          document.activeElement !== attrPropSearchInput &&
-          document.activeElement !== attrPropPickerList
-        ) {
-          closeAttrPropDropdown();
-        }
-      }, 150);
-    });
-  }
-
-  if (btnAttrPropSearchAll) {
-    btnAttrPropSearchAll.addEventListener("click", () => {
-      clearTimeout(_propPickerSearchTimer);
-      const q = (attrPropSearchInput?.value || "").trim();
-      searchAndRenderProps(q, { searchAll: false }).catch(console.error);
-    });
+    // no-op
   }
 
   document.addEventListener("DOMContentLoaded", () => {

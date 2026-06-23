@@ -959,41 +959,18 @@ if (btnAttrReset) {
         }
         frag.appendChild(row);
         if (!readOnly && showQuickAddBtn) {
-          const addRow = document.createElement("div");
-          addRow.style.display = "flex";
-          addRow.style.alignItems = "center";
-          addRow.style.gap = "6px";
-          addRow.style.padding = "4px 0";
-
-          const addLabel = document.createElement("div");
-          addLabel.style.flex = "0 0 140px";
-          addLabel.style.color = "var(--muted)";
-          addLabel.style.fontSize = "12px";
-          addLabel.textContent = "";
-
-          const addActionWrap = document.createElement("div");
-          addActionWrap.style.flex = "1";
-          addActionWrap.style.fontSize = "12px";
-          addActionWrap.style.padding = "2px 6px";
-          addActionWrap.style.borderRadius = "4px";
-
           const quickAddBtn = document.createElement("button");
           quickAddBtn.type = "button";
-          quickAddBtn.className = "btn sm";
+          quickAddBtn.className = "btn sm attr-quick-add-btn";
           quickAddBtn.title = `为${it?.property_label_zh || it?.property || "该属性"}新增属性值`;
           quickAddBtn.setAttribute("aria-label", quickAddBtn.title);
-          quickAddBtn.style.padding = "2px 10px";
-          quickAddBtn.innerHTML = '<i class="fa-solid fa-plus"></i><span style="margin-left:6px;">新增属性值</span>';
+          quickAddBtn.innerHTML = '<i class="fa-solid fa-plus"></i>';
           quickAddBtn.addEventListener("click", (e) => {
             e.preventDefault();
             e.stopPropagation();
-            openQuickAddAttrForProperty(it, nodeId, addRow);
+            openQuickAddAttrForProperty(it, nodeId, row);
           });
-
-          addActionWrap.appendChild(quickAddBtn);
-          addRow.appendChild(addLabel);
-          addRow.appendChild(addActionWrap);
-          frag.appendChild(addRow);
+          row.appendChild(quickAddBtn);
         }
       }
     }
@@ -2128,23 +2105,21 @@ if (btnAttrReset) {
       ensureAttrButtonsState();
     } catch {}
 
-    if (attrForm && attrFormBody) {
-      attrFormBody.style.display = "";
-      attrFormBody.classList.remove("collapsed");
-      attrFormBody.classList.add("inline-editing");
-      attrForm.classList.add("value-only-editing");
-      anchorRow.insertAdjacentElement("afterend", attrFormBody);
-    }
+      if (attrForm && attrFormBody) {
+        attrFormBody.style.display = "";
+        attrFormBody.classList.remove("collapsed");
+        attrFormBody.classList.add("inline-editing");
+        attrForm.classList.add("value-only-editing");
+        anchorRow.insertAdjacentElement("afterend", attrFormBody);
+      }
 
-    currentAttrEditingRow = anchorRow;
-    anchorRow.classList.add("attr-editing-hidden");
-
-    try {
-      resetAttrForm();
       currentAttrEditingRow = anchorRow;
-      anchorRow.classList.add("attr-editing-hidden");
-      if (attrForm) attrForm.classList.add("value-only-editing");
-    } catch {}
+
+      try {
+        resetAttrForm();
+        currentAttrEditingRow = anchorRow;
+        if (attrForm) attrForm.classList.add("value-only-editing");
+      } catch {}
 
     const propertyId = item.property || "";
     const propertyLabel = item.property_label_zh || propertyId;
