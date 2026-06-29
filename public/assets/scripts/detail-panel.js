@@ -18,6 +18,37 @@
     });
   }
 
+  const detailPdfViewerState = {
+    renderSeq: 0,
+    doc: null,
+    url: "",
+  };
+
+  function resetDetailPdfViewer() {
+    detailPdfViewerState.renderSeq += 1;
+    detailPdfViewerState.url = "";
+    if (
+      detailPdfViewerState.doc &&
+      typeof detailPdfViewerState.doc.destroy === "function"
+    ) {
+      try {
+        detailPdfViewerState.doc.destroy();
+      } catch {}
+    }
+    detailPdfViewerState.doc = null;
+  }
+
+  async function ensurePdfJsLib() {
+    if (window.pdfjsLib) return window.pdfjsLib;
+    if (window.kbPdfJsReady && typeof window.kbPdfJsReady.then === "function") {
+      try {
+        const lib = await window.kbPdfJsReady;
+        if (lib) return lib;
+      } catch {}
+    }
+    throw new Error("PDF.js not available");
+  }
+
   function hideDetailPanel() {
     try {
       const dp = document.getElementById("detailPanel");
@@ -499,6 +530,7 @@
 
   function clearDetailPanel() {
     try {
+      resetDetailPdfViewer();
       const tb = document.getElementById("detailAttrList");
       if (tb) tb.innerHTML = "";
       const imgBoxReset = document.getElementById("infoboxImgs");
@@ -527,6 +559,243 @@
     } catch {}
   }
 
+  async function renderPdfPageToPane(pdfDoc, pageNo, pane, seq) {
+    if (!pane) return;
+    const labelEl = pane.querySelector(".detail-pdf-pane-label");
+    const canvas = pane.querySelector(".detail-pdf-canvas");
+    const emptyEl = pane.querySelector(".detail-pdf-empty");
+    if (!canvas || !labelEl) return;
+
+    if (!pageNo || pageNo < 1 || pageNo > Number(pdfDoc?.numPages || 0)) {
+      pane.classList.add("is-empty");
+      labelEl.textContent = "空白页";
+      canvas.width = 1;
+      canvas.height = 1;
+      canvas.style.display = "none";
+      if (emptyEl) emptyEl.style.display = "";
+      return;
+    }
+
+    pane.classList.remove("is-empty");
+    canvas.style.display = "block";
+    if (emptyEl) emptyEl.style.display = "none";
+    labelEl.textContent = `第 ${pageNo} 页`;
+
+    const page = await pdfDoc.getPage(pageNo);
+    if (seq !== detailPdfViewerState.renderSeq) return;
+
+    const baseViewport = page.getViewport({ scale: 1 });
+    const paneWidth = Math.max(220, Math.floor(pane.clientWidth - 24));
+    const maxHeight = Math.max(320, Math.floor(window.innerHeight * 0.64) - 56);
+    const widthScale = paneWidth / baseViewport.width;
+    const heightScale = maxHeight / baseViewport.height;
+    const scale = Math.max(0.2, Math.min(widthScale, heightScale));
+    const viewport = page.getViewport({ scale });
+
+    const dpr =
+      typeof window !== "undefined" && window.devicePixelRatio
+        ? Math.min(window.devicePixelRatio, 2)
+        : 1;
+    canvas.width = Math.max(1, Math.floor(viewport.width * dpr));
+    canvas.height = Math.max(1, Math.floor(viewport.height * dpr));
+    canvas.style.width = `${Math.floor(viewport.width)}px`;
+    canvas.style.height = `${Math.floor(viewport.height)}px`;
+
+    const ctx = canvas.getContext("2d", { alpha: false });
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, viewport.width, viewport.height);
+
+    const renderTask = page.render({
+      canvasContext: ctx,
+      viewport,
+    });
+    await renderTask.promise;
+  }
+
+  async function mountPdfSpreadViewer(root, resolvedUrl, title) {
+    if (!root) return;
+    const seq = ++detailPdfViewerState.renderSeq;
+    detailPdfViewerState.url = resolvedUrl;
+
+    const wrap = document.createElement("section");
+    wrap.className = "detail-pdf-viewer";
+
+    const toolbar = document.createElement("div");
+    toolbar.className = "detail-pdf-toolbar";
+
+    const info = document.createElement("div");
+    info.className = "detail-pdf-page-info";
+    info.textContent = "PDF 加载中…";
+
+    const actions = document.createElement("div");
+    actions.className = "detail-pdf-toolbar-actions";
+
+    const prevBtn = document.createElement("button");
+    prevBtn.type = "button";
+    prevBtn.className = "btn sm";
+    prevBtn.textContent = "上一组";
+    prevBtn.disabled = true;
+
+    const nextBtn = document.createElement("button");
+    nextBtn.type = "button";
+    nextBtn.className = "btn sm";
+    nextBtn.textContent = "下一组";
+    nextBtn.disabled = true;
+
+    actions.appendChild(prevBtn);
+    actions.appendChild(nextBtn);
+    toolbar.appendChild(info);
+    toolbar.appendChild(actions);
+    wrap.appendChild(toolbar);
+
+    const spread = document.createElement("div");
+    spread.className = "detail-pdf-spread";
+    wrap.appendChild(spread);
+
+    const prevSpreadBtn = document.createElement("button");
+    prevSpreadBtn.type = "button";
+    prevSpreadBtn.className = "detail-pdf-nav detail-pdf-nav-prev";
+    prevSpreadBtn.setAttribute("aria-label", "上一组页面");
+    prevSpreadBtn.innerHTML =
+      '<i class="fa-solid fa-chevron-left" aria-hidden="true"></i>';
+    prevSpreadBtn.disabled = true;
+
+    const nextSpreadBtn = document.createElement("button");
+    nextSpreadBtn.type = "button";
+    nextSpreadBtn.className = "detail-pdf-nav detail-pdf-nav-next";
+    nextSpreadBtn.setAttribute("aria-label", "下一组页面");
+    nextSpreadBtn.innerHTML =
+      '<i class="fa-solid fa-chevron-right" aria-hidden="true"></i>';
+    nextSpreadBtn.disabled = true;
+
+    spread.appendChild(prevSpreadBtn);
+    spread.appendChild(nextSpreadBtn);
+
+    const pages = document.createElement("div");
+    pages.className = "detail-pdf-pages";
+    spread.appendChild(pages);
+
+    const makePagePane = (sideLabel) => {
+      const pane = document.createElement("div");
+      pane.className = "detail-pdf-pane";
+
+      const pageLabel = document.createElement("div");
+      pageLabel.className = "detail-pdf-pane-label";
+      pageLabel.textContent = sideLabel;
+      pane.appendChild(pageLabel);
+
+      const canvasWrap = document.createElement("div");
+      canvasWrap.className = "detail-pdf-canvas-wrap";
+
+      const canvas = document.createElement("canvas");
+      canvas.className = "detail-pdf-canvas";
+
+      const empty = document.createElement("div");
+      empty.className = "detail-pdf-empty";
+      empty.textContent = "无页面";
+      empty.style.display = "none";
+
+      canvasWrap.appendChild(canvas);
+      canvasWrap.appendChild(empty);
+      pane.appendChild(canvasWrap);
+      return pane;
+    };
+
+    const leftPane = makePagePane("左页");
+    const rightPane = makePagePane("右页");
+    pages.appendChild(leftPane);
+    pages.appendChild(rightPane);
+    root.appendChild(wrap);
+
+    try {
+      const pdfjsLib = await ensurePdfJsLib();
+      if (seq !== detailPdfViewerState.renderSeq) return;
+
+      const loadingTask = pdfjsLib.getDocument({
+        url: resolvedUrl,
+        withCredentials: false,
+      });
+      const pdfDoc = await loadingTask.promise;
+      if (seq !== detailPdfViewerState.renderSeq) {
+        try {
+          await pdfDoc.destroy();
+        } catch {}
+        return;
+      }
+      detailPdfViewerState.doc = pdfDoc;
+
+      let pageStart = 1;
+      let rendering = false;
+      let queued = false;
+
+      const updateButtons = () => {
+        const canPrev = pageStart > 1;
+        const canNext = pageStart + 1 < pdfDoc.numPages;
+        prevBtn.disabled = !canPrev;
+        prevSpreadBtn.disabled = !canPrev;
+        nextBtn.disabled = !canNext;
+        nextSpreadBtn.disabled = !canNext;
+      };
+
+      const renderSpread = async () => {
+        if (rendering) {
+          queued = true;
+          return;
+        }
+        rendering = true;
+        try {
+          const leftNo = pageStart;
+          const rightNo = pageStart + 1;
+          info.textContent = `双页预览：第 ${leftNo}${rightNo <= pdfDoc.numPages ? ` - ${rightNo}` : ""} 页 / 共 ${pdfDoc.numPages} 页`;
+          updateButtons();
+          await Promise.all([
+            renderPdfPageToPane(pdfDoc, leftNo, leftPane, seq),
+            renderPdfPageToPane(pdfDoc, rightNo, rightPane, seq),
+          ]);
+        } finally {
+          rendering = false;
+          if (queued) {
+            queued = false;
+            renderSpread();
+          }
+        }
+      };
+
+      const goPrev = () => {
+        if (pageStart <= 1) return;
+        pageStart = Math.max(1, pageStart - 2);
+        renderSpread();
+      };
+      const goNext = () => {
+        if (pageStart + 1 >= pdfDoc.numPages) return;
+        pageStart += 2;
+        renderSpread();
+      };
+
+      prevBtn.addEventListener("click", goPrev);
+      nextBtn.addEventListener("click", goNext);
+      prevSpreadBtn.addEventListener("click", goPrev);
+      nextSpreadBtn.addEventListener("click", goNext);
+
+      renderSpread();
+    } catch (err) {
+      console.error("PDF.js viewer init failed", err);
+      root.innerHTML = "";
+      const fallback = document.createElement("div");
+      fallback.className = "detail-pdf-fallback";
+      fallback.textContent = "PDF 预览加载失败，请使用新窗口打开。";
+      const linkEl = document.createElement("a");
+      linkEl.href = resolvedUrl;
+      linkEl.target = "_blank";
+      linkEl.rel = "noreferrer noopener";
+      linkEl.textContent = "打开 PDF";
+      fallback.appendChild(document.createElement("br"));
+      fallback.appendChild(linkEl);
+      root.appendChild(fallback);
+    }
+  }
+
   function normalizeEntityIdForApi(id) {
     const raw = (id ?? "").toString().trim();
     if (!raw) return "";
@@ -536,7 +805,8 @@
 
   async function showNodeDetailInline(nodeId, options = {}) {
     if (!nodeId) return;
-    const preserveSidebarState = options && options.preserveSidebarState === true;
+    const preserveSidebarState =
+      options && options.preserveSidebarState === true;
     const routeId = (nodeId ?? "").toString().trim();
     const fullId = normalizeEntityIdForApi(routeId);
     const dp = document.getElementById("detailPanel");
@@ -560,7 +830,10 @@
         window.kbCurrentNodeId = window.kbSelectedRowId;
         window.kbLastAnchorRowId = window.kbSelectedRowId;
       }
-      if (!preserveSidebarState && typeof window.loadAttributes === "function") {
+      if (
+        !preserveSidebarState &&
+        typeof window.loadAttributes === "function"
+      ) {
         try {
           window.loadAttributes(fullId);
         } catch (err) {
@@ -614,7 +887,10 @@
           window.kbLastAnchorRowId = canonicalId;
         }
         try {
-          if (!preserveSidebarState && typeof window.loadAttributes === "function") {
+          if (
+            !preserveSidebarState &&
+            typeof window.loadAttributes === "function"
+          ) {
             window.loadAttributes(canonicalId);
           }
         } catch (err) {
@@ -834,39 +1110,7 @@
               return pdfUrl;
             }
           })();
-          const wrap = document.createElement("div");
-          wrap.style.display = "grid";
-          wrap.style.gap = "8px";
-          wrap.style.width = "100%";
-          const objectEl = document.createElement("object");
-          objectEl.data = `${resolvedUrl}#toolbar=0&view=FitH`;
-          objectEl.type = "application/pdf";
-          objectEl.style.width = "100%";
-          objectEl.style.minHeight = "720px";
-          objectEl.style.border = "1px solid var(--border)";
-          objectEl.style.borderRadius = "12px";
-          objectEl.style.background = "var(--surface-1)";
-          const frame = document.createElement("iframe");
-          frame.src = `${resolvedUrl}#toolbar=0&view=FitH`;
-          frame.title = title + " PDF 预览";
-          frame.style.width = "100%";
-          frame.style.minHeight = "720px";
-          frame.style.border = "1px solid var(--border)";
-          frame.style.borderRadius = "12px";
-          frame.style.background = "var(--surface-1)";
-          frame.setAttribute("loading", "lazy");
-          objectEl.appendChild(frame);
-          wrap.appendChild(objectEl);
-          const link = document.createElement("a");
-          link.href = resolvedUrl;
-          link.target = "_blank";
-          link.rel = "noreferrer noopener";
-          link.textContent = "新窗口打开 PDF";
-          link.style.display = "inline-block";
-          link.style.marginTop = "8px";
-          link.style.color = "var(--link)";
-          wrap.appendChild(link);
-          wikiTopPdf.appendChild(wrap);
+          mountPdfSpreadViewer(wikiTopPdf, resolvedUrl, title);
           wikiTopPdf.style.display = "block";
         } else {
           wikiTopPdf.style.display = "none";

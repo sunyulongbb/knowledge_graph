@@ -1955,6 +1955,562 @@ body {
   height: 0px;
 }
 
+.detail-panel-shell {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.detail-inner {
+  width: min(100%, 1040px);
+  margin: 0 auto;
+  padding: 0 2px 20px;
+  position: relative;
+}
+
+.detail-actions {
+  position: sticky;
+  top: 4px;
+  justify-content: flex-end;
+  margin: 0 0 6px;
+  padding: 0;
+  z-index: 20;
+}
+
+.detail-actions .btn.icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border-color: color-mix(in srgb, var(--border) 84%, white);
+  background: color-mix(in srgb, var(--surface-0) 88%, white);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(10px);
+}
+
+.detail-hero {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 2px 0 10px;
+  margin-bottom: 10px !important;
+}
+
+#wikiTopTitle {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+  gap: 12px;
+  font-size: clamp(26px, 3vw, 34px) !important;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+#wikiTopTitle > :first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+#wikiTopLink {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, white);
+  background: color-mix(in srgb, var(--surface-0) 92%, white);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
+}
+
+#wikiClasses {
+  margin: 8px 0 0 !important;
+  gap: 6px !important;
+}
+
+#wikiClasses .tag {
+  padding: 5px 10px !important;
+  border-radius: 999px !important;
+  font-size: 12px !important;
+  font-weight: 600;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+#wikiTopDesc {
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 1.68;
+  max-width: 78ch;
+  color: color-mix(in srgb, var(--fg) 78%, var(--muted));
+}
+
+#wikiTopMedia,
+#wikiTopVideo,
+#wikiTopPdf,
+#wikiMediaGrid {
+  margin-top: 14px !important;
+}
+
+#wikiTopMedia .detail-carousel-container,
+#wikiTopVideo > *,
+#wikiTopPdf > * {
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: none;
+}
+
+.detail-pdf-viewer {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.detail-pdf-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 2px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.detail-pdf-page-info {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.detail-pdf-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.detail-pdf-open-link {
+  color: var(--link);
+  text-decoration: none;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.detail-pdf-open-link:hover {
+  text-decoration: underline;
+}
+
+.detail-pdf-spread {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0 30px;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.detail-pdf-pages {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+  position: relative;
+  width: 100%;
+}
+
+.detail-pdf-pages::before {
+  display: none;
+}
+
+.detail-pdf-pane {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  min-width: 0;
+}
+
+.detail-pdf-pane:first-child {
+  border-radius: 0;
+  margin-right: 0;
+}
+
+.detail-pdf-pane:last-child {
+  border-radius: 0;
+  margin-left: 0;
+}
+
+.detail-pdf-pane-label {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.detail-pdf-canvas-wrap {
+  height: min(64vh, calc(100vh - 250px));
+  max-height: min(64vh, calc(100vh - 250px));
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.detail-pdf-canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  box-shadow: none;
+}
+
+.detail-pdf-empty {
+  margin: auto;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.detail-pdf-fallback {
+  padding: 10px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+}
+
+.detail-pdf-fallback a {
+  color: var(--link);
+}
+
+.detail-pdf-frame {
+  width: 100%;
+  height: min(64vh, calc(100vh - 250px));
+  max-height: min(64vh, calc(100vh - 250px));
+  border: 1px solid color-mix(in srgb, var(--border) 84%, white);
+  border-radius: 12px;
+  background: #f5f5f4;
+  overflow: hidden;
+  scrollbar-width: none;
+}
+
+.detail-pdf-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 34px;
+  height: 54px;
+  border: 1px solid color-mix(in srgb, var(--border) 84%, white);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-0) 94%, white);
+  color: var(--fg);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+}
+
+.detail-pdf-nav:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.detail-pdf-nav-prev {
+  left: 0;
+}
+
+.detail-pdf-nav-next {
+  right: 0;
+}
+
+.detail-content-layout {
+  display: block !important;
+}
+
+.detail-article {
+  min-width: 0;
+}
+
+#wikiInfobox.detail-infobox {
+  width: 296px !important;
+  margin: 0 0 18px 18px !important;
+  border: 1px solid color-mix(in srgb, var(--border) 84%, white);
+  border-radius: 16px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-1) 88%, white), var(--surface-0));
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.06);
+  overflow: hidden;
+}
+
+#wikiInfobox .ibox-title {
+  padding: 14px 16px 10px !important;
+  font-size: 14px;
+  letter-spacing: 0.01em;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 84%, white);
+}
+
+#wikiInfobox .box {
+  padding: 0 14px 14px;
+}
+
+#infoboxImgs {
+  padding: 14px 14px 0;
+}
+
+#infoboxImgs img,
+#infoboxImgs video {
+  width: 100%;
+  border-radius: 12px;
+  display: block;
+}
+
+#detailAttrList {
+  margin-top: 0;
+  padding-top: 0;
+  font-size: 12px;
+}
+
+#detailAttrList > div + div {
+  border-top: 1px solid color-mix(in srgb, var(--border) 76%, white);
+}
+
+#wikiView {
+  color: var(--fg);
+  font-size: 15px !important;
+  line-height: 1.82 !important;
+}
+
+#wikiView > :first-child {
+  margin-top: 0;
+}
+
+#wikiView h1,
+#wikiView h2,
+#wikiView h3,
+#wikiView h4 {
+  letter-spacing: -0.02em;
+  line-height: 1.28;
+  margin: 1.4em 0 0.65em;
+}
+
+#wikiView h1 {
+  font-size: 28px;
+}
+
+#wikiView h2 {
+  font-size: 22px;
+  padding-bottom: 0.32em;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 84%, white);
+}
+
+#wikiView h3 {
+  font-size: 18px;
+}
+
+#wikiView p,
+#wikiView ul,
+#wikiView ol,
+#wikiView blockquote {
+  margin: 0 0 1em;
+}
+
+#wikiView ul,
+#wikiView ol {
+  padding-left: 1.35em;
+}
+
+#wikiView blockquote {
+  padding: 12px 14px;
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--surface-1) 78%, white);
+  border-radius: 0 12px 12px 0;
+  color: color-mix(in srgb, var(--fg) 86%, var(--muted));
+}
+
+#wikiView code {
+  padding: 0.12em 0.38em;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface-1) 86%, white);
+  font-size: 0.92em;
+}
+
+#wikiView pre {
+  margin: 1em 0;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-1) 92%, white);
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, white);
+}
+
+#wikiView pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.detail-edit-inline {
+  margin-top: 16px !important;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, white);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface-0) 94%, white);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.05);
+}
+
+.detail-edit-inline textarea,
+.detail-edit-inline input,
+.detail-edit-inline select {
+  border-radius: 10px !important;
+}
+
+@media (max-width: 900px) {
+  .detail-inner {
+    width: 100%;
+    padding: 0 0 20px;
+  }
+
+  .detail-hero {
+    padding: 0 0 10px;
+  }
+
+  #wikiTopTitle {
+    flex-wrap: wrap;
+    font-size: 22px !important;
+  }
+
+  #wikiInfobox.detail-infobox {
+    float: none !important;
+    width: 100% !important;
+    margin: 0 0 14px 0 !important;
+  }
+
+  #wikiView {
+    font-size: 14px !important;
+    line-height: 1.72 !important;
+  }
+
+  .detail-pdf-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 0;
+  }
+
+  .detail-pdf-toolbar-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .detail-pdf-spread {
+    padding: 0 0 52px;
+    border-radius: 0;
+  }
+
+  .detail-pdf-pages {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .detail-pdf-pages::before {
+    display: none;
+  }
+
+  .detail-pdf-pane:first-child,
+  .detail-pdf-pane:last-child {
+    margin: 0;
+    border-radius: 14px;
+  }
+
+  .detail-pdf-frame {
+    height: min(56vh, calc(100vh - 280px));
+    max-height: min(56vh, calc(100vh - 280px));
+  }
+
+  .detail-pdf-canvas-wrap {
+    height: min(56vh, calc(100vh - 280px));
+    max-height: min(56vh, calc(100vh - 280px));
+  }
+
+  .detail-pdf-nav {
+    top: auto;
+    bottom: 10px;
+    transform: none;
+    width: 42px;
+    height: 42px;
+    border-radius: 999px;
+  }
+
+  .detail-pdf-nav-prev {
+    left: calc(50% - 48px);
+  }
+
+  .detail-pdf-nav-next {
+    right: calc(50% - 48px);
+  }
+}
+
+:root[data-theme="dark"] .detail-panel-shell {
+  background: transparent;
+}
+
+:root[data-theme="dark"] .detail-actions .btn.icon,
+:root[data-theme="dark"] #wikiTopLink {
+  background: rgba(15, 23, 42, 0.84);
+  border-color: rgba(148, 163, 184, 0.16);
+  box-shadow: 0 14px 28px rgba(2, 6, 23, 0.3);
+}
+
+:root[data-theme="dark"] .detail-hero,
+:root[data-theme="dark"] #wikiInfobox.detail-infobox,
+:root[data-theme="dark"] .detail-edit-inline {
+  background:
+    linear-gradient(180deg, rgba(30, 41, 59, 0.66), rgba(15, 23, 42, 0.82));
+  border-color: rgba(148, 163, 184, 0.18);
+  box-shadow: 0 20px 38px rgba(2, 6, 23, 0.34);
+}
+
+:root[data-theme="dark"] #wikiInfobox .ibox-title,
+:root[data-theme="dark"] #wikiView h2,
+:root[data-theme="dark"] #detailAttrList > div + div {
+  border-color: rgba(148, 163, 184, 0.14);
+}
+
+:root[data-theme="dark"] #wikiView blockquote,
+:root[data-theme="dark"] #wikiView pre,
+:root[data-theme="dark"] #wikiView code {
+  background: rgba(15, 23, 42, 0.7);
+  border-color: rgba(148, 163, 184, 0.16);
+}
+
+:root[data-theme="dark"] .detail-pdf-toolbar,
+:root[data-theme="dark"] .detail-pdf-pane {
+  background: transparent;
+  border-color: transparent;
+}
+
+:root[data-theme="dark"] .detail-pdf-frame {
+  background: rgba(15, 23, 42, 0.85);
+  border-color: rgba(148, 163, 184, 0.14);
+}
+
+:root[data-theme="dark"] .detail-pdf-canvas-wrap,
+:root[data-theme="dark"] .detail-pdf-fallback {
+  background: transparent;
+  border-color: transparent;
+}
+
+:root[data-theme="dark"] .detail-pdf-nav {
+  background: rgba(15, 23, 42, 0.92);
+  border-color: rgba(148, 163, 184, 0.18);
+  box-shadow: 0 8px 18px rgba(2, 6, 23, 0.26);
+}
+
 #wikiView table {
   width: 100%;
   margin: 12px 0;
@@ -3995,10 +4551,10 @@ body {
 }
 
 #tblNodes.grid-layout {
-  --table-grid-gap: 12px;
+  --table-grid-gap: 8px;
   --table-grid-row-height: 8px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(190px, 100%), 1fr));
   grid-auto-flow: row;
   grid-auto-rows: var(--table-grid-row-height);
   gap: var(--table-grid-gap);
@@ -4025,71 +4581,121 @@ body {
 }
 
 #tblNodes.grid-layout .table-feed-card {
-  border-radius: 14px;
-  padding: 12px;
+  border-radius: 10px;
+  padding: 9px;
   background: var(--surface-1);
   box-shadow: 0 1px 6px rgba(15, 23, 42, 0.05);
   height: max-content;
 }
 
 #tblNodes.grid-layout .table-feed-header {
-  flex-direction: column;
+  flex-direction: row;
   align-items: flex-start;
+  gap: 6px;
+  padding-bottom: 5px;
 }
 
 #tblNodes.grid-layout .table-feed-top-actions {
   margin-left: 0;
-  margin-top: 6px;
+  margin-top: 0;
+}
+
+#tblNodes.grid-layout .table-feed-header-aside {
+  gap: 3px;
+}
+
+#tblNodes.grid-layout .table-feed-avatar {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  font-size: 12px;
+}
+
+#tblNodes.grid-layout .table-feed-name {
+  font-size: 14px;
+  -webkit-line-clamp: 1;
+  line-height: 1.35;
+}
+
+#tblNodes.grid-layout .table-feed-time {
+  font-size: 10px;
+}
+
+#tblNodes.grid-layout .table-feed-subline {
+  gap: 4px;
+  font-size: 10px;
+}
+
+#tblNodes.grid-layout .table-feed-collapsed-info {
+  font-size: 10px;
+  line-height: 1.45;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+#tblNodes.grid-layout .table-feed-tag-list {
+  display: none;
 }
 
 #tblNodes.grid-layout .table-feed-media-slot {
-  min-height: 180px;
-  border-radius: 12px;
-  margin-top: 8px;
+  min-height: 0;
+  border-radius: 9px;
+  margin-top: 4px;
   padding: 0;
 }
 
 #tblNodes.grid-layout .table-feed-footer {
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-start;
+  gap: 3px;
+  padding-top: 5px;
+}
+
+#tblNodes.grid-layout .table-feed-action-btn {
+  gap: 3px;
+  padding: 2px 5px;
+  font-size: 10px;
+}
+
+#tblNodes.grid-layout .table-feed-external-link {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  font-size: 11px;
 }
 
 .table-feed-grid-media {
   position: relative;
   width: 100%;
-  min-height: 180px;
+  min-height: 0;
   overflow: hidden;
-  border-radius: 14px;
+  border-radius: 10px;
   background: var(--surface-0);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
 }
 
 .table-feed-grid-media-view {
   position: relative;
   width: 100%;
-  min-height: 180px;
+  min-height: 0;
   overflow: hidden;
 }
 
 .table-feed-carousel-track {
   display: flex;
   width: 100%;
-  height: 100%;
+  align-items: flex-start;
   transition: transform 260ms ease;
 }
 
 .table-feed-carousel-slide {
   min-width: 100%;
-  height: 100%;
   position: relative;
   flex: 0 0 100%;
 }
 
 .table-feed-grid-image-btn {
   width: 100%;
-  height: 100%;
   display: block;
   border: none;
   background: transparent;
@@ -4100,8 +4706,8 @@ body {
 .table-feed-grid-image-btn img,
 .table-feed-grid-media video {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
+  height: auto;
+  object-fit: contain;
   display: block;
 }
 
@@ -4159,10 +4765,10 @@ body {
   border-radius: 16px;
   background: var(--surface-0);
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
-  padding: 14px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   overflow: hidden;
   transition:
     transform 180ms ease,
@@ -4189,15 +4795,16 @@ body {
 .table-feed-header {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding-bottom: 8px;
+  gap: 8px;
+  justify-content: space-between;
+  padding-bottom: 6px;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 82%, white);
 }
 
 .table-feed-avatar {
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
   border-radius: 50%;
   border: none;
   background: linear-gradient(135deg, #dbeafe, #eff6ff);
@@ -4205,7 +4812,7 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
   overflow: hidden;
   padding: 0;
@@ -4224,7 +4831,7 @@ body {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .table-feed-meta-top {
@@ -4232,15 +4839,22 @@ body {
   align-items: flex-start;
   gap: 6px;
   flex-wrap: wrap;
-  position: relative;
-  padding-right: 72px;
   min-width: 0;
+}
+
+.table-feed-header-aside {
+  flex: 0 0 auto;
+  min-width: max-content;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
 }
 
 .table-feed-name {
   color: var(--fg);
   text-decoration: none;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   display: block;
   max-width: 100%;
@@ -4254,11 +4868,12 @@ body {
 }
 
 .table-feed-time {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted-2);
-  position: absolute;
-  top: 0;
-  right: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  text-align: right;
   white-space: nowrap;
   padding: 0;
   border-radius: 0;
@@ -4269,10 +4884,10 @@ body {
 .table-feed-subline {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   min-width: 0;
 }
 
@@ -4282,8 +4897,8 @@ body {
 
 .table-feed-collapsed-info {
   color: var(--muted);
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: 11px;
+  line-height: 1.5;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
@@ -4300,11 +4915,11 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 3px 8px;
+  padding: 2px 7px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--surface-1) 94%, white);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0;
   border: 1px solid color-mix(in srgb, var(--border) 84%, white);
@@ -4312,7 +4927,7 @@ body {
 
 .table-feed-aliases {
   color: var(--muted-2);
-  font-size: 11px;
+  font-size: 10px;
   opacity: 0.92;
 }
 
@@ -4320,7 +4935,6 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-left: auto;
 }
 
 .table-feed-external-link {
@@ -4377,25 +4991,25 @@ body {
 .table-feed-tag-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 4px;
   margin-top: -1px;
 }
 
 .table-feed-tag-chip {
   display: inline-flex;
   align-items: center;
-  padding: 2px 7px;
+  padding: 1px 6px;
   border-radius: 999px;
   background: transparent;
   border: 1px solid color-mix(in srgb, var(--border) 82%, white);
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
 }
 
 .table-feed-media-slot {
-  min-height: 132px;
-  border-radius: 14px;
+  min-height: 116px;
+  border-radius: 12px;
   background: color-mix(in srgb, var(--surface-1) 90%, white);
   border: 1px solid color-mix(in srgb, var(--border) 84%, white);
   overflow: hidden;
@@ -4827,8 +5441,8 @@ body {
 .table-feed-footer {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding-top: 8px;
+  gap: 4px;
+  padding-top: 6px;
   margin-top: auto;
   border-top: 1px solid color-mix(in srgb, var(--border) 82%, white);
 }
@@ -4839,11 +5453,11 @@ body {
   color: var(--muted);
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 7px;
+  gap: 4px;
+  padding: 3px 6px;
   border-radius: 999px;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 10px;
   transition:
     color 140ms ease,
     background 140ms ease,

@@ -1756,7 +1756,6 @@ function __kbInitTableSelection() {
       const slide = document.createElement("div");
       slide.className = "table-feed-carousel-slide";
       slide.style.minWidth = "100%";
-      slide.style.height = "100%";
       slide.style.flex = "0 0 100%";
       slide.style.position = "relative";
 
@@ -1764,7 +1763,6 @@ function __kbInitTableSelection() {
         const wrap = document.createElement("div");
         wrap.className = "table-feed-video-wrap";
         wrap.style.width = "100%";
-        wrap.style.height = "100%";
         const video = document.createElement("video");
         video.className = "table-feed-video";
         video.src = resolveMediaUrl(item.src);
@@ -1774,8 +1772,8 @@ function __kbInitTableSelection() {
         video.loop = true;
         video.controls = false;
         video.style.width = "100%";
-        video.style.height = "100%";
-        video.style.objectFit = "cover";
+        video.style.height = "auto";
+        video.style.objectFit = "contain";
         if (coverUrl) {
           video.poster = resolveMediaUrl(coverUrl);
         }
@@ -1792,7 +1790,6 @@ function __kbInitTableSelection() {
         button.type = "button";
         button.className = "table-feed-grid-image-btn";
         button.title = "查看图片";
-        button.style.height = "100%";
         button.addEventListener("click", (e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -1802,8 +1799,8 @@ function __kbInitTableSelection() {
         img.src = imageUrl;
         img.alt = node?.label_zh || node?.label || node?.name || "图片";
         img.style.width = "100%";
-        img.style.height = "100%";
-        img.style.objectFit = "cover";
+        img.style.height = "auto";
+        img.style.objectFit = "contain";
         button.appendChild(img);
         slide.appendChild(button);
       }
@@ -2294,13 +2291,6 @@ function __kbInitTableSelection() {
       metaTop.className = "table-feed-meta-top";
       metaTop.appendChild(nameLink);
 
-      if (relativeTime) {
-        const timeText = document.createElement("span");
-        timeText.className = "table-feed-time";
-        timeText.textContent = relativeTime;
-        metaTop.appendChild(timeText);
-      }
-
       meta.appendChild(metaTop);
 
       const metaSub = document.createElement("div");
@@ -2334,6 +2324,16 @@ function __kbInitTableSelection() {
 
       header.appendChild(meta);
 
+      const headerAside = document.createElement("div");
+      headerAside.className = "table-feed-header-aside";
+
+      if (relativeTime) {
+        const timeText = document.createElement("span");
+        timeText.className = "table-feed-time";
+        timeText.textContent = relativeTime;
+        headerAside.appendChild(timeText);
+      }
+
       const actions = document.createElement("div");
       actions.className = "table-feed-top-actions";
       if (n.link) {
@@ -2352,7 +2352,11 @@ function __kbInitTableSelection() {
       }
 
       if (actions.childElementCount > 0) {
-        header.appendChild(actions);
+        headerAside.appendChild(actions);
+      }
+
+      if (headerAside.childElementCount > 0) {
+        header.appendChild(headerAside);
       }
       card.appendChild(header);
 
