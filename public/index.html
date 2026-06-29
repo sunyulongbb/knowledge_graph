@@ -3412,27 +3412,28 @@
         <!-- Inline detail panel: will render node detail HTML here when requested -->
         <div id="detailPanel" class="panel detail-panel-shell" style="padding: 0; display: none; overflow: auto; min-height: 0">
           <div id="detailInner" class="detail-inner" style="font-size: 14px; color: var(--fg)">
-            <!-- 编辑百科 按钮，放在详情面板右上角 -->
-            <div class="detail-actions" style="display: flex; align-items: center; gap: 8px;">
-              <button id="btnToc" class="btn icon" title="目录" aria-label="目录" style="display: none">
-                <i class="fa-solid fa-list-ul"></i>
-              </button>
-              <button id="btnEditWiki" class="btn icon edit-wiki" title="编辑百科" aria-label="编辑百科">
-                <i class="fa-solid fa-pen-to-square"></i>
-              </button>
-              <button id="btnSaveWikiInlineTop" class="btn icon" title="保存百科" aria-label="保存百科"
-                style="display: none; background: var(--accent); color: #fff; border-color: var(--accent);">
-                <i class="fa-solid fa-floppy-disk"></i>
-              </button>
-              <div id="tocPopup" class="toc-popup" style="display: none;"></div>
-            </div>
             <div id="wikiTop" class="detail-hero" style="display: none; margin-bottom: 8px">
-              <div id="wikiTopTitle" class="title" style="font-size: 18px; font-weight: 700; white-space: pre-wrap; overflow-wrap: anywhere;"></div>
+              <div id="wikiTopPdf" style="display:none; margin-top: 10px;"></div>
+              <div class="detail-topbar">
+                <div id="wikiTopTitle" class="title" style="font-size: 18px; font-weight: 700; white-space: pre-wrap; overflow-wrap: anywhere;"></div>
+                <div class="detail-actions" style="display: flex; align-items: center; gap: 8px;">
+                  <button id="btnToc" class="btn icon" title="目录" aria-label="目录" style="display: none">
+                    <i class="fa-solid fa-list-ul"></i>
+                  </button>
+                  <button id="btnEditWiki" class="btn icon edit-wiki" title="编辑百科" aria-label="编辑百科">
+                    <i class="fa-solid fa-pen-to-square"></i>
+                  </button>
+                  <button id="btnSaveWikiInlineTop" class="btn icon" title="保存百科" aria-label="保存百科"
+                    style="display: none; background: var(--accent); color: #fff; border-color: var(--accent);">
+                    <i class="fa-solid fa-floppy-disk"></i>
+                  </button>
+                  <div id="tocPopup" class="toc-popup" style="display: none;"></div>
+                </div>
+              </div>
               <div id="wikiClasses" style="display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0;"></div>
               <div id="wikiTopDesc" class="desc" style="color: var(--muted)"></div>
               <div id="wikiTopMedia" style="display:none; margin-top: 10px;"></div>
               <div id="wikiTopVideo" style="display:none; margin-top: 10px;"></div>
-              <div id="wikiTopPdf" style="display:none; margin-top: 10px;"></div>
             </div>
             <div class="detail-content-layout" style="display: flex; gap: 12px; align-items: flex-start">
               <article id="wikiContent" class="detail-article" style="flex: 1; min-width: 0">
@@ -3442,25 +3443,15 @@
                       display: none;
                       margin-bottom: 12px;
                     "></nav>
-                <aside id="wikiInfobox" class="infobox detail-infobox" style="
-                      display: none;
-                      width: 320px;
-                      float: right;
-                      margin-left: 12px;
-                    ">
-                  <div class="ibox-title" id="infoboxTitle" style="display: none; padding: 10px; font-weight: 700">
-                  </div>
-                  <div class="infobox-imgs" id="infoboxImgs"></div>
-                  <div class="box">
-                    <!-- Attribute list (use same renderer/styles as left attrList) -->
-                    <div id="detailAttrList" style="font-size: 13px">
-                      <!-- populated by renderAttrList in read-only mode -->
-                    </div>
-                  </div>
-                </aside>
                 <div id="wikiView" style="font-size: 14px; line-height: 1.6">
                   加载详情中…
                 </div>
+                <section id="detailAttrSection" class="detail-attr-section" style="display: none;">
+                  <div class="detail-attr-title">属性信息</div>
+                  <div id="detailAttrList" style="font-size: 13px">
+                    <!-- populated by renderAttrList in read-only mode -->
+                  </div>
+                </section>
                 <div id="wikiMediaGrid" class="wiki-media-grid" style="display: none; margin-top: 12px"></div>
                 <!-- Inline wiki edit area (copied/adapted from kb_detail.html) -->
                 <div id="wikiEditInline" class="detail-edit-inline" style="display: none; margin-top: 8px">
