@@ -2388,8 +2388,10 @@
       if (firstOpt) firstOpt.selected = true;
     }
     if (selectedIndex >= 0) {
-      attrPropPickerList.value = selectedPropId;
       if (selectedPropId) {
+        attrPropPickerList.value = selectedPropId;
+        attrPropPickerList.selectedIndex = selectedIndex;
+      } else {
         attrPropPickerList.selectedIndex = selectedIndex;
       }
       setTimeout(() => {
@@ -2408,6 +2410,13 @@
   if (attrPropPickerList) {
     if (attrPropPicker) {
       attrPropPicker.addEventListener("click", (event) => {
+        if (
+          event.target === attrPropPickerList ||
+          (event.target instanceof Element &&
+            event.target.closest("#attrPropPickerList"))
+        ) {
+          return;
+        }
         if (isAttrPropDropdownOpen()) {
           closeAttrPropDropdown();
         } else {

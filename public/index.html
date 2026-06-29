@@ -2374,29 +2374,20 @@
           <div class="panel-header">
             <div class="panel-title">
               <span>实体列表</span>
-              <span id="tblCount" class="panel-subtitle"></span>
-               <input id="tblSearch" type="text" placeholder="搜索名称…" style="
-                    margin-left: auto;
-                    height: 32px;
-                    padding: 0 8px;
-                    border-radius: 8px;
-                    border: 1px solid var(--border-strong);
-                    background: var(--surface-0);
-                    color: var(--fg);
-                  " />
             </div>
             <div id="tbTableControls" class="table-toolbar panel-actions">
               <div class="table-filter-actions-row">
-                <select id="tblTypeFilter" class="kb-select sm" style="min-width: 180px; max-width: 220px; margin-left: 8px;">
+                <input id="tblSearch" type="text" class="table-toolbar-search" placeholder="搜索名称…" />
+                <select id="tblTypeFilter" class="kb-select sm" style="min-width: 180px; max-width: 220px;">
                   <option value="">本体类型</option>
                 </select>
-                <select id="tblPropertyFilter" class="kb-select sm" style="min-width: 180px; max-width: 220px; margin-left: 8px;">
+                <select id="tblPropertyFilter" class="kb-select sm" style="min-width: 180px; max-width: 220px;">
                   <option value="">筛选属性</option>
                 </select>
-                <select id="tblPropertyFilterValue" class="kb-select sm" style="min-width: 180px; max-width: 220px; margin-left: 8px;">
+                <select id="tblPropertyFilterValue" class="kb-select sm" style="min-width: 180px; max-width: 220px;">
                   <option value="">属性值</option>
                 </select>
-                <button id="btnClearTableFilter" class="btn icon" title="清除属性筛选" aria-label="清除属性筛选" style="margin-left: 4px;">
+                <button id="btnClearTableFilter" class="btn icon" title="清除属性筛选" aria-label="清除属性筛选">
                   <i class="fa-solid fa-xmark"></i>
                 </button>
                 <button id="btnTableRefresh" class="btn icon" title="刷新列表" aria-label="刷新列表">
@@ -5320,7 +5311,6 @@
     const btnTableRefresh = document.getElementById("btnTableRefresh");
     const btnDeleteSelected = document.getElementById("btnDeleteSelected");
     const tblNodes = document.getElementById("tblNodes");
-    const tblCount = document.getElementById("tblCount");
     const cleanTaskForm = document.getElementById("cleanTaskForm");
     const cleanTaskName = document.getElementById("cleanTaskName");
     const cleanTaskType = document.getElementById("cleanTaskType");

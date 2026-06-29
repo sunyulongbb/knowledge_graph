@@ -16,6 +16,7 @@ function __kbInitTableSelection() {
   let videoContextMenuEl = null;
   let videoContextMenuActionEl = null;
   let videoContextMenuAction = null;
+  let tableGridLayoutRaf = 0;
 
   if (typeof state.bindAlias === "function") {
     state.bindAlias("kbSelectedRowId", "selectedRowId", "");
@@ -163,6 +164,53 @@ function __kbInitTableSelection() {
       if (itemId === id) return item;
     }
     return null;
+  }
+
+  function applyTableGridMasonryLayout() {
+    if (!tblNodes) return;
+    if (window.kbTableLayoutMode !== "grid") {
+      tblNodes.style.removeProperty("--table-grid-row-height");
+      tblNodes.style.removeProperty("--table-grid-gap");
+      getListItems().forEach((item) => {
+        item.style.removeProperty("grid-row-end");
+      });
+      return;
+    }
+
+    tblNodes.style.setProperty("--table-grid-row-height", "8px");
+    tblNodes.style.setProperty("--table-grid-gap", "12px");
+
+    const computed = window.getComputedStyle(tblNodes);
+    const rowHeight = parseFloat(
+      computed.getPropertyValue("--table-grid-row-height"),
+    );
+    const rowGap =
+      parseFloat(computed.getPropertyValue("row-gap")) ||
+      parseFloat(computed.getPropertyValue("--table-grid-gap")) ||
+      12;
+    if (!rowHeight) return;
+
+    getListItems().forEach((item) => {
+      const card = item.querySelector(".table-feed-card") || item;
+      const rect = card.getBoundingClientRect();
+      const span = Math.max(
+        1,
+        Math.ceil((rect.height + rowGap) / (rowHeight + rowGap)),
+      );
+      item.style.gridRowEnd = `span ${span}`;
+    });
+  }
+
+  function scheduleTableGridMasonryLayout() {
+    if (tableGridLayoutRaf) {
+      try {
+        cancelAnimationFrame(tableGridLayoutRaf);
+      } catch {}
+    }
+    tableGridLayoutRaf = requestAnimationFrame(() => {
+      tableGridLayoutRaf = 0;
+      applyTableGridMasonryLayout();
+    });
   }
 
   function updateSelectedRowStyles() {
@@ -1908,7 +1956,7 @@ function __kbInitTableSelection() {
 
     if (action === "view") {
       if (typeof setViewMode === "function") {
-        setViewMode("detail", { targetNodeId: rid });
+        setViewMode("vis", { targetNodeId: rid });
       }
     }
   }
@@ -1985,14 +2033,8 @@ function __kbInitTableSelection() {
       if (!rid) return;
       setTableSelection(rid);
       if (typeof setViewMode === "function") {
-        setViewMode("vis", { targetNodeId: rid });
+        setViewMode("detail", { targetNodeId: rid });
       }
-      try {
-        if (!window.kbCy && typeof loadGraph === "function") {
-          await loadGraph();
-        }
-        if (typeof focusNode === "function") focusNode(rid);
-      } catch {}
     });
 
     tblNodes.addEventListener("mouseover", (e) => {
@@ -2064,6 +2106,17 @@ function __kbInitTableSelection() {
     slot.replaceChildren();
     if (mediaEl) {
       slot.appendChild(mediaEl);
+      const relayout = () => scheduleTableGridMasonryLayout();
+      try {
+        mediaEl.querySelectorAll("img").forEach((img) => {
+          if (img.complete) return;
+          img.addEventListener("load", relayout, { once: true });
+          img.addEventListener("error", relayout, { once: true });
+        });
+        mediaEl.querySelectorAll("video").forEach((video) => {
+          video.addEventListener("loadedmetadata", relayout, { once: true });
+        });
+      } catch {}
       try {
         const observedVideo = mediaEl.querySelector(
           ".table-feed-video-observe",
@@ -2074,6 +2127,7 @@ function __kbInitTableSelection() {
       } catch {}
     }
     slot.dataset.hydrated = "1";
+    scheduleTableGridMasonryLayout();
   }
 
   function setupTableMediaLazyRender() {
@@ -2115,6 +2169,10 @@ function __kbInitTableSelection() {
 
     pending.forEach((slot) => tableMediaObserver.observe(slot));
   }
+
+  window.addEventListener("resize", () => {
+    scheduleTableGridMasonryLayout();
+  });
 
   function renderTableList() {
     if (!tblNodes) return;
@@ -2278,28 +2336,6 @@ function __kbInitTableSelection() {
 
       const actions = document.createElement("div");
       actions.className = "table-feed-top-actions";
-      if (hasImage) {
-        const imgTag = document.createElement("button");
-        imgTag.type = "button";
-        imgTag.className = "node-media-tag";
-        imgTag.setAttribute("data-node-action", "gallery");
-        imgTag.innerHTML = '<i class="fa-solid fa-image"></i>';
-        imgTag.title = "打开图库";
-        actions.appendChild(imgTag);
-      }
-      if (hasVideo) {
-        const vidTag = document.createElement("button");
-        vidTag.type = "button";
-        vidTag.className = "node-media-tag";
-        vidTag.setAttribute("data-node-action", "shorts");
-        vidTag.innerHTML = '<i class="fa-solid fa-video"></i>';
-        vidTag.title =
-          videoList.length > 1
-            ? `打开短视频（${videoList.length}条）`
-            : "打开短视频";
-        actions.appendChild(vidTag);
-      }
-
       if (n.link) {
         try {
           const externalLink = document.createElement("a");
@@ -2315,7 +2351,9 @@ function __kbInitTableSelection() {
         } catch {}
       }
 
-      header.appendChild(actions);
+      if (actions.childElementCount > 0) {
+        header.appendChild(actions);
+      }
       card.appendChild(header);
 
       if (tags.length) {
@@ -2412,6 +2450,7 @@ function __kbInitTableSelection() {
     window._kbVideoObserver = null;
 
     setupTableMediaLazyRender();
+    scheduleTableGridMasonryLayout();
 
     // Keyboard seek: ArrowRight +5s, ArrowLeft -5s — bound directly on each video element
     if (window._kbVideoKeyHandler) {
@@ -5354,7 +5393,7 @@ function __kbInitTableSelection() {
       }
     }
 
-    alert(`删除完成：成功 ${okCount} / 总计 ${ids.length}`);
+    alert(`删除完成：${okCount}/${ids.length}`);
     window.kbSelectedRowIds = new Set();
     window.kbSelectedRowId = "";
     window.kbLastAnchorRowId = "";
