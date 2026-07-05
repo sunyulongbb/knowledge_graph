@@ -1719,9 +1719,42 @@ function __kbInitTableSelection() {
           if (video.readyState >= 1) applyVideoRatio();
         }
 
-        const playBadge = document.createElement("span");
+        const playBadge = document.createElement("button");
+        playBadge.type = "button";
         playBadge.className = "table-feed-media-play-badge";
+        playBadge.title = "播放视频";
+        playBadge.setAttribute("aria-label", "播放视频");
         playBadge.innerHTML = '<i class="fa-solid fa-play"></i>';
+
+        const syncPlayBadge = () => {
+          const isPaused = video.paused || video.ended;
+          playBadge.title = isPaused ? "播放视频" : "暂停视频";
+          playBadge.setAttribute("aria-label", isPaused ? "播放视频" : "暂停视频");
+          playBadge.innerHTML = isPaused
+            ? '<i class="fa-solid fa-play"></i>'
+            : '<i class="fa-solid fa-pause"></i>';
+          playBadge.classList.toggle("is-playing", !isPaused);
+        };
+
+        const toggleVideoPlayback = () => {
+          document.querySelectorAll(".table-feed-video").forEach((v) => {
+            if (v !== video && !v.paused) v.pause();
+          });
+          if (video.paused || video.ended) {
+            video.play().catch(() => {});
+          } else {
+            video.pause();
+          }
+          syncPlayBadge();
+        };
+        video.addEventListener("play", syncPlayBadge);
+        video.addEventListener("pause", syncPlayBadge);
+        video.addEventListener("ended", syncPlayBadge);
+        playBadge.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleVideoPlayback();
+        });
 
         const delBtn = document.createElement("button");
         delBtn.type = "button";
@@ -1745,14 +1778,7 @@ function __kbInitTableSelection() {
           if (clickTimer) return;
           clickTimer = setTimeout(() => {
             clickTimer = null;
-            document.querySelectorAll(".table-feed-video").forEach((v) => {
-              if (v !== video && !v.paused) v.pause();
-            });
-            if (video.paused) {
-              video.play().catch(() => {});
-            } else {
-              video.pause();
-            }
+            toggleVideoPlayback();
           }, 220);
         });
         cell.addEventListener("dblclick", (e) => {
@@ -2280,6 +2306,7 @@ function __kbInitTableSelection() {
 
   function hydrateTableMediaSlot(slot) {
     if (!slot || slot.dataset.hydrated === "1") return;
+    if (window.kbTableLayoutMode === "table") return;
     const nodeId = String(slot.dataset.nodeId || "").trim();
     if (!nodeId) {
       slot.dataset.hydrated = "1";
@@ -2382,13 +2409,16 @@ function __kbInitTableSelection() {
     hideTableListTooltip();
 
     const isGridLayout = window.kbTableLayoutMode === "grid";
-    const appendGrid = options && options.append === true && isGridLayout;
+    const isTableLayout = window.kbTableLayoutMode === "table";
+    const appendInfinite =
+      options && options.append === true && (isGridLayout || !isTableLayout);
 
     if (isGridLayout) {
       tblNodes.classList.add("grid-layout");
     } else {
       tblNodes.classList.remove("grid-layout");
     }
+    tblNodes.classList.toggle("table-layout", isTableLayout);
 
     ensureTableListScrollTracking();
     rememberTableListScrollPosition();
@@ -2435,7 +2465,7 @@ function __kbInitTableSelection() {
 
     const tableNodeMap = new Map();
     const frag = document.createDocumentFragment();
-    const existingRenderedIds = appendGrid
+    const existingRenderedIds = appendInfinite
       ? new Set(
           Array.from(tblNodes.querySelectorAll(".entity-list-item[data-id]"))
             .map((item) => String(item.getAttribute("data-id") || "").trim())
@@ -2448,7 +2478,7 @@ function __kbInitTableSelection() {
       if (nodeId) {
         tableNodeMap.set(nodeId, n);
       }
-      if (appendGrid && nodeId && existingRenderedIds.has(nodeId)) {
+      if (appendInfinite && nodeId && existingRenderedIds.has(nodeId)) {
         return;
       }
       const imageList = collectNodeImages(n);
@@ -2609,7 +2639,7 @@ function __kbInitTableSelection() {
         card.appendChild(tagList);
       }
 
-      if (hasVideo || hasImage) {
+      if (!isTableLayout && (hasVideo || hasImage)) {
         const mediaSlot = document.createElement("div");
         mediaSlot.className = "table-feed-media-slot";
         mediaSlot.dataset.nodeId = nodeId;
@@ -2641,7 +2671,7 @@ function __kbInitTableSelection() {
       frag.appendChild(tr);
     });
 
-    if (appendGrid) {
+    if (appendInfinite) {
       tblNodes.appendChild(frag);
     } else {
       tblNodes.replaceChildren(frag);
@@ -2652,7 +2682,7 @@ function __kbInitTableSelection() {
         0,
         Number(target.scrollHeight || 0) - Number(target.clientHeight || 0),
       );
-      if (!appendGrid) {
+      if (!appendInfinite) {
         target.scrollTop = Math.min(previousScrollTop, maxScrollTop);
       }
       window.kbTableListScrollTop = Number(target.scrollTop || 0);

@@ -29,21 +29,26 @@
   const btnDeleteSelected = document.getElementById("btnDeleteSelected");
   const tblCount = document.getElementById("tblCount");
   const tblPagination = document.getElementById("tblPagination");
+  const TABLE_LAYOUT_MODES = ["list", "grid", "table"];
+  const normalizeTableLayoutMode = (mode) =>
+    TABLE_LAYOUT_MODES.includes(mode) ? mode : "list";
   const getInitialTableLayoutMode = () => {
     let mode = "list";
     try {
       if (window.localStorage) {
         const stored = localStorage.getItem("kbTableLayoutMode");
-        if (stored === "grid") mode = "grid";
+        mode = normalizeTableLayoutMode(stored);
       }
     } catch {
       // ignore
     }
     return mode;
   };
+  const isInfiniteTableLayoutMode = (mode = window.kbTableLayoutMode) =>
+    mode === "list" || mode === "grid";
 
   const applyTableLayoutMode = (mode) => {
-    const normalized = mode === "grid" ? "grid" : "list";
+    const normalized = normalizeTableLayoutMode(mode);
     window.kbTableLayoutMode = normalized;
     try {
       if (window.localStorage)
@@ -54,22 +59,34 @@
     const tblNodes = document.getElementById("tblNodes");
     if (tblNodes) {
       tblNodes.classList.toggle("grid-layout", normalized === "grid");
+      tblNodes.classList.toggle("table-layout", normalized === "table");
     }
     if (btnTblLayoutToggle) {
-      btnTblLayoutToggle.innerHTML =
+      const nextMode =
+        TABLE_LAYOUT_MODES[
+          (TABLE_LAYOUT_MODES.indexOf(normalized) + 1) %
+            TABLE_LAYOUT_MODES.length
+        ];
+      const nextLabel =
+        nextMode === "grid" ? "网格布局" : nextMode === "table" ? "表格布局" : "列表布局";
+      const icon =
         normalized === "grid"
-          ? '<i class="fa-solid fa-list"></i>'
-          : '<i class="fa-solid fa-th-large"></i>';
-      btnTblLayoutToggle.title =
-        normalized === "grid" ? "切换到列表布局" : "切换到网格布局";
+          ? "fa-table-list"
+          : normalized === "table"
+            ? "fa-list"
+            : "fa-th-large";
+      btnTblLayoutToggle.innerHTML = `<i class="fa-solid ${icon}"></i>`;
+      btnTblLayoutToggle.title = `切换到${nextLabel}`;
+      btnTblLayoutToggle.setAttribute("aria-label", `切换到${nextLabel}`);
     }
     if (tblPagination) {
-      tblPagination.style.display = normalized === "grid" ? "none" : "";
+      tblPagination.style.display = normalized === "table" ? "" : "none";
     }
     if (typeof window.renderTableList === "function") {
       window.renderTableList();
     }
   };
+  window.applyTableLayoutMode = applyTableLayoutMode;
   if (tblPageSizeSelect) {
     tblPageSizeSelect.value = tblPageSize.toString();
   }
@@ -107,8 +124,8 @@
     }
   }
 
-  function maybeLoadMoreGridRows() {
-    if (window.kbTableLayoutMode !== "grid") return;
+  function maybeLoadMoreTableRows() {
+    if (!isInfiniteTableLayoutMode()) return;
     if (tblGridLoadingMore || tblGridLoadExhausted) return;
     if (!tblTotalNodes) return;
     const scrollContainer = getTableScrollContainer();
@@ -133,7 +150,7 @@
     if (tblGridLoadCheckRaf) return;
     tblGridLoadCheckRaf = requestAnimationFrame(() => {
       tblGridLoadCheckRaf = 0;
-      maybeLoadMoreGridRows();
+      maybeLoadMoreTableRows();
     });
   }
 
@@ -384,7 +401,7 @@
       updateTblPageInfo();
       if (tblPagination) {
         tblPagination.style.display =
-          window.kbTableLayoutMode === "grid" ? "none" : "";
+          window.kbTableLayoutMode === "table" ? "" : "none";
       }
 
       if (tblCount) {
@@ -415,9 +432,9 @@
       if (typeof window.renderTableList === "function") {
         window.renderTableList({ append });
       }
-      if (append && window.kbTableLayoutMode === "grid") {
+      if (isInfiniteTableLayoutMode()) {
         setTimeout(() => {
-          maybeLoadMoreGridRows();
+          maybeLoadMoreTableRows();
         }, 0);
       }
 
@@ -601,8 +618,17 @@
 
     if (btnTblLayoutToggle) {
       btnTblLayoutToggle.addEventListener("click", () => {
-        const nextMode = window.kbTableLayoutMode === "grid" ? "list" : "grid";
+        const currentMode = normalizeTableLayoutMode(window.kbTableLayoutMode);
+        const nextMode =
+          TABLE_LAYOUT_MODES[
+            (TABLE_LAYOUT_MODES.indexOf(currentMode) + 1) %
+              TABLE_LAYOUT_MODES.length
+          ];
         applyTableLayoutMode(nextMode);
+        tblPage = 1;
+        tblLoadedNodes = [];
+        tblGridLoadExhausted = false;
+        loadTablePage({ resetPage: false, scrollToTop: true });
       });
     }
 
@@ -611,7 +637,7 @@
       scrollContainer.addEventListener(
         "scroll",
         () => {
-          if (window.kbTableLayoutMode === "grid") {
+          if (isInfiniteTableLayoutMode()) {
             scheduleGridLoadMoreCheck();
           }
         },
