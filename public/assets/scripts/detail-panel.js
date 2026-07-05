@@ -242,6 +242,43 @@
     } catch {}
   }
 
+  function normalizeMediaStringList(value) {
+    try {
+      if (Array.isArray(value)) {
+        return value
+          .map((item) => String(item || "").trim())
+          .filter(Boolean);
+      }
+      const text = String(value || "").trim();
+      if (!text) return [];
+      if (text.startsWith("[") && text.endsWith("]")) {
+        try {
+          const parsed = JSON.parse(text);
+          if (Array.isArray(parsed)) {
+            return parsed
+              .map((item) => String(item || "").trim())
+              .filter(Boolean);
+          }
+        } catch {}
+      }
+      return [text];
+    } catch {
+      return [];
+    }
+  }
+
+  function syncDetailTopMediaStage() {
+    const stage = document.getElementById("detailTopMediaStage");
+    if (!stage) return;
+    const hasMedia = Array.from(stage.children || []).some((child) => {
+      if (!(child instanceof HTMLElement)) return false;
+      return child.style.display !== "none" && child.childElementCount > 0;
+    });
+    stage.style.display = hasMedia ? "" : "none";
+    const hero = document.getElementById("wikiTop");
+    if (hero) hero.classList.toggle("has-top-media", hasMedia);
+  }
+
   function pickLabelValue(value) {
     if (!value) return "";
     if (typeof value === "string" || typeof value === "number")
@@ -303,7 +340,7 @@
     return false;
   }
 
-  function renderWikiMediaGrid(items) {
+  function renderWikiMediaGrid(items, extraEntries = []) {
     const topMedia = document.getElementById("wikiTopMedia");
     const grid = document.getElementById("wikiMediaGrid");
     if (grid) {
@@ -312,13 +349,20 @@
     }
     if (!topMedia) return;
     topMedia.innerHTML = "";
-    if (!Array.isArray(items) || !items.length) {
+    const entries = [];
+    const seedEntries = Array.isArray(extraEntries) ? extraEntries : [];
+    seedEntries.forEach((entry) => {
+      const url = String(entry?.url || "").trim();
+      if (url) entries.push({ url, label: String(entry?.label || "媒体") });
+    });
+
+    if ((!Array.isArray(items) || !items.length) && !entries.length) {
       topMedia.style.display = "none";
+      syncDetailTopMediaStage();
       return;
     }
 
-    const entries = [];
-    for (const it of items) {
+    for (const it of Array.isArray(items) ? items : []) {
       if (!it) continue;
       const title = (
         it.property_label_zh ||
@@ -366,6 +410,7 @@
 
     if (!entries.length) {
       topMedia.style.display = "none";
+      syncDetailTopMediaStage();
       return;
     }
 
@@ -450,6 +495,7 @@
     topMedia.appendChild(carousel);
     topMedia.style.display = "";
     requestAnimationFrame(() => updateTransform());
+    syncDetailTopMediaStage();
   }
 
   function getAttributeLabel(attr) {
@@ -841,18 +887,22 @@
       const wikiTopVideo = document.getElementById("wikiTopVideo");
       if (wikiTopVideo) {
         wikiTopVideo.innerHTML = "";
-        const videoUrl = (doc && doc.video) || "";
-        const trimmedVideoUrl =
-          typeof videoUrl === "string" ? videoUrl.trim() : "";
-        if (trimmedVideoUrl) {
-          const resolvedUrl = (() => {
+        const videoUrls = [
+          ...normalizeMediaStringList(doc && doc.video),
+          ...normalizeMediaStringList(doc && doc.videos),
+        ].filter((url, index, arr) => url && arr.indexOf(url) === index);
+        if (videoUrls.length) {
+          const videoGrid = document.createElement("div");
+          videoGrid.className = "detail-video-grid";
+          videoUrls.forEach((videoUrl) => {
+            const resolvedUrl = (() => {
             try {
               return new URL(
-                trimmedVideoUrl,
+                videoUrl,
                 window.location.origin,
               ).toString();
             } catch {
-              return trimmedVideoUrl;
+              return videoUrl;
             }
           })();
 
@@ -929,14 +979,17 @@
             fallback.appendChild(linkEl);
             wikiTopVideo.innerHTML = "";
             wikiTopVideo.appendChild(fallback);
+            syncDetailTopMediaStage();
           });
 
-          wikiTopVideo.appendChild(videoEl);
-          wikiTopVideo.appendChild(hint);
+            videoGrid.appendChild(videoEl);
+          });
+          wikiTopVideo.appendChild(videoGrid);
           wikiTopVideo.style.display = "block";
         } else {
           wikiTopVideo.style.display = "none";
         }
+        syncDetailTopMediaStage();
       }
       const wikiTopPdf = document.getElementById("wikiTopPdf");
       if (wikiTopPdf) {
@@ -955,6 +1008,7 @@
         } else {
           wikiTopPdf.style.display = "none";
         }
+        syncDetailTopMediaStage();
       }
       document.getElementById("wikiTop").style.display = "";
       // collect images
@@ -1037,6 +1091,7 @@
           pickLabelValue(doc.image_caption) || "",
           true,
         );
+      let detailMediaAttrItems = [];
       // attributes -> props: prefer backend attribute list API used by attribute manager
       let propCount = 0;
       const added = new Set();
@@ -1116,6 +1171,7 @@
           const mediaAttrItems = Array.isArray(attrItems)
             ? attrItems.filter(isMediaAttrItem)
             : [];
+          detailMediaAttrItems = mediaAttrItems;
           const detailAttrItems = Array.isArray(attrItems)
             ? attrItems.filter((it) => !isMediaAttrItem(it))
             : [];
@@ -1127,7 +1183,6 @@
               propCount += detailAttrItems.length;
             }
           }
-          renderWikiMediaGrid(mediaAttrItems);
         } catch (e) {
           console.error("renderAttrList (detail) failed", e);
         }
@@ -1241,6 +1296,19 @@
             added.add(dedupKey);
             propCount++;
           }
+        }
+      }
+      renderWikiMediaGrid(detailMediaAttrItems, imageEntries);
+      if (wikiTopDescEl) {
+        const stage = document.getElementById("detailTopMediaStage");
+        const hasMediaStage =
+          stage instanceof HTMLElement && stage.style.display !== "none";
+        if (!wikiHtmlPresent && !hasMediaStage && topDescText) {
+          wikiTopDescEl.textContent = topDescText;
+          wikiTopDescEl.style.display = "";
+        } else {
+          wikiTopDescEl.textContent = "";
+          wikiTopDescEl.style.display = "none";
         }
       }
       const attrSection = document.getElementById("detailAttrSection");

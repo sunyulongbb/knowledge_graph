@@ -3410,7 +3410,11 @@
         <div id="detailPanel" class="panel detail-panel-shell" style="padding: 0; display: none; overflow: auto; min-height: 0">
           <div id="detailInner" class="detail-inner" style="font-size: 14px; color: var(--fg)">
             <div id="wikiTop" class="detail-hero" style="display: none; margin-bottom: 8px">
-              <div id="wikiTopPdf" style="display:none; margin-top: 10px;"></div>
+              <div id="detailTopMediaStage" class="detail-top-media-stage" style="display:none;">
+                <div id="wikiTopPdf" style="display:none;"></div>
+                <div id="wikiTopMedia" style="display:none;"></div>
+                <div id="wikiTopVideo" style="display:none;"></div>
+              </div>
               <div class="detail-topbar">
                 <div id="wikiTopTitle" class="title" style="font-size: 18px; font-weight: 700; white-space: pre-wrap; overflow-wrap: anywhere;"></div>
                 <div class="detail-actions" style="display: flex; align-items: center; gap: 8px;">
@@ -3429,8 +3433,6 @@
               </div>
               <div id="wikiClasses" style="display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0;"></div>
               <div id="wikiTopDesc" class="desc" style="color: var(--muted)"></div>
-              <div id="wikiTopMedia" style="display:none; margin-top: 10px;"></div>
-              <div id="wikiTopVideo" style="display:none; margin-top: 10px;"></div>
             </div>
             <div class="detail-content-layout" style="display: flex; gap: 12px; align-items: flex-start">
               <article id="wikiContent" class="detail-article" style="flex: 1; min-width: 0">
