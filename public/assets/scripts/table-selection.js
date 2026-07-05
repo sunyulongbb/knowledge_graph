@@ -169,36 +169,11 @@ function __kbInitTableSelection() {
 
   function applyTableGridMasonryLayout() {
     if (!tblNodes) return;
-    if (window.kbTableLayoutMode !== "grid") {
-      tblNodes.style.removeProperty("--table-grid-row-height");
-      tblNodes.style.removeProperty("--table-grid-gap");
-      getListItems().forEach((item) => {
-        item.style.removeProperty("grid-row-end");
-      });
-      return;
-    }
-
-    tblNodes.style.setProperty("--table-grid-row-height", "8px");
-    tblNodes.style.setProperty("--table-grid-gap", "12px");
-
-    const computed = window.getComputedStyle(tblNodes);
-    const rowHeight = parseFloat(
-      computed.getPropertyValue("--table-grid-row-height"),
-    );
-    const rowGap =
-      parseFloat(computed.getPropertyValue("row-gap")) ||
-      parseFloat(computed.getPropertyValue("--table-grid-gap")) ||
-      12;
-    if (!rowHeight) return;
-
+    if (window.kbTableLayoutMode === "grid") return;
+    tblNodes.style.removeProperty("--table-grid-row-height");
+    tblNodes.style.removeProperty("--table-grid-gap");
     getListItems().forEach((item) => {
-      const card = item.querySelector(".table-feed-card") || item;
-      const rect = card.getBoundingClientRect();
-      const span = Math.max(
-        1,
-        Math.ceil((rect.height + rowGap) / (rowHeight + rowGap)),
-      );
-      item.style.gridRowEnd = `span ${span}`;
+      item.style.removeProperty("grid-row-end");
     });
   }
 
@@ -303,6 +278,15 @@ function __kbInitTableSelection() {
     updateSelectedRowStyles();
     syncCheckboxStates();
     ensureTableSelectedButtonsState();
+    if (!id && autoEdit && !skipSidebarSync) {
+      try {
+        if (typeof window.resetFormToAdd === "function") {
+          window.resetFormToAdd();
+        }
+      } catch (e) {
+        console.warn("reset form after deselect failed", e);
+      }
+    }
     if ((window.kbViewMode || "table") === "table") {
       try {
         if (typeof syncHashForView === "function") {
@@ -346,7 +330,7 @@ function __kbInitTableSelection() {
       if (!skipSidebarSync) {
         var fId = window.fId || document.getElementById("fId");
         if (fId && typeof fId === "object") fId.value = id || "";
-        if (typeof window.loadAttributes === "function") {
+        if (!autoEdit && typeof window.loadAttributes === "function") {
           window.loadAttributes(id);
         }
       }
@@ -846,9 +830,10 @@ function __kbInitTableSelection() {
     const mediaList = Array.isArray(videoList)
       ? videoList.map((item) => String(item || "").trim()).filter(Boolean)
       : [];
-    const playableList = mediaList.length
+    const playableListRaw = mediaList.length
       ? mediaList
       : [String(videoUrl || "").trim()].filter(Boolean);
+    const playableList = playableListRaw.map((item) => resolveMediaUrl(item));
     if (!playableList.length) {
       window.kbVideoLightboxOpen = false;
       return;
@@ -859,7 +844,7 @@ function __kbInitTableSelection() {
       : Math.max(
           0,
           playableList.findIndex(
-            (item) => item === String(videoUrl || "").trim(),
+            (item) => item === resolveMediaUrl(String(videoUrl || "").trim()),
           ),
         );
 
@@ -868,12 +853,12 @@ function __kbInitTableSelection() {
 
     const video = document.createElement("video");
     video.className = "kb-lightbox-video";
-    video.src = videoUrl;
     video.controls = true;
     video.playsInline = true;
-    video.muted = !!muted;
+    video.muted = muted === true;
     video.loop = true;
     video.autoplay = true;
+    video.preload = "auto";
 
     const counter = document.createElement("div");
     counter.className = "kb-lightbox-counter";
@@ -886,7 +871,13 @@ function __kbInitTableSelection() {
       currentIndex =
         ((idx % playableList.length) + playableList.length) %
         playableList.length;
-      video.src = playableList[currentIndex];
+      const nextSrc = playableList[currentIndex];
+      if (video.src !== nextSrc) {
+        video.src = nextSrc;
+        try {
+          video.load();
+        } catch {}
+      }
       if (keepTime && Number.isFinite(startTime) && startTime > 0) {
         video.currentTime = startTime;
       } else {
@@ -1667,27 +1658,180 @@ function __kbInitTableSelection() {
   }
 
   function buildMixedMediaStripElement(node, imageList, videoList, coverList) {
-    const mixedStrip = document.createElement("div");
-    mixedStrip.className = "table-feed-unified-strip";
+    const imageSources = Array.isArray(imageList)
+      ? imageList.map((item) => String(item || "").trim()).filter(Boolean)
+      : [];
+    const videoSources = Array.isArray(videoList)
+      ? videoList.map((item) => String(item || "").trim()).filter(Boolean)
+      : [];
+    const posterList = Array.isArray(coverList)
+      ? coverList.map((item) => String(item || "").trim())
+      : [];
+    const mediaItems = [
+      ...videoSources.map((src, index) => ({
+        src,
+        type: "video",
+        index,
+        poster: posterList[index] || "",
+      })),
+      ...imageSources.map((src, index) => ({ src, type: "image", index })),
+    ];
 
-    if (Array.isArray(videoList) && videoList.length) {
-      const posterList = Array.isArray(coverList)
-        ? coverList.map((item) => String(item || "").trim())
-        : [];
-      const videoStrip = buildPreviewVideoElement(node, videoList, posterList);
-      while (videoStrip.firstChild) {
-        mixedStrip.appendChild(videoStrip.firstChild);
-      }
+    const grid = document.createElement("div");
+    grid.className = "table-feed-media-collage";
+    grid.dataset.count = String(Math.min(mediaItems.length, 4));
+    if (mediaItems.some((item) => item.type === "video")) {
+      grid.classList.add("has-video");
     }
-
-    if (Array.isArray(imageList) && imageList.length) {
-      const imageStrip = buildImageStripElement(node, imageList);
-      while (imageStrip.firstChild) {
-        mixedStrip.appendChild(imageStrip.firstChild);
-      }
+    if (mediaItems.length === 1 && mediaItems[0]?.type === "video") {
+      grid.classList.add("single-video");
     }
+    if (!mediaItems.length) return grid;
 
-    return mixedStrip;
+    const visibleItems = mediaItems.slice(0, 4);
+    const hiddenCount = Math.max(0, mediaItems.length - visibleItems.length);
+
+    visibleItems.forEach((item, visibleIndex) => {
+      const cell = document.createElement("div");
+      cell.className = `table-feed-media-collage-item is-${item.type}`;
+
+      if (item.type === "video") {
+        const video = document.createElement("video");
+        video.className = "table-feed-video";
+        if (visibleIndex === 0) video.classList.add("table-feed-video-observe");
+        video.src = resolveMediaUrl(item.src);
+        video.controls = false;
+        video.preload = visibleIndex === 0 ? "metadata" : "none";
+        video.playsInline = true;
+        video.muted = true;
+        video.loop = true;
+        if (item.poster) video.poster = resolveMediaUrl(item.poster);
+        if (mediaItems.length === 1) {
+          const applyVideoRatio = () => {
+            const width = Number(video.videoWidth || 0);
+            const height = Number(video.videoHeight || 0);
+            if (!width || !height) return;
+            grid.style.aspectRatio = `${width} / ${height}`;
+          };
+          video.addEventListener("loadedmetadata", applyVideoRatio, {
+            once: true,
+          });
+          if (video.readyState >= 1) applyVideoRatio();
+        }
+
+        const playBadge = document.createElement("span");
+        playBadge.className = "table-feed-media-play-badge";
+        playBadge.innerHTML = '<i class="fa-solid fa-play"></i>';
+
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "table-feed-img-delete-btn";
+        delBtn.title = "删除视频";
+        delBtn.textContent = "×";
+        delBtn.addEventListener("click", async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          try {
+            await deleteNodeVideo(node, item.src);
+          } catch (err) {
+            alert("删除视频失败: " + (err?.message || err));
+          }
+        });
+
+        let clickTimer = null;
+        cell.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (clickTimer) return;
+          clickTimer = setTimeout(() => {
+            clickTimer = null;
+            document.querySelectorAll(".table-feed-video").forEach((v) => {
+              if (v !== video && !v.paused) v.pause();
+            });
+            if (video.paused) {
+              video.play().catch(() => {});
+            } else {
+              video.pause();
+            }
+          }, 220);
+        });
+        cell.addEventListener("dblclick", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (clickTimer) {
+            clearTimeout(clickTimer);
+            clickTimer = null;
+          }
+          openVideoLightbox(
+            item.src,
+            video.currentTime,
+            false,
+            videoSources,
+            item.index,
+          );
+        });
+
+        cell.appendChild(video);
+        cell.appendChild(playBadge);
+        cell.appendChild(delBtn);
+      } else {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "table-feed-media-image-btn";
+        button.title = "放大查看";
+        button.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          openImageLightbox(imageSources, item.index);
+        });
+        const img = document.createElement("img");
+        img.alt =
+          node?.label_zh || node?.label || node?.name || `图片 ${item.index + 1}`;
+        img.loading = "lazy";
+        img.decoding = "async";
+        img.src = resolveMediaUrl(item.src);
+        button.appendChild(img);
+
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "table-feed-img-delete-btn";
+        delBtn.title = "删除图片";
+        delBtn.textContent = "×";
+        delBtn.addEventListener("click", async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          try {
+            await deleteNodeImage(node, item.src);
+          } catch (err) {
+            alert("删除图片失败: " + (err?.message || err));
+          }
+        });
+
+        cell.appendChild(button);
+        cell.appendChild(delBtn);
+      }
+
+      if (hiddenCount > 0 && visibleIndex === visibleItems.length - 1) {
+        const more = document.createElement("button");
+        more.type = "button";
+        more.className = "table-feed-media-more";
+        more.textContent = `+${hiddenCount}`;
+        more.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (item.type === "video") {
+            openVideoLightbox(item.src, 0, false, videoSources, item.index);
+          } else {
+            openImageLightbox(imageSources, item.index);
+          }
+        });
+        cell.appendChild(more);
+      }
+
+      grid.appendChild(cell);
+    });
+
+    return grid;
   }
 
   function buildGridMediaElement(node, imageList, videoList, coverList) {
@@ -1758,8 +1902,12 @@ function __kbInitTableSelection() {
       try {
         const img = slide.querySelector("img[data-src]");
         if (img) {
+          const markLoaded = () => img.classList.add("is-loaded");
+          img.addEventListener("load", markLoaded, { once: true });
+          img.addEventListener("error", markLoaded, { once: true });
           img.src = img.dataset.src || "";
           img.removeAttribute("data-src");
+          if (img.complete) markLoaded();
         }
         const video = slide.querySelector("video[data-src]");
         if (video) {
@@ -1793,22 +1941,45 @@ function __kbInitTableSelection() {
         const video = document.createElement("video");
         video.className = "table-feed-video";
         video.dataset.src = resolveMediaUrl(item.src);
-        video.preload = mediaIndex === 0 ? "metadata" : "none";
+        video.preload = mediaIndex === 0 ? "auto" : "metadata";
         video.playsInline = true;
         video.muted = true;
         video.loop = true;
         video.controls = false;
-        video.style.width = "100%";
-        video.style.height = "auto";
-        video.style.objectFit = "contain";
         if (coverUrl) {
           video.poster = resolveMediaUrl(coverUrl);
         }
         wrap.appendChild(video);
+        wrap.addEventListener("mouseenter", () => {
+          try {
+            if (video.dataset.src && !video.src) {
+              video.src = video.dataset.src;
+              video.removeAttribute("data-src");
+            }
+            video.preload = "auto";
+            video.load();
+          } catch {}
+        });
+        let openTimer = null;
         wrap.addEventListener("click", (e) => {
           e.preventDefault();
           e.stopPropagation();
-          openVideoLightbox(item.src, 0, true, videoSources, item.index);
+          if (openTimer) clearTimeout(openTimer);
+          openTimer = setTimeout(() => {
+            openTimer = null;
+            const row = wrap.closest(".entity-list-item.table-feed-row");
+            const rid = String(row?.getAttribute("data-id") || "").trim();
+            if (row && rid) performTableRowSelection(row, rid, e);
+          }, 220);
+        });
+        wrap.addEventListener("dblclick", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (openTimer) {
+            clearTimeout(openTimer);
+            openTimer = null;
+          }
+          openVideoLightbox(item.src, 0, false, videoSources, item.index);
         });
         slide.appendChild(wrap);
       } else {
@@ -1825,12 +1996,9 @@ function __kbInitTableSelection() {
         const img = document.createElement("img");
         img.dataset.src = imageUrl;
         img.alt = node?.label_zh || node?.label || node?.name || "图片";
-        img.loading = "lazy";
+        img.loading = "eager";
         img.decoding = "async";
         img.fetchPriority = mediaIndex === 0 ? "auto" : "low";
-        img.style.width = "100%";
-        img.style.height = "auto";
-        img.style.objectFit = "contain";
         button.appendChild(img);
         slide.appendChild(button);
       }
@@ -1989,6 +2157,27 @@ function __kbInitTableSelection() {
     }
   }
 
+  function performTableRowSelection(row, rid, event) {
+    if (!row || !rid) return;
+    if (event?.shiftKey && window.kbLastAnchorRowId) {
+      rangeSelectTo(rid);
+    } else if (event?.ctrlKey || event?.metaKey) {
+      toggleCtrlSelection(rid);
+    } else {
+      const alreadySelected =
+        (window.kbSelectedRowIds &&
+          window.kbSelectedRowIds.size === 1 &&
+          window.kbSelectedRowIds.has(rid)) ||
+        (!window.kbSelectedRowIds && window.kbSelectedRowId === rid);
+      if (alreadySelected) {
+        setTableSelection("", true);
+      } else {
+        setTableSelection(rid, true);
+      }
+    }
+    focusRowElement(row);
+  }
+
   function bindTableListDelegatedEvents() {
     if (!tblNodes || tableListDelegatedBound) return;
     tableListDelegatedBound = true;
@@ -2032,23 +2221,7 @@ function __kbInitTableSelection() {
         return;
       }
 
-      if (e.shiftKey && window.kbLastAnchorRowId) {
-        rangeSelectTo(rid);
-      } else if (e.ctrlKey || e.metaKey) {
-        toggleCtrlSelection(rid);
-      } else {
-        const alreadySelected =
-          (window.kbSelectedRowIds &&
-            window.kbSelectedRowIds.size === 1 &&
-            window.kbSelectedRowIds.has(rid)) ||
-          (!window.kbSelectedRowIds && window.kbSelectedRowId === rid);
-        if (alreadySelected) {
-          setTableSelection("", true);
-        } else {
-          setTableSelection(rid, true);
-        }
-      }
-      focusRowElement(row);
+      performTableRowSelection(row, rid, e);
     });
 
     tblNodes.addEventListener("dblclick", async (e) => {
@@ -2134,17 +2307,19 @@ function __kbInitTableSelection() {
     slot.replaceChildren();
     if (mediaEl) {
       slot.appendChild(mediaEl);
-      const relayout = () => scheduleTableGridMasonryLayout();
-      try {
-        mediaEl.querySelectorAll("img").forEach((img) => {
-          if (img.complete) return;
-          img.addEventListener("load", relayout, { once: true });
-          img.addEventListener("error", relayout, { once: true });
-        });
-        mediaEl.querySelectorAll("video").forEach((video) => {
-          video.addEventListener("loadedmetadata", relayout, { once: true });
-        });
-      } catch {}
+      if (window.kbTableLayoutMode !== "grid") {
+        const relayout = () => scheduleTableGridMasonryLayout();
+        try {
+          mediaEl.querySelectorAll("img").forEach((img) => {
+            if (img.complete) return;
+            img.addEventListener("load", relayout, { once: true });
+            img.addEventListener("error", relayout, { once: true });
+          });
+          mediaEl.querySelectorAll("video").forEach((video) => {
+            video.addEventListener("loadedmetadata", relayout, { once: true });
+          });
+        } catch {}
+      }
       try {
         const observedVideo = mediaEl.querySelector(
           ".table-feed-video-observe",
@@ -2202,11 +2377,14 @@ function __kbInitTableSelection() {
     scheduleTableGridMasonryLayout();
   });
 
-  function renderTableList() {
+  function renderTableList(options = {}) {
     if (!tblNodes) return;
     hideTableListTooltip();
 
-    if (window.kbTableLayoutMode === "grid") {
+    const isGridLayout = window.kbTableLayoutMode === "grid";
+    const appendGrid = options && options.append === true && isGridLayout;
+
+    if (isGridLayout) {
       tblNodes.classList.add("grid-layout");
     } else {
       tblNodes.classList.remove("grid-layout");
@@ -2257,11 +2435,21 @@ function __kbInitTableSelection() {
 
     const tableNodeMap = new Map();
     const frag = document.createDocumentFragment();
+    const existingRenderedIds = appendGrid
+      ? new Set(
+          Array.from(tblNodes.querySelectorAll(".entity-list-item[data-id]"))
+            .map((item) => String(item.getAttribute("data-id") || "").trim())
+            .filter(Boolean),
+        )
+      : new Set();
 
     filteredList.forEach((n) => {
       const nodeId = String(n?._id || n?.id || "").trim();
       if (nodeId) {
         tableNodeMap.set(nodeId, n);
+      }
+      if (appendGrid && nodeId && existingRenderedIds.has(nodeId)) {
+        return;
       }
       const imageList = collectNodeImages(n);
       const videoList = collectNodeVideos(n);
@@ -2294,6 +2482,7 @@ function __kbInitTableSelection() {
 
       const tr = document.createElement("article");
       tr.className = "entity-list-item table-feed-row";
+      tr.classList.add(hasImage || hasVideo ? "has-media" : "no-media");
       tr.tabIndex = -1;
       tr.setAttribute("data-id", nodeId);
       tr.setAttribute("role", "listitem");
@@ -2311,6 +2500,23 @@ function __kbInitTableSelection() {
       const header = document.createElement("div");
       header.className = "table-feed-header";
 
+      const avatar = document.createElement("div");
+      avatar.className = "table-feed-avatar";
+      avatar.title = label || nodeId || "实体";
+      avatar.setAttribute("aria-label", "选中实体");
+      const avatarImage = imageList[0] ? resolveMediaUrl(imageList[0]) : "";
+      if (avatarImage && !isAnimatedImageVideoUrl(avatarImage)) {
+        const avatarImg = document.createElement("img");
+        avatarImg.src = avatarImage;
+        avatarImg.alt = label || "实体";
+        avatarImg.loading = "lazy";
+        avatarImg.decoding = "async";
+        avatar.appendChild(avatarImg);
+      } else {
+        avatar.textContent = (label || nodeId || "?").trim().charAt(0) || "?";
+      }
+      header.appendChild(avatar);
+
       const meta = document.createElement("div");
       meta.className = "table-feed-meta";
 
@@ -2327,7 +2533,7 @@ function __kbInitTableSelection() {
       const metaSub = document.createElement("div");
       metaSub.className = "table-feed-subline";
 
-      if (window.kbTableLayoutMode !== "grid") {
+      if (!isGridLayout) {
         const typeChip = document.createElement("span");
         typeChip.className = "table-feed-type-chip";
         typeChip.textContent = typeLabel || "未分类";
@@ -2435,14 +2641,20 @@ function __kbInitTableSelection() {
       frag.appendChild(tr);
     });
 
-    tblNodes.replaceChildren(frag);
+    if (appendGrid) {
+      tblNodes.appendChild(frag);
+    } else {
+      tblNodes.replaceChildren(frag);
+    }
     try {
       const target = scrollContainer || tblNodes;
       const maxScrollTop = Math.max(
         0,
         Number(target.scrollHeight || 0) - Number(target.clientHeight || 0),
       );
-      target.scrollTop = Math.min(previousScrollTop, maxScrollTop);
+      if (!appendGrid) {
+        target.scrollTop = Math.min(previousScrollTop, maxScrollTop);
+      }
       window.kbTableListScrollTop = Number(target.scrollTop || 0);
     } catch {}
     window.kbTableNodeMap = tableNodeMap;

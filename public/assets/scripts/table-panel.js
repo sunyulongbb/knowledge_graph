@@ -9,6 +9,7 @@
   let tblActiveType = "";
   let tblActiveClassId = "";
   let tblActiveClassLabel = "";
+  let tblGridLoadCheckRaf = 0;
   const EMPTY_TYPE_FILTER = "__EMPTY_NODE_TYPE__";
 
   const btnPrevPage = document.getElementById("btnPrevPage");
@@ -125,6 +126,14 @@
     tblPage += 1;
     loadTablePage({ append: true }).finally(() => {
       tblGridLoadingMore = false;
+    });
+  }
+
+  function scheduleGridLoadMoreCheck() {
+    if (tblGridLoadCheckRaf) return;
+    tblGridLoadCheckRaf = requestAnimationFrame(() => {
+      tblGridLoadCheckRaf = 0;
+      maybeLoadMoreGridRows();
     });
   }
 
@@ -404,7 +413,7 @@
       }
 
       if (typeof window.renderTableList === "function") {
-        window.renderTableList();
+        window.renderTableList({ append });
       }
       if (append && window.kbTableLayoutMode === "grid") {
         setTimeout(() => {
@@ -603,7 +612,7 @@
         "scroll",
         () => {
           if (window.kbTableLayoutMode === "grid") {
-            maybeLoadMoreGridRows();
+            scheduleGridLoadMoreCheck();
           }
         },
         { passive: true },

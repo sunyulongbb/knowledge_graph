@@ -14549,6 +14549,7 @@
         if (typeof window.refreshTagListHighlight === "function") window.refreshTagListHighlight();
       } catch { }
     }
+    window.resetFormToAdd = resetFormToAdd;
     function clearEntityListSelection() {
       try {
         if (typeof window.setTableSelection === "function") {
@@ -15804,6 +15805,16 @@
       try {
         const fullId = ensureEntityIdPrefix(nodeId);
         const routeId = stripEntityIdPrefix(fullId) || fullId;
+        const tableNodeMap = window.kbTableNodeMap;
+        const cachedNode =
+          tableNodeMap && typeof tableNodeMap.get === "function"
+            ? tableNodeMap.get(routeId) ||
+              tableNodeMap.get(fullId) ||
+              tableNodeMap.get(nodeId)
+            : null;
+        if (cachedNode) {
+          setFormToEdit(cachedNode);
+        }
         // highlight selection
         try {
           focusNode(fullId, { fit: false });
@@ -15849,17 +15860,12 @@
               }
             }
           } catch { }
-          // Load attributes and relations for this node
-          try {
-            await loadAttributes(fullId);
-          } catch { }
-          try {
-            await loadRelations(fullId);
-          } catch { }
-          // Load classification info for this entity
-          try {
-            await loadEntityClass(fullId);
-          } catch { }
+          // Load side-panel data in parallel after the form is already visible.
+          await Promise.allSettled([
+            typeof loadAttributes === "function" ? loadAttributes(fullId) : null,
+            typeof loadRelations === "function" ? loadRelations(fullId) : null,
+            typeof loadEntityClass === "function" ? loadEntityClass(fullId) : null,
+          ]);
         }
       } catch (e) {
         console.error("enterEditById failed", e);
