@@ -3247,9 +3247,9 @@ export async function handleCoreKbRoutes(
       if (!allowedExts.includes(ext)) {
         return new Response("Invalid video file type", { status: 400 });
       }
-      const maxSize = 500 * 1024 * 1024;
+      const maxSize = 5000 * 1024 * 1024;
       if (typeof file.size === "number" && file.size > maxSize) {
-        return new Response("视频文件过大，请上传不超过 500MB 的视频。", {
+        return new Response("视频文件过大，请上传不超过 5000MB 的视频。", {
           status: 413,
         });
       }

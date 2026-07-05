@@ -4442,10 +4442,12 @@ body {
 }
 
 #tblNodes.grid-layout .table-feed-media-slot {
-  min-height: 0;
+  min-height: 132px;
   border-radius: 9px;
   margin-top: 4px;
   padding: 0;
+  background: color-mix(in srgb, var(--surface-2) 72%, transparent);
+  overflow: hidden;
 }
 
 #tblNodes.grid-layout .table-feed-footer {
@@ -4494,8 +4496,10 @@ body {
 
 .table-feed-carousel-slide {
   min-width: 100%;
+  min-height: 132px;
   position: relative;
   flex: 0 0 100%;
+  background: color-mix(in srgb, var(--surface-2) 72%, transparent);
 }
 
 .table-feed-grid-image-btn {

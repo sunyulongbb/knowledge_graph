@@ -13757,9 +13757,9 @@
         const file = fVideo.files[0];
         if (!file) return;
         try {
-          const maxVideoSize = 500 * 1024 * 1024;
+          const maxVideoSize = 5000 * 1024 * 1024;
           if (file.size > maxVideoSize) {
-            throw new Error("视频文件过大，请上传不超过 500MB 的视频。");
+            throw new Error("视频文件过大，请上传不超过 5000MB 的视频。");
           }
           const existingImageEl = document.getElementById("entityDisplayImage");
           const existingImage = existingImageEl?.getAttribute("src") || "";
@@ -14549,6 +14549,24 @@
         if (typeof window.refreshTagListHighlight === "function") window.refreshTagListHighlight();
       } catch { }
     }
+    function clearEntityListSelection() {
+      try {
+        if (typeof window.setTableSelection === "function") {
+          window.setTableSelection("", false, { skipDetailRefresh: true });
+          return;
+        }
+      } catch { }
+      try {
+        window.kbSelectedRowId = "";
+        window.kbSelectedNodeId = "";
+        window.kbCurrentNodeId = "";
+        window.kbLastAnchorRowId = "";
+        window.kbSelectedRowIds = new Set();
+        if (typeof window.updateSelectedRowStyles === "function") window.updateSelectedRowStyles();
+        if (typeof window.syncCheckboxStates === "function") window.syncCheckboxStates();
+        if (typeof window.ensureTableSelectedButtonsState === "function") window.ensureTableSelectedButtonsState();
+      } catch { }
+    }
     function setFormToEdit(node) {
       const id = (node && (node._id || node.id)) || "";
       fId.value = id;
@@ -14745,9 +14763,9 @@
           pdfData = uploadedPdfUrl;
         }
         if (videoFile) {
-          const maxVideoSize = 500 * 1024 * 1024;
+          const maxVideoSize = 5000 * 1024 * 1024;
           if (videoFile.size > maxVideoSize) {
-            addMsg.textContent = "视频文件过大，请上传不超过 500MB 的视频。";
+            addMsg.textContent = "视频文件过大，请上传不超过 5000MB 的视频。";
             return;
           }
           if (!videoData) {
@@ -14923,24 +14941,8 @@
         }
 
         if (isEdit) {
-          // keep in edit mode with refreshed values
-          setFormToEdit(
-            res?.node || {
-              _id: nodeId,
-              label_zh: name,
-              desc_zh: description,
-              aliases_zh: aliases,
-              tags,
-              link,
-            }
-          );
-          try {
-            if (nodeId && typeof loadRelations === 'function') {
-              await loadRelations(nodeId);
-            }
-          } catch (err) {
-            console.warn('refresh relations after save failed', err);
-          }
+          resetFormToAdd();
+          clearEntityListSelection();
           try {
             if (
               nodeId &&

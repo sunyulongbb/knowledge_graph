@@ -17,6 +17,7 @@ function __kbInitTableSelection() {
   let videoContextMenuActionEl = null;
   let videoContextMenuAction = null;
   let tableGridLayoutRaf = 0;
+  const TABLE_GRID_MEDIA_ROOT_MARGIN = "360px 0px";
 
   if (typeof state.bindAlias === "function") {
     state.bindAlias("kbSelectedRowId", "selectedRowId", "");
@@ -1752,9 +1753,35 @@ function __kbInitTableSelection() {
     controls.appendChild(nextBtn);
     element.appendChild(controls);
 
-    const createMediaSlide = (item) => {
+    const loadGridSlideMedia = (slide) => {
+      if (!slide || slide.dataset.mediaLoaded === "1") return;
+      try {
+        const img = slide.querySelector("img[data-src]");
+        if (img) {
+          img.src = img.dataset.src || "";
+          img.removeAttribute("data-src");
+        }
+        const video = slide.querySelector("video[data-src]");
+        if (video) {
+          video.src = video.dataset.src || "";
+          video.removeAttribute("data-src");
+        }
+      } catch {}
+      slide.dataset.mediaLoaded = "1";
+    };
+
+    const loadGridSlideAt = (index) => {
+      const slides = track.children;
+      const current = slides[index];
+      if (current) loadGridSlideMedia(current);
+      const next = slides[index + 1];
+      if (next) loadGridSlideMedia(next);
+    };
+
+    const createMediaSlide = (item, mediaIndex) => {
       const slide = document.createElement("div");
       slide.className = "table-feed-carousel-slide";
+      slide.dataset.mediaLoaded = "0";
       slide.style.minWidth = "100%";
       slide.style.flex = "0 0 100%";
       slide.style.position = "relative";
@@ -1765,8 +1792,8 @@ function __kbInitTableSelection() {
         wrap.style.width = "100%";
         const video = document.createElement("video");
         video.className = "table-feed-video";
-        video.src = resolveMediaUrl(item.src);
-        video.preload = "metadata";
+        video.dataset.src = resolveMediaUrl(item.src);
+        video.preload = mediaIndex === 0 ? "metadata" : "none";
         video.playsInline = true;
         video.muted = true;
         video.loop = true;
@@ -1796,8 +1823,11 @@ function __kbInitTableSelection() {
           openImageLightbox(imageSources, item.index);
         });
         const img = document.createElement("img");
-        img.src = imageUrl;
+        img.dataset.src = imageUrl;
         img.alt = node?.label_zh || node?.label || node?.name || "图片";
+        img.loading = "lazy";
+        img.decoding = "async";
+        img.fetchPriority = mediaIndex === 0 ? "auto" : "low";
         img.style.width = "100%";
         img.style.height = "auto";
         img.style.objectFit = "contain";
@@ -1808,8 +1838,8 @@ function __kbInitTableSelection() {
       return slide;
     };
 
-    mediaItems.forEach((item) => {
-      track.appendChild(createMediaSlide(item));
+    mediaItems.forEach((item, index) => {
+      track.appendChild(createMediaSlide(item, index));
     });
 
     let currentIndex = 0;
@@ -1820,6 +1850,7 @@ function __kbInitTableSelection() {
       nextBtn.disabled = currentIndex >= mediaItems.length - 1;
       controls.style.display = mediaItems.length > 1 ? "flex" : "none";
       track.style.transform = `translateX(-${currentIndex * 100}%)`;
+      loadGridSlideAt(currentIndex);
     };
 
     prevBtn.addEventListener("click", (e) => {
@@ -2159,7 +2190,7 @@ function __kbInitTableSelection() {
       },
       {
         root: getTableListScrollContainer(),
-        rootMargin: "240px 0px",
+        rootMargin: TABLE_GRID_MEDIA_ROOT_MARGIN,
         threshold: 0.01,
       },
     );
