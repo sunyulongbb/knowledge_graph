@@ -6,15 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>知识库</title>
 
-  <script>
-    // 注册 edgehandles 插件
-    if (typeof cytoscape !== 'undefined' && typeof cytoscapeEdgehandles !== 'undefined') {
-      cytoscape.use(cytoscapeEdgehandles);
-      console.log('edgehandles registered in head');
-    } else {
-      console.warn('cytoscape or cytoscapeEdgehandles not defined', typeof cytoscape, typeof cytoscapeEdgehandles);
-    }
-  </script>
   <script src="/js/marked.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
   <link rel="stylesheet" href="/node_modules/vidstack/player/styles/default/theme.css" />
@@ -48,6 +39,13 @@
   <link rel="stylesheet" href="/assets/styles/app.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
   <script src="https://unpkg.com/cytoscape-edgehandles@4.0.1/cytoscape-edgehandles.js"></script>
+  <script src="/node_modules/cytoscape-dagre/dist/cytoscape-dagre.min.js"></script>
+  <script>
+    if (typeof cytoscape !== 'undefined') {
+      if (typeof cytoscapeEdgehandles !== 'undefined') cytoscape.use(cytoscapeEdgehandles);
+      if (typeof cytoscapeDagre !== 'undefined') cytoscape.use(cytoscapeDagre);
+    }
+  </script>
   <script src="/assets/scripts/app-settings.js"></script>
   <script type="module">
     import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.1.200/build/pdf.min.mjs";
@@ -3407,6 +3405,7 @@
             <div class="vis-bottom-layout">
               <select id="cyLayoutSelect" class="vis-layout-select">
                 <option value="cose" selected>力导向布局</option>
+                <option value="dagre">Dagre 层级布局</option>
                 <option value="grid">网格布局</option>
                 <option value="circle">圆形布局</option>
                 <option value="breadthfirst">层次布局</option>
@@ -5854,7 +5853,23 @@
       } = {}
     ) {
       const normalizedMode = normalizeViewModeInput(mode) || "table";
-      const normalizedNode = nodeId ? String(nodeId).trim() : "";
+      let normalizedNode = nodeId ? String(nodeId).trim() : "";
+      if (!normalizedNode) {
+        const pinnedNode = String(
+          window.kbActiveDetailRouteId ||
+          window.kbActiveDetailNodeId ||
+          window.kbActiveVisNodeId ||
+          window.kbSelectedRowId ||
+          document.getElementById("fId")?.value ||
+          "",
+        ).trim();
+        if (
+          pinnedNode &&
+          ["detail", "report_detail", "vis"].includes(normalizedMode)
+        ) {
+          normalizedNode = pinnedNode;
+        }
+      }
       const normalizedEntryTaskId = entryTaskId
         ? String(entryTaskId).trim()
         : "";
@@ -5891,6 +5906,81 @@
       if (window.location.hash === targetHash) return;
       window.kbSuppressNextHashChange = true;
       window.location.hash = targetHash;
+    }
+
+    function getPinnedKnowledgeRouteState() {
+      try {
+        const route = getRouteStateFromHash();
+        const routeView = normalizeViewModeInput(route.view || "");
+        const routeNode = String(route.node || "").trim();
+        if (routeView && routeNode) {
+          return { view: routeView, nodeId: routeNode };
+        }
+      } catch {}
+      const fallbackNode = String(
+        window.kbActiveDetailRouteId ||
+        window.kbSelectedRowId ||
+        document.getElementById("fId")?.value ||
+        "",
+      ).trim();
+      const fallbackView = normalizeViewModeInput(window.kbViewMode || "table");
+      return {
+        view: fallbackView || "table",
+        nodeId: fallbackNode,
+      };
+    }
+
+    function restoreKnowledgeRouteState(options = {}) {
+      const opts = options || {};
+      const preferredView = normalizeViewModeInput(opts.view || "");
+      const preferredNodeId = String(opts.nodeId || "").trim();
+      const pinned = getPinnedKnowledgeRouteState();
+      const nextView = preferredView || pinned.view || "table";
+      const nextNodeId = preferredNodeId || pinned.nodeId || "";
+
+      if (nextNodeId) {
+        try {
+          window.kbSelectedRowId = nextNodeId;
+          window.kbSelectedRowIds = new Set([nextNodeId]);
+          window.kbLastAnchorRowId = nextNodeId;
+          window.kbSelectedNodeId = nextNodeId;
+          window.kbCurrentNodeId = nextNodeId;
+          window.kbActiveDetailRouteId = nextNodeId;
+        } catch {}
+      }
+
+      try {
+        if (typeof syncHashForView === "function") {
+          syncHashForView(nextView, {
+            replace: true,
+            nodeId: nextNodeId,
+            includeNode: Boolean(nextNodeId),
+          });
+        }
+      } catch (err) {
+        if (window.console && console.warn) {
+          console.warn("restoreKnowledgeRouteState hash failed", err);
+        }
+      }
+
+      if (!nextNodeId) return;
+
+      try {
+        if (typeof setFormToEdit === "function") {
+          const tableNodeMap = window.kbTableNodeMap;
+          const cachedNode =
+            tableNodeMap && typeof tableNodeMap.get === "function"
+              ? tableNodeMap.get(nextNodeId)
+              : null;
+          if (cachedNode) {
+            setFormToEdit(cachedNode);
+          }
+        }
+      } catch (err) {
+        if (window.console && console.warn) {
+          console.warn("restoreKnowledgeRouteState left card failed", err);
+        }
+      }
     }
 
     function startCleanTaskPolling() {
@@ -9491,7 +9581,7 @@
                 container: canvas,
                 elements: [...nodes, ...edges],
                 style: buildCyStyle(),
-                layout: { name: 'cose', animate: false, fit: true, padding: 24 },
+                layout: getSelectedGraphLayoutOpts({ animate: false }),
               });
               try { cy.resize(); cy.fit(); } catch (e) { }
               try {
@@ -10869,9 +10959,16 @@
     // Load one-hop neighborhood for a specific node from backend and update cytoscape
     async function loadNodeNeighborhood(nodeId, options = {}) {
       if (!nodeId) return;
-      showGraphLoading(true, '加载邻居节点…');
+      const opts = options || {};
+      const direction = String(opts.direction || "both").trim().toLowerCase();
+      const loadingText =
+        direction === "outgoing"
+          ? "加载下级关系…"
+          : direction === "incoming"
+            ? "加载上级关系…"
+            : "加载邻居节点…";
+      showGraphLoading(true, loadingText);
       try {
-        const opts = options || {};
         const shouldReplaceAll =
           opts.replace === true ||
           (window.kbViewMode === "vis" &&
@@ -10881,6 +10978,9 @@
         const fullId = ensureEntityIdPrefix(nodeId);
         const url = new URL("/api/kb/node/graph", window.location.origin);
         url.searchParams.set("id", fullId);
+        if (direction && direction !== "both") {
+          url.searchParams.set("direction", direction);
+        }
         const resp = await fetch(url);
         if (!resp.ok) throw new Error("HTTP " + resp.status);
         const data = await resp.json();
@@ -10922,9 +11022,10 @@
               window.kbCy.elements().remove();
               window.kbCy.add(elements);
             });
+            syncGraphLayoutAppearance();
             window.kbCy
               .layout(
-                getCoseLayoutOpts({
+                getSelectedGraphLayoutOpts({
                   animate: true,
                   randomize: false,
                 })
@@ -10987,8 +11088,9 @@
               }
               // run layout but restrict to affected elements for smoother interaction
               try {
+                syncGraphLayoutAppearance();
                 const layout = window.kbCy.layout(
-                  getCoseLayoutOpts({
+                  getSelectedGraphLayoutOpts({
                     animate: true,
                     randomize: false,
                     fit: false,
@@ -11068,6 +11170,103 @@
         fit: true,
       };
       return Object.assign({}, base, extra || {});
+    }
+
+    function getDagreLayoutOpts(extra) {
+      const base = {
+        name: "dagre",
+        rankDir: "TB",
+        rankSep: 90,
+        nodeSep: 36,
+        edgeSep: 18,
+        padding: 24,
+        fit: true,
+        animate: false,
+        nodeDimensionsIncludeLabels: true,
+      };
+      return Object.assign({}, base, extra || {});
+    }
+
+    const KB_VIS_LAYOUT_STORAGE_KEY = "kb-vis-layout";
+
+    function restoreSavedGraphLayoutSelection() {
+      try {
+        const layoutSelect = document.getElementById("cyLayoutSelect");
+        if (!layoutSelect) return "cose";
+        const stored = String(
+          window.localStorage.getItem(KB_VIS_LAYOUT_STORAGE_KEY) || "",
+        )
+          .trim()
+          .toLowerCase();
+        if (!stored) return layoutSelect.value || "cose";
+        const hasOption = Array.from(layoutSelect.options || []).some(
+          (option) => String(option.value || "").trim().toLowerCase() === stored,
+        );
+        if (hasOption) {
+          layoutSelect.value = stored;
+          return stored;
+        }
+        return layoutSelect.value || "cose";
+      } catch {
+        return "cose";
+      }
+    }
+
+    function persistGraphLayoutSelection(name) {
+      try {
+        const nextName = String(name || "").trim().toLowerCase();
+        if (!nextName) return;
+        window.localStorage.setItem(KB_VIS_LAYOUT_STORAGE_KEY, nextName);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    function getCurrentGraphLayoutName() {
+      const layoutSelect = document.getElementById("cyLayoutSelect");
+      if (layoutSelect && layoutSelect.value) return layoutSelect.value;
+      try {
+        const stored = String(
+          window.localStorage.getItem(KB_VIS_LAYOUT_STORAGE_KEY) || "",
+        )
+          .trim()
+          .toLowerCase();
+        if (stored) return stored;
+      } catch {
+        /* ignore */
+      }
+      return "cose";
+    }
+
+    function getGraphLayoutOpts(name, extra) {
+      if (name === "dagre") return getDagreLayoutOpts(extra);
+      if (name === "cose") return getCoseLayoutOpts(extra);
+      return Object.assign(
+        {
+          name: name || "cose",
+          animate: false,
+          fit: true,
+          padding: 24,
+        },
+        extra || {}
+      );
+    }
+
+    function getSelectedGraphLayoutOpts(extra) {
+      return getGraphLayoutOpts(getCurrentGraphLayoutName(), extra);
+    }
+
+    function syncGraphLayoutAppearance(name) {
+      if (!window.kbCy) return;
+      const layoutName = String(name || getCurrentGraphLayoutName() || "cose").trim();
+      const useDagreEdges = layoutName === "dagre";
+      try {
+        window.kbCy.batch(() => {
+          window.kbCy.edges().toggleClass("layout-dagre-edge", useDagreEdges);
+        });
+      } catch (err) {
+        console.warn("syncGraphLayoutAppearance failed", err);
+      }
     }
 
     // Re-fit graph on container resize to keep canvas synced
@@ -11201,6 +11400,19 @@
             color: "#475569",
             "text-margin-y": -10,
             "arrow-scale": 0.8,
+          },
+        },
+        {
+          selector: "edge.layout-dagre-edge",
+          style: {
+            "curve-style": "taxi",
+            "taxi-direction": "downward",
+            "taxi-turn": "60%",
+            "taxi-turn-min-distance": 28,
+            "source-endpoint": "outside-to-node",
+            "target-endpoint": "outside-to-node",
+            "text-rotation": "none",
+            "text-margin-y": -14,
           },
         },
         {
@@ -11371,11 +11583,12 @@
             container,
             elements: arr,
             style: buildCyStyle(),
-            layout: getCoseLayoutOpts({ animate: false, randomize: true }),
+            layout: getSelectedGraphLayoutOpts({ animate: false, randomize: true }),
             minZoom: 0.2,
             maxZoom: 3.0,
             wheelSensitivity: 0.2,
           });
+          syncGraphLayoutAppearance();
           fitOnDblClick(window.kbCy);
           observeResize(window.kbCy, container);
           try {
@@ -12016,7 +12229,7 @@
               (cy) =>
                 cy
                   .layout(
-                    getCoseLayoutOpts({
+                    getSelectedGraphLayoutOpts({
                       animate: true,
                       randomize: false,
                     })
@@ -12203,6 +12416,20 @@
                 setViewMode('detail', { targetNodeId: nodeId });
               } catch (e) {
                 console.error('跳转到知识详情页失败', e);
+              }
+            });
+
+            addItem('加载下级关系', async () => {
+              if (!node) return;
+              const nodeId = node.id();
+              if (!nodeId || typeof loadNodeNeighborhood !== 'function') return;
+              try {
+                await loadNodeNeighborhood(nodeId, {
+                  replace: false,
+                  direction: 'outgoing',
+                });
+              } catch (e) {
+                console.error('加载下级关系失败', e);
               }
             });
 
@@ -12697,7 +12924,8 @@
             window.kbCy.elements().remove();
             window.kbCy.add(arr);
           });
-          window.kbCy.layout(getCoseLayoutOpts({ animate: false, randomize: true })).run();
+          syncGraphLayoutAppearance();
+          window.kbCy.layout(getSelectedGraphLayoutOpts({ animate: false, randomize: true })).run();
         }
         try {
           window.kbCy.resize();
@@ -12818,11 +13046,26 @@
       });
     }
     btnTableRefresh.addEventListener("click", async () => {
+      const pinnedRoute = getPinnedKnowledgeRouteState();
       tblActiveClassId = "";
       tblActiveClassLabel = "";
       tblPage = 1;
       await loadGraph();
       await loadTablePage({ resetPage: true });
+      restoreKnowledgeRouteState(pinnedRoute);
+      if (
+        pinnedRoute.view === "detail" &&
+        pinnedRoute.nodeId &&
+        typeof showNodeDetailInline === "function"
+      ) {
+        try {
+          await showNodeDetailInline(pinnedRoute.nodeId);
+        } catch (err) {
+          if (window.console && console.warn) {
+            console.warn("refresh detail restore failed", err);
+          }
+        }
+      }
     });
     tblSearch.addEventListener("input", () => {
       renderTableList();
@@ -13090,11 +13333,13 @@
       // Layout selector
       const cyLayoutSelect = document.getElementById('cyLayoutSelect');
       const cyBtnRunLayout = document.getElementById('cy_btnRunLayout');
+      restoreSavedGraphLayoutSelection();
       function runSelectedLayout() {
         if (!window.kbCy) return;
         const name = cyLayoutSelect ? cyLayoutSelect.value : 'cose';
-        let opts = { name, animate: true, fit: true };
-        if (name === 'cose') opts = getCoseLayoutOpts({ animate: true, randomize: false });
+        persistGraphLayoutSelection(name);
+        const opts = getGraphLayoutOpts(name, { animate: true, randomize: false, fit: true });
+        syncGraphLayoutAppearance(name);
         window.kbCy.layout(opts).run();
       }
       if (cyBtnRunLayout) cyBtnRunLayout.addEventListener('click', runSelectedLayout);
@@ -13230,6 +13475,10 @@
         entryTaskId: hashEntryTaskId,
         entryScreen: hashEntryScreen,
       });
+      restoreKnowledgeRouteState({
+        view: initialMode,
+        nodeId: initialNodeId,
+      });
       // 新增：所有页面只要有节点参数都自动进入编辑模式
       if (initialNodeId) {
         enterEditById(initialNodeId);
@@ -13253,6 +13502,24 @@
       }
 
       function getSelectedNodeId() {
+        const selectedNodeId = String(
+          window.kbSelectedNodeId ||
+          window.kbCurrentNodeId ||
+          window.kbActiveDetailRouteId ||
+          window.kbActiveDetailNodeId ||
+          window.kbSelectedRowId ||
+          (window.kbSelectedRowIds && Array.from(window.kbSelectedRowIds)[0]) ||
+          "",
+        ).trim();
+        if (selectedNodeId) return selectedNodeId;
+        try {
+          if (window.kbCy && typeof window.kbCy.$ === "function") {
+            const selectedNode = window.kbCy.$("node:selected").first();
+            if (selectedNode && typeof selectedNode.id === "function" && selectedNode.id()) {
+              return String(selectedNode.id()).trim();
+            }
+          }
+        } catch { }
         const formId = document.getElementById('fId')?.value?.toString().trim();
         if (formId) return formId;
         const badgeEl = document.getElementById('entityIdBadge');
@@ -13383,6 +13650,14 @@
             try { node.style('background-image', nextImage); } catch { }
             try { node.updateStyle(); } catch { }
           }
+          const rawNode = window.kbCy.getElementById(targetId);
+          if (rawNode && (!rawNode.empty || typeof rawNode.empty !== 'function' || !rawNode.empty())) {
+            try { rawNode.data('image', nextImage); } catch { }
+            try { rawNode.style('background-image', nextImage); } catch { }
+            try { rawNode.updateStyle(); } catch { }
+          }
+          try { window.kbCy.style().update(); } catch { }
+          try { window.kbCy.elements().updateStyle(); } catch { }
         }
       }
 
@@ -13412,6 +13687,15 @@
               try { node.style('background-image', imageUrl); } catch { }
               try { node.updateStyle(); } catch { }
             }
+            const rawId = String(fullId || '').replace(/^entity\//, '');
+            const rawNode = window.kbCy.getElementById(rawId);
+            if (rawNode && (!rawNode.empty || typeof rawNode.empty !== 'function' || !rawNode.empty())) {
+              try { rawNode.data('image', imageUrl); } catch { }
+              try { rawNode.style('background-image', imageUrl); } catch { }
+              try { rawNode.updateStyle(); } catch { }
+            }
+            try { window.kbCy.style().update(); } catch { }
+            try { window.kbCy.elements().updateStyle(); } catch { }
           }
           if (typeof window.loadAttributes === 'function') {
             await window.loadAttributes(fullId);
@@ -14981,8 +15265,47 @@
         }
 
         if (isEdit) {
-          resetFormToAdd();
-          clearEntityListSelection();
+          const updatedNode =
+            nodeData && typeof nodeData === "object" ? nodeData : null;
+          try {
+            if (nodeId) {
+              if (typeof window.setTableSelection === "function") {
+                window.setTableSelection(nodeId, true, {
+                  skipDetailRefresh: window.kbViewMode !== "detail",
+                });
+              } else {
+                window.kbSelectedRowId = nodeId;
+                window.kbSelectedRowIds = new Set([nodeId]);
+                window.kbSelectedNodeId = nodeId;
+                window.kbCurrentNodeId = nodeId;
+                window.kbLastAnchorRowId = nodeId;
+              }
+            }
+          } catch (err) {
+            console.warn("restore selection after save failed", err);
+          }
+          try {
+            if (updatedNode && typeof setFormToEdit === "function") {
+              setFormToEdit(updatedNode);
+            }
+          } catch (err) {
+            console.warn("restore left card after save failed", err);
+          }
+          try {
+            if (
+              nodeId &&
+              window.kbViewMode === "detail" &&
+              typeof syncHashForView === "function"
+            ) {
+              syncHashForView("detail", {
+                replace: true,
+                nodeId,
+                includeNode: true,
+              });
+            }
+          } catch (err) {
+            console.warn("restore detail route after save failed", err);
+          }
           try {
             if (
               nodeId &&
@@ -15799,10 +16122,31 @@
       // Build floating dropdown for ontology selection
       const ontologyDropdown = document.createElement('div');
       ontologyDropdown.id = 'ontologyDropdown';
-      ontologyDropdown.className = 'ontology-floating-dropdown';
+      ontologyDropdown.className = 'ontology-floating-dropdown is-portal';
       ontologyDropdown.style.display = 'none';
-      btnAddOntologyChip.parentElement.style.position = 'relative';
-      btnAddOntologyChip.insertAdjacentElement('afterend', ontologyDropdown);
+      document.body.appendChild(ontologyDropdown);
+
+      function positionComposerOntologyDropdown() {
+        if (!ontologyDropdown || ontologyDropdown.style.display === 'none') return;
+        const rect = btnAddOntologyChip.getBoundingClientRect();
+        const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+        const dropdownWidth = Math.max(220, Number(ontologyDropdown.offsetWidth || 280));
+        const dropdownHeight = Math.max(120, Number(ontologyDropdown.offsetHeight || 280));
+        const margin = 12;
+        let left = rect.left;
+        let top = rect.bottom + 8;
+
+        if (left + dropdownWidth > viewportWidth - margin) {
+          left = Math.max(margin, viewportWidth - dropdownWidth - margin);
+        }
+        if (top + dropdownHeight > viewportHeight - margin) {
+          top = Math.max(margin, rect.top - dropdownHeight - 8);
+        }
+
+        ontologyDropdown.style.left = `${Math.max(margin, left)}px`;
+        ontologyDropdown.style.top = `${Math.max(margin, top)}px`;
+      }
 
       function buildOntologyTreeFromOptions() {
         const options = Array.from(composerTypeSelect.options || []);
@@ -15908,11 +16252,16 @@
         await buildOntologyDropdown();
         const isVisible = ontologyDropdown.style.display !== 'none';
         ontologyDropdown.style.display = isVisible ? 'none' : 'block';
+        if (!isVisible) {
+          positionComposerOntologyDropdown();
+        }
       });
 
       document.addEventListener('click', () => {
         ontologyDropdown.style.display = 'none';
       });
+      window.addEventListener('resize', positionComposerOntologyDropdown, { passive: true });
+      window.addEventListener('scroll', positionComposerOntologyDropdown, true);
     }
 
     if (btnEntityImageUpload) {

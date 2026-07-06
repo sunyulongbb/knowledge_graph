@@ -781,6 +781,25 @@
           window.kbLastAnchorRowId = canonicalId;
         }
         try {
+          if (!preserveSidebarState && typeof setFormToEdit === "function") {
+            setFormToEdit(doc);
+          }
+        } catch (err) {
+          console.warn("sync left card from detail failed", err);
+        }
+        try {
+          if (!preserveSidebarState) {
+            if (typeof window.updateSelectedRowStyles === "function") {
+              window.updateSelectedRowStyles();
+            }
+            if (typeof window.syncCheckboxStates === "function") {
+              window.syncCheckboxStates();
+            }
+          }
+        } catch (err) {
+          console.warn("sync table selection from detail failed", err);
+        }
+        try {
           if (
             !preserveSidebarState &&
             typeof window.loadAttributes === "function"

@@ -1907,6 +1907,11 @@ export async function handleCoreKbRoutes(
   if (url.pathname === "/api/kb/node/graph" && method === "GET") {
     let id = url.searchParams.get("id");
     if (!id) return new Response("Missing id", { status: 400 });
+    const direction = String(url.searchParams.get("direction") || "both")
+      .trim()
+      .toLowerCase();
+    const includeOutgoing = direction !== "incoming";
+    const includeIncoming = direction !== "outgoing";
 
     if (id.startsWith("entity/")) {
       const stripped = id.replace("entity/", "");
@@ -1926,11 +1931,13 @@ export async function handleCoreKbRoutes(
     if (!centerNode) return Response.json({ nodes: [], edges: [] });
 
     const edges: any[] = [];
-    const outgoingAttrs = db
-      .query(
-        "SELECT * FROM attributes WHERE node_id = ? AND datatype = 'wikibase-entityid'",
-      )
-      .all(id) as any[];
+    const outgoingAttrs = includeOutgoing
+      ? (db
+          .query(
+            "SELECT * FROM attributes WHERE node_id = ? AND datatype = 'wikibase-entityid'",
+          )
+          .all(id) as any[])
+      : [];
 
     const processAttr = (attr: any) => {
       try {
@@ -1962,24 +1969,26 @@ export async function handleCoreKbRoutes(
 
     outgoingAttrs.forEach(processAttr);
 
-    const incomingAttrs = db
-      .query(
-        "SELECT * FROM attributes WHERE datatype = 'wikibase-entityid' AND value LIKE ?",
-      )
-      .all(`%${id}%`) as any[];
-    incomingAttrs.forEach((attr) => {
-      try {
-        const vals = JSON.parse(attr.value);
-        const list = Array.isArray(vals) ? vals : [vals];
-        const pointsToId = list.some((v: any) => {
-          let tid = v?.id;
-          if (tid && tid.startsWith("entity/"))
-            tid = tid.replace("entity/", "");
-          return tid === id;
-        });
-        if (pointsToId) processAttr(attr);
-      } catch {}
-    });
+    if (includeIncoming) {
+      const incomingAttrs = db
+        .query(
+          "SELECT * FROM attributes WHERE datatype = 'wikibase-entityid' AND value LIKE ?",
+        )
+        .all(`%${id}%`) as any[];
+      incomingAttrs.forEach((attr) => {
+        try {
+          const vals = JSON.parse(attr.value);
+          const list = Array.isArray(vals) ? vals : [vals];
+          const pointsToId = list.some((v: any) => {
+            let tid = v?.id;
+            if (tid && tid.startsWith("entity/"))
+              tid = tid.replace("entity/", "");
+            return tid === id;
+          });
+          if (pointsToId) processAttr(attr);
+        } catch {}
+      });
+    }
 
     const neighborIds = new Set<string>();
     neighborIds.add(id);

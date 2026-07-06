@@ -1730,24 +1730,42 @@ if (btnAttrReset) {
   function syncCyNodeImage(nodeId) {
     if (!window.kbCy) return;
     try {
-      const rawId = (nodeId || "").replace(/^entity\//, "");
-      const cyNode = window.kbCy.getElementById(rawId);
+      const normalizedId = String(nodeId || "").trim();
+      const rawId = normalizedId.replace(/^entity\//, "");
+      const prefixedId = rawId ? `entity/${rawId}` : normalizedId;
+      const candidates = [normalizedId, rawId, prefixedId].filter(Boolean);
+      const cyNode = candidates
+        .map((id) => window.kbCy.getElementById(id))
+        .find((node) => node && node.length);
       if (!cyNode || !cyNode.length) return;
       const items = window.kbAttrItems || [];
       const imageAttr = items.find(
         (it) =>
           it.datatype === "commonsMedia" ||
+          (typeof it.key === "string" &&
+            (it.key.toLowerCase() === "image" ||
+              it.key.toLowerCase().includes("image"))) ||
           (it.datavalue && it.datavalue.type === "commonsMedia"),
       );
+      let nextUrl = "";
       if (imageAttr) {
-        let url = "";
         const v = imageAttr.value;
-        if (typeof v === "string") url = v;
-        else if (Array.isArray(v) && typeof v[0] === "string") url = v[0];
-        cyNode.data("image", url || "");
-      } else {
-        cyNode.data("image", "");
+        if (typeof v === "string") nextUrl = v;
+        else if (Array.isArray(v) && typeof v[0] === "string") nextUrl = v[0];
       }
+      cyNode.data("image", nextUrl || "");
+      try {
+        cyNode.style("background-image", nextUrl || "");
+      } catch {}
+      try {
+        cyNode.updateStyle();
+      } catch {}
+      try {
+        window.kbCy.style().update();
+      } catch {}
+      try {
+        window.kbCy.elements().updateStyle();
+      } catch {}
     } catch {}
   }
 

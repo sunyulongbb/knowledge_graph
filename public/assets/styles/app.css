@@ -3549,7 +3549,7 @@ body {
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
-  z-index: 999;
+  z-index: 12050;
   background: var(--surface-0, #fff);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -3558,6 +3558,15 @@ body {
   max-height: 280px;
   overflow-y: auto;
   padding: 6px 0;
+}
+
+.ontology-floating-dropdown.is-portal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  min-width: 220px;
+  max-width: min(360px, calc(100vw - 24px));
+  max-height: min(360px, calc(100vh - 24px));
 }
 
 .ontology-dropdown-item {
