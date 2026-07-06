@@ -514,8 +514,8 @@
     #wikiTopPdf iframe {
       width: 100%;
       min-height: 0;
-      height: min(68vh, calc(100vh - 250px));
-      max-height: min(68vh, calc(100vh - 250px));
+      height: var(--detail-pdf-frame-height, calc(100vh - 180px));
+      max-height: none;
       border: 1px solid var(--border);
       border-radius: 12px;
       background: var(--surface-1);
@@ -13601,6 +13601,7 @@
     const btnEntityImageUpload = document.getElementById("btnEntityImageUpload");
     const btnAddOntologyChip = document.getElementById("btnAddOntologyChip");
     const composerTypeSelect = document.getElementById("composerTypeSelect");
+    let composerOntologyTreeCache = null;
     let uploadedVideoUrl = "";
     let uploadedVideoPoster = "";
     let uploadedPdfUrl = "";
@@ -15722,6 +15723,7 @@
       if (!composerTypeSelect || !fType) return;
       if (composerTypeSelect.innerHTML !== fType.innerHTML) {
         composerTypeSelect.innerHTML = fType.innerHTML;
+        composerOntologyTreeCache = null;
       }
       composerTypeSelect.value = fType.value || '';
       if (btnAddOntologyChip) {
@@ -15748,6 +15750,10 @@
         fType.dispatchEvent(new Event('input', { bubbles: true }));
         fType.dispatchEvent(new Event('change', { bubbles: true }));
       });
+
+      window.addEventListener('kb:ontologies-updated', () => {
+        composerOntologyTreeCache = null;
+      });
     }
 
     if (btnAddOntologyChip && composerTypeSelect) {
@@ -15759,29 +15765,108 @@
       btnAddOntologyChip.parentElement.style.position = 'relative';
       btnAddOntologyChip.insertAdjacentElement('afterend', ontologyDropdown);
 
-      function buildOntologyDropdown() {
-        ontologyDropdown.innerHTML = '';
-        const options = Array.from(composerTypeSelect.options);
-        options.forEach((opt) => {
-          const item = document.createElement('button');
-          item.type = 'button';
-          item.className = 'ontology-dropdown-item' + (opt.value === composerTypeSelect.value ? ' selected' : '');
-          item.textContent = opt.textContent;
-          item.dataset.value = opt.value;
-          item.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            composerTypeSelect.value = opt.value;
-            composerTypeSelect.dispatchEvent(new Event('change', { bubbles: true }));
-            ontologyDropdown.style.display = 'none';
-            buildOntologyDropdown();
-          });
-          ontologyDropdown.appendChild(item);
-        });
+      function buildOntologyTreeFromOptions() {
+        const options = Array.from(composerTypeSelect.options || []);
+        return options
+          .filter((opt) => (opt.value || '').trim())
+          .map((opt) => ({
+            id: String(opt.value || '').trim(),
+            name: String(opt.textContent || '').trim(),
+            children: [],
+          }));
       }
 
-      btnAddOntologyChip.addEventListener('click', (e) => {
+      async function loadComposerOntologyTree() {
+        if (Array.isArray(composerOntologyTreeCache)) {
+          return composerOntologyTreeCache;
+        }
+        try {
+          const url = new URL('/api/kb/ontology/tree', window.location.origin);
+          if (typeof window.appendCurrentDbParam === 'function') {
+            const scoped = window.appendCurrentDbParam(url);
+            if (scoped instanceof URL) url.search = scoped.search;
+          }
+          const resp = await fetch(url.toString());
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          const data = await resp.json();
+          const items = Array.isArray(data?.items) ? data.items : [];
+          composerOntologyTreeCache = items;
+          return items;
+        } catch (err) {
+          console.warn('loadComposerOntologyTree failed, fallback to flat options', err);
+          const fallbackItems = buildOntologyTreeFromOptions();
+          composerOntologyTreeCache = fallbackItems;
+          return fallbackItems;
+        }
+      }
+
+      function renderOntologyTreeNodes(items, depth = 0) {
+        const frag = document.createDocumentFragment();
+        (Array.isArray(items) ? items : []).forEach((item) => {
+          if (!item) return;
+          const itemId = String(item.id || item.value || '').trim();
+          const itemName = String(item.name || item.label || item.alias || itemId).trim();
+          if (!itemId || !itemName) return;
+          const childItems = Array.isArray(item.children) ? item.children : [];
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'ontology-dropdown-item ontology-dropdown-tree-item' + (itemId === composerTypeSelect.value ? ' selected' : '');
+          button.dataset.value = itemId;
+          button.style.setProperty('--ontology-tree-depth', String(depth));
+          const row = document.createElement('span');
+          row.className = 'ontology-dropdown-tree-item__row';
+          const label = document.createElement('span');
+          label.className = 'ontology-dropdown-tree-item__label';
+          label.textContent = itemName;
+          row.appendChild(label);
+          if (childItems.length) {
+            const meta = document.createElement('span');
+            meta.className = 'ontology-dropdown-tree-item__meta';
+            meta.textContent = String(childItems.length);
+            row.appendChild(meta);
+          }
+          button.appendChild(row);
+          button.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            composerTypeSelect.value = itemId;
+            composerTypeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+            ontologyDropdown.style.display = 'none';
+          });
+          frag.appendChild(button);
+          if (childItems.length) {
+            frag.appendChild(renderOntologyTreeNodes(childItems, depth + 1));
+          }
+        });
+        return frag;
+      }
+
+      async function buildOntologyDropdown() {
+        ontologyDropdown.innerHTML = '';
+        const clearItem = document.createElement('button');
+        clearItem.type = 'button';
+        clearItem.className = 'ontology-dropdown-item ontology-dropdown-tree-item' + (!composerTypeSelect.value ? ' selected' : '');
+        const clearRow = document.createElement('span');
+        clearRow.className = 'ontology-dropdown-tree-item__row';
+        const clearLabel = document.createElement('span');
+        clearLabel.className = 'ontology-dropdown-tree-item__label';
+        clearLabel.textContent = '不设置本体';
+        clearRow.appendChild(clearLabel);
+        clearItem.appendChild(clearRow);
+        clearItem.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          composerTypeSelect.value = '';
+          composerTypeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+          ontologyDropdown.style.display = 'none';
+        });
+        ontologyDropdown.appendChild(clearItem);
+
+        const treeItems = await loadComposerOntologyTree();
+        ontologyDropdown.appendChild(renderOntologyTreeNodes(treeItems, 0));
+      }
+
+      btnAddOntologyChip.addEventListener('click', async (e) => {
         e.stopPropagation();
-        buildOntologyDropdown();
+        await buildOntologyDropdown();
         const isVisible = ontologyDropdown.style.display !== 'none';
         ontologyDropdown.style.display = isVisible ? 'none' : 'block';
       });

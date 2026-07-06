@@ -611,14 +611,7 @@
     frame.setAttribute("title", "PDF 预览");
     syncDetailPdfFrameHeight(frame, root, fallback);
 
-    const linkEl = document.createElement("a");
-    linkEl.href = resolvedUrl;
-    linkEl.target = "_blank";
-    linkEl.rel = "noreferrer noopener";
-    linkEl.textContent = "新窗口打开 PDF";
-
     fallback.appendChild(frame);
-    fallback.appendChild(linkEl);
     root.appendChild(fallback);
   }
 
@@ -628,6 +621,8 @@
       const applyHeight = () => {
         try {
           const detailPanel = document.getElementById("detailPanel");
+          const viewportHeight =
+            typeof window !== "undefined" ? window.innerHeight || 0 : 0;
           const isWideLayout =
             typeof window !== "undefined" ? window.innerWidth > 900 : true;
           if (!detailPanel || !isWideLayout) {
@@ -645,11 +640,23 @@
           const scopeRect = scopeEl
             ? scopeEl.getBoundingClientRect()
             : frame.getBoundingClientRect();
-          const nextHeight = Math.max(
-            420,
-            Math.floor(panelRect.bottom - scopeRect.top),
-          );
-          frame.style.height = "100%";
+          const nextHeight = viewportHeight
+            ? Math.max(420, Math.floor(panelRect.bottom - scopeRect.top))
+            : Math.max(420, Math.floor(panelRect.height || 0));
+          if (!nextHeight || !Number.isFinite(nextHeight)) {
+            frame.style.removeProperty("height");
+            if (scopeEl) {
+              scopeEl.style.removeProperty("--detail-pdf-frame-height");
+              scopeEl.style.removeProperty("height");
+            }
+            if (fallbackEl) {
+              fallbackEl.style.removeProperty("height");
+            }
+            return;
+          }
+          frame.style.height = `${nextHeight}px`;
+          frame.style.maxHeight = `${nextHeight}px`;
+          frame.style.minHeight = `${nextHeight}px`;
           if (scopeEl) {
             scopeEl.style.height = `${nextHeight}px`;
             scopeEl.style.setProperty(
@@ -884,6 +891,7 @@
           wikiTopDescEl.style.display = "none";
         }
       }
+      let hasPriorityMedia = false;
       const wikiTopVideo = document.getElementById("wikiTopVideo");
       if (wikiTopVideo) {
         wikiTopVideo.innerHTML = "";
@@ -892,6 +900,7 @@
           ...normalizeMediaStringList(doc && doc.videos),
         ].filter((url, index, arr) => url && arr.indexOf(url) === index);
         if (videoUrls.length) {
+          hasPriorityMedia = true;
           const videoGrid = document.createElement("div");
           videoGrid.className = "detail-video-grid";
           videoUrls.forEach((videoUrl) => {
@@ -996,6 +1005,7 @@
         wikiTopPdf.innerHTML = "";
         const pdfUrl = String((doc && doc.pdf) || "").trim();
         if (pdfUrl && isPdfUrl(pdfUrl)) {
+          hasPriorityMedia = true;
           const resolvedUrl = (() => {
             try {
               return new URL(pdfUrl, window.location.origin).toString();
@@ -1298,7 +1308,11 @@
           }
         }
       }
-      renderWikiMediaGrid(detailMediaAttrItems, imageEntries);
+      if (hasPriorityMedia) {
+        renderWikiMediaGrid([], []);
+      } else {
+        renderWikiMediaGrid(detailMediaAttrItems, imageEntries);
+      }
       if (wikiTopDescEl) {
         const stage = document.getElementById("detailTopMediaStage");
         const hasMediaStage =
