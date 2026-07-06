@@ -1,6 +1,7 @@
 ﻿(function () {
   // Inline detail panel helper
   // ----------------------
+  const SHOW_DETAIL_ATTR_SECTION = false;
   const shared = window.kbApp || {};
   const state = shared.state || {};
   if (typeof state.bindAlias === "function") {
@@ -901,107 +902,186 @@
         ].filter((url, index, arr) => url && arr.indexOf(url) === index);
         if (videoUrls.length) {
           hasPriorityMedia = true;
-          const videoGrid = document.createElement("div");
-          videoGrid.className = "detail-video-grid";
-          videoUrls.forEach((videoUrl) => {
+          const coverList = Array.isArray(doc?.covers)
+            ? doc.covers.map((item) => String(item || "").trim())
+            : normalizeMediaStringList(doc?.cover);
+          const playlistItems = videoUrls.map((videoUrl, index) => {
             const resolvedUrl = (() => {
-            try {
-              return new URL(
-                videoUrl,
-                window.location.origin,
-              ).toString();
-            } catch {
-              return videoUrl;
-            }
-          })();
-
-          const posterCandidate = (() => {
-            const fromCovers = Array.isArray(doc?.covers)
-              ? String(doc.covers[0] || "").trim()
-              : "";
-            const fromCover = String(doc?.cover || "").trim();
-            return fromCovers || fromCover;
-          })();
-          const extMatch = resolvedUrl.split("?")[0].match(/\.([a-z0-9]+)$/i);
-          const sourceType = extMatch
-            ? `video/${extMatch[1].toLowerCase()}`
-            : "";
-          const videoEl =
-            typeof window.kbCreateVideoPlayer === "function"
-              ? window.kbCreateVideoPlayer({
-                  src: resolvedUrl,
-                  type: sourceType,
-                  poster: posterCandidate,
-                  title: title || String(doc?.label_zh || doc?.label || "").trim(),
-                  preload: "metadata",
-                  playsInline: true,
-                  controls: true,
-                  streamType: "on-demand",
-                  logLevel: "warn",
-                  className: "kb-video-player",
-                  attributes: { controlsList: "nodownload" },
-                  style: {
-                    display: "block",
-                    width: "100%",
-                    maxWidth: "100%",
-                    height: "auto",
-                    borderRadius: "12px",
-                    marginTop: "8px",
-                    background: "#000",
-                  },
-                })
-              : document.createElement("video");
-          if (!videoEl.src && videoEl.tagName === "VIDEO") {
-            videoEl.controls = true;
-            videoEl.preload = "metadata";
-            videoEl.playsInline = true;
-            videoEl.setAttribute("playsinline", "");
-            videoEl.setAttribute("webkit-playsinline", "");
-            videoEl.style.display = "block";
-            videoEl.style.width = "100%";
-            videoEl.style.maxWidth = "100%";
-            videoEl.style.height = "auto";
-            videoEl.style.borderRadius = "12px";
-            videoEl.style.marginTop = "8px";
-            videoEl.style.background = "#000";
-            videoEl.setAttribute("controlsList", "nodownload");
-            if (posterCandidate) {
-              videoEl.poster = posterCandidate;
-            }
-            videoEl.src = resolvedUrl;
-          }
-          videoEl.addEventListener("error", (event) => {
-            console.warn("详情页视频播放错误", event);
-            try {
-              if (typeof window.kbDestroyVideoPlayer === "function") {
-                window.kbDestroyVideoPlayer(videoEl);
+              try {
+                return new URL(videoUrl, window.location.origin).toString();
+              } catch {
+                return videoUrl;
               }
-            } catch {}
-            const fallback = document.createElement("div");
-            fallback.style.padding = "16px";
-            fallback.style.border = "1px solid var(--border)";
-            fallback.style.borderRadius = "12px";
-            fallback.style.background = "var(--surface-1)";
-            fallback.style.color = "var(--muted)";
-            fallback.textContent = "视频加载失败，点击打开原始文件。";
-            const linkEl = document.createElement("a");
-            linkEl.href = resolvedUrl;
-            linkEl.target = "_blank";
-            linkEl.rel = "noreferrer noopener";
-            linkEl.textContent = "打开视频";
-            linkEl.style.display = "inline-block";
-            linkEl.style.marginTop = "8px";
-            linkEl.style.color = "var(--link)";
-            fallback.appendChild(document.createElement("br"));
-            fallback.appendChild(linkEl);
-            wikiTopVideo.innerHTML = "";
-            wikiTopVideo.appendChild(fallback);
-            syncDetailTopMediaStage();
+            })();
+            const fromCovers = String(coverList[index] || "").trim();
+            const fromCover = String(doc?.cover || "").trim();
+            const poster = fromCovers || (videoUrls.length === 1 ? fromCover : "");
+            const extMatch = resolvedUrl.split("?")[0].match(/\.([a-z0-9]+)$/i);
+            return {
+              index,
+              src: resolvedUrl,
+              poster,
+              type: extMatch ? `video/${extMatch[1].toLowerCase()}` : "",
+              title:
+                videoUrls.length > 1
+                  ? `${title || String(doc?.label_zh || doc?.label || "").trim()} ${index + 1}`
+                  : title || String(doc?.label_zh || doc?.label || "").trim(),
+            };
           });
 
-            videoGrid.appendChild(videoEl);
-          });
-          wikiTopVideo.appendChild(videoGrid);
+          const playerShell = document.createElement("div");
+          playerShell.className = "detail-video-playlist-shell";
+          const playerStage = document.createElement("div");
+          playerStage.className = "detail-video-stage";
+          const playerMount = document.createElement("div");
+          playerMount.className = "detail-video-player-mount";
+          playerStage.appendChild(playerMount);
+          playerShell.appendChild(playerStage);
+
+          let playlistNav = null;
+          let currentPlayerEl = null;
+          let activePlaylistIndex = 0;
+
+          const updatePlaylistSelection = () => {
+            if (!playlistNav) return;
+            Array.from(
+              playlistNav.querySelectorAll(".detail-video-playlist-item"),
+            ).forEach((button, buttonIndex) => {
+              const isActive = buttonIndex === activePlaylistIndex;
+              button.classList.toggle("is-active", isActive);
+              button.setAttribute("aria-pressed", isActive ? "true" : "false");
+              const subLabel = button.querySelector(
+                ".detail-video-playlist-sub",
+              );
+              if (subLabel) {
+                subLabel.textContent = isActive
+                  ? "当前播放"
+                  : playlistItems[buttonIndex]?.type || "video";
+              }
+            });
+          };
+
+          const renderPlayerAt = (nextIndex) => {
+            const item = playlistItems[nextIndex];
+            if (!item) return;
+            activePlaylistIndex = nextIndex;
+            if (currentPlayerEl) {
+              try {
+                if (typeof window.kbDestroyVideoPlayer === "function") {
+                  window.kbDestroyVideoPlayer(currentPlayerEl);
+                }
+              } catch {}
+            }
+            playerMount.innerHTML = "";
+            const videoEl =
+              typeof window.kbCreateVideoPlayer === "function"
+                ? window.kbCreateVideoPlayer({
+                    src: item.src,
+                    type: item.type,
+                    poster: item.poster,
+                    title: item.title,
+                    preload: "metadata",
+                    playsInline: true,
+                    controls: true,
+                    streamType: "on-demand",
+                    logLevel: "warn",
+                    className: "kb-video-player detail-video-main-player",
+                    showSliderVideoPreview: true,
+                    previewVideoSrc: item.src,
+                    attributes: { controlsList: "nodownload" },
+                    style: {
+                      display: "block",
+                      width: "100%",
+                      maxWidth: "100%",
+                      height: "auto",
+                      borderRadius: "16px",
+                      background: "#000",
+                    },
+                  })
+                : document.createElement("video");
+            if (!videoEl.src && videoEl.tagName === "VIDEO") {
+              videoEl.controls = true;
+              videoEl.preload = "metadata";
+              videoEl.playsInline = true;
+              videoEl.setAttribute("playsinline", "");
+              videoEl.setAttribute("webkit-playsinline", "");
+              videoEl.style.display = "block";
+              videoEl.style.width = "100%";
+              videoEl.style.maxWidth = "100%";
+              videoEl.style.height = "auto";
+              videoEl.style.borderRadius = "16px";
+              videoEl.style.background = "#000";
+              videoEl.setAttribute("controlsList", "nodownload");
+              if (item.poster) {
+                videoEl.poster = item.poster;
+              }
+              videoEl.src = item.src;
+            }
+            videoEl.addEventListener("error", (event) => {
+              console.warn("详情页视频播放错误", event);
+              try {
+                if (typeof window.kbDestroyVideoPlayer === "function") {
+                  window.kbDestroyVideoPlayer(videoEl);
+                }
+              } catch {}
+              playerMount.innerHTML = "";
+              const fallback = document.createElement("div");
+              fallback.className = "detail-video-fallback";
+              fallback.textContent = "视频加载失败，点击打开原始文件。";
+              const linkEl = document.createElement("a");
+              linkEl.href = item.src;
+              linkEl.target = "_blank";
+              linkEl.rel = "noreferrer noopener";
+              linkEl.textContent = "打开视频";
+              fallback.appendChild(document.createElement("br"));
+              fallback.appendChild(linkEl);
+              playerMount.appendChild(fallback);
+              syncDetailTopMediaStage();
+            });
+            currentPlayerEl = videoEl;
+            playerMount.appendChild(videoEl);
+            updatePlaylistSelection();
+          };
+
+          if (playlistItems.length > 1) {
+            playlistNav = document.createElement("div");
+            playlistNav.className = "detail-video-playlist";
+            playlistItems.forEach((item, index) => {
+              const button = document.createElement("button");
+              button.type = "button";
+              button.className = "detail-video-playlist-item";
+              button.setAttribute("aria-label", `播放视频 ${index + 1}`);
+              const thumb = document.createElement("span");
+              thumb.className = "detail-video-playlist-thumb";
+              if (item.poster) {
+                thumb.style.backgroundImage = `url("${item.poster.replace(/"/g, "%22")}")`;
+              }
+              const copy = document.createElement("span");
+              copy.className = "detail-video-playlist-copy";
+              const titleEl = document.createElement("span");
+              titleEl.className = "detail-video-playlist-title";
+              titleEl.textContent = `视频 ${index + 1}`;
+              const subEl = document.createElement("span");
+              subEl.className = "detail-video-playlist-sub";
+              subEl.textContent = item.type || "video";
+              const orderEl = document.createElement("span");
+              orderEl.className = "detail-video-playlist-order";
+              orderEl.textContent = String(index + 1).padStart(2, "0");
+              copy.appendChild(titleEl);
+              copy.appendChild(subEl);
+              button.appendChild(orderEl);
+              button.appendChild(thumb);
+              button.appendChild(copy);
+              button.addEventListener("click", () => {
+                renderPlayerAt(index);
+              });
+              playlistNav.appendChild(button);
+            });
+            playerShell.appendChild(playlistNav);
+          }
+
+          renderPlayerAt(0);
+          wikiTopVideo.appendChild(playerShell);
           wikiTopVideo.style.display = "block";
         } else {
           wikiTopVideo.style.display = "none";
@@ -1334,7 +1414,10 @@
         }
       }
       const attrSection = document.getElementById("detailAttrSection");
-      if (attrSection) attrSection.style.display = propCount > 0 ? "" : "none";
+      if (attrSection) {
+        attrSection.style.display =
+          SHOW_DETAIL_ATTR_SECTION && propCount > 0 ? "" : "none";
+      }
       // render wiki content if available and show edit button inside detail panel
       try {
         const view = document.getElementById("wikiView");
@@ -1570,10 +1653,9 @@
       if (view) view.style.display = "";
       if (edit) edit.style.display = "none";
       try {
-        const hasAttrs = Boolean(
-          document.getElementById("detailAttrList")?.childElementCount,
-        );
-        if (attrSection) attrSection.style.display = hasAttrs ? "" : "none";
+        if (attrSection) {
+          attrSection.style.display = SHOW_DETAIL_ATTR_SECTION ? "" : "none";
+        }
       } catch (e) {}
       if (btnEdit) btnEdit.style.display = "inline-flex";
       if (btnSaveTop) btnSaveTop.style.display = "none";

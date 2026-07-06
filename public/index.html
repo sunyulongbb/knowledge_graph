@@ -17,18 +17,16 @@
   </script>
   <script src="/js/marked.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vidstack@1.15.6/player/styles/default/theme.css" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vidstack@1.15.6/player/styles/default/layouts/audio.css" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vidstack@1.15.6/player/styles/default/layouts/video.css" />
+  <link rel="stylesheet" href="/node_modules/vidstack/player/styles/default/theme.css" />
+  <link rel="stylesheet" href="/node_modules/vidstack/player/styles/default/layouts/audio.css" />
+  <link rel="stylesheet" href="/node_modules/vidstack/player/styles/default/layouts/video.css" />
   <link rel="stylesheet" href="/css/easymde.min.css">
   <script src="/js/easymde.min.js"></script>
   <script src="/js/canvas-datagrid.js"></script>
   <script src="/js/xlsx.full.min.js"></script>
   <script src="/js/lodash.min.js"></script>
   <script type="module">
-    import "https://cdn.jsdelivr.net/npm/vidstack@1.15.6/prod/define/vidstack-player.js";
-    import "https://cdn.jsdelivr.net/npm/vidstack@1.15.6/prod/define/vidstack-player-ui.js";
-    import "https://cdn.jsdelivr.net/npm/vidstack@1.15.6/prod/define/vidstack-player-default-layout.js";
+    import "/node_modules/vidstack/cdn/with-layouts/vidstack.js";
 
     window.kbVidstackElementsReady = Promise.all([
       customElements.whenDefined("media-player"),
@@ -38,7 +36,15 @@
     ]).then(() => true);
   </script>
   <script src="https://unpkg.com/@tiptap/core@2.0.0-beta.141/dist/tiptap-core.umd.js"></script>
+  <script>
+    window.TiptapCore = window.TiptapCore || window["@tiptap/core"];
+  </script>
   <script src="https://unpkg.com/@tiptap/starter-kit@2.0.0-beta.141/dist/tiptap-starter-kit.umd.js"></script>
+  <script>
+    window["@tiptap/core"] = window["@tiptap/core"] || window.TiptapCore;
+    window["@tiptap/starter-kit"] =
+      window["@tiptap/starter-kit"] || window.TiptapStarterKit;
+  </script>
   <link rel="stylesheet" href="/assets/styles/app.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
   <script src="https://unpkg.com/cytoscape-edgehandles@4.0.1/cytoscape-edgehandles.js"></script>

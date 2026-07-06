@@ -6,6 +6,7 @@
   let tblLoadedNodes = [];
   let tblGridLoadingMore = false;
   let tblGridLoadExhausted = false;
+  let tblCacheStorageDisabled = false;
   let tblActiveType = "";
   let tblActiveClassId = "";
   let tblActiveClassLabel = "";
@@ -550,11 +551,18 @@
       window.kbTablePageSize = tblPageSize;
       window.kbTableTotalNodes = data.total || nodes.length;
       try {
-        if (window.localStorage) {
+        if (!tblCacheStorageDisabled && window.localStorage) {
           localStorage.setItem("kbTableNodesCache", JSON.stringify(nodes));
         }
       } catch (err) {
-        console.warn("kbTableNodes cache failed", err);
+        if (err && err.name === "QuotaExceededError") {
+          tblCacheStorageDisabled = true;
+          try {
+            localStorage.removeItem("kbTableNodesCache");
+          } catch {}
+        } else {
+          console.warn("kbTableNodes cache failed", err);
+        }
       }
       tblTotalNodes = window.kbTableTotalNodes;
       updateTblPageInfo();

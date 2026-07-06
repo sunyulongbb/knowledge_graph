@@ -86,6 +86,9 @@
     "media-provider",
     "media-poster",
     "media-video-layout",
+    "media-slider-preview",
+    "media-slider-video",
+    "media-slider-value",
   ];
   let kbVidstackReadyPromise = null;
 
@@ -116,11 +119,88 @@
   function destroyVideoPlayer(target) {
     if (!target) return null;
     try {
+      if (typeof target.__kbCleanupSliderPreview === "function") {
+        target.__kbCleanupSliderPreview();
+      }
+    } catch {}
+    try {
       if (typeof target.pause === "function") {
         target.pause();
       }
     } catch {}
     return null;
+  }
+
+  function attachSliderVideoPreview(playerEl, settings) {
+    if (
+      !playerEl ||
+      settings.showSliderVideoPreview !== true ||
+      !root.customElements?.get("media-slider-preview") ||
+      !root.customElements?.get("media-slider-video") ||
+      !root.customElements?.get("media-slider-value")
+    ) {
+      return;
+    }
+
+    let disposed = false;
+    let rafId = 0;
+    let retryCount = 0;
+    let observer = null;
+
+    const cleanup = () => {
+      disposed = true;
+      if (rafId) root.cancelAnimationFrame(rafId);
+      if (observer) observer.disconnect();
+      observer = null;
+    };
+
+    const mountPreview = () => {
+      if (disposed) return;
+      const timeSlider = playerEl.querySelector("media-time-slider");
+      if (!timeSlider) {
+        if (retryCount < 24) {
+          retryCount += 1;
+          rafId = root.requestAnimationFrame(mountPreview);
+        }
+        return;
+      }
+      if (timeSlider.querySelector(".kb-slider-video-preview")) return;
+
+      const previewEl = document.createElement("media-slider-preview");
+      previewEl.className = "kb-slider-video-preview";
+      previewEl.setAttribute("offset", "14");
+
+      const previewVideoEl = document.createElement("media-slider-video");
+      previewVideoEl.className = "kb-slider-video-preview-media";
+      previewVideoEl.setAttribute(
+        "src",
+        settings.previewVideoSrc || settings.src || "",
+      );
+      if (settings.crossOrigin) {
+        previewVideoEl.setAttribute(
+          "crossorigin",
+          settings.crossOrigin === true
+            ? "anonymous"
+            : String(settings.crossOrigin),
+        );
+      }
+
+      const previewTimeEl = document.createElement("media-slider-value");
+      previewTimeEl.className = "kb-slider-video-preview-time";
+      previewTimeEl.setAttribute("type", "pointer");
+      previewTimeEl.setAttribute("format", "time");
+
+      previewEl.appendChild(previewVideoEl);
+      previewEl.appendChild(previewTimeEl);
+      timeSlider.appendChild(previewEl);
+    };
+
+    observer = new MutationObserver(() => {
+      mountPreview();
+    });
+    observer.observe(playerEl, { childList: true, subtree: true });
+    mountPreview();
+    playerEl.__kbCleanupSliderPreview = cleanup;
   }
 
   function createVideoPlayer(options) {
@@ -212,6 +292,7 @@
 
     playerEl.appendChild(providerEl);
     playerEl.appendChild(videoLayoutEl);
+    attachSliderVideoPreview(playerEl, settings);
     return playerEl;
   }
 

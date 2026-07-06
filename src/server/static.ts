@@ -10,9 +10,10 @@ const SHARED_UPLOADS_DIR = resolve(
 );
 
 export async function serveStaticRoute(req: Request, pathname: string) {
-  const makeResponse = async (file: Bun.File) => {
+  const makeResponse = async (file: ReturnType<typeof Bun.file>) => {
     const headers = new Headers();
-    const ext = pathname.split("?")[0].split('.').pop()?.toLowerCase() || "";
+    const pathOnly = pathname.split("?")[0] || pathname;
+    const ext = pathOnly.split(".").pop()?.toLowerCase() || "";
     const contentTypes: Record<string, string> = {
       png: "image/png",
       jpg: "image/jpeg",
@@ -65,6 +66,14 @@ export async function serveStaticRoute(req: Request, pathname: string) {
       return null;
     }
 
+    const file = Bun.file(`.${pathname}`);
+    if (await file.exists()) {
+      return makeResponse(file);
+    }
+    return null;
+  }
+
+  if (pathname.startsWith("/node_modules/")) {
     const file = Bun.file(`.${pathname}`);
     if (await file.exists()) {
       return makeResponse(file);

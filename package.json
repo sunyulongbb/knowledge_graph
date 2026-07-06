@@ -11,6 +11,7 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "marked": "^17.0.1"
+    "marked": "^17.0.1",
+    "vidstack": "^1.15.6"
   }
 }

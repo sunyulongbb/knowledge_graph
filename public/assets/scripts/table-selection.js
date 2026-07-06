@@ -109,6 +109,64 @@ function __kbInitTableSelection() {
       .replace(/^entity\//, "");
   }
 
+  function getNodeVideoEntryKey(item) {
+    const explicitKey = String(
+      item?.__videoEntryKey || item?.__shortsReplayKey || "",
+    ).trim();
+    if (explicitKey) return explicitKey;
+    const id = String(item?.id || item?._id || "").trim();
+    const video = String(item?.video || "").trim();
+    if (id && video) return `id:${id}|video:${video}`;
+    if (video) return `video:${video}`;
+    if (id) return `id:${id}`;
+    return "";
+  }
+
+  function normalizeNodeVideoEntries(nodes) {
+    return (Array.isArray(nodes) ? nodes : []).flatMap((item) => {
+      const videos = Array.isArray(item?.videos)
+        ? item.videos.map((entry) => String(entry || "").trim()).filter(Boolean)
+        : [];
+      const singleVideo = String(item?.video || "").trim();
+      const videoList = videos.length
+        ? videos
+        : singleVideo
+          ? [singleVideo]
+          : [];
+      if (!videoList.length) return [];
+      const coverList = Array.isArray(item?.covers)
+        ? item.covers.map((entry) => String(entry || "").trim())
+        : [];
+      const fallbackCover = String(item?.cover || "").trim();
+      const labelZh = item?.label_zh || item?.label || item?.name || "";
+      const label = item?.label || item?.label_zh || item?.name || "";
+      const id = item?.id || item?._id || "";
+      const _id = item?._id || item?.id || "";
+      const link = item?.link || "";
+      const classLabel = item?.classLabel || item?.type || item?.class || "";
+      const image = item?.image || item?.avatar || "";
+      return videoList.map((video, index) => {
+        const poster =
+          coverList[index] || (videoList.length === 1 ? fallbackCover : "");
+        const entryKey = `${String(id || _id || "node").trim() || "node"}::${index}::${video}`;
+        return {
+          label_zh: labelZh,
+          label,
+          id,
+          _id,
+          link,
+          classLabel,
+          video,
+          cover: poster,
+          covers: coverList,
+          image,
+          __videoEntryKey: entryKey,
+          __shortsReplayKey: entryKey,
+        };
+      });
+    });
+  }
+
   function getRouteNodeIdFromUrl() {
     try {
       const hash = String(window.location.hash || "")
@@ -1983,10 +2041,9 @@ function __kbInitTableSelection() {
 
     if (!mediaItems.length) return element;
 
-    const coverUrl =
-      Array.isArray(coverList) && coverList.length
-        ? String(coverList[0] || "").trim()
-        : "";
+    const normalizedCoverList = Array.isArray(coverList)
+      ? coverList.map((item) => String(item || "").trim())
+      : [];
 
     const mediaView = document.createElement("div");
     mediaView.className = "table-feed-grid-media-view";
@@ -2052,6 +2109,7 @@ function __kbInitTableSelection() {
       slide.style.position = "relative";
 
       if (item.type === "video") {
+        const coverUrl = String(normalizedCoverList[item.index] || "").trim();
         const wrap = document.createElement("div");
         wrap.className = "table-feed-video-wrap";
         wrap.style.width = "100%";
@@ -2970,23 +3028,18 @@ function __kbInitTableSelection() {
       return Array.isArray(data.nodes) ? data.nodes : [];
     };
 
-    const normalizeShortsNodes = (nodes) =>
-      nodes.map((item) => ({
-        label_zh: item.label || "",
-        id: item.id || "",
-        link: item.link || "",
-        classLabel: item.classLabel || item.type || "",
-        video: item.video || "",
-        cover:
-          (Array.isArray(item.covers) && item.covers[0]) || item.cover || "",
-        image: item.image || item.avatar || "",
-      }));
+    const normalizeShortsNodes = (nodes) => normalizeNodeVideoEntries(nodes);
 
     const appendShortsNodes = async (nodes) => {
       const tableList = normalizeShortsNodes(nodes);
-      const existingIds = new Set(rawList.map((item) => item.id));
+      const existingKeys = new Set(
+        rawList.map((item) => getNodeVideoEntryKey(item)).filter(Boolean),
+      );
       const newItems = tableList.filter(
-        (item) => item.id && !existingIds.has(item.id),
+        (item) =>
+          item.video &&
+          item.video.trim() &&
+          !existingKeys.has(getNodeVideoEntryKey(item)),
       );
       if (!newItems.length) return false;
       rawList = rawList.concat(newItems);
@@ -3034,18 +3087,7 @@ function __kbInitTableSelection() {
       Array.isArray(window.kbTableNodes) &&
       window.kbTableNodes.length
     ) {
-      rawList = window.kbTableNodes
-        .filter((item) => item.video && item.video.trim())
-        .map((item) => ({
-          label_zh: item.label || "",
-          id: item.id || "",
-          link: item.link || "",
-          classLabel: item.classLabel || item.type || "",
-          video: item.video || "",
-          cover:
-            (Array.isArray(item.covers) && item.covers[0]) || item.cover || "",
-          image: item.image || item.avatar || "",
-        }));
+      rawList = normalizeShortsNodes(window.kbTableNodes);
       window.kbShortsNodes = rawList;
       saveShortsCache(rawList);
     }
@@ -3061,22 +3103,7 @@ function __kbInitTableSelection() {
         if (!rawList.length && typeof loadTablePage === "function") {
           try {
             await loadTablePage();
-            rawList = Array.isArray(window.kbTableNodes)
-              ? window.kbTableNodes
-                  .filter((item) => item.video && item.video.trim())
-                  .map((item) => ({
-                    label_zh: item.label || "",
-                    id: item.id || "",
-                    link: item.link || "",
-                    classLabel: item.classLabel || item.type || "",
-                    video: item.video || "",
-                    cover:
-                      (Array.isArray(item.covers) && item.covers[0]) ||
-                      item.cover ||
-                      "",
-                    image: item.image || item.avatar || "",
-                  }))
-              : [];
+            rawList = normalizeShortsNodes(window.kbTableNodes);
             window.kbShortsNodes = rawList;
           } catch {}
         }
@@ -3089,8 +3116,7 @@ function __kbInitTableSelection() {
         label: item.label_zh || item.label || "",
         classLabel: item.classLabel || item.type || "",
         video: item.video || "",
-        cover:
-          (Array.isArray(item.covers) && item.covers[0]) || item.cover || "",
+        cover: String(item.cover || "").trim(),
         image: item.image || "",
       }))
       .filter((item) => item.video && item.video.trim());
@@ -3724,11 +3750,7 @@ function __kbInitTableSelection() {
     };
 
     const normalizeShortsNodeKey = (item) => {
-      const id = String(item.id || item._id || "").trim();
-      if (id) return `id:${id}`;
-      const video = String(item.video || "").trim();
-      if (video) return `video:${video}`;
-      return "";
+      return getNodeVideoEntryKey(item);
     };
 
     const dedupeShortsNodes = (items) => {
@@ -3742,19 +3764,7 @@ function __kbInitTableSelection() {
     };
 
     const normalizeShortsNodes = (nodes) =>
-      dedupeShortsNodes(
-        nodes.map((item) => ({
-          label_zh: item.label_zh || item.label || item.name || "",
-          id: item.id || item._id || "",
-          _id: item._id || item.id || "",
-          link: item.link || "",
-          classLabel: item.classLabel || item.type || item.class || "",
-          video: item.video || "",
-          cover:
-            (Array.isArray(item.covers) && item.covers[0]) || item.cover || "",
-          image: item.image || item.avatar || "",
-        })),
-      );
+      dedupeShortsNodes(normalizeNodeVideoEntries(nodes));
 
     const appendShortsNodes = async (nodes, options = {}) => {
       const allowDuplicates = options.allowDuplicates === true;
@@ -3780,14 +3790,14 @@ function __kbInitTableSelection() {
         const nextIndex = startIndex + idx;
         const addedItem = {
           id: item._id || item.id || "",
-          label: item.label || "",
+          label: item.label || item.label_zh || "",
           label_zh: item.label_zh || item.label || "",
           classLabel: item.classLabel || item.type || "",
           video: item.video || "",
-          cover:
-            (Array.isArray(item.covers) && item.covers[0]) || item.cover || "",
+          cover: String(item.cover || "").trim(),
           image: item.image || "",
-          replayKey: item.__shortsReplayKey || "",
+          replayKey:
+            item.__shortsReplayKey || item.__videoEntryKey || "",
         };
         videoItems.push(addedItem);
         createShortsCard(addedItem, nextIndex);
@@ -3843,29 +3853,13 @@ function __kbInitTableSelection() {
 
     const cachedShorts = loadShortsCache();
     if (cachedShorts.length) {
-      rawList = dedupeShortsNodes(cachedShorts);
+      rawList = normalizeShortsNodes(cachedShorts);
       window.kbShortsNodes = rawList;
     } else if (
       Array.isArray(window.kbTableNodes) &&
       window.kbTableNodes.length
     ) {
-      rawList = dedupeShortsNodes(
-        window.kbTableNodes
-          .filter((item) => item.video && item.video.trim())
-          .map((item) => ({
-            label_zh: item.label_zh || item.label || item.name || "",
-            id: item.id || item._id || "",
-            _id: item._id || item.id || "",
-            link: item.link || "",
-            classLabel: item.classLabel || item.type || item.class || "",
-            video: item.video || "",
-            cover:
-              (Array.isArray(item.covers) && item.covers[0]) ||
-              item.cover ||
-              "",
-            image: item.image || item.avatar || "",
-          })),
-      );
+      rawList = normalizeShortsNodes(window.kbTableNodes);
       window.kbShortsNodes = rawList;
       saveShortsCache(rawList);
     }
@@ -3881,22 +3875,7 @@ function __kbInitTableSelection() {
         if (!rawList.length && typeof loadTablePage === "function") {
           try {
             await loadTablePage();
-            rawList = Array.isArray(window.kbTableNodes)
-              ? window.kbTableNodes
-                  .filter((item) => item.video && item.video.trim())
-                  .map((item) => ({
-                    label_zh: item.label || "",
-                    id: item.id || "",
-                    link: item.link || "",
-                    classLabel: item.classLabel || item.type || "",
-                    video: item.video || "",
-                    cover:
-                      (Array.isArray(item.covers) && item.covers[0]) ||
-                      item.cover ||
-                      "",
-                    image: item.image || item.avatar || "",
-                  }))
-              : [];
+            rawList = normalizeShortsNodes(window.kbTableNodes);
             window.kbShortsNodes = rawList;
           } catch {}
         }
@@ -3909,10 +3888,9 @@ function __kbInitTableSelection() {
         label: item.label_zh || item.label || "",
         classLabel: item.classLabel || item.type || "",
         video: item.video || "",
-        cover:
-          (Array.isArray(item.covers) && item.covers[0]) || item.cover || "",
+        cover: String(item.cover || "").trim(),
         image: item.image || "",
-        replayKey: item.__shortsReplayKey || "",
+        replayKey: item.__shortsReplayKey || item.__videoEntryKey || "",
       }))
       .filter((item) => item.video && item.video.trim());
 
