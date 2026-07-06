@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
   const urlParams = new URLSearchParams(window.location.search);
   let tblPage = parseInt(urlParams.get("page") || "1", 10);
   let tblPageSize = parseInt(urlParams.get("limit") || "20", 10);
@@ -10,6 +10,7 @@
   let tblActiveClassId = "";
   let tblActiveClassLabel = "";
   let tblGridLoadCheckRaf = 0;
+  let tblTypeTreeCache = null;
   const EMPTY_TYPE_FILTER = "__EMPTY_NODE_TYPE__";
 
   const btnPrevPage = document.getElementById("btnPrevPage");
@@ -19,6 +20,13 @@
   const tblPageSizeSelect = document.getElementById("tblPageSize");
   const tblSearch = document.getElementById("tblSearch");
   const tblTypeFilter = document.getElementById("tblTypeFilter");
+  const btnTblTypeFilterTree = document.getElementById("btnTblTypeFilterTree");
+  const tblTypeFilterTreeLabel = document.getElementById(
+    "tblTypeFilterTreeLabel",
+  );
+  const tblTypeFilterTreeDropdown = document.getElementById(
+    "tblTypeFilterTreeDropdown",
+  );
   const tblPropertyFilter = document.getElementById("tblPropertyFilter");
   const tblPropertyFilterValue = document.getElementById(
     "tblPropertyFilterValue",
@@ -114,6 +122,145 @@
     return id;
   }
 
+  function flattenOntologyTree(items, bucket = []) {
+    (Array.isArray(items) ? items : []).forEach((item) => {
+      if (!item) return;
+      const id = String(item.id || item.value || "").trim();
+      const name = String(item.name || item.label || item.alias || id).trim();
+      if (id && name) bucket.push({ id, name });
+      if (Array.isArray(item.children) && item.children.length) {
+        flattenOntologyTree(item.children, bucket);
+      }
+    });
+    return bucket;
+  }
+
+  async function loadTableTypeTree() {
+    if (Array.isArray(tblTypeTreeCache)) return tblTypeTreeCache;
+    const url = new URL("/api/kb/ontology/tree", window.location.origin);
+    if (typeof window.appendCurrentDbParam === "function") {
+      const scopedUrl = window.appendCurrentDbParam(url);
+      if (scopedUrl instanceof URL) {
+        url.search = scopedUrl.search;
+      }
+    }
+    const resp = await fetch(url.toString());
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    tblTypeTreeCache = Array.isArray(data?.items) ? data.items : [];
+    return tblTypeTreeCache;
+  }
+
+  function updateTableTypeTreeLabel() {
+    if (!tblTypeFilterTreeLabel) return;
+    if (!tblActiveType) {
+      tblTypeFilterTreeLabel.textContent = "\u672c\u4f53\u7c7b\u578b";
+      return;
+    }
+    if (tblActiveType === EMPTY_TYPE_FILTER) {
+      tblTypeFilterTreeLabel.textContent = "\u65e0\u7c7b\u578b";
+      return;
+    }
+    tblTypeFilterTreeLabel.textContent =
+      tblTypeFilter?.selectedOptions?.[0]?.textContent || tblActiveType;
+  }
+
+  function setTableTypeFilterValue(nextValue) {
+    if (!tblTypeFilter) return;
+    tblTypeFilter.value = nextValue || "";
+    tblTypeFilter.dispatchEvent(new Event("change", { bubbles: true }));
+    if (tblTypeFilterTreeDropdown) {
+      tblTypeFilterTreeDropdown.style.display = "none";
+    }
+  }
+
+  function renderTableTypeTreeNodes(items, depth = 0) {
+    const frag = document.createDocumentFragment();
+    (Array.isArray(items) ? items : []).forEach((item) => {
+      if (!item) return;
+      const itemId = String(item.id || item.value || "").trim();
+      const itemName = String(
+        item.name || item.label || item.alias || itemId,
+      ).trim();
+      if (!itemId || !itemName) return;
+      const childItems = Array.isArray(item.children) ? item.children : [];
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className =
+        "ontology-dropdown-item ontology-dropdown-tree-item" +
+        (itemId === tblActiveType ? " selected" : "");
+      button.dataset.value = itemId;
+      button.style.setProperty("--ontology-tree-depth", String(depth));
+      const row = document.createElement("span");
+      row.className = "ontology-dropdown-tree-item__row";
+      const label = document.createElement("span");
+      label.className = "ontology-dropdown-tree-item__label";
+      label.textContent = itemName;
+      row.appendChild(label);
+      if (childItems.length) {
+        const meta = document.createElement("span");
+        meta.className = "ontology-dropdown-tree-item__meta";
+        meta.textContent = String(childItems.length);
+        row.appendChild(meta);
+      }
+      button.appendChild(row);
+      button.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+        setTableTypeFilterValue(itemId);
+      });
+      frag.appendChild(button);
+      if (childItems.length) {
+        frag.appendChild(renderTableTypeTreeNodes(childItems, depth + 1));
+      }
+    });
+    return frag;
+  }
+
+  async function buildTableTypeTreeDropdown() {
+    if (!tblTypeFilterTreeDropdown) return;
+    tblTypeFilterTreeDropdown.innerHTML = "";
+
+    const createAction = (labelText, value, selected) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className =
+        "ontology-dropdown-item ontology-dropdown-tree-item" +
+        (selected ? " selected" : "");
+      const row = document.createElement("span");
+      row.className = "ontology-dropdown-tree-item__row";
+      const label = document.createElement("span");
+      label.className = "ontology-dropdown-tree-item__label";
+      label.textContent = labelText;
+      row.appendChild(label);
+      button.appendChild(row);
+      button.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+        setTableTypeFilterValue(value);
+      });
+      return button;
+    };
+
+    tblTypeFilterTreeDropdown.appendChild(
+      createAction("\u5168\u90e8\u7c7b\u578b", "", !tblActiveType),
+    );
+    tblTypeFilterTreeDropdown.appendChild(
+      createAction(
+        "\u65e0\u7c7b\u578b",
+        EMPTY_TYPE_FILTER,
+        tblActiveType === EMPTY_TYPE_FILTER,
+      ),
+    );
+
+    try {
+      const treeItems = await loadTableTypeTree();
+      tblTypeFilterTreeDropdown.appendChild(
+        renderTableTypeTreeNodes(treeItems, 0),
+      );
+    } catch (error) {
+      console.warn("buildTableTypeTreeDropdown failed", error);
+    }
+  }
+
   function getTableScrollContainer() {
     const tblNodes = document.getElementById("tblNodes");
     if (!tblNodes) return null;
@@ -202,20 +349,32 @@
           emptyTypeOption.selected = true;
         tblTypeFilter.appendChild(emptyTypeOption);
 
-        if (Array.isArray(ontologies)) {
-          ontologies.forEach((item) => {
-            const option = document.createElement("option");
-            option.value = item.id || item.name || item.label || "";
-            option.textContent = item.name || item.label || item.id || "";
-            if (option.value === currentValue) option.selected = true;
-            tblTypeFilter.appendChild(option);
-          });
-        }
+        const treeItems = await loadTableTypeTree().catch(() => []);
+        const flatOntologies = treeItems.length
+          ? flattenOntologyTree(treeItems)
+          : Array.isArray(ontologies)
+            ? ontologies.map((item) => ({
+                id: item.id || item.name || item.label || "",
+                name: item.name || item.label || item.id || "",
+              }))
+            : [];
+        const seenTypeValues = new Set(["", EMPTY_TYPE_FILTER]);
+        flatOntologies.forEach((item) => {
+          const optionValue = String(item?.id || "").trim();
+          if (!optionValue || seenTypeValues.has(optionValue)) return;
+          seenTypeValues.add(optionValue);
+          const option = document.createElement("option");
+          option.value = optionValue;
+          option.textContent = item.name || optionValue;
+          if (option.value === currentValue) option.selected = true;
+          tblTypeFilter.appendChild(option);
+        });
         if (!tblActiveClassLabel && tblTypeFilter.value) {
           tblActiveClassLabel =
             tblTypeFilter.selectedOptions[0]?.textContent ||
             tblTypeFilter.value;
         }
+        updateTableTypeTreeLabel();
       }
 
       if (tblPropertyFilter) {
@@ -573,7 +732,29 @@
       tblTypeFilter.addEventListener("change", () => {
         tblPage = 1;
         tblActiveType = tblTypeFilter.value || "";
+        updateTableTypeTreeLabel();
         loadTablePage({ resetPage: false });
+      });
+    }
+
+    if (btnTblTypeFilterTree && tblTypeFilterTreeDropdown) {
+      btnTblTypeFilterTree.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        await buildTableTypeTreeDropdown();
+        const isVisible = tblTypeFilterTreeDropdown.style.display !== "none";
+        tblTypeFilterTreeDropdown.style.display = isVisible ? "none" : "block";
+      });
+
+      document.addEventListener("click", (event) => {
+        const target = event.target;
+        if (
+          tblTypeFilterTreeDropdown.style.display !== "none" &&
+          target instanceof Node &&
+          !tblTypeFilterTreeDropdown.contains(target) &&
+          !btnTblTypeFilterTree.contains(target)
+        ) {
+          tblTypeFilterTreeDropdown.style.display = "none";
+        }
       });
     }
 
@@ -654,6 +835,7 @@
         if (tblTypeFilter && tblActiveType) {
           tblTypeFilter.value = tblActiveType;
         }
+        updateTableTypeTreeLabel();
         loadTablePage({ resetPage: true });
       });
   }
@@ -682,6 +864,7 @@
     tblActiveClassLabel = "";
 
     if (tblTypeFilter) tblTypeFilter.value = "";
+    if (tblTypeFilterTreeDropdown) tblTypeFilterTreeDropdown.style.display = "none";
     if (tblPropertyFilter) tblPropertyFilter.value = "";
     if (tblPropertyFilterValue) {
       tblPropertyFilterValue.value = "";
@@ -693,6 +876,7 @@
     loadTableFilters()
       .catch(() => {})
       .finally(() => {
+        updateTableTypeTreeLabel();
         loadTablePage({ resetPage: true });
       });
   });

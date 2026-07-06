@@ -851,19 +851,50 @@ function __kbInitTableSelection() {
     const overlay = document.createElement("div");
     overlay.className = "kb-lightbox-overlay kb-video-lightbox";
 
-    const video = document.createElement("video");
-    video.className = "kb-lightbox-video";
-    video.controls = true;
-    video.playsInline = true;
-    video.muted = muted === true;
-    video.loop = true;
-    video.autoplay = true;
-    video.preload = "auto";
+    const sourceUrl = playableList[initialIndex] || playableList[0] || "";
+    const sourceTypeMatch = sourceUrl.split("?")[0].match(/\.([a-z0-9]+)$/i);
+    const sourceType = sourceTypeMatch
+      ? `video/${sourceTypeMatch[1].toLowerCase()}`
+      : "";
+    const video =
+      typeof window.kbCreateVideoPlayer === "function"
+        ? window.kbCreateVideoPlayer({
+            src: sourceUrl,
+            type: sourceType,
+            autoplay: true,
+            muted: muted === true,
+            loop: true,
+            preload: "auto",
+            playsInline: true,
+            controls: true,
+            streamType: "on-demand",
+            logLevel: "warn",
+            className: "kb-lightbox-video kb-video-player",
+          })
+        : document.createElement("video");
+    if (video.tagName === "VIDEO") {
+      video.className = "kb-lightbox-video";
+      video.controls = true;
+      video.playsInline = true;
+      video.muted = muted === true;
+      video.loop = true;
+      video.autoplay = true;
+      video.preload = "auto";
+      video.src = sourceUrl;
+    }
 
     const counter = document.createElement("div");
     counter.className = "kb-lightbox-counter";
 
     let currentIndex = initialIndex;
+    let player = null;
+
+    const playCurrentVideo = () => {
+      if (player && typeof player.play === "function") {
+        return player.play();
+      }
+      return video.play();
+    };
 
     const setVideoByIndex = (idx, options = {}) => {
       const { keepTime = false } = options;
@@ -874,23 +905,22 @@ function __kbInitTableSelection() {
       const nextSrc = playableList[currentIndex];
       if (video.src !== nextSrc) {
         video.src = nextSrc;
-        try {
-          video.load();
-        } catch {}
       }
-      if (keepTime && Number.isFinite(startTime) && startTime > 0) {
-        video.currentTime = startTime;
-      } else {
-        video.currentTime = 0;
-      }
+      const nextTime =
+        keepTime && Number.isFinite(startTime) && startTime > 0 ? startTime : 0;
       counter.textContent =
         playableList.length > 1
           ? `${currentIndex + 1} / ${playableList.length}`
           : "";
-      video.play().catch(() => {});
+      try {
+        video.currentTime = nextTime;
+      } catch {}
+      const playback = playCurrentVideo();
+      if (playback && typeof playback.catch === "function") {
+        playback.catch(() => {});
+      }
     };
 
-    setVideoByIndex(initialIndex, { keepTime: true });
     overlay.appendChild(video);
     overlay.appendChild(counter);
 
@@ -898,7 +928,14 @@ function __kbInitTableSelection() {
     closeBtn.className = "kb-lightbox-close";
     closeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
     const close = () => {
-      video.pause();
+      try {
+        video.pause();
+      } catch {}
+      try {
+        if (typeof window.kbDestroyVideoPlayer === "function") {
+          window.kbDestroyVideoPlayer(video);
+        }
+      } catch {}
       overlay.remove();
       window.kbVideoLightboxOpen = false;
       document.removeEventListener("keydown", onKey);
@@ -949,6 +986,14 @@ function __kbInitTableSelection() {
     });
     document.addEventListener("keydown", onKey);
     document.body.appendChild(overlay);
+    player = video;
+    Promise.resolve(
+      typeof window.kbEnsureVidstackReady === "function"
+        ? window.kbEnsureVidstackReady()
+        : true,
+    ).finally(() => {
+      setVideoByIndex(initialIndex, { keepTime: true });
+    });
   }
 
   function buildPreviewVideoElement(node, videoUrls, posterSource) {
@@ -1163,6 +1208,7 @@ function __kbInitTableSelection() {
     overlay.className = "kb-lightbox-overlay";
 
     let mediaEl = null;
+    let mediaPlayer = null;
 
     const counter = document.createElement("div");
     counter.className = "kb-lightbox-counter";
@@ -1175,26 +1221,46 @@ function __kbInitTableSelection() {
       if (existingLiveTag) existingLiveTag.remove();
       if (mediaEl) {
         try {
-          if (mediaEl.tagName === "VIDEO") mediaEl.pause();
+          if (typeof mediaEl.pause === "function") mediaEl.pause();
         } catch {}
+        try {
+          if (mediaPlayer && typeof window.kbDestroyVideoPlayer === "function") {
+            window.kbDestroyVideoPlayer(mediaEl);
+          }
+        } catch {}
+        mediaPlayer = null;
         mediaEl.remove();
       }
       if (isVideo) {
-        const video = document.createElement("video");
-        video.className = "kb-lightbox-video";
-        video.src = mediaUrl;
-        video.autoplay = false;
-        video.loop = true;
-        video.muted = true;
-        video.playsInline = true;
-        video.controls = false;
-        video.classList.add("kb-live-media");
-        video.addEventListener("click", (event) => {
-          event.stopPropagation();
-          if (video.paused) video.play().catch(() => {});
-          else video.pause();
-        });
-        mediaEl = video;
+        const sourceTypeMatch = mediaUrl.split("?")[0].match(/\.([a-z0-9]+)$/i);
+        const sourceType = sourceTypeMatch
+          ? `video/${sourceTypeMatch[1].toLowerCase()}`
+          : "";
+        mediaEl =
+          typeof window.kbCreateVideoPlayer === "function"
+            ? window.kbCreateVideoPlayer({
+                src: mediaUrl,
+                type: sourceType,
+                autoplay: true,
+                muted: true,
+                loop: true,
+                preload: "auto",
+                playsInline: true,
+                controls: true,
+                streamType: "on-demand",
+                logLevel: "warn",
+                className: "kb-lightbox-video kb-live-media kb-video-player",
+              })
+            : document.createElement("video");
+        if (mediaEl.tagName === "VIDEO") {
+          mediaEl.className = "kb-lightbox-video kb-live-media";
+          mediaEl.src = mediaUrl;
+          mediaEl.autoplay = true;
+          mediaEl.loop = true;
+          mediaEl.muted = true;
+          mediaEl.playsInline = true;
+          mediaEl.controls = true;
+        }
         const liveTag = document.createElement("span");
         liveTag.className = "kb-live-badge kb-lightbox-live-badge";
         liveTag.textContent = "LIVE";
@@ -1206,11 +1272,36 @@ function __kbInitTableSelection() {
         mediaEl = img;
       }
       overlay.appendChild(mediaEl);
+      if (isVideo) {
+        mediaPlayer = mediaEl;
+        Promise.resolve(
+          typeof window.kbEnsureVidstackReady === "function"
+            ? window.kbEnsureVidstackReady()
+            : true,
+        ).finally(() => {
+          try {
+            if (mediaPlayer && typeof mediaPlayer.play === "function") {
+              const playback = mediaPlayer.play();
+              if (playback && typeof playback.catch === "function") {
+                playback.catch(() => {});
+              }
+            }
+          } catch {}
+        });
+      }
       counter.textContent =
         imageList.length > 1 ? `${current + 1} / ${imageList.length}` : "";
     };
 
     const close = () => {
+      try {
+        if (mediaEl && typeof mediaEl.pause === "function") mediaEl.pause();
+      } catch {}
+      try {
+        if (mediaEl && mediaPlayer && typeof window.kbDestroyVideoPlayer === "function") {
+          window.kbDestroyVideoPlayer(mediaEl);
+        }
+      } catch {}
       overlay.remove();
       document.removeEventListener("keydown", onKey);
     };

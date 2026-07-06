@@ -17,11 +17,26 @@
   </script>
   <script src="/js/marked.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vidstack@1.15.6/player/styles/default/theme.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vidstack@1.15.6/player/styles/default/layouts/audio.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/vidstack@1.15.6/player/styles/default/layouts/video.css" />
   <link rel="stylesheet" href="/css/easymde.min.css">
   <script src="/js/easymde.min.js"></script>
   <script src="/js/canvas-datagrid.js"></script>
   <script src="/js/xlsx.full.min.js"></script>
   <script src="/js/lodash.min.js"></script>
+  <script type="module">
+    import "https://cdn.jsdelivr.net/npm/vidstack@1.15.6/prod/define/vidstack-player.js";
+    import "https://cdn.jsdelivr.net/npm/vidstack@1.15.6/prod/define/vidstack-player-ui.js";
+    import "https://cdn.jsdelivr.net/npm/vidstack@1.15.6/prod/define/vidstack-player-default-layout.js";
+
+    window.kbVidstackElementsReady = Promise.all([
+      customElements.whenDefined("media-player"),
+      customElements.whenDefined("media-provider"),
+      customElements.whenDefined("media-poster"),
+      customElements.whenDefined("media-video-layout"),
+    ]).then(() => true);
+  </script>
   <script src="https://unpkg.com/@tiptap/core@2.0.0-beta.141/dist/tiptap-core.umd.js"></script>
   <script src="https://unpkg.com/@tiptap/starter-kit@2.0.0-beta.141/dist/tiptap-starter-kit.umd.js"></script>
   <link rel="stylesheet" href="/assets/styles/app.css" />
@@ -1657,6 +1672,24 @@
           <span id="headerProjectName"
             style="font-weight:600;color:var(--fg);font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;display:inline-block;">&nbsp;</span>
         </div>
+        <div id="tbTableControls" class="table-context-tools">
+          <div class="table-type-tree-filter">
+            <button id="btnTblTypeFilterTree" type="button" class="btn table-type-tree-trigger" aria-label="本体类型筛选">
+              <i class="fa-solid fa-sitemap"></i>
+              <span id="tblTypeFilterTreeLabel">本体类型</span>
+            </button>
+            <div id="tblTypeFilterTreeDropdown" class="ontology-floating-dropdown table-type-tree-dropdown" style="display:none;"></div>
+          </div>
+          <select id="tblTypeFilter" class="kb-select sm table-context-type-filter" aria-label="本体类型筛选" style="display:none;">
+            <option value="">本体类型</option>
+          </select>
+          <button id="btnTblLayoutToggle" class="btn icon" title="切换到网格布局" aria-label="切换布局">
+            <i class="fa-solid fa-th-large"></i>
+          </button>
+          <button id="btnTableRefresh" class="btn icon" title="刷新列表" aria-label="刷新列表">
+            <i class="fa-solid fa-rotate-right"></i>
+          </button>
+        </div>
       </div>
       <div class="header-nav">
         <nav class="view-toggle" role="tablist" aria-label="视图切换">
@@ -1686,14 +1719,14 @@
           </div>
              <a id="btnViewEntry" class="nav-item" role="tab" aria-selected="false" title="录入页面" aria-label="录入页面"
             href="#"><span class="nav-label">录入</span></a>
+          <a id="btnViewClean" class="nav-item" role="tab" aria-selected="false" title="数据清洗" aria-label="数据清洗"
+            href="#"><span class="nav-label">清洗</span></a>
           <a id="btnViewAttr" class="nav-item" role="tab" aria-selected="false" title="本体管理" aria-label="本体管理"
             href="#"><span class="nav-label">本体</span></a>
           <a id="btnViewTable" class="nav-item" role="tab" aria-selected="true" title="知识视图" aria-label="知识视图"
             href="#"><span class="nav-label">知识</span></a>
           <a id="btnViewVis" class="nav-item" role="tab" aria-selected="false" title="关联视图" aria-label="关联视图"
             href="#"><span class="nav-label">关联</span></a>
-          <a id="btnViewClean" class="nav-item" role="tab" aria-selected="false" title="数据清洗" aria-label="数据清洗"
-            href="#"><span class="nav-label">清洗</span></a>
           <a id="btnViewChat" class="nav-item" role="tab" aria-selected="false" title="智能聊天" aria-label="智能聊天"
             href="#"><span class="nav-label">智能体</span></a>
           <a id="btnViewReportHome" class="nav-item active" role="tab" aria-selected="true" title="报表中心" aria-label="报表中心"
@@ -1702,9 +1735,12 @@
         </nav>
       </div>
       <div class="header-quick-actions">
-        <button id="btnTableAdd" class="btn icon" title="新增节点" aria-label="新增节点">
-          <i class="fa-solid fa-plus"></i>
-        </button>
+        <div id="tbTableQuickActions" class="header-table-actions">
+          <input id="tblSearch" type="text" class="table-toolbar-search header-table-search" placeholder="搜索名称…" />
+          <button id="btnTableAdd" class="btn icon" title="新增节点" aria-label="新增节点">
+            <i class="fa-solid fa-plus"></i>
+          </button>
+        </div>
         <!-- Chat quick link removed; use 顶部导航 智能聊天 菜单进入聊天面板 -->
         <button id="btnDbSwitch" class="btn icon" title="切换知识库" style="margin-right:4px;">
           <i class="fa-solid fa-database"></i>
@@ -2382,35 +2418,6 @@
         </div>
         <!-- Table panel (default) -->
         <div id="tablePanel" class="panel" style="padding: 8px 10px">
-          <div class="panel-header">
-            <div id="tbTableControls" class="table-toolbar panel-actions">
-              <div class="table-filter-actions-row">
-                <input id="tblSearch" type="text" class="table-toolbar-search" placeholder="搜索名称…" />
-                <select id="tblTypeFilter" class="kb-select sm" style="min-width: 180px; max-width: 220px;">
-                  <option value="">本体类型</option>
-                </select>
-                <select id="tblPropertyFilter" class="kb-select sm" style="min-width: 180px; max-width: 220px;">
-                  <option value="">筛选属性</option>
-                </select>
-                <select id="tblPropertyFilterValue" class="kb-select sm" style="min-width: 180px; max-width: 220px;">
-                  <option value="">属性值</option>
-                </select>
-                <button id="btnClearTableFilter" class="btn icon" title="清除属性筛选" aria-label="清除属性筛选">
-                  <i class="fa-solid fa-xmark"></i>
-                </button>
-                <button id="btnTableRefresh" class="btn icon" title="刷新列表" aria-label="刷新列表">
-                  <i class="fa-solid fa-rotate-right"></i>
-                </button>
-                <button id="btnTblLayoutToggle" class="btn icon" title="切换到网格布局" aria-label="切换布局">
-                  <i class="fa-solid fa-th-large"></i>
-                </button>
-                <button id="btnDeleteSelected" class="btn icon" disabled title="删除选中节点" aria-label="删除选中节点">
-                  <i class="fa-solid fa-trash"></i>
-                </button>
-              </div>
-             
-            </div>
-          </div>
           <div class="tbl-wrap">
             <div id="tblNodes" class="entity-list" role="list" aria-label="实体列表"></div>
           </div>
@@ -5239,6 +5246,7 @@
     const btnViewDetail = document.getElementById("btnViewDetail");
     const btnViewChat = document.getElementById("btnViewChat");
     const tbTableControls = document.getElementById("tbTableControls");
+    const tbTableQuickActions = document.getElementById("tbTableQuickActions");
     const tbAttrControls = document.getElementById("tbAttrControls");
     const reportHomePanel = document.getElementById("reportHomePanel");
     const reportGeneratePanel = document.getElementById("reportGeneratePanel");
@@ -5260,6 +5268,13 @@
     const btnReportDetailExport = document.getElementById("btnReportDetailExport");
     const tbCleanControls = document.getElementById("tbCleanControls");
     const tbDetailControls = document.getElementById("tbDetailControls");
+    const headerTableContextTargets = [
+      document.getElementById("tblTypeFilter"),
+      document.getElementById("btnTblLayoutToggle"),
+      document.getElementById("btnTableRefresh"),
+      document.getElementById("tblSearch"),
+      document.getElementById("btnTableAdd"),
+    ];
     const entryPanel = document.getElementById("entryPanel");
     const chatPanel = document.getElementById("chatPanel");
     const entryTemplateButtons = [];
@@ -5281,6 +5296,25 @@
     const btnEntryTaskCreate = document.getElementById("btnEntryTaskCreate");
     const btnEntryTaskSave = document.getElementById("btnEntryTaskSave");
     const btnEntryTaskDelete = document.getElementById("btnEntryTaskDelete");
+
+    function syncHeaderTableContextState(enabled) {
+      [tbTableControls, tbTableQuickActions].forEach((el) => {
+        if (!el) return;
+        el.classList.toggle("is-disabled", !enabled);
+        el.setAttribute("aria-disabled", enabled ? "false" : "true");
+      });
+      headerTableContextTargets.forEach((el) => {
+        if (!el) return;
+        if ("disabled" in el) {
+          el.disabled = !enabled;
+        }
+        if (!enabled && el === document.activeElement) {
+          try {
+            el.blur();
+          } catch {}
+        }
+      });
+    }
     const btnEntryAddRow = document.getElementById("btnEntryAddRow");
     const btnEntryImportExcel = document.getElementById("btnEntryImportExcel");
     const btnEntryImportApi = document.getElementById("btnEntryImportApi");
@@ -8681,8 +8715,7 @@
         btnViewDetail.setAttribute("aria-selected", String(isDetail));
       }
       // 控制工具栏显示
-      if (tbTableControls)
-        tbTableControls.style.display = isTable ? "" : "none";
+      syncHeaderTableContextState(isTable);
 
       if (tbAttrControls)
         tbAttrControls.style.display = isAttr ? "" : "none";
