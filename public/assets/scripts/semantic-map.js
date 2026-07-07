@@ -37,6 +37,7 @@
 
   const nodeMap = new Map();
   const typeColorCache = new Map();
+  const ontologyNameMap = new Map();
   const searchState = {
     keyword: "",
     matches: [],
@@ -123,11 +124,47 @@
     if (item && item.color) {
       return parseColor(item.color, [99, 102, 241]);
     }
-    const key = String((item && item.type) || "Unknown");
+    const key = String((item && item.type) || "未分类");
     if (typeColorCache.has(key)) return typeColorCache.get(key);
     const color = TYPE_COLORS[hashText(key) % TYPE_COLORS.length];
     typeColorCache.set(key, color);
     return color;
+  }
+
+  function flattenOntologyTree(items) {
+    const bucket = [];
+    (Array.isArray(items) ? items : []).forEach((item) => {
+      if (!item) return;
+      bucket.push(item);
+      if (Array.isArray(item.children) && item.children.length) {
+        bucket.push.apply(bucket, flattenOntologyTree(item.children));
+      }
+    });
+    return bucket;
+  }
+
+  async function loadOntologyLabels() {
+    try {
+      const data = await api("/api/kb/ontology/tree");
+      const items = flattenOntologyTree((data && data.items) || []);
+      items.forEach((item) => {
+        const id = String((item && item.id) || "").trim();
+        const name = String(
+          (item && (item.name || item.label || item.alias || item.id)) || "",
+        ).trim();
+        if (id && name) {
+          ontologyNameMap.set(id, name);
+        }
+      });
+    } catch (err) {
+      console.warn("load ontology labels failed", err);
+    }
+  }
+
+  function displayTypeLabel(typeValue) {
+    const type = String(typeValue || "").trim();
+    if (!type) return "未分类";
+    return ontologyNameMap.get(type) || type;
   }
 
   function mergeNodes(items) {
@@ -155,6 +192,10 @@
     if (item && item.id === selectedNodeId) radius += 5;
     if (searchState.keyword && getMatchSet().has(item && item.id)) radius += 4;
     return radius;
+  }
+
+  function getNodeHitRadius(item) {
+    return Math.max(7, getNodeRadius(item) + 3);
   }
 
   function computeViewportBounds() {
@@ -223,11 +264,11 @@
     const node = info.object;
     tooltipEl.innerHTML = [
       '<div class="tooltip-title">' +
-        escapeHtml(node.label || node.id || "Unnamed Node") +
+        escapeHtml(node.label || node.id || "未命名节点") +
         "</div>",
       '<div class="tooltip-meta">' +
-        escapeHtml(node.type || "Unknown Type") +
-        " • Hot " +
+        escapeHtml(displayTypeLabel(node.type)) +
+        " · 热度 " +
         escapeHtml(String(Number(node.hot || 0))) +
         "</div>",
     ].join("");
@@ -239,7 +280,7 @@
   function renderEmptyDetail() {
     detailHotEl.style.display = "none";
     detailBodyEl.innerHTML =
-      '<div class="detail-empty">Pan, zoom, or search the map, then click a node to view its detail.</div>';
+      '<div class="detail-empty">拖拽、缩放或搜索地图后，点击节点即可查看详情。</div>';
   }
 
   function formatTags(tags) {
@@ -251,6 +292,55 @@
     return String(tags || "").trim();
   }
 
+  function normalizeMediaItems(value) {
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => String(item || "").trim())
+        .filter(Boolean);
+    }
+    if (typeof value === "string" && value.trim()) {
+      try {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) {
+          return parsed
+            .map((item) => String(item || "").trim())
+            .filter(Boolean);
+        }
+      } catch {}
+      return [value.trim()];
+    }
+    return [];
+  }
+
+  function renderMediaSection(title, items, kind) {
+    const list = normalizeMediaItems(items);
+    if (!list.length) return "";
+    return [
+      '<div class="detail-section">',
+      "<h3>" + escapeHtml(title) + "</h3>",
+      '<div class="detail-media-grid">',
+      list
+        .map((src, index) => {
+          const safeSrc = escapeHtml(src);
+          if (kind === "video") {
+            return (
+              '<div class="detail-media-item">' +
+              `<video class="detail-media-video" controls preload="metadata" src="${safeSrc}"></video>` +
+              "</div>"
+            );
+          }
+          return (
+            '<div class="detail-media-item">' +
+            `<img class="detail-media-thumb" src="${safeSrc}" alt="${escapeHtml(title)} ${index + 1}" loading="lazy" />` +
+            "</div>"
+          );
+        })
+        .join(""),
+      "</div>",
+      "</div>",
+    ].join("");
+  }
+
   async function showNodeDetail(nodeId) {
     if (!nodeId) return;
     selectedNodeId = nodeId;
@@ -260,40 +350,59 @@
         "/api/semantic-map/detail/" + encodeURIComponent(nodeId),
       );
       const item = data.item || {};
+      const imageSection = renderMediaSection("图片", item.images, "image");
+      const coverSection = renderMediaSection("封面", item.covers, "image");
+      const videoSection = renderMediaSection("视频", item.videos, "video");
+      const linkSection = item.link
+        ? [
+            '<div class="detail-section">',
+            "<h3>链接</h3>",
+            '<a class="detail-link-card" href="' +
+              escapeHtml(item.link) +
+              '" target="_blank" rel="noopener noreferrer">' +
+              escapeHtml(item.link) +
+              "</a>",
+            "</div>",
+          ].join("")
+        : "";
       detailHotEl.style.display = "";
-      detailHotEl.textContent = "Hot " + String(Number(item.hot || 0));
+      detailHotEl.textContent = "热度 " + String(Number(item.hot || 0));
       detailBodyEl.innerHTML = [
         '<div class="detail-section">',
-        "<h3>Summary</h3>",
-        "<div>" + escapeHtml(item.description || "No description.") + "</div>",
+        "<h3>摘要</h3>",
+        "<div>" + escapeHtml(item.description || "暂无描述。") + "</div>",
         "</div>",
+        imageSection,
+        coverSection,
+        videoSection,
+        linkSection,
         '<div class="detail-section">',
-        "<h3>Metadata</h3>",
+        "<h3>基础信息</h3>",
         '<dl class="detail-grid">',
         "<dt>ID</dt><dd>" + escapeHtml(item.id || "") + "</dd>",
-        "<dt>Label</dt><dd>" + escapeHtml(item.label || "") + "</dd>",
-        "<dt>Type</dt><dd>" + escapeHtml(item.type || "Unknown Type") + "</dd>",
-        "<dt>Tags</dt><dd>" + escapeHtml(formatTags(item.tags) || "-") + "</dd>",
-        "<dt>Position</dt><dd>" +
+        "<dt>名称</dt><dd>" + escapeHtml(item.label || "") + "</dd>",
+        "<dt>类型</dt><dd>" + escapeHtml(displayTypeLabel(item.type)) + "</dd>",
+        "<dt>标签</dt><dd>" + escapeHtml(formatTags(item.tags) || "-") + "</dd>",
+        "<dt>坐标</dt><dd>" +
           escapeHtml(
             Number(item.x || 0).toFixed(3) +
               ", " +
               Number(item.y || 0).toFixed(3),
           ) +
           "</dd>",
-        "<dt>Size</dt><dd>" + escapeHtml(String(Number(item.size || 4))) + "</dd>",
-        "<dt>Color</dt><dd>" +
-          escapeHtml(item.color || "Auto-mapped by type") +
+        "<dt>尺寸</dt><dd>" + escapeHtml(String(Number(item.size || 4))) + "</dd>",
+        "<dt>颜色</dt><dd>" +
+          escapeHtml(item.color || "按类型自动映射") +
           "</dd>",
-        "<dt>Created</dt><dd>" + escapeHtml(item.created_at || "-") + "</dd>",
-        "<dt>Updated</dt><dd>" + escapeHtml(item.updated_at || "-") + "</dd>",
+        "<dt>创建时间</dt><dd>" + escapeHtml(item.created_at || "-") + "</dd>",
+        "<dt>更新时间</dt><dd>" + escapeHtml(item.updated_at || "-") + "</dd>",
         "</dl>",
         "</div>",
       ].join("");
     } catch (err) {
       console.error("load detail failed", err);
       detailBodyEl.innerHTML =
-        '<div class="detail-empty">Failed to load node detail: ' +
+        '<div class="detail-empty">节点详情加载失败：' +
         escapeHtml((err && err.message) || String(err)) +
         "</div>";
     }
@@ -302,7 +411,7 @@
   function renderLegend() {
     const counts = new Map();
     getLoadedNodes().forEach((item) => {
-      const key = String(item.type || "Unknown Type");
+      const key = displayTypeLabel(item.type);
       counts.set(key, (counts.get(key) || 0) + 1);
     });
     const entries = Array.from(counts.entries())
@@ -331,14 +440,14 @@
     const total = nodeMap.size;
     const keyword = searchState.keyword.trim();
     statsEl.textContent = keyword
-      ? "Loaded " +
+      ? "已加载 " +
         total.toLocaleString() +
-        " nodes • " +
+        " 个节点 · 匹配 " +
         searchState.matches.length.toLocaleString() +
-        " matches"
-      : "Loaded " +
+        " 项"
+      : "已加载 " +
         total.toLocaleString() +
-        " nodes • pan or zoom to load more in the current viewport";
+        " 个节点 · 拖拽或缩放后自动加载当前视口更多数据";
   }
 
   function renderSearchResults() {
@@ -361,8 +470,8 @@
           escapeHtml(item.label || item.id) +
           "</div>" +
           '<div class="search-result-meta">' +
-          escapeHtml(item.type || "Unknown Type") +
-          " • Hot " +
+          escapeHtml(displayTypeLabel(item.type)) +
+          " · 热度 " +
           escapeHtml(String(Number(item.hot || 0))) +
           "</div>" +
           "</div>"
@@ -419,10 +528,36 @@
     if (!deckInstance) return;
     const data = getLoadedNodes();
     const matchSet = getMatchSet();
-    const layer = new deckLib.ScatterplotLayer({
-      id: "semantic-nodes-layer",
+    const interactionLayer = new deckLib.ScatterplotLayer({
+      id: "semantic-nodes-hit-layer",
       data: data,
       pickable: true,
+      autoHighlight: false,
+      radiusUnits: "pixels",
+      stroked: false,
+      filled: true,
+      opacity: 0.01,
+      getPosition: function (d) {
+        return [Number(d.x || 0), Number(d.y || 0)];
+      },
+      getRadius: function (d) {
+        return getNodeHitRadius(d);
+      },
+      getFillColor: function () {
+        return [255, 255, 255, 255];
+      },
+      onClick: function (info) {
+        if (!info || !info.object) return;
+        void showNodeDetail(info.object.id);
+      },
+      onHover: function (info) {
+        renderTooltip(info);
+      },
+    });
+    const visibleLayer = new deckLib.ScatterplotLayer({
+      id: "semantic-nodes-layer",
+      data: data,
+      pickable: false,
       autoHighlight: true,
       radiusUnits: "pixels",
       stroked: false,
@@ -450,15 +585,8 @@
         getRadius: [searchState.keyword, selectedNodeId],
         getFillColor: [searchState.keyword, selectedNodeId],
       },
-      onClick: function (info) {
-        if (!info || !info.object) return;
-        void showNodeDetail(info.object.id);
-      },
-      onHover: function (info) {
-        renderTooltip(info);
-      },
     });
-    deckInstance.setProps({ layers: [layer] });
+    deckInstance.setProps({ layers: [interactionLayer, visibleLayer] });
   }
 
   function fitToInitialData(items) {
@@ -493,8 +621,18 @@
   function initDeck() {
     deckInstance = new deckLib.Deck({
       parent: rootEl,
-      controller: true,
       views: [new deckLib.OrthographicView({ id: "semantic-map-view" })],
+      controller: {
+        dragPan: true,
+        dragRotate: false,
+        scrollZoom: {
+          speed: 0.02,
+          smooth: true,
+        },
+        doubleClickZoom: true,
+        touchZoom: true,
+        touchRotate: false,
+      },
       viewState: Object.assign({}, viewState),
       getCursor: function (params) {
         if (params.isDragging) return "grabbing";
@@ -507,6 +645,11 @@
           ? nextViewState.target.slice()
           : [0, 0, 0];
         viewState.zoom = Number(nextViewState.zoom || 0);
+        if (deckInstance) {
+          deckInstance.setProps({
+            viewState: Object.assign({}, viewState),
+          });
+        }
         scheduleViewportFetch();
         return nextViewState;
       },
@@ -536,9 +679,9 @@
       scheduleViewportFetch();
     } catch (err) {
       console.error("semantic map init failed", err);
-      statsEl.textContent = "Initial load failed.";
+      statsEl.textContent = "初始化加载失败。";
       detailBodyEl.innerHTML =
-        '<div class="detail-empty">Initial load failed: ' +
+        '<div class="detail-empty">初始化加载失败：' +
         escapeHtml((err && err.message) || String(err)) +
         "</div>";
     }
@@ -592,7 +735,11 @@
     renderEmptyDetail();
     renderLegend();
     renderStats();
-    void loadInit();
+    void Promise.all([loadOntologyLabels(), loadInit()]).then(function () {
+      renderLegend();
+      renderSearchResults();
+      renderLayer();
+    });
   }
 
   init();

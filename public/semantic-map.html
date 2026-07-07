@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Semantic Map / Knowledge Galaxy</title>
+  <title>语义地图 / 知识星图</title>
   <style>
     :root {
       color-scheme: dark;
@@ -242,6 +242,72 @@
       word-break: break-word;
     }
 
+    .detail-media-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+      gap: 12px;
+    }
+
+    .detail-media-item {
+      border: 1px solid rgba(148, 163, 184, 0.14);
+      border-radius: 14px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.04);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+      transition:
+        transform 160ms ease,
+        border-color 160ms ease,
+        box-shadow 160ms ease;
+    }
+
+    .detail-media-item:hover {
+      transform: translateY(-2px);
+      border-color: rgba(76, 201, 240, 0.28);
+      box-shadow:
+        0 10px 24px rgba(0, 0, 0, 0.22),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    }
+
+    .detail-media-thumb,
+    .detail-media-video {
+      width: 100%;
+      display: block;
+      background: rgba(2, 6, 23, 0.92);
+    }
+
+    .detail-media-thumb {
+      aspect-ratio: 16 / 10;
+      object-fit: cover;
+      cursor: zoom-in;
+    }
+
+    .detail-media-video {
+      max-height: 240px;
+    }
+
+    .detail-link-card {
+      display: block;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(125, 211, 252, 0.18);
+      background: linear-gradient(
+        180deg,
+        rgba(14, 165, 233, 0.08) 0%,
+        rgba(59, 130, 246, 0.04) 100%
+      );
+      color: #7dd3fc;
+      text-decoration: none;
+      word-break: break-all;
+      transition:
+        border-color 160ms ease,
+        transform 160ms ease;
+    }
+
+    .detail-link-card:hover {
+      border-color: rgba(125, 211, 252, 0.38);
+      transform: translateY(-1px);
+    }
+
     .detail-empty {
       margin: auto 0;
       text-align: center;
@@ -355,41 +421,41 @@
 
     <section class="top-search">
       <div class="search-card">
-        <div class="search-title">Semantic Search</div>
+        <div class="search-title">语义检索</div>
         <div class="search-row">
           <input
             id="semanticSearchInput"
             class="search-input"
             type="search"
-            placeholder="Search label, tags, description"
+            placeholder="搜索名称、标签、描述"
             autocomplete="off"
           />
-          <button id="semanticSearchButton" class="search-action" type="button">Locate</button>
+          <button id="semanticSearchButton" class="search-action" type="button">定位</button>
         </div>
         <div id="semanticSearchResults" class="search-results" style="display:none;"></div>
       </div>
 
-      <div id="semanticStats" class="stats-card">Loading semantic nodes...</div>
+      <div id="semanticStats" class="stats-card">正在加载语义节点...</div>
     </section>
 
     <aside class="right-panel">
       <div class="detail-card">
         <div class="detail-head">
           <div>
-            <h1 class="detail-title">Node Detail</h1>
-            <div class="detail-subtitle">Click any point in the semantic space to inspect it.</div>
+            <h1 class="detail-title">节点详情</h1>
+            <div class="detail-subtitle">点击语义空间中的节点查看详情。</div>
           </div>
           <div id="semanticDetailHot" class="detail-hot" style="display:none;"></div>
         </div>
         <div id="semanticDetailBody" class="detail-body">
-          <div class="detail-empty">Pan, zoom, or search the map, then click a node to open its detail here.</div>
+          <div class="detail-empty">拖拽、缩放或搜索地图后，点击节点即可在这里查看详情。</div>
         </div>
       </div>
     </aside>
 
     <div class="legend-wrap">
       <div class="legend-card">
-        <div class="legend-title">Legend</div>
+        <div class="legend-title">图例</div>
         <div id="semanticLegend" class="legend-list"></div>
       </div>
     </div>
