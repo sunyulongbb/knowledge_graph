@@ -3448,6 +3448,25 @@
                       </select>
                     </label>
                   </div>
+                  <div class="vis-style-panel__section">
+                    <span class="vis-style-panel__label">画布背景</span>
+                    <label class="vis-style-field">
+                      <span>类型</span>
+                      <select id="cyStyleCanvasMode" class="vis-style-input">
+                        <option value="grid">网格</option>
+                        <option value="dots">点阵</option>
+                        <option value="plain">纯色</option>
+                      </select>
+                    </label>
+                    <label class="vis-style-field">
+                      <span>底色</span>
+                      <input id="cyStyleCanvasColor" class="vis-style-input vis-style-input--color" type="color" />
+                    </label>
+                    <label class="vis-style-field">
+                      <span>纹理</span>
+                      <input id="cyStyleCanvasAccent" class="vis-style-input vis-style-input--color" type="color" />
+                    </label>
+                  </div>
                   <div class="vis-style-panel__actions">
                     <button id="cy_btnResetStyleConfig" type="button" class="btn sm">恢复默认</button>
                   </div>
@@ -3462,6 +3481,9 @@
               </button>
               <button id="cy_btnLayout" class="vis-tool-btn" title="重新布局">
                 <i class="fa-solid fa-sitemap"></i>
+              </button>
+              <button id="cy_btnSaveSnapshot" class="vis-tool-btn" title="保存关系图快照">
+                <i class="fa-regular fa-floppy-disk"></i>
               </button>
               <button id="cy_btnDeleteEdge" class="vis-tool-btn" title="删除选中边" disabled>
                 <i class="fa-regular fa-trash-can"></i>
@@ -11079,12 +11101,31 @@
         const canonicalRouteId = stripEntityIdPrefix(fullId) || fullId;
         if (canonicalRouteId) {
           window.kbActiveVisNodeId = canonicalRouteId;
+          window.kbVisSnapshotOwnerId = canonicalRouteId;
         }
+        try {
+          const ownerNode =
+            nodesRaw.find((node) => {
+              const rawNode = node?.data || node || {};
+              const nodeId = getCurrentGraphSnapshotScopeId(rawNode.id || rawNode._id || "");
+              return nodeId === canonicalRouteId;
+            }) || null;
+          if (ownerNode) {
+            const rawOwnerNode = ownerNode.data || ownerNode || {};
+            window.kbVisSnapshotOwnerPayload = JSON.parse(JSON.stringify(rawOwnerNode));
+          }
+        } catch {
+          window.kbVisSnapshotOwnerPayload = null;
+        }
+        const snapshotScopeId = getCurrentGraphSnapshotScopeId(canonicalRouteId || fullId);
+        const hasSavedSnapshot = Boolean(readGraphSnapshot(snapshotScopeId));
 
         // If cytoscape instance doesn't exist yet, initialize it with neighborhood data
         if (!window.kbCy) {
           await loadGraph({ nodes: nodesRaw, edges: edgesRaw, counts: data.counts || {} });
-          try { focusNode(fullId); } catch { }
+          if (!hasSavedSnapshot && !consumeGraphSnapshotAutoFocusSkip(snapshotScopeId)) {
+            try { focusNode(fullId); } catch { }
+          }
           return;
         }
 
@@ -11095,6 +11136,7 @@
               window.kbCy.add(elements);
             });
             syncGraphLayoutAppearance();
+            const willRestoreSnapshot = restoreGraphSnapshotAfterNextLayout(snapshotScopeId);
             window.kbCy
               .layout(
                 getSelectedGraphLayoutOpts({
@@ -11103,7 +11145,9 @@
                 })
               )
               .run();
-            focusNode(fullId);
+            if (!willRestoreSnapshot) {
+              focusNode(fullId);
+            }
             try {
               window.kbCy.resize();
             } catch { }
@@ -11161,6 +11205,7 @@
               // run layout but restrict to affected elements for smoother interaction
               try {
                 syncGraphLayoutAppearance();
+                const willRestoreSnapshot = restoreGraphSnapshotAfterNextLayout(snapshotScopeId);
                 const layout = window.kbCy.layout(
                   getSelectedGraphLayoutOpts({
                     animate: true,
@@ -11169,6 +11214,12 @@
                   })
                 );
                 layout.run();
+                if (willRestoreSnapshot) {
+                  try {
+                    window.kbSkipAutoFocusAfterSnapshot = true;
+                    window.kbLastRestoredGraphSnapshotScopeId = snapshotScopeId;
+                  } catch { }
+                }
               } catch (e) {
                 console.error("layout run failed", e);
               }
@@ -11190,8 +11241,10 @@
             }
           }
           try {
-            window.kbCy.fit();
-            focusNode(fullId, { fit: false, duration: 180 });
+            if (!hasSavedSnapshot && !consumeGraphSnapshotAutoFocusSkip(snapshotScopeId)) {
+              window.kbCy.fit();
+              focusNode(fullId, { fit: false, duration: 180 });
+            }
           } catch (e) {
             console.error("focusNode after merge failed", e);
           }
@@ -11454,6 +11507,38 @@
       });
     }
 
+    let graphSnapshotPersistTimer = 0;
+    function scheduleGraphSnapshotPersist(scopeId) {
+      const targetScopeId = getCurrentGraphSnapshotScopeId(scopeId);
+      if (!targetScopeId) return;
+      if (graphSnapshotPersistTimer) window.clearTimeout(graphSnapshotPersistTimer);
+      graphSnapshotPersistTimer = window.setTimeout(() => {
+        graphSnapshotPersistTimer = 0;
+        persistGraphSnapshot(targetScopeId);
+      }, 220);
+    }
+
+    function restoreGraphSnapshotAfterNextLayout(scopeId) {
+      const targetScopeId = getCurrentGraphSnapshotScopeId(scopeId);
+      if (!targetScopeId || !window.kbCy) return false;
+      const snapshot = readGraphSnapshot(targetScopeId);
+      if (!snapshot) return false;
+      const handle = () => {
+        try {
+          restoreGraphSnapshot(targetScopeId);
+        } catch (err) {
+          console.warn("restoreGraphSnapshotAfterNextLayout failed", err);
+        }
+      };
+      window.kbCy.one("layoutstop", () => {
+        requestAnimationFrame(handle);
+      });
+      requestAnimationFrame(() => {
+        requestAnimationFrame(handle);
+      });
+      return true;
+    }
+
     function syncGraphLayoutAppearance(name) {
       if (!window.kbCy) return;
       const layoutName = String(name || getCurrentGraphLayoutName() || "cose").trim();
@@ -11506,6 +11591,8 @@
     }
 
     const KB_VIS_STYLE_STORAGE_KEY = "kb-vis-style-config";
+    const KB_VIS_SNAPSHOT_STORAGE_PREFIX = "kb-vis-snapshot";
+    const KB_VIS_NODE_SNAPSHOT_FIELD = "_relationGraphSnapshot";
     const KB_VIS_STYLE_DEFAULTS = Object.freeze({
       nodeShape: "round-rectangle",
       nodeFontSize: 12,
@@ -11516,6 +11603,9 @@
       edgeColor: "#cbd5e1",
       edgeLineStyle: "solid",
       edgeArrowShape: "triangle",
+      canvasMode: "grid",
+      canvasColor: "#f8fafc",
+      canvasAccent: "#dbeafe",
     });
 
     function getGraphStyleConfig() {
@@ -11542,13 +11632,215 @@
       }
     }
 
+    function buildGraphCanvasBackground(cfg) {
+      const baseColor = String(cfg?.canvasColor || KB_VIS_STYLE_DEFAULTS.canvasColor);
+      const accentColor = String(cfg?.canvasAccent || KB_VIS_STYLE_DEFAULTS.canvasAccent);
+      const mode = String(cfg?.canvasMode || KB_VIS_STYLE_DEFAULTS.canvasMode).trim().toLowerCase();
+      if (mode === "plain") {
+        return {
+          backgroundColor: baseColor,
+          backgroundImage: "none",
+          backgroundSize: "auto",
+          backgroundPosition: "center",
+        };
+      }
+      if (mode === "dots") {
+        return {
+          backgroundColor: baseColor,
+          backgroundImage: `radial-gradient(circle at 1px 1px, ${accentColor} 1.15px, transparent 0)`,
+          backgroundSize: "22px 22px",
+          backgroundPosition: "center",
+        };
+      }
+      return {
+        backgroundColor: baseColor,
+        backgroundImage: `linear-gradient(${accentColor} 1px, transparent 1px), linear-gradient(90deg, ${accentColor} 1px, transparent 1px)`,
+        backgroundSize: "28px 28px",
+        backgroundPosition: "center",
+      };
+    }
+
+    function applyGraphCanvasBackground(config) {
+      const cyContainer = document.getElementById("cy");
+      if (!cyContainer) return;
+      const background = buildGraphCanvasBackground(config || getGraphStyleConfig());
+      cyContainer.style.backgroundColor = background.backgroundColor;
+      cyContainer.style.backgroundImage = background.backgroundImage;
+      cyContainer.style.backgroundSize = background.backgroundSize;
+      cyContainer.style.backgroundPosition = background.backgroundPosition;
+    }
+
     function applyCurrentGraphStyleConfig() {
+      const cfg = getGraphStyleConfig();
+      applyGraphCanvasBackground(cfg);
       if (!window.kbCy) return;
       try {
         window.kbCy.style(buildCyStyle()).update();
         syncGraphLayoutAppearance();
       } catch (err) {
         console.warn("applyCurrentGraphStyleConfig failed", err);
+      }
+    }
+
+    function getCurrentGraphDbScope() {
+      try {
+        const url = new URL(window.location.href);
+        return String(url.searchParams.get("db") || "default").trim() || "default";
+      } catch {
+        return "default";
+      }
+    }
+
+    function getCurrentGraphSnapshotScopeId(preferredId) {
+      const raw = String(
+        preferredId ||
+        window.kbVisSnapshotOwnerId ||
+        window.kbActiveVisNodeId ||
+        window.kbSelectedRowId ||
+        document.getElementById("fId")?.value ||
+        "",
+      ).trim();
+      if (!raw) return "";
+      return stripEntityIdPrefix(raw) || raw;
+    }
+
+    function getGraphSnapshotStorageKey(scopeId) {
+      const normalizedScopeId = getCurrentGraphSnapshotScopeId(scopeId);
+      if (!normalizedScopeId) return "";
+      return `${KB_VIS_SNAPSHOT_STORAGE_PREFIX}:${getCurrentGraphDbScope()}:${normalizedScopeId}`;
+    }
+
+    function getNodeSnapshotFromPayload(nodeLike, scopeId) {
+      if (!nodeLike || typeof nodeLike !== "object") return null;
+      try {
+        const snapshot = nodeLike[KB_VIS_NODE_SNAPSHOT_FIELD];
+        if (!snapshot || typeof snapshot !== "object") return null;
+        const snapshotScopeId = getCurrentGraphSnapshotScopeId(snapshot.scopeId || scopeId);
+        const targetScopeId = getCurrentGraphSnapshotScopeId(scopeId);
+        if (targetScopeId && snapshotScopeId && snapshotScopeId !== targetScopeId) {
+          return null;
+        }
+        return snapshot;
+      } catch {
+        return null;
+      }
+    }
+
+    function findServerGraphSnapshot(scopeId) {
+      const targetScopeId = getCurrentGraphSnapshotScopeId(scopeId);
+      if (!targetScopeId) return null;
+      try {
+        const ownerNode =
+          window.kbVisSnapshotOwnerPayload &&
+          typeof window.kbVisSnapshotOwnerPayload === "object"
+            ? window.kbVisSnapshotOwnerPayload
+            : null;
+        const ownerNodeId = getCurrentGraphSnapshotScopeId(
+          ownerNode?.id || ownerNode?._id || "",
+        );
+        if (ownerNode && ownerNodeId === targetScopeId) {
+          const fromOwnerNode = getNodeSnapshotFromPayload(ownerNode, targetScopeId);
+          if (fromOwnerNode) return fromOwnerNode;
+        }
+      } catch { }
+      return null;
+    }
+
+    function readGraphSnapshot(scopeId) {
+      const serverSnapshot = findServerGraphSnapshot(scopeId);
+      if (serverSnapshot) return serverSnapshot;
+      const key = getGraphSnapshotStorageKey(scopeId);
+      if (!key) return null;
+      try {
+        const raw = window.localStorage.getItem(key);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === "object" ? parsed : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function persistGraphSnapshot(scopeId) {
+      const key = getGraphSnapshotStorageKey(scopeId);
+      if (!key || !window.kbCy) return;
+      try {
+        const snapshot = buildGraphSnapshotPayload(scopeId);
+        window.localStorage.setItem(key, JSON.stringify(snapshot));
+      } catch (err) {
+        console.warn("persistGraphSnapshot failed", err);
+      }
+    }
+
+    function buildGraphSnapshotPayload(scopeId) {
+      const nodes = {};
+      if (window.kbCy) {
+        window.kbCy.nodes().forEach((node) => {
+          const pos = node.position();
+          nodes[node.id()] = {
+            x: Number(pos?.x) || 0,
+            y: Number(pos?.y) || 0,
+          };
+        });
+      }
+      return {
+        scopeId: getCurrentGraphSnapshotScopeId(scopeId),
+        db: getCurrentGraphDbScope(),
+        updatedAt: Date.now(),
+        layout: getCurrentGraphLayoutName(),
+        pan: window.kbCy && window.kbCy.pan ? window.kbCy.pan() : { x: 0, y: 0 },
+        zoom: window.kbCy && window.kbCy.zoom ? window.kbCy.zoom() : 1,
+        nodes,
+      };
+    }
+
+    function restoreGraphSnapshot(scopeId) {
+      if (!window.kbCy) return false;
+      const snapshot = readGraphSnapshot(scopeId);
+      if (!snapshot || !snapshot.nodes || typeof snapshot.nodes !== "object") return false;
+      try {
+        let matched = 0;
+        window.kbCy.batch(() => {
+          window.kbCy.nodes().forEach((node) => {
+            const saved = snapshot.nodes[node.id()];
+            if (!saved) return;
+            matched += 1;
+            node.position({
+              x: Number(saved.x) || 0,
+              y: Number(saved.y) || 0,
+            });
+          });
+        });
+        if (!matched) return false;
+        if (snapshot.pan && typeof snapshot.pan.x === "number" && typeof snapshot.pan.y === "number") {
+          try { window.kbCy.pan(snapshot.pan); } catch { }
+        }
+        if (typeof snapshot.zoom === "number" && Number.isFinite(snapshot.zoom)) {
+          try { window.kbCy.zoom(snapshot.zoom); } catch { }
+        }
+        try {
+          window.kbSkipAutoFocusAfterSnapshot = true;
+          window.kbLastRestoredGraphSnapshotScopeId = getCurrentGraphSnapshotScopeId(scopeId);
+        } catch { }
+        scheduleDagreEdgeLabelVisibilityRefresh();
+        return true;
+      } catch (err) {
+        console.warn("restoreGraphSnapshot failed", err);
+        return false;
+      }
+    }
+
+    function consumeGraphSnapshotAutoFocusSkip(scopeId) {
+      try {
+        const normalizedScopeId = getCurrentGraphSnapshotScopeId(scopeId);
+        const shouldSkip = Boolean(window.kbSkipAutoFocusAfterSnapshot) &&
+          (!normalizedScopeId || window.kbLastRestoredGraphSnapshotScopeId === normalizedScopeId);
+        if (shouldSkip) {
+          window.kbSkipAutoFocusAfterSnapshot = false;
+        }
+        return shouldSkip;
+      } catch {
+        return false;
       }
     }
 
@@ -11863,6 +12155,9 @@
           renderLegend(nodesRaw, edgesRaw);
         } catch { }
         const container = document.getElementById("cy");
+        applyGraphCanvasBackground();
+        const initialSnapshotScopeId = getCurrentGraphSnapshotScopeId();
+        let willRestoreInitialSnapshot = false;
         if (!window.kbCy) {
           window.kbCy = cytoscape({
             container,
@@ -11872,10 +12167,13 @@
             minZoom: 0.2,
             maxZoom: 3.0,
             wheelSensitivity: 0.2,
+            boxSelectionEnabled: false,
           });
+          willRestoreInitialSnapshot = restoreGraphSnapshotAfterNextLayout(initialSnapshotScopeId);
           syncGraphLayoutAppearance();
           window.kbCy.on("layoutstop", () => {
             try {
+              scheduleGraphSnapshotPersist();
               if (getCurrentGraphLayoutName() !== "dagre") return;
               requestAnimationFrame(() => {
                 annotateDagreEdgeLabelOffsets();
@@ -11885,6 +12183,15 @@
               console.warn("dagre layoutstop relabel failed", err);
             }
           });
+          window.kbCy.on("pan zoom", () => {
+            scheduleGraphSnapshotPersist();
+          });
+          if (willRestoreInitialSnapshot) {
+            try {
+              window.kbSkipAutoFocusAfterSnapshot = true;
+              window.kbLastRestoredGraphSnapshotScopeId = initialSnapshotScopeId;
+            } catch { }
+          }
           window.kbCy.on("mouseover", "edge", (evt) => {
             try {
               evt.target?.addClass("edge-hovered");
@@ -11898,7 +12205,7 @@
           fitOnDblClick(window.kbCy);
           observeResize(window.kbCy, container);
           try {
-            if (window.kbViewMode === 'vis' && window.kbActiveVisNodeId) {
+            if (!willRestoreInitialSnapshot && window.kbViewMode === 'vis' && window.kbActiveVisNodeId) {
               focusNode(window.kbActiveVisNodeId, { fit: false, duration: 180 });
             }
           } catch (err) {
@@ -12207,6 +12514,126 @@
             }
 
             createHoverHandle();
+            let multiDragState = null;
+            let rightBoxSelectState = null;
+            let rightBoxSelectOverlay = null;
+            let suppressNextCanvasContextMenu = false;
+
+            function ensureRightBoxSelectOverlay() {
+              if (rightBoxSelectOverlay && rightBoxSelectOverlay.isConnected) return rightBoxSelectOverlay;
+              rightBoxSelectOverlay = document.createElement("div");
+              rightBoxSelectOverlay.className = "vis-right-box-select";
+              rightBoxSelectOverlay.style.display = "none";
+              container.appendChild(rightBoxSelectOverlay);
+              return rightBoxSelectOverlay;
+            }
+
+            function clearRightBoxSelectionOverlay() {
+              const overlay = ensureRightBoxSelectOverlay();
+              overlay.style.display = "none";
+              overlay.style.left = "0px";
+              overlay.style.top = "0px";
+              overlay.style.width = "0px";
+              overlay.style.height = "0px";
+            }
+
+            function updateRightBoxSelectionOverlay(clientX, clientY) {
+              if (!rightBoxSelectState) return;
+              const overlay = ensureRightBoxSelectOverlay();
+              const rect = container.getBoundingClientRect();
+              const startX = rightBoxSelectState.startClientX - rect.left;
+              const startY = rightBoxSelectState.startClientY - rect.top;
+              const nextX = clientX - rect.left;
+              const nextY = clientY - rect.top;
+              const left = Math.min(startX, nextX);
+              const top = Math.min(startY, nextY);
+              const width = Math.abs(nextX - startX);
+              const height = Math.abs(nextY - startY);
+              overlay.style.display = "block";
+              overlay.style.left = `${left}px`;
+              overlay.style.top = `${top}px`;
+              overlay.style.width = `${width}px`;
+              overlay.style.height = `${height}px`;
+              rightBoxSelectState.dragged = width > 6 || height > 6;
+            }
+
+            function finishRightBoxSelection() {
+              if (!rightBoxSelectState) return;
+              const state = rightBoxSelectState;
+              rightBoxSelectState = null;
+              if (!state.dragged) {
+                clearRightBoxSelectionOverlay();
+                return;
+              }
+              suppressNextCanvasContextMenu = true;
+              const overlay = ensureRightBoxSelectOverlay();
+              const left = parseFloat(overlay.style.left || "0") || 0;
+              const top = parseFloat(overlay.style.top || "0") || 0;
+              const width = parseFloat(overlay.style.width || "0") || 0;
+              const height = parseFloat(overlay.style.height || "0") || 0;
+              const right = left + width;
+              const bottom = top + height;
+              clearRightBoxSelectionOverlay();
+              try {
+                window.kbCy.batch(() => {
+                  if (!state.additive) {
+                    window.kbCy.elements(":selected").unselect();
+                  }
+                  window.kbCy.nodes().forEach((node) => {
+                    const box = node.renderedBoundingBox ? node.renderedBoundingBox() : null;
+                    const overlaps = box
+                      ? !(box.x2 < left || box.x1 > right || box.y2 < top || box.y1 > bottom)
+                      : (() => {
+                        const pos = node.renderedPosition();
+                        return pos.x >= left && pos.x <= right && pos.y >= top && pos.y <= bottom;
+                      })();
+                    if (overlaps) node.select();
+                  });
+                });
+              } catch (err) {
+                console.warn("finishRightBoxSelection failed", err);
+              }
+            }
+
+            function handleRightBoxSelectionMove(evt) {
+              if (!rightBoxSelectState) return;
+              updateRightBoxSelectionOverlay(evt.clientX, evt.clientY);
+            }
+
+            function handleRightBoxSelectionEnd() {
+              if (!rightBoxSelectState) return;
+              window.removeEventListener("mousemove", handleRightBoxSelectionMove, true);
+              window.removeEventListener("mouseup", handleRightBoxSelectionEnd, true);
+              finishRightBoxSelection();
+            }
+
+            function startRightBoxSelection(originalEvent) {
+              if (!originalEvent || originalEvent.button !== 2) return;
+              rightBoxSelectState = {
+                startClientX: originalEvent.clientX,
+                startClientY: originalEvent.clientY,
+                additive: Boolean(originalEvent.shiftKey || originalEvent.ctrlKey || originalEvent.metaKey),
+                dragged: false,
+              };
+              clearRightBoxSelectionOverlay();
+              window.addEventListener("mousemove", handleRightBoxSelectionMove, true);
+              window.addEventListener("mouseup", handleRightBoxSelectionEnd, true);
+            }
+
+            container.addEventListener("contextmenu", (evt) => {
+              if (suppressNextCanvasContextMenu) {
+                suppressNextCanvasContextMenu = false;
+                evt.preventDefault();
+                return;
+              }
+              if (rightBoxSelectState || (rightBoxSelectOverlay && rightBoxSelectOverlay.style.display !== "none")) {
+                evt.preventDefault();
+              }
+            });
+            window.kbCy.on("cxttapstart", (evt) => {
+              if (evt.target !== window.kbCy) return;
+              startRightBoxSelection(evt.originalEvent || null);
+            });
 
             // 高亮目标节点
             function highlightTargetNode(node) {
@@ -12250,15 +12677,55 @@
             window.kbCy.on('grab', 'node', function (e) {
               isDraggingNode = true;
               hideHandle();
+              const anchorNode = e.target;
+              if (!anchorNode || !anchorNode.selected || !anchorNode.selected()) {
+                multiDragState = null;
+                return;
+              }
+              const selectedNodes = window.kbCy.nodes(':selected');
+              if (!selectedNodes || selectedNodes.length < 2) {
+                multiDragState = null;
+                return;
+              }
+              const originPositions = {};
+              selectedNodes.forEach((node) => {
+                const pos = node.position();
+                originPositions[node.id()] = { x: Number(pos?.x) || 0, y: Number(pos?.y) || 0 };
+              });
+              const anchorPos = anchorNode.position();
+              multiDragState = {
+                anchorId: anchorNode.id(),
+                anchorStartX: Number(anchorPos?.x) || 0,
+                anchorStartY: Number(anchorPos?.y) || 0,
+                originPositions,
+              };
             });
 
             window.kbCy.on('free', 'node', function (e) {
               isDraggingNode = false;
+              multiDragState = null;
               scheduleDagreEdgeLabelVisibilityRefresh();
+              scheduleGraphSnapshotPersist();
             });
 
-            window.kbCy.on('position', 'node', function () {
+            window.kbCy.on('position', 'node', function (e) {
               if (!isDraggingNode) return;
+              if (multiDragState && e.target && e.target.id() === multiDragState.anchorId) {
+                const anchorPos = e.target.position();
+                const deltaX = (Number(anchorPos?.x) || 0) - multiDragState.anchorStartX;
+                const deltaY = (Number(anchorPos?.y) || 0) - multiDragState.anchorStartY;
+                window.kbCy.batch(() => {
+                  window.kbCy.nodes(':selected').forEach((node) => {
+                    if (node.id() === multiDragState.anchorId) return;
+                    const origin = multiDragState.originPositions[node.id()];
+                    if (!origin) return;
+                    node.position({
+                      x: origin.x + deltaX,
+                      y: origin.y + deltaY,
+                    });
+                  });
+                });
+              }
               scheduleDagreEdgeLabelVisibilityRefresh();
             });
 
@@ -13237,11 +13704,16 @@
             window.kbCy.add(arr);
           });
           syncGraphLayoutAppearance();
+          willRestoreInitialSnapshot = restoreGraphSnapshotAfterNextLayout(initialSnapshotScopeId);
           window.kbCy.layout(getSelectedGraphLayoutOpts({ animate: false, randomize: true })).run();
         }
+        const shouldSkipAutoFocusAfterSnapshot =
+          willRestoreInitialSnapshot || consumeGraphSnapshotAutoFocusSkip(initialSnapshotScopeId);
         try {
           window.kbCy.resize();
-          window.kbCy.fit();
+          if (!shouldSkipAutoFocusAfterSnapshot) {
+            window.kbCy.fit();
+          }
         } catch { }
         const counts = data.counts || {};
 
@@ -13300,14 +13772,14 @@
             if (candidates && candidates.length) target = candidates[0];
           }
           // 新增：可视化视图页面，路由有节点参数时默认高亮并选中
-          if (isVisMode && nodeParam) {
+          if (isVisMode && nodeParam && !shouldSkipAutoFocusAfterSnapshot) {
             const visTargetId = ensureEntityIdPrefix(nodeParam);
             const visTarget = window.kbCy.getElementById(visTargetId);
             if (visTarget && !visTarget.empty()) {
               focusNode(visTargetId);
               enterEditById(visTargetId);
             }
-          } else if (target && !target.empty()) {
+          } else if (target && !target.empty() && !shouldSkipAutoFocusAfterSnapshot) {
             focusNode(target.id());
             if (isVisMode) {
               enterEditById(target.id());
@@ -13634,12 +14106,68 @@
       if (cyBtnScreenshot) cyBtnScreenshot.addEventListener('click', () => {
         if (!window.kbCy) return;
         try {
-          const png = window.kbCy.png({ full: true, scale: 2, bg: getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#fff' });
+          const canvasCfg = getGraphStyleConfig();
+          const png = window.kbCy.png({ full: true, scale: 2, bg: canvasCfg.canvasColor || '#fff' });
           const a = document.createElement('a');
           a.href = png;
           a.download = 'graph-export.png';
           a.click();
         } catch (e) { console.error('screenshot export failed', e); }
+      });
+
+      const cyBtnSaveSnapshot = document.getElementById('cy_btnSaveSnapshot');
+      if (cyBtnSaveSnapshot) cyBtnSaveSnapshot.addEventListener('click', async () => {
+        try {
+          if (!window.kbCy) return;
+          const scopeId = getCurrentGraphSnapshotScopeId();
+          if (!scopeId) {
+            if (typeof showToast === 'function') showToast('当前没有可保存的关系图节点');
+            return;
+          }
+          const snapshot = buildGraphSnapshotPayload(scopeId);
+          persistGraphSnapshot(scopeId);
+          await apiPost('/api/kb/nodes/update', {
+            id: ensureEntityIdPrefix(scopeId),
+            relationGraphSnapshot: snapshot,
+          });
+          try {
+            const fullId = ensureEntityIdPrefix(scopeId);
+            const cyNode = window.kbCy.getElementById(fullId);
+            if (cyNode && !cyNode.empty()) {
+              cyNode.data(KB_VIS_NODE_SNAPSHOT_FIELD, snapshot);
+            }
+            const cyNodeShort = window.kbCy.getElementById(scopeId);
+            if (cyNodeShort && !cyNodeShort.empty()) {
+              cyNodeShort.data(KB_VIS_NODE_SNAPSHOT_FIELD, snapshot);
+            }
+            if (Array.isArray(window.kbData?.nodes)) {
+              window.kbData.nodes = window.kbData.nodes.map((node) => {
+                const nodeId = getCurrentGraphSnapshotScopeId(node?.id || node?._id || "");
+                return nodeId === scopeId
+                  ? Object.assign({}, node, { [KB_VIS_NODE_SNAPSHOT_FIELD]: snapshot })
+                  : node;
+              });
+            }
+            if (
+              window.kbVisSnapshotOwnerPayload &&
+              getCurrentGraphSnapshotScopeId(
+                window.kbVisSnapshotOwnerPayload.id || window.kbVisSnapshotOwnerPayload._id || "",
+              ) === scopeId
+            ) {
+              window.kbVisSnapshotOwnerPayload = Object.assign({}, window.kbVisSnapshotOwnerPayload, {
+                [KB_VIS_NODE_SNAPSHOT_FIELD]: snapshot,
+              });
+            }
+          } catch (syncErr) {
+            console.warn('sync saved graph snapshot to client cache failed', syncErr);
+          }
+          if (typeof showToast === 'function') {
+            showToast('已保存当前关系图快照到节点');
+          }
+        } catch (err) {
+          console.error('save graph snapshot failed', err);
+          if (typeof showToast === 'function') showToast('关系图快照保存失败');
+        }
       });
 
       // Layout selector
@@ -13670,6 +14198,9 @@
       const cyStyleEdgeColor = document.getElementById('cyStyleEdgeColor');
       const cyStyleEdgeLineStyle = document.getElementById('cyStyleEdgeLineStyle');
       const cyStyleEdgeArrowShape = document.getElementById('cyStyleEdgeArrowShape');
+      const cyStyleCanvasMode = document.getElementById('cyStyleCanvasMode');
+      const cyStyleCanvasColor = document.getElementById('cyStyleCanvasColor');
+      const cyStyleCanvasAccent = document.getElementById('cyStyleCanvasAccent');
 
       function toggleStyleConfigPanel(forceOpen) {
         if (!cyStyleConfigPanel) return;
@@ -13690,6 +14221,9 @@
         if (cyStyleEdgeColor) cyStyleEdgeColor.value = cfg.edgeColor || KB_VIS_STYLE_DEFAULTS.edgeColor;
         if (cyStyleEdgeLineStyle) cyStyleEdgeLineStyle.value = cfg.edgeLineStyle || KB_VIS_STYLE_DEFAULTS.edgeLineStyle;
         if (cyStyleEdgeArrowShape) cyStyleEdgeArrowShape.value = cfg.edgeArrowShape || KB_VIS_STYLE_DEFAULTS.edgeArrowShape;
+        if (cyStyleCanvasMode) cyStyleCanvasMode.value = cfg.canvasMode || KB_VIS_STYLE_DEFAULTS.canvasMode;
+        if (cyStyleCanvasColor) cyStyleCanvasColor.value = cfg.canvasColor || KB_VIS_STYLE_DEFAULTS.canvasColor;
+        if (cyStyleCanvasAccent) cyStyleCanvasAccent.value = cfg.canvasAccent || KB_VIS_STYLE_DEFAULTS.canvasAccent;
       }
 
       function readStyleConfigFromControls() {
@@ -13703,6 +14237,9 @@
           edgeColor: cyStyleEdgeColor ? cyStyleEdgeColor.value : KB_VIS_STYLE_DEFAULTS.edgeColor,
           edgeLineStyle: cyStyleEdgeLineStyle ? cyStyleEdgeLineStyle.value : KB_VIS_STYLE_DEFAULTS.edgeLineStyle,
           edgeArrowShape: cyStyleEdgeArrowShape ? cyStyleEdgeArrowShape.value : KB_VIS_STYLE_DEFAULTS.edgeArrowShape,
+          canvasMode: cyStyleCanvasMode ? cyStyleCanvasMode.value : KB_VIS_STYLE_DEFAULTS.canvasMode,
+          canvasColor: cyStyleCanvasColor ? cyStyleCanvasColor.value : KB_VIS_STYLE_DEFAULTS.canvasColor,
+          canvasAccent: cyStyleCanvasAccent ? cyStyleCanvasAccent.value : KB_VIS_STYLE_DEFAULTS.canvasAccent,
         };
       }
 
@@ -13713,7 +14250,8 @@
       }
 
       syncStyleConfigControls();
-      [cyStyleNodeShape, cyStyleNodeFontSize, cyStyleNodePadding, cyStyleNodeBorderWidth, cyStyleEdgeWidth, cyStyleEdgeFontSize, cyStyleEdgeColor, cyStyleEdgeLineStyle, cyStyleEdgeArrowShape]
+      applyGraphCanvasBackground();
+      [cyStyleNodeShape, cyStyleNodeFontSize, cyStyleNodePadding, cyStyleNodeBorderWidth, cyStyleEdgeWidth, cyStyleEdgeFontSize, cyStyleEdgeColor, cyStyleEdgeLineStyle, cyStyleEdgeArrowShape, cyStyleCanvasMode, cyStyleCanvasColor, cyStyleCanvasAccent]
         .filter(Boolean)
         .forEach((el) => el.addEventListener('input', handleGraphStyleConfigChange));
       if (cyBtnStyleConfig) cyBtnStyleConfig.addEventListener('click', (event) => {
@@ -15288,6 +15826,14 @@
       } catch { }
     }
     function setFormToEdit(node) {
+      try {
+        window.kbCurrentNodePayload =
+          node && typeof node === "object"
+            ? JSON.parse(JSON.stringify(node))
+            : null;
+      } catch {
+        window.kbCurrentNodePayload = node && typeof node === "object" ? { ...node } : null;
+      }
       const id = (node && (node._id || node.id)) || "";
       fId.value = id;
       const nameVal = node?.label_zh || node?.label || node?.name || "";

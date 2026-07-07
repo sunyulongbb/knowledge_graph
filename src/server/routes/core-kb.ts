@@ -3467,6 +3467,33 @@ export async function handleCoreKbRoutes(
           JSON.stringify({ ...existingData, mentions: mentionPayload }),
         );
       }
+      if (body.relationGraphSnapshot !== undefined) {
+        let existingData: Record<string, any> = {};
+        try {
+          const existingNode = hasProjectScope
+            ? db
+                .query(
+                  `SELECT data FROM nodes WHERE id = ? AND ${scopedClause()}`,
+                )
+                .get(id, scopedProjectId)
+            : db.query("SELECT data FROM nodes WHERE id = ?").get(id);
+          existingData = existingNode?.data
+            ? JSON.parse(existingNode.data)
+            : {};
+        } catch {}
+        const nextSnapshot =
+          body.relationGraphSnapshot &&
+          typeof body.relationGraphSnapshot === "object"
+            ? body.relationGraphSnapshot
+            : null;
+        updates.push("data = ?");
+        params.push(
+          JSON.stringify({
+            ...existingData,
+            _relationGraphSnapshot: nextSnapshot,
+          }),
+        );
+      }
       if (body.categories !== undefined) {
         const normalizedCategories = normalizeListValue(body.categories || []);
         db.run("DELETE FROM entity_classes WHERE entity_id = ?", [id]);
