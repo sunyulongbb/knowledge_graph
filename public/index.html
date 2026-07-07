@@ -11055,6 +11055,8 @@
       if (!nodeId) return;
       const opts = options || {};
       const direction = String(opts.direction || "both").trim().toLowerCase();
+      const preserveSnapshotOwner = opts.preserveSnapshotOwner === true;
+      const skipExpandedStateMark = opts.skipExpandedStateMark === true;
       const loadingText =
         direction === "outgoing"
           ? "加载下级关系…"
@@ -11099,30 +11101,46 @@
           };
         } catch { }
         const canonicalRouteId = stripEntityIdPrefix(fullId) || fullId;
-        if (canonicalRouteId) {
+        if (canonicalRouteId && !preserveSnapshotOwner) {
           window.kbActiveVisNodeId = canonicalRouteId;
           window.kbVisSnapshotOwnerId = canonicalRouteId;
         }
-        try {
-          const ownerNode =
-            nodesRaw.find((node) => {
-              const rawNode = node?.data || node || {};
-              const nodeId = getCurrentGraphSnapshotScopeId(rawNode.id || rawNode._id || "");
-              return nodeId === canonicalRouteId;
-            }) || null;
-          if (ownerNode) {
-            const rawOwnerNode = ownerNode.data || ownerNode || {};
-            window.kbVisSnapshotOwnerPayload = JSON.parse(JSON.stringify(rawOwnerNode));
+        if (!preserveSnapshotOwner) {
+          resetExpandedOutgoingNodeIds([]);
+          try {
+            const ownerNode =
+              nodesRaw.find((node) => {
+                const rawNode = node?.data || node || {};
+                const nodeId = getCurrentGraphSnapshotScopeId(rawNode.id || rawNode._id || "");
+                return nodeId === canonicalRouteId;
+              }) || null;
+            if (ownerNode) {
+              const rawOwnerNode = ownerNode.data || ownerNode || {};
+              window.kbVisSnapshotOwnerPayload = JSON.parse(JSON.stringify(rawOwnerNode));
+            }
+          } catch {
+            window.kbVisSnapshotOwnerPayload = null;
           }
-        } catch {
-          window.kbVisSnapshotOwnerPayload = null;
         }
-        const snapshotScopeId = getCurrentGraphSnapshotScopeId(canonicalRouteId || fullId);
+        if (direction === "outgoing" && !skipExpandedStateMark) {
+          markNodeOutgoingExpanded(canonicalRouteId || fullId);
+          scheduleGraphSnapshotPersist(
+            preserveSnapshotOwner
+              ? getCurrentGraphSnapshotScopeId()
+              : (canonicalRouteId || fullId),
+          );
+        }
+        const snapshotScopeId = preserveSnapshotOwner
+          ? getCurrentGraphSnapshotScopeId()
+          : getCurrentGraphSnapshotScopeId(canonicalRouteId || fullId);
         const hasSavedSnapshot = Boolean(readGraphSnapshot(snapshotScopeId));
 
         // If cytoscape instance doesn't exist yet, initialize it with neighborhood data
         if (!window.kbCy) {
           await loadGraph({ nodes: nodesRaw, edges: edgesRaw, counts: data.counts || {} });
+          if (!preserveSnapshotOwner) {
+            await restoreExpandedOutgoingState(snapshotScopeId);
+          }
           if (!hasSavedSnapshot && !consumeGraphSnapshotAutoFocusSkip(snapshotScopeId)) {
             try { focusNode(fullId); } catch { }
           }
@@ -11145,6 +11163,9 @@
                 })
               )
               .run();
+            if (!preserveSnapshotOwner) {
+              void restoreExpandedOutgoingState(snapshotScopeId);
+            }
             if (!willRestoreSnapshot) {
               focusNode(fullId);
             }
@@ -11205,20 +11226,25 @@
               // run layout but restrict to affected elements for smoother interaction
               try {
                 syncGraphLayoutAppearance();
-                const willRestoreSnapshot = restoreGraphSnapshotAfterNextLayout(snapshotScopeId);
-                const layout = window.kbCy.layout(
-                  getSelectedGraphLayoutOpts({
-                    animate: true,
-                    randomize: false,
-                    fit: false,
-                  })
-                );
-                layout.run();
-                if (willRestoreSnapshot) {
-                  try {
-                    window.kbSkipAutoFocusAfterSnapshot = true;
-                    window.kbLastRestoredGraphSnapshotScopeId = snapshotScopeId;
-                  } catch { }
+                const layoutName = String(getCurrentGraphLayoutName() || "cose").trim();
+                if (layoutName === "dagre" && newNodeIds.size) {
+                  placeNewNodesForDagreMerge(toAdd, newNodeIds, fullId);
+                } else {
+                  const willRestoreSnapshot = restoreGraphSnapshotAfterNextLayout(snapshotScopeId);
+                  const layout = window.kbCy.layout(
+                    getSelectedGraphLayoutOpts({
+                      animate: true,
+                      randomize: false,
+                      fit: false,
+                    })
+                  );
+                  layout.run();
+                  if (willRestoreSnapshot) {
+                    try {
+                      window.kbSkipAutoFocusAfterSnapshot = true;
+                      window.kbLastRestoredGraphSnapshotScopeId = snapshotScopeId;
+                    } catch { }
+                  }
                 }
               } catch (e) {
                 console.error("layout run failed", e);
@@ -11310,6 +11336,116 @@
         nodeDimensionsIncludeLabels: true,
       };
       return Object.assign({}, base, extra || {});
+    }
+
+    function placeNewNodesForDagreMerge(addedElements, addedNodeIds, anchorNodeId) {
+      if (!window.kbCy) return;
+      const layoutName = String(getCurrentGraphLayoutName() || "cose").trim();
+      if (layoutName !== "dagre") return;
+      const nodeIds = Array.isArray(addedNodeIds)
+        ? addedNodeIds
+        : Array.from(addedNodeIds || []);
+      if (!nodeIds.length) return;
+
+      const anchorCandidates = [];
+      const anchorFullId = ensureEntityIdPrefix(anchorNodeId || "");
+      const anchorShortId = stripEntityIdPrefix(anchorNodeId || "") || String(anchorNodeId || "").trim();
+      if (anchorFullId) anchorCandidates.push(anchorFullId);
+      if (anchorShortId && !anchorCandidates.includes(anchorShortId)) anchorCandidates.push(anchorShortId);
+      let anchor = null;
+      for (const candidate of anchorCandidates) {
+        try {
+          const found = window.kbCy.getElementById(candidate);
+          if (found && !found.empty()) {
+            anchor = found;
+            break;
+          }
+        } catch { }
+      }
+      const anchorPos = anchor && !anchor.empty() ? anchor.position() : null;
+      if (!anchorPos) return;
+      const normalizedAnchorIds = new Set(
+        anchorCandidates
+          .map((id) => getCurrentGraphSnapshotScopeId(id))
+          .filter(Boolean),
+      );
+
+      const nodesToPlace = [];
+      nodeIds.forEach((id) => {
+        try {
+          const idCandidates = [];
+          const fullId = ensureEntityIdPrefix(id || "");
+          const shortId = stripEntityIdPrefix(id || "") || String(id || "").trim();
+          if (fullId) idCandidates.push(fullId);
+          if (shortId && !idCandidates.includes(shortId)) idCandidates.push(shortId);
+          let node = null;
+          for (const candidate of idCandidates) {
+            const found = window.kbCy.getElementById(candidate);
+            if (found && !found.empty()) {
+              node = found;
+              break;
+            }
+          }
+          if (!node || node.empty()) return;
+          const isChildOfAnchor = Array.from(node.connectedEdges?.() || []).some((edge) => {
+            const sourceId = getCurrentGraphSnapshotScopeId(edge.source?.().id?.() || "");
+            const targetId = getCurrentGraphSnapshotScopeId(edge.target?.().id?.() || "");
+            return normalizedAnchorIds.has(sourceId) || normalizedAnchorIds.has(targetId);
+          });
+          if (isChildOfAnchor) {
+            nodesToPlace.push(node);
+          }
+        } catch { }
+      });
+
+      if (!nodesToPlace.length) return;
+
+      const directChildren = [];
+      try {
+        const seen = new Set();
+        window.kbCy.edges().forEach((edge) => {
+          const sourceId = getCurrentGraphSnapshotScopeId(edge.source?.().id?.() || "");
+          if (!normalizedAnchorIds.has(sourceId)) return;
+          const targetNode = edge.target?.();
+          if (!targetNode || targetNode.empty?.()) return;
+          const targetId = String(targetNode.id?.() || "").trim();
+          if (!targetId || seen.has(targetId)) return;
+          seen.add(targetId);
+          directChildren.push(targetNode);
+        });
+      } catch { }
+
+      const nodesToArrange = directChildren.length ? directChildren : nodesToPlace;
+      if (!nodesToArrange.length) return;
+
+      nodesToArrange.sort((a, b) => {
+        const ax = Number(a.position?.().x || 0);
+        const bx = Number(b.position?.().x || 0);
+        if (Math.abs(ax - bx) > 4) return ax - bx;
+        const al = String(a.data?.("label") || a.id?.() || "");
+        const bl = String(b.data?.("label") || b.id?.() || "");
+        return al.localeCompare(bl, "zh-Hans-CN");
+      });
+
+      window.kbCy.batch(() => {
+        const total = nodesToArrange.length;
+        const columns = total <= 3 ? total : total <= 8 ? 4 : 5;
+        const columnGap = columns >= 5 ? 170 : 190;
+        const rowGap = 120;
+        const startX = anchorPos.x - ((columns - 1) * columnGap) / 2;
+        const startY = anchorPos.y + 170;
+        nodesToArrange.forEach((node, index) => {
+          try {
+            const column = index % columns;
+            const row = Math.floor(index / columns);
+            const targetX = startX + column * columnGap;
+            const targetY = startY + row * rowGap;
+            node.position({ x: targetX, y: targetY });
+          } catch { }
+        });
+      });
+      scheduleDagreEdgeLabelVisibilityRefresh();
+      scheduleGraphSnapshotPersist();
     }
 
     const KB_VIS_LAYOUT_STORAGE_KEY = "kb-vis-layout";
@@ -11710,6 +11846,40 @@
       return `${KB_VIS_SNAPSHOT_STORAGE_PREFIX}:${getCurrentGraphDbScope()}:${normalizedScopeId}`;
     }
 
+    function getExpandedOutgoingNodeIds() {
+      if (!(window.kbExpandedOutgoingNodeIds instanceof Set)) {
+        window.kbExpandedOutgoingNodeIds = new Set();
+      }
+      return window.kbExpandedOutgoingNodeIds;
+    }
+
+    function markNodeOutgoingExpanded(nodeId) {
+      const normalizedId = getCurrentGraphSnapshotScopeId(nodeId);
+      if (!normalizedId) return;
+      getExpandedOutgoingNodeIds().add(normalizedId);
+    }
+
+    function unmarkNodeOutgoingExpanded(nodeId) {
+      const normalizedId = getCurrentGraphSnapshotScopeId(nodeId);
+      if (!normalizedId) return;
+      getExpandedOutgoingNodeIds().delete(normalizedId);
+    }
+
+    function isNodeOutgoingExpanded(nodeId) {
+      const normalizedId = getCurrentGraphSnapshotScopeId(nodeId);
+      if (!normalizedId) return false;
+      return getExpandedOutgoingNodeIds().has(normalizedId);
+    }
+
+    function resetExpandedOutgoingNodeIds(nextIds = []) {
+      const nextSet = new Set();
+      (Array.isArray(nextIds) ? nextIds : []).forEach((id) => {
+        const normalizedId = getCurrentGraphSnapshotScopeId(id);
+        if (normalizedId) nextSet.add(normalizedId);
+      });
+      window.kbExpandedOutgoingNodeIds = nextSet;
+    }
+
     function getNodeSnapshotFromPayload(nodeLike, scopeId) {
       if (!nodeLike || typeof nodeLike !== "object") return null;
       try {
@@ -11748,17 +11918,23 @@
 
     function readGraphSnapshot(scopeId) {
       const serverSnapshot = findServerGraphSnapshot(scopeId);
-      if (serverSnapshot) return serverSnapshot;
       const key = getGraphSnapshotStorageKey(scopeId);
-      if (!key) return null;
+      if (!key) return serverSnapshot || null;
+      let localSnapshot = null;
       try {
         const raw = window.localStorage.getItem(key);
-        if (!raw) return null;
-        const parsed = JSON.parse(raw);
-        return parsed && typeof parsed === "object" ? parsed : null;
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          localSnapshot = parsed && typeof parsed === "object" ? parsed : null;
+        }
       } catch {
-        return null;
+        localSnapshot = null;
       }
+      if (!serverSnapshot) return localSnapshot;
+      if (!localSnapshot) return serverSnapshot;
+      const serverUpdatedAt = Number(serverSnapshot.updatedAt || 0) || 0;
+      const localUpdatedAt = Number(localSnapshot.updatedAt || 0) || 0;
+      return localUpdatedAt >= serverUpdatedAt ? localSnapshot : serverSnapshot;
     }
 
     function persistGraphSnapshot(scopeId) {
@@ -11791,6 +11967,7 @@
         pan: window.kbCy && window.kbCy.pan ? window.kbCy.pan() : { x: 0, y: 0 },
         zoom: window.kbCy && window.kbCy.zoom ? window.kbCy.zoom() : 1,
         nodes,
+        expandedOutgoingNodeIds: Array.from(getExpandedOutgoingNodeIds()),
       };
     }
 
@@ -11818,6 +11995,7 @@
         if (typeof snapshot.zoom === "number" && Number.isFinite(snapshot.zoom)) {
           try { window.kbCy.zoom(snapshot.zoom); } catch { }
         }
+        resetExpandedOutgoingNodeIds(snapshot.expandedOutgoingNodeIds || []);
         try {
           window.kbSkipAutoFocusAfterSnapshot = true;
           window.kbLastRestoredGraphSnapshotScopeId = getCurrentGraphSnapshotScopeId(scopeId);
@@ -11841,6 +12019,112 @@
         return shouldSkip;
       } catch {
         return false;
+      }
+    }
+
+    function collapseNodeOutgoingNeighborhood(nodeId) {
+      if (!window.kbCy) return;
+      const normalizedId = getCurrentGraphSnapshotScopeId(nodeId);
+      if (!normalizedId) return;
+      const rootCandidates = [ensureEntityIdPrefix(nodeId || ""), stripEntityIdPrefix(nodeId || "") || String(nodeId || "").trim()]
+        .filter(Boolean);
+      let rootNode = null;
+      for (const candidate of rootCandidates) {
+        const found = window.kbCy.getElementById(candidate);
+        if (found && !found.empty()) {
+          rootNode = found;
+          break;
+        }
+      }
+      if (!rootNode || rootNode.empty()) return;
+
+      const nodesToRemove = new Set();
+      const edgesToRemove = new Set();
+      const queue = [];
+      try {
+        rootNode.outgoers("edge").forEach((edge) => {
+          const target = edge.target?.();
+          if (!target || target.empty?.()) return;
+          const targetId = String(target.id?.() || "").trim();
+          if (!targetId) return;
+          edgesToRemove.add(edge.id());
+          nodesToRemove.add(targetId);
+          queue.push(target);
+        });
+      } catch { }
+
+      while (queue.length) {
+        const current = queue.shift();
+        if (!current || current.empty?.()) continue;
+        try {
+          current.outgoers("edge").forEach((edge) => {
+            const child = edge.target?.();
+            if (!child || child.empty?.()) return;
+            const childId = String(child.id?.() || "").trim();
+            if (!childId) return;
+            edgesToRemove.add(edge.id());
+            if (!nodesToRemove.has(childId)) {
+              nodesToRemove.add(childId);
+              queue.push(child);
+            }
+          });
+        } catch { }
+      }
+
+      if (!nodesToRemove.size && !edgesToRemove.size) {
+        unmarkNodeOutgoingExpanded(normalizedId);
+        scheduleGraphSnapshotPersist();
+        return;
+      }
+
+      window.kbCy.batch(() => {
+        Array.from(edgesToRemove).forEach((edgeId) => {
+          try {
+            const edge = window.kbCy.getElementById(edgeId);
+            if (edge && !edge.empty()) edge.remove();
+          } catch { }
+        });
+        Array.from(nodesToRemove).forEach((targetId) => {
+          try {
+            const node = window.kbCy.getElementById(targetId);
+            if (node && !node.empty()) node.remove();
+          } catch { }
+        });
+      });
+
+      Array.from(nodesToRemove).forEach((targetId) => {
+        unmarkNodeOutgoingExpanded(targetId);
+      });
+      unmarkNodeOutgoingExpanded(normalizedId);
+      scheduleDagreEdgeLabelVisibilityRefresh();
+      scheduleGraphSnapshotPersist();
+    }
+
+    async function restoreExpandedOutgoingState(scopeId) {
+      const snapshot = readGraphSnapshot(scopeId);
+      const ownerScopeId = getCurrentGraphSnapshotScopeId(scopeId);
+      const expandedNodeIds = Array.isArray(snapshot?.expandedOutgoingNodeIds)
+        ? snapshot.expandedOutgoingNodeIds
+        : [];
+      const restoreIds = expandedNodeIds
+        .map((id) => getCurrentGraphSnapshotScopeId(id))
+        .filter((id) => id && id !== ownerScopeId);
+      if (!restoreIds.length) return;
+      if (window.kbRestoringExpandedOutgoingState === ownerScopeId) return;
+      window.kbRestoringExpandedOutgoingState = ownerScopeId;
+      try {
+        for (const nodeId of restoreIds) {
+          await loadNodeNeighborhood(nodeId, {
+            replace: false,
+            direction: "outgoing",
+            preserveSnapshotOwner: true,
+            skipExpandedStateMark: true,
+          });
+        }
+      } catch (err) {
+        console.warn("restoreExpandedOutgoingState failed", err);
+      } finally {
+        window.kbRestoringExpandedOutgoingState = "";
       }
     }
 
@@ -13203,9 +13487,14 @@
               const nodeId = node.id();
               if (!nodeId || typeof loadNodeNeighborhood !== 'function') return;
               try {
+                if (isNodeOutgoingExpanded(nodeId)) {
+                  collapseNodeOutgoingNeighborhood(nodeId);
+                  return;
+                }
                 await loadNodeNeighborhood(nodeId, {
                   replace: false,
                   direction: 'outgoing',
+                  preserveSnapshotOwner: true,
                 });
               } catch (e) {
                 console.error('加载下级关系失败', e);
@@ -13678,13 +13967,23 @@
             showNodeContextMenu(node, clientX, clientY);
           });
 
-          // double click node to focus/highlight it (不隐藏其他节点)
+          // double click node to toggle outgoing relations
           window.kbCy.on("dbltap", "node", (evt) => {
             const ele = evt.target;
             const id = ele?.data("id");
             if (!id) return;
-            // 聚焦到该节点
-            focusNode(id);
+            try {
+              hideNodeContextMenu();
+            } catch { }
+            if (isNodeOutgoingExpanded(id)) {
+              collapseNodeOutgoingNeighborhood(id);
+              return;
+            }
+            loadNodeNeighborhood(id, {
+              replace: false,
+              direction: "outgoing",
+              preserveSnapshotOwner: true,
+            });
           });
 
           // click edge to select it
@@ -13706,6 +14005,7 @@
           syncGraphLayoutAppearance();
           willRestoreInitialSnapshot = restoreGraphSnapshotAfterNextLayout(initialSnapshotScopeId);
           window.kbCy.layout(getSelectedGraphLayoutOpts({ animate: false, randomize: true })).run();
+          void restoreExpandedOutgoingState(initialSnapshotScopeId);
         }
         const shouldSkipAutoFocusAfterSnapshot =
           willRestoreInitialSnapshot || consumeGraphSnapshotAutoFocusSkip(initialSnapshotScopeId);
