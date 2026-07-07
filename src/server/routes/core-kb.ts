@@ -3425,8 +3425,8 @@ export async function handleCoreKbRoutes(
         id = id.slice("entity/".length);
       }
 
-      const updates = [];
-      const params = [];
+      const updates: string[] = [];
+      const params: any[] = [];
 
       if (body.name !== undefined) {
         updates.push("name = ?");

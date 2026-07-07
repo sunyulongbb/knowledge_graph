@@ -1,62 +1,178 @@
-# bun
+# Knowledge Graph
 
-To install dependencies:
+This project now includes a semantic map / knowledge galaxy page built with Bun, SQLite, native HTML, and `deck.gl`. The map now reads the current application entity data from `nodes`, while `semantic_nodes` acts as the coordinate/index layer.
+
+## Install
 
 ```bash
 bun install
 ```
 
-To run:
+The `deck.gl` browser dependency has also been added to `package.json` and installed into `node_modules`.
+
+## Start the Bun Server
 
 ```bash
-bun run index.ts
+bun run dev
 ```
 
-This project was created using `bun init` in bun v1.3.3. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+Default address:
 
-出生	唐纳德·约翰·特朗普
-Donald John Trump
-1946年6月14日（79岁）
-美国纽约州纽约市皇后区
-国籍	美国
-政党	 共和党（1987年—1999年；2009年—2011年；2012年—）
-其他政党	民主党（2001年—2009年）
-改革党（1999年—2001年）
-无党籍（2011年—2012年）
-配偶	
-伊万娜·特朗普
-（1977年结婚—1992年离婚）
-马拉·梅普尔斯
-（1993年结婚—1999年离婚）
-梅拉尼娅·特朗普（2005年结婚）
-儿女	
-小唐纳德（长子）
-伊万卡（长女）
-埃里克（次子）
-蒂芙尼（次女）
-巴伦（三子）
-父母	
-弗雷德·特朗普（父）
-玛丽·安妮·特朗普（母）
-亲属	唐纳德·特朗普家族
-居住地	
-纽约特朗普大厦
-佛罗里达州海湖庄园[1]
-华盛顿哥伦比亚特区白宫（总统任内）
-学历	宾夕法尼亚大学（理学士）
-职业	
-地产发展商
-（特朗普集团）
-电视主持人／制片人
-（《学徒》）
-政治人物
-净资产	75亿美元（2024年）
-内阁	第一次特朗普内阁
-第二次特朗普内阁
-宗教信仰	非宗派教会
-获奖	列表
+```text
+http://localhost:8080
+```
 
+Main knowledge page:
 
+```text
+http://localhost:8080/
+```
 
+Semantic map page:
 
-页面左侧节点实体卡片创建参考截图样式优化，添加话题改成添加本体，有什么新鲜事是实体名称的输入，支持换行格式和#添加标签，@引用实体，粘贴添加图片等功能，底部是功能按钮图片上传，视频上传和编辑按钮等
+```text
+http://localhost:8080/semantic-map.html
+```
+
+## SQLite Schema
+
+On server startup, the app automatically ensures the `semantic_nodes` table and indexes exist. Current entity content still comes from `nodes`; `semantic_nodes` stores semantic coordinates and rendering metadata keyed by the same node id.
+
+```sql
+CREATE TABLE IF NOT EXISTS semantic_nodes (
+  id TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  type TEXT,
+  tags TEXT,
+  description TEXT,
+  x REAL,
+  y REAL,
+  size REAL DEFAULT 4,
+  color TEXT,
+  hot INTEGER DEFAULT 0,
+  created_at TEXT,
+  updated_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_semantic_nodes_xy ON semantic_nodes(x, y);
+CREATE INDEX IF NOT EXISTS idx_semantic_nodes_type ON semantic_nodes(type);
+CREATE INDEX IF NOT EXISTS idx_semantic_nodes_hot ON semantic_nodes(hot);
+```
+
+The application database is stored at:
+
+```text
+../data/app.sqlite
+```
+
+Relative to this repository, that resolves to the sibling `data` directory used by the existing Bun app.
+
+## Semantic Map APIs
+
+Implemented endpoints:
+
+```text
+GET /api/semantic-map/init
+GET /api/semantic-map/viewport
+GET /api/semantic-map/detail/:id
+GET /api/semantic-map/search?q=keyword
+```
+
+Behavior summary:
+
+- `/api/semantic-map/init`: load the initial hot nodes with non-null `x/y`.
+- `/api/semantic-map/viewport`: load nodes in the current visible XY range.
+- `/api/semantic-map/detail/:id`: fetch a single node detail record.
+- `/api/semantic-map/search`: optional backend fuzzy search by `label`, `tags`, or `description`.
+
+All endpoints return JSON and include permissive CORS headers for local development.
+
+## Insert Test Data
+
+If you want standalone sample coordinates for quick demo use, seed sample data with:
+
+```bash
+bun run seed:semantic
+```
+
+The seed script inserts 50 semantic nodes across:
+
+- Person
+- Organization
+- Equipment
+- Location
+- Event
+- Document
+- Technology
+
+Each record includes:
+
+- `label`
+- `type`
+- `tags`
+- `description`
+- `x`
+- `y`
+- `size`
+- `color`
+- `hot`
+
+## Generate Semantic Coordinates Offline
+
+Coordinate generation script:
+
+```text
+scripts/generate-semantic-coordinates.py
+```
+
+Install Python dependencies:
+
+```bash
+pip install sentence-transformers umap-learn pandas
+```
+
+Run the script:
+
+```bash
+python scripts/generate-semantic-coordinates.py
+```
+
+What it does:
+
+1. Syncs current `nodes` into `semantic_nodes`.
+2. Reads `label`, `type`, `tags`, and `description` from `semantic_nodes`.
+3. Generates embeddings with `paraphrase-multilingual-MiniLM-L12-v2`.
+4. Reduces them to 2D with UMAP.
+5. Writes `x` and `y` back into `semantic_nodes`.
+
+UMAP settings:
+
+```text
+n_neighbors=50
+min_dist=0.1
+n_components=2
+metric="cosine"
+```
+
+## Semantic Map Page Features
+
+`/semantic-map.html` currently supports:
+
+- full-screen WebGL scatter rendering via `deck.gl`
+- `OrthographicView` for a true 2D semantic plane
+- semantic content sourced from the current application `nodes`
+- semantic coordinates read from `semantic_nodes`
+- mouse wheel zoom
+- drag pan
+- node hover tooltip
+- click-to-open detail panel
+- local search over loaded nodes
+- search result highlighting and first-result focus
+- viewport-based incremental data loading
+- client-side deduplication with `Map<string, Node>`
+
+## Notes
+
+- The semantic map does not use Cytoscape.js.
+- Version one intentionally does not render relationship edges.
+- `bunx tsc --noEmit` still reports several pre-existing type errors in older route files outside this feature, but the semantic map files added in this change are in place and wired into the Bun server.

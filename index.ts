@@ -6,6 +6,7 @@ import { handleSchemaRoutes } from "./src/server/routes/schema.ts";
 import { serveStaticRoute } from "./src/server/static.ts";
 import { handleWikiRoutes } from "./src/server/routes/wiki.ts";
 import { handleChatRoutes } from "./src/server/routes/chat.ts";
+import { handleSemanticMapRoutes } from "./src/server/routes/semantic-map.ts";
 
 const port = parseInt(process.env.PORT || "8080");
 
@@ -46,6 +47,9 @@ const server = Bun.serve({
 
       const chatRes = await handleChatRoutes(req, url, method);
       if (chatRes) return chatRes;
+
+      const semanticMapRes = await handleSemanticMapRoutes(req, url, method);
+      if (semanticMapRes) return semanticMapRes;
 
       const staticResponse = await serveStaticRoute(req, url.pathname);
       if (staticResponse) return staticResponse;

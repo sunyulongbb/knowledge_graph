@@ -3,6 +3,10 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "dev": "bun run index.ts",
+    "seed:semantic": "bun run scripts/seed-semantic-nodes.ts"
+  },
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "^5.4.0"
@@ -13,6 +17,7 @@
   "dependencies": {
     "cytoscape-dagre": "^4.0.0",
     "dagre": "^0.8.5",
+    "deck.gl": "^9.3.6",
     "marked": "^17.0.1",
     "vidstack": "^1.15.6"
   }

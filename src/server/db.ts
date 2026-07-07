@@ -319,6 +319,32 @@ function ensureSharedTables() {
   runSafe("ALTER TABLE nodes ADD COLUMN pdf TEXT");
   runSafe("ALTER TABLE nodes ADD COLUMN videos TEXT");
 
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS semantic_nodes (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      type TEXT,
+      tags TEXT,
+      description TEXT,
+      x REAL,
+      y REAL,
+      size REAL DEFAULT 4,
+      color TEXT,
+      hot INTEGER DEFAULT 0,
+      created_at TEXT,
+      updated_at TEXT
+    )
+  `);
+  runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_semantic_nodes_xy ON semantic_nodes(x, y)",
+  );
+  runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_semantic_nodes_type ON semantic_nodes(type)",
+  );
+  runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_semantic_nodes_hot ON semantic_nodes(hot)",
+  );
+
   const nodeColumns = queryAllSafe("PRAGMA table_info(nodes)");
   const nodeColumnNames = nodeColumns.map((col: any) =>
     (col?.name || col?.[1]).toString(),

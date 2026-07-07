@@ -1,6 +1,7 @@
 import { resolve } from "path";
 
 const PUBLIC_INDEX_FILE = Bun.file("public/index.html");
+const PUBLIC_SEMANTIC_MAP_FILE = Bun.file("public/semantic-map.html");
 const DEMO_CHAT_FILE = Bun.file("demo/chat.html");
 const SHARED_UPLOADS_DIR = resolve(
   import.meta.dir,
@@ -46,6 +47,15 @@ export async function serveStaticRoute(req: Request, pathname: string) {
 
   if (pathname === "/kb" || pathname === "/") {
     return new Response(PUBLIC_INDEX_FILE, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+  }
+
+  if (pathname === "/semantic-map.html" || pathname === "/semantic-map") {
+    if (await PUBLIC_SEMANTIC_MAP_FILE.exists()) {
+      return new Response(PUBLIC_SEMANTIC_MAP_FILE, {
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      });
+    }
+    return null;
   }
 
   if (pathname === "/demo/chat.html" || pathname === "/chat") {
