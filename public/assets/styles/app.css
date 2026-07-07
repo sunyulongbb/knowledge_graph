@@ -985,6 +985,99 @@ main {
   display: flex;
 }
 
+.vis-style-dock {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 1202;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.vis-style-dock-btn {
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+  background: color-mix(in srgb, var(--surface-0) 92%, white);
+}
+
+.vis-style-panel {
+  width: min(300px, calc(100vw - 48px));
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-0) 94%, white);
+  box-shadow: 0 18px 46px rgba(15, 23, 42, 0.18);
+  padding: 12px;
+  backdrop-filter: blur(14px);
+}
+
+.vis-style-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.vis-style-panel__close {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-0);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.vis-style-panel__section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vis-style-panel__section + .vis-style-panel__section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.vis-style-panel__label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.vis-style-field {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.vis-style-field span {
+  font-size: 12px;
+  color: var(--fg);
+}
+
+.vis-style-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.vis-style-input--color {
+  padding: 0;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-0);
+}
+
+.vis-style-panel__actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
 .vis-graph-body #cy {
   flex: 1 1 auto;
   min-height: 0;
@@ -1016,6 +1109,13 @@ main {
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
   background: var(--surface-0);
+  flex: 0 0 auto;
+}
+
+.vis-topbar-layout {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   flex: 0 0 auto;
 }
 .vis-search-wrap {
@@ -1070,6 +1170,11 @@ main {
   background: var(--surface-1);
   color: var(--fg);
   border-color: var(--border-strong);
+}
+
+.vis-topbar-layout-btn {
+  width: 32px;
+  height: 32px;
 }
 
 /* Canvas area wrapper */

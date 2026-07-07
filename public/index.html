@@ -3307,6 +3307,20 @@
               <input id="visSearch" type="text" class="vis-search-input" placeholder="搜索节点…" autocomplete="off" />
               <div id="visSearchDropdown" class="vis-search-dropdown" style="display:none;"></div>
             </div>
+            <div class="vis-topbar-layout">
+              <select id="cyLayoutSelect" class="vis-layout-select">
+                <option value="cose" selected>力导向布局</option>
+                <option value="dagre">Dagre 层级布局</option>
+                <option value="grid">网格布局</option>
+                <option value="circle">圆形布局</option>
+                <option value="breadthfirst">层次布局</option>
+                <option value="concentric">同心圆布局</option>
+                <option value="random">随机布局</option>
+              </select>
+              <button id="cy_btnRunLayout" class="vis-topbar-btn vis-topbar-layout-btn" title="应用布局">
+                <i class="fa-solid fa-sitemap"></i>
+              </button>
+            </div>
             <button id="cy_btnSettings" class="vis-topbar-btn" title="筛选设置">
               <i class="fa-solid fa-sliders"></i>
             </button>
@@ -3367,6 +3381,78 @@
                 <strong class="vis-legend-title">图例</strong>
                 <div id="cyLegendContent"></div>
               </div>
+              <div class="vis-style-dock">
+                <button id="cy_btnStyleConfig" class="vis-tool-btn vis-style-dock-btn" title="样式配置">
+                  <i class="fa-solid fa-palette"></i>
+                </button>
+                <div id="cyStyleConfigPanel" class="vis-style-panel" style="display:none;">
+                  <div class="vis-style-panel__head">
+                    <strong>样式配置</strong>
+                    <button id="cy_btnCloseStyleConfig" type="button" class="vis-style-panel__close" aria-label="关闭样式配置">
+                      <i class="fa-solid fa-xmark"></i>
+                    </button>
+                  </div>
+                  <div class="vis-style-panel__section">
+                    <span class="vis-style-panel__label">节点样式</span>
+                    <label class="vis-style-field">
+                      <span>形状</span>
+                      <select id="cyStyleNodeShape" class="vis-style-input">
+                        <option value="round-rectangle">圆角矩形</option>
+                        <option value="ellipse">椭圆</option>
+                        <option value="diamond">菱形</option>
+                        <option value="hexagon">六边形</option>
+                      </select>
+                    </label>
+                    <label class="vis-style-field">
+                      <span>字号</span>
+                      <input id="cyStyleNodeFontSize" class="vis-style-input" type="range" min="11" max="18" step="1" />
+                    </label>
+                    <label class="vis-style-field">
+                      <span>内边距</span>
+                      <input id="cyStyleNodePadding" class="vis-style-input" type="range" min="6" max="18" step="1" />
+                    </label>
+                    <label class="vis-style-field">
+                      <span>边框</span>
+                      <input id="cyStyleNodeBorderWidth" class="vis-style-input" type="range" min="1" max="5" step="1" />
+                    </label>
+                  </div>
+                  <div class="vis-style-panel__section">
+                    <span class="vis-style-panel__label">边样式</span>
+                    <label class="vis-style-field">
+                      <span>粗细</span>
+                      <input id="cyStyleEdgeWidth" class="vis-style-input" type="range" min="1" max="5" step="1" />
+                    </label>
+                    <label class="vis-style-field">
+                      <span>字号</span>
+                      <input id="cyStyleEdgeFontSize" class="vis-style-input" type="range" min="10" max="18" step="1" />
+                    </label>
+                    <label class="vis-style-field">
+                      <span>颜色</span>
+                      <input id="cyStyleEdgeColor" class="vis-style-input vis-style-input--color" type="color" />
+                    </label>
+                    <label class="vis-style-field">
+                      <span>线型</span>
+                      <select id="cyStyleEdgeLineStyle" class="vis-style-input">
+                        <option value="solid">实线</option>
+                        <option value="dashed">虚线</option>
+                        <option value="dotted">点线</option>
+                      </select>
+                    </label>
+                    <label class="vis-style-field">
+                      <span>箭头</span>
+                      <select id="cyStyleEdgeArrowShape" class="vis-style-input">
+                        <option value="triangle">三角</option>
+                        <option value="vee">V 形</option>
+                        <option value="chevron">箭尾</option>
+                        <option value="none">无箭头</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div class="vis-style-panel__actions">
+                    <button id="cy_btnResetStyleConfig" type="button" class="btn sm">恢复默认</button>
+                  </div>
+                </div>
+              </div>
               <div id="cy"></div>
             </div>
             <!-- Right vertical toolbar (zoom/tools) -->
@@ -3401,20 +3487,6 @@
             </div>
             <div class="vis-bottom-status">
               <div id="visStatusText" class="vis-status-msg"></div>
-            </div>
-            <div class="vis-bottom-layout">
-              <select id="cyLayoutSelect" class="vis-layout-select">
-                <option value="cose" selected>力导向布局</option>
-                <option value="dagre">Dagre 层级布局</option>
-                <option value="grid">网格布局</option>
-                <option value="circle">圆形布局</option>
-                <option value="breadthfirst">层次布局</option>
-                <option value="concentric">同心圆布局</option>
-                <option value="random">随机布局</option>
-              </select>
-              <button id="cy_btnRunLayout" class="vis-tool-btn sm" title="应用布局">
-                <i class="fa-solid fa-pen"></i>
-              </button>
             </div>
           </div>
         </div>
@@ -11256,6 +11328,132 @@
       return getGraphLayoutOpts(getCurrentGraphLayoutName(), extra);
     }
 
+    function annotateDagreEdgeLabelOffsets() {
+      if (!window.kbCy) return;
+      try {
+        const dagreEdges = window.kbCy.edges(".layout-dagre-edge");
+        if (!dagreEdges || !dagreEdges.length) return;
+        const createStackOffset = (index) => {
+          if (index <= 0) return 0;
+          const level = Math.ceil(index / 2);
+          const direction = index % 2 === 1 ? -1 : 1;
+          return direction * Math.min(24, level * 10);
+        };
+        const groups = new Map();
+        dagreEdges.forEach((edge) => {
+          const sourcePos = edge.source()?.position?.() || { x: 0, y: 0 };
+          const targetPos = edge.target()?.position?.() || { x: 0, y: 0 };
+          const sourceId = String(edge.source()?.id?.() || edge.data("source") || "");
+          const sourceLabel = String(edge.source()?.data?.("label") || sourceId || "");
+          const targetId = String(edge.target()?.id?.() || edge.data("target") || "");
+          const targetLabel = String(edge.target()?.data?.("label") || targetId || "");
+          const midX = (Number(sourcePos.x) + Number(targetPos.x)) / 2 || 0;
+          const midY = (Number(sourcePos.y) + Number(targetPos.y)) / 2 || 0;
+          const key = `${Math.round(midX / 72)}:${Math.round(midY / 44)}`;
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push({
+            edge,
+            sortKey: `${sourceLabel}::${targetLabel}::${sourceId}::${targetId}::${edge.id()}`,
+          });
+        });
+
+        groups.forEach((entries) => {
+          entries.sort((a, b) => a.sortKey.localeCompare(b.sortKey, "zh-Hans-CN"));
+          entries.forEach((entry, index) => {
+            const offsetX = 0;
+            const offsetY = createStackOffset(index);
+            try {
+              entry.edge.data("kbDagreLabelOffsetX", offsetX);
+              entry.edge.data("kbDagreLabelOffsetY", offsetY);
+            } catch { }
+          });
+        });
+      } catch (err) {
+        console.warn("annotateDagreEdgeLabelOffsets failed", err);
+      }
+    }
+
+    function updateDagreEdgeLabelVisibility() {
+      if (!window.kbCy) return;
+      try {
+        const dagreEdges = Array.from(window.kbCy.edges(".layout-dagre-edge"));
+        if (!dagreEdges.length) return;
+        const overlapLength = (a1, a2, b1, b2) => {
+          const left = Math.max(Math.min(a1, a2), Math.min(b1, b2));
+          const right = Math.min(Math.max(a1, a2), Math.max(b1, b2));
+          return Math.max(0, right - left);
+        };
+        const hiddenIds = new Set();
+        const segments = [];
+        dagreEdges.forEach((edge) => {
+          const label = String(edge.data("label") || "").trim();
+          if (!label) {
+            edge.removeClass("dagre-label-hidden");
+            return;
+          }
+          const sourcePos = edge.source()?.renderedPosition?.() || { x: 0, y: 0 };
+          const targetPos = edge.target()?.renderedPosition?.() || { x: 0, y: 0 };
+          const x1 = Number(sourcePos.x) || 0;
+          const y1 = Number(sourcePos.y) || 0;
+          const x2 = Number(targetPos.x) || 0;
+          const y2 = Number(targetPos.y) || 0;
+          segments.push({
+            edge,
+            x1,
+            y1,
+            x2,
+            y2,
+            minX: Math.min(x1, x2),
+            maxX: Math.max(x1, x2),
+            minY: Math.min(y1, y2),
+            maxY: Math.max(y1, y2),
+            centerX: (x1 + x2) / 2,
+            centerY: (y1 + y2) / 2,
+          });
+        });
+
+        for (let i = 0; i < segments.length; i += 1) {
+          const current = segments[i];
+          for (let j = i + 1; j < segments.length; j += 1) {
+            const other = segments[j];
+            const xOverlap = overlapLength(current.minX, current.maxX, other.minX, other.maxX);
+            const yOverlap = overlapLength(current.minY, current.maxY, other.minY, other.maxY);
+            const sharedVerticalCorridor =
+              Math.abs(current.centerX - other.centerX) <= 26 && yOverlap >= 42;
+            const sharedHorizontalCorridor =
+              Math.abs(current.centerY - other.centerY) <= 18 && xOverlap >= 56;
+            const sharedBoundingArea = xOverlap >= 28 && yOverlap >= 28;
+            if (sharedVerticalCorridor || sharedHorizontalCorridor || sharedBoundingArea) {
+              hiddenIds.add(current.edge.id());
+              hiddenIds.add(other.edge.id());
+            }
+          }
+        }
+
+        segments.forEach(({ edge }) => {
+          edge.toggleClass("dagre-label-hidden", hiddenIds.has(edge.id()));
+        });
+      } catch (err) {
+        console.warn("updateDagreEdgeLabelVisibility failed", err);
+      }
+    }
+
+    let dagreLabelVisibilityFrame = 0;
+    function scheduleDagreEdgeLabelVisibilityRefresh() {
+      if (!window.kbCy) return;
+      if (String(getCurrentGraphLayoutName() || "").trim() !== "dagre") return;
+      if (dagreLabelVisibilityFrame) return;
+      dagreLabelVisibilityFrame = requestAnimationFrame(() => {
+        dagreLabelVisibilityFrame = 0;
+        try {
+          annotateDagreEdgeLabelOffsets();
+          updateDagreEdgeLabelVisibility();
+        } catch (err) {
+          console.warn("scheduleDagreEdgeLabelVisibilityRefresh failed", err);
+        }
+      });
+    }
+
     function syncGraphLayoutAppearance(name) {
       if (!window.kbCy) return;
       const layoutName = String(name || getCurrentGraphLayoutName() || "cose").trim();
@@ -11263,6 +11461,19 @@
       try {
         window.kbCy.batch(() => {
           window.kbCy.edges().toggleClass("layout-dagre-edge", useDagreEdges);
+          if (useDagreEdges) {
+            annotateDagreEdgeLabelOffsets();
+            updateDagreEdgeLabelVisibility();
+          } else {
+            window.kbCy.edges().forEach((edge) => {
+              try {
+                edge.removeData("kbDagreLabelOffsetX");
+                edge.removeData("kbDagreLabelOffsetY");
+                edge.removeClass("dagre-label-hidden");
+                edge.removeClass("edge-hovered");
+              } catch { }
+            });
+          }
         });
       } catch (err) {
         console.warn("syncGraphLayoutAppearance failed", err);
@@ -11294,7 +11505,55 @@
       return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg.trim());
     }
 
+    const KB_VIS_STYLE_STORAGE_KEY = "kb-vis-style-config";
+    const KB_VIS_STYLE_DEFAULTS = Object.freeze({
+      nodeShape: "round-rectangle",
+      nodeFontSize: 12,
+      nodePadding: 8,
+      nodeBorderWidth: 2,
+      edgeWidth: 1,
+      edgeFontSize: 11,
+      edgeColor: "#cbd5e1",
+      edgeLineStyle: "solid",
+      edgeArrowShape: "triangle",
+    });
+
+    function getGraphStyleConfig() {
+      const base = Object.assign({}, KB_VIS_STYLE_DEFAULTS);
+      try {
+        const raw = window.localStorage.getItem(KB_VIS_STYLE_STORAGE_KEY);
+        if (!raw) return base;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object") return base;
+        return Object.assign(base, parsed);
+      } catch {
+        return base;
+      }
+    }
+
+    function persistGraphStyleConfig(config) {
+      try {
+        window.localStorage.setItem(
+          KB_VIS_STYLE_STORAGE_KEY,
+          JSON.stringify(config || KB_VIS_STYLE_DEFAULTS),
+        );
+      } catch {
+        /* ignore */
+      }
+    }
+
+    function applyCurrentGraphStyleConfig() {
+      if (!window.kbCy) return;
+      try {
+        window.kbCy.style(buildCyStyle()).update();
+        syncGraphLayoutAppearance();
+      } catch (err) {
+        console.warn("applyCurrentGraphStyleConfig failed", err);
+      }
+    }
+
     function buildCyStyle() {
+      const cfg = getGraphStyleConfig();
       return [
         // 节点有 image 字段时显示为圆形头像
         {
@@ -11305,7 +11564,7 @@
             'background-position-x': '50%',
             'background-position-y': '50%',
             'background-opacity': 1,
-            'border-width': 3,
+            'border-width': Math.max(2, Number(cfg.nodeBorderWidth) + 1 || 3),
             'border-color': (ele) => ele.data("color") || "#4f46e5",
             'shape': 'ellipse',
             'width': 56,
@@ -11313,7 +11572,7 @@
             'label': 'data(label)',
             'text-valign': 'bottom',
             'text-halign': 'center',
-            'font-size': '13px',
+            'font-size': `${Math.max(11, Number(cfg.nodeFontSize) + 1 || 13)}px`,
             'font-weight': '600',
             'color': '#0f172a',
             'text-wrap': 'wrap',
@@ -11335,21 +11594,21 @@
           selector: "node",
           style: {
             "background-color": (ele) => ele.data("color") || "#fff",
-            "border-width": 2,
+            "border-width": Number(cfg.nodeBorderWidth) || 2,
             "border-color": (ele) => ele.data("color") || "#94a3b8",
             label: "data(label)",
             "text-valign": "center",
             "text-halign": "center",
-            "font-size": "12px",
+            "font-size": `${Number(cfg.nodeFontSize) || 12}px`,
             "font-weight": "500",
             color: "#0f172a",
             width: "label",
             height: "label",
-            padding: "8px",
+            padding: `${Number(cfg.nodePadding) || 8}px`,
             "text-wrap": "ellipsis",
             "text-overflow": "ellipsis",
             "text-max-width": "90px",
-            shape: "round-rectangle",
+            shape: cfg.nodeShape || "round-rectangle",
             "text-background-opacity": 0,
           },
         },
@@ -11381,13 +11640,14 @@
         {
           selector: "edge",
           style: {
-            width: 1,
-            "line-color": "#cbd5e1",
-            "target-arrow-color": "#cbd5e1",
-            "target-arrow-shape": "triangle",
+            width: Number(cfg.edgeWidth) || 1,
+            "line-color": cfg.edgeColor || "#cbd5e1",
+            "target-arrow-color": cfg.edgeColor || "#cbd5e1",
+            "target-arrow-shape": cfg.edgeArrowShape || "triangle",
+            "line-style": cfg.edgeLineStyle || "solid",
             "curve-style": "bezier",
             label: "data(label)",
-            "font-size": "11px",
+            "font-size": `${Number(cfg.edgeFontSize) || 11}px`,
             "text-rotation": "autorotate",
             "text-background-opacity": 1,
             "text-background-color": "#ffffff",
@@ -11412,7 +11672,32 @@
             "source-endpoint": "outside-to-node",
             "target-endpoint": "outside-to-node",
             "text-rotation": "none",
-            "text-margin-y": -14,
+            "font-size": `${Math.max(10, (Number(cfg.edgeFontSize) || 11) - 1)}px`,
+            "text-wrap": "wrap",
+            "text-max-width": "76px",
+            "line-height": 1.15,
+            "text-justification": "center",
+            "text-background-opacity": 0.94,
+            "text-background-padding": "2px",
+            "text-margin-y": "data(kbDagreLabelOffsetY)",
+            "text-margin-x": "data(kbDagreLabelOffsetX)",
+            "line-style": cfg.edgeLineStyle || "solid",
+          },
+        },
+        {
+          selector: "edge.layout-dagre-edge.dagre-label-hidden",
+          style: {
+            "text-opacity": 0,
+            "text-background-opacity": 0,
+            "text-border-opacity": 0,
+          },
+        },
+        {
+          selector: "edge.layout-dagre-edge.edge-hovered, edge.layout-dagre-edge:selected",
+          style: {
+            "text-opacity": 1,
+            "text-background-opacity": 0.94,
+            "text-border-opacity": 1,
           },
         },
         {
@@ -11589,6 +11874,27 @@
             wheelSensitivity: 0.2,
           });
           syncGraphLayoutAppearance();
+          window.kbCy.on("layoutstop", () => {
+            try {
+              if (getCurrentGraphLayoutName() !== "dagre") return;
+              requestAnimationFrame(() => {
+                annotateDagreEdgeLabelOffsets();
+                updateDagreEdgeLabelVisibility();
+              });
+            } catch (err) {
+              console.warn("dagre layoutstop relabel failed", err);
+            }
+          });
+          window.kbCy.on("mouseover", "edge", (evt) => {
+            try {
+              evt.target?.addClass("edge-hovered");
+            } catch { }
+          });
+          window.kbCy.on("mouseout", "edge", (evt) => {
+            try {
+              evt.target?.removeClass("edge-hovered");
+            } catch { }
+          });
           fitOnDblClick(window.kbCy);
           observeResize(window.kbCy, container);
           try {
@@ -11948,6 +12254,12 @@
 
             window.kbCy.on('free', 'node', function (e) {
               isDraggingNode = false;
+              scheduleDagreEdgeLabelVisibilityRefresh();
+            });
+
+            window.kbCy.on('position', 'node', function () {
+              if (!isDraggingNode) return;
+              scheduleDagreEdgeLabelVisibilityRefresh();
             });
 
             // 监听节点悬停
@@ -13344,6 +13656,90 @@
       }
       if (cyBtnRunLayout) cyBtnRunLayout.addEventListener('click', runSelectedLayout);
       if (cyLayoutSelect) cyLayoutSelect.addEventListener('change', runSelectedLayout);
+
+      const cyBtnStyleConfig = document.getElementById('cy_btnStyleConfig');
+      const cyBtnCloseStyleConfig = document.getElementById('cy_btnCloseStyleConfig');
+      const cyBtnResetStyleConfig = document.getElementById('cy_btnResetStyleConfig');
+      const cyStyleConfigPanel = document.getElementById('cyStyleConfigPanel');
+      const cyStyleNodeShape = document.getElementById('cyStyleNodeShape');
+      const cyStyleNodeFontSize = document.getElementById('cyStyleNodeFontSize');
+      const cyStyleNodePadding = document.getElementById('cyStyleNodePadding');
+      const cyStyleNodeBorderWidth = document.getElementById('cyStyleNodeBorderWidth');
+      const cyStyleEdgeWidth = document.getElementById('cyStyleEdgeWidth');
+      const cyStyleEdgeFontSize = document.getElementById('cyStyleEdgeFontSize');
+      const cyStyleEdgeColor = document.getElementById('cyStyleEdgeColor');
+      const cyStyleEdgeLineStyle = document.getElementById('cyStyleEdgeLineStyle');
+      const cyStyleEdgeArrowShape = document.getElementById('cyStyleEdgeArrowShape');
+
+      function toggleStyleConfigPanel(forceOpen) {
+        if (!cyStyleConfigPanel) return;
+        const shouldOpen = typeof forceOpen === 'boolean'
+          ? forceOpen
+          : cyStyleConfigPanel.style.display === 'none';
+        cyStyleConfigPanel.style.display = shouldOpen ? 'block' : 'none';
+      }
+
+      function syncStyleConfigControls() {
+        const cfg = getGraphStyleConfig();
+        if (cyStyleNodeShape) cyStyleNodeShape.value = cfg.nodeShape || KB_VIS_STYLE_DEFAULTS.nodeShape;
+        if (cyStyleNodeFontSize) cyStyleNodeFontSize.value = String(cfg.nodeFontSize || KB_VIS_STYLE_DEFAULTS.nodeFontSize);
+        if (cyStyleNodePadding) cyStyleNodePadding.value = String(cfg.nodePadding || KB_VIS_STYLE_DEFAULTS.nodePadding);
+        if (cyStyleNodeBorderWidth) cyStyleNodeBorderWidth.value = String(cfg.nodeBorderWidth || KB_VIS_STYLE_DEFAULTS.nodeBorderWidth);
+        if (cyStyleEdgeWidth) cyStyleEdgeWidth.value = String(cfg.edgeWidth || KB_VIS_STYLE_DEFAULTS.edgeWidth);
+        if (cyStyleEdgeFontSize) cyStyleEdgeFontSize.value = String(cfg.edgeFontSize || KB_VIS_STYLE_DEFAULTS.edgeFontSize);
+        if (cyStyleEdgeColor) cyStyleEdgeColor.value = cfg.edgeColor || KB_VIS_STYLE_DEFAULTS.edgeColor;
+        if (cyStyleEdgeLineStyle) cyStyleEdgeLineStyle.value = cfg.edgeLineStyle || KB_VIS_STYLE_DEFAULTS.edgeLineStyle;
+        if (cyStyleEdgeArrowShape) cyStyleEdgeArrowShape.value = cfg.edgeArrowShape || KB_VIS_STYLE_DEFAULTS.edgeArrowShape;
+      }
+
+      function readStyleConfigFromControls() {
+        return {
+          nodeShape: cyStyleNodeShape ? cyStyleNodeShape.value : KB_VIS_STYLE_DEFAULTS.nodeShape,
+          nodeFontSize: cyStyleNodeFontSize ? Number(cyStyleNodeFontSize.value) || KB_VIS_STYLE_DEFAULTS.nodeFontSize : KB_VIS_STYLE_DEFAULTS.nodeFontSize,
+          nodePadding: cyStyleNodePadding ? Number(cyStyleNodePadding.value) || KB_VIS_STYLE_DEFAULTS.nodePadding : KB_VIS_STYLE_DEFAULTS.nodePadding,
+          nodeBorderWidth: cyStyleNodeBorderWidth ? Number(cyStyleNodeBorderWidth.value) || KB_VIS_STYLE_DEFAULTS.nodeBorderWidth : KB_VIS_STYLE_DEFAULTS.nodeBorderWidth,
+          edgeWidth: cyStyleEdgeWidth ? Number(cyStyleEdgeWidth.value) || KB_VIS_STYLE_DEFAULTS.edgeWidth : KB_VIS_STYLE_DEFAULTS.edgeWidth,
+          edgeFontSize: cyStyleEdgeFontSize ? Number(cyStyleEdgeFontSize.value) || KB_VIS_STYLE_DEFAULTS.edgeFontSize : KB_VIS_STYLE_DEFAULTS.edgeFontSize,
+          edgeColor: cyStyleEdgeColor ? cyStyleEdgeColor.value : KB_VIS_STYLE_DEFAULTS.edgeColor,
+          edgeLineStyle: cyStyleEdgeLineStyle ? cyStyleEdgeLineStyle.value : KB_VIS_STYLE_DEFAULTS.edgeLineStyle,
+          edgeArrowShape: cyStyleEdgeArrowShape ? cyStyleEdgeArrowShape.value : KB_VIS_STYLE_DEFAULTS.edgeArrowShape,
+        };
+      }
+
+      function handleGraphStyleConfigChange() {
+        const nextConfig = readStyleConfigFromControls();
+        persistGraphStyleConfig(nextConfig);
+        applyCurrentGraphStyleConfig();
+      }
+
+      syncStyleConfigControls();
+      [cyStyleNodeShape, cyStyleNodeFontSize, cyStyleNodePadding, cyStyleNodeBorderWidth, cyStyleEdgeWidth, cyStyleEdgeFontSize, cyStyleEdgeColor, cyStyleEdgeLineStyle, cyStyleEdgeArrowShape]
+        .filter(Boolean)
+        .forEach((el) => el.addEventListener('input', handleGraphStyleConfigChange));
+      if (cyBtnStyleConfig) cyBtnStyleConfig.addEventListener('click', (event) => {
+        event.stopPropagation();
+        syncStyleConfigControls();
+        toggleStyleConfigPanel();
+      });
+      if (cyBtnCloseStyleConfig) cyBtnCloseStyleConfig.addEventListener('click', () => {
+        toggleStyleConfigPanel(false);
+      });
+      if (cyBtnResetStyleConfig) cyBtnResetStyleConfig.addEventListener('click', () => {
+        persistGraphStyleConfig(KB_VIS_STYLE_DEFAULTS);
+        syncStyleConfigControls();
+        applyCurrentGraphStyleConfig();
+      });
+      document.addEventListener('click', (event) => {
+        if (!cyStyleConfigPanel || cyStyleConfigPanel.style.display === 'none') return;
+        const target = event.target;
+        if (
+          cyStyleConfigPanel.contains(target) ||
+          (cyBtnStyleConfig && cyBtnStyleConfig.contains(target))
+        ) {
+          return;
+        }
+        toggleStyleConfigPanel(false);
+      });
 
       // Legend toggle
       const cyBtnLegendLeft = document.getElementById('cy_btnLegend');
