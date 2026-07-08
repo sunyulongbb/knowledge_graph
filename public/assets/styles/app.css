@@ -2490,6 +2490,23 @@ body {
   border: 1px solid rgba(148, 163, 184, 0.24);
   box-shadow: 0 18px 44px rgba(2, 6, 23, 0.42);
   backdrop-filter: blur(14px);
+  opacity: 0 !important;
+  visibility: hidden !important;
+  transform: translateY(8px) scale(0.98);
+  pointer-events: none;
+  transition:
+    opacity 120ms ease,
+    visibility 120ms ease,
+    transform 120ms ease;
+}
+
+#wikiTopVideo media-time-slider:hover media-slider-preview.kb-slider-video-preview,
+#wikiTopVideo media-time-slider:focus-within media-slider-preview.kb-slider-video-preview,
+#wikiTopVideo media-time-slider[data-dragging] media-slider-preview.kb-slider-video-preview,
+#wikiTopVideo media-time-slider[data-pointing] media-slider-preview.kb-slider-video-preview {
+  opacity: 1 !important;
+  visibility: visible !important;
+  transform: translateY(0) scale(1);
 }
 
 #wikiTopVideo media-slider-video.kb-slider-video-preview-media,
