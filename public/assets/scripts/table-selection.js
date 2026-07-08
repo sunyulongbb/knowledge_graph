@@ -304,6 +304,7 @@ function __kbInitTableSelection() {
     const opts = options || {};
     const skipDetailRefresh = opts.skipDetailRefresh === true;
     const skipSidebarSync = opts.skipSidebarSync === true;
+    const skipGraphFocus = opts.skipGraphFocus === true;
     const selectedId = id || "";
     window.kbSelectedRowId = selectedId;
     window.kbSelectedRowIds = new Set(selectedId ? [selectedId] : []);
@@ -377,7 +378,7 @@ function __kbInitTableSelection() {
       }
     } catch {}
     try {
-      if (window.kbViewMode === "vis" && id) {
+      if (!skipGraphFocus && window.kbViewMode === "vis" && id) {
         if (typeof focusNode === "function") {
           focusNode(id, { fit: false, duration: 180 });
         }

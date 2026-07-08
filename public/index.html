@@ -12232,6 +12232,7 @@
             "line-style": cfg.edgeLineStyle || "solid",
             "curve-style": "bezier",
             label: "data(label)",
+            "text-events": "yes",
             "font-size": `${Number(cfg.edgeFontSize) || 11}px`,
             "text-rotation": "autorotate",
             "text-background-opacity": 1,
@@ -12267,6 +12268,7 @@
             "text-margin-y": "data(kbDagreLabelOffsetY)",
             "text-margin-x": "data(kbDagreLabelOffsetX)",
             "line-style": cfg.edgeLineStyle || "solid",
+            "text-events": "yes",
           },
         },
         {
@@ -13166,6 +13168,125 @@
             cyBtnDeleteEdge.disabled = !selectedEdge;
           };
 
+          const normalizeGraphNodePanelId = (value) => {
+            const raw = String(value || '').trim();
+            if (!raw) return '';
+            return raw.replace(/^entity\//i, '');
+          };
+
+          const buildRelationFormPayloadFromEdge = (edge) => {
+            if (!edge || !edge.isEdge || !edge.isEdge()) return null;
+            const edgeData = typeof edge.data === 'function' ? edge.data() : {};
+            return {
+              id: edge.id(),
+              source: normalizeGraphNodePanelId(edge.source()?.id?.() || edgeData?.source || ''),
+              target: normalizeGraphNodePanelId(edge.target()?.id?.() || edgeData?.target || ''),
+              property:
+                edgeData?.property ||
+                edgeData?.relation ||
+                edgeData?.type ||
+                '',
+              property_label_zh:
+                edgeData?.property_label_zh ||
+                edgeData?.label ||
+                edgeData?.name ||
+                edgeData?.property ||
+                edgeData?.relation ||
+                edgeData?.type ||
+                '',
+            };
+          };
+
+          const syncRelationSelectionFromEdge = async (edge, options = {}) => {
+            if (!edge || !edge.isEdge || !edge.isEdge()) return false;
+            const keepNodeId = normalizeGraphNodePanelId(
+              edge.source()?.id?.() ||
+              window.kbSelectedNodeId ||
+              window.kbCurrentNodeId ||
+              window.kbSelectedRowId ||
+              document.getElementById('fId')?.value ||
+              '',
+            );
+            if (!keepNodeId) return false;
+            try {
+              if (typeof setTableSelection === 'function') {
+                setTableSelection(keepNodeId, false, {
+                  skipDetailRefresh: true,
+                  skipGraphFocus: true,
+                });
+              }
+            } catch (err) {
+              console.warn('setTableSelection for edge failed', err);
+            }
+            try {
+              if (typeof enterEditById === 'function') {
+                await enterEditById(keepNodeId, {
+                  skipGraphFocus: options.skipGraphFocus === true,
+                });
+              }
+            } catch (err) {
+              console.warn('enterEditById for edge failed', err);
+            }
+            try {
+              if (typeof window.kbHighlightRelationAttrByEdgeId === 'function') {
+                window.kbHighlightRelationAttrByEdgeId(edge.id(), {
+                  scroll: options.scroll !== false,
+                });
+              }
+            } catch (err) {
+              console.warn('highlight relation row failed', err);
+            }
+            if (options.editInline) {
+              try {
+                if (typeof window.kbOpenRelationAttrEditorByEdgeId === 'function') {
+                  window.kbOpenRelationAttrEditorByEdgeId(edge.id(), {
+                    scroll: options.scroll !== false,
+                    highlightFirst: true,
+                  });
+                }
+              } catch (err) {
+                console.warn('open relation inline editor failed', err);
+              }
+            }
+            try {
+              const relationPayload = buildRelationFormPayloadFromEdge(edge);
+              if (relationPayload && typeof window.fillRelForm === 'function') {
+                window.fillRelForm(relationPayload);
+              }
+              if (typeof window.setRelMode === 'function') {
+                window.setRelMode('edit');
+              }
+              if (typeof window.ensureRelButtonsState === 'function') {
+                window.ensureRelButtonsState();
+              }
+              if (options.focusEditor && !options.editInline) {
+                const relPropLabelInput = document.getElementById('relPropLabel');
+                if (relPropLabelInput && typeof relPropLabelInput.focus === 'function') {
+                  setTimeout(() => relPropLabelInput.focus(), 0);
+                }
+              }
+            } catch (err) {
+              console.warn('sync relation editor failed', err);
+            }
+            return true;
+          };
+
+          const selectGraphEdge = async (edge, options = {}) => {
+            if (!edge || !edge.isEdge || !edge.isEdge()) return false;
+            hideNodeContextMenu();
+            if (selectedEdge && selectedEdge !== edge) {
+              try { selectedEdge.unselect(); } catch (err) {}
+            }
+            try {
+              window.kbCy.elements(':selected').unselect();
+            } catch (err) {}
+            try { edge.select(); } catch (err) {}
+            selectedEdge = edge;
+            updateDeleteEdgeButtonState();
+            await syncRelationSelectionFromEdge(edge, options);
+            return true;
+          };
+
           const buildScopedRelationDeleteUrl = (edgeId) => {
             const url = new URL('/api/kb/relations/' + encodeURIComponent(edgeId), window.location.origin);
             try {
@@ -13210,15 +13331,9 @@
           };
 
           // 点击边选中
-          window.kbCy.on('tap', 'edge', function (e) {
+          window.kbCy.on('tap', 'edge', async function (e) {
             const edge = e.target;
-            // 取消之前选中的边
-            if (selectedEdge && selectedEdge !== edge) {
-              selectedEdge.unselect();
-            }
-            edge.select();
-            selectedEdge = edge;
-            updateDeleteEdgeButtonState();
+            await selectGraphEdge(edge, { scroll: true });
           });
 
           // 点击空白区域取消选中
@@ -13234,7 +13349,10 @@
                 window.kbCy.elements(":selected").unselect();
               } catch (err) {}
               try {
-                setTableSelection("", false, { skipDetailRefresh: true });
+                setTableSelection("", false, {
+                  skipDetailRefresh: true,
+                  skipSidebarSync: true,
+                });
               } catch (err) {}
             }
           });
@@ -13247,7 +13365,7 @@
           });
 
           // 右键菜单删除边
-          window.kbCy.on('cxttap', 'edge', function (e) {
+          window.kbCy.on('cxttap', 'edge', async function (e) {
             const edge = e.target;
             if (!edge || !edge.isEdge || !edge.isEdge()) return;
             const originalEvent = e.originalEvent || null;
@@ -13256,12 +13374,12 @@
             if (originalEvent && typeof originalEvent.preventDefault === 'function') {
               originalEvent.preventDefault();
             }
-            if (selectedEdge && selectedEdge !== edge) {
-              try { selectedEdge.unselect(); } catch (err) {}
-            }
-            try { edge.select(); } catch (err) {}
-            selectedEdge = edge;
-            updateDeleteEdgeButtonState();
+            await selectGraphEdge(edge, {
+              scroll: true,
+              focusEditor: false,
+              editInline: false,
+              skipGraphFocus: true,
+            });
             showEdgeContextMenu(edge, clientX, clientY);
           });
 
@@ -13412,6 +13530,16 @@
               });
               edgeContextMenu.appendChild(item);
             };
+
+            addItem('编辑关系', async () => {
+              if (!edge) return;
+              await selectGraphEdge(edge, {
+                scroll: true,
+                focusEditor: true,
+                editInline: true,
+                skipGraphFocus: true,
+              });
+            });
 
             addItem('删除关系', async () => {
               if (!edge) return;
@@ -13933,6 +14061,7 @@
               try {
                 setTableSelection("", false, {
                   skipDetailRefresh: true,
+                  skipSidebarSync: true,
                 });
               } catch (e) { }
               try {
@@ -13995,17 +14124,6 @@
             });
           });
 
-          // click edge to select it
-          window.kbCy.on("tap", "edge", (evt) => {
-            const ed = evt.target;
-            if (!ed) return;
-            hideNodeContextMenu();
-            try {
-              // select this edge and deselect other elements so :selected styles apply
-              window.kbCy.elements(":selected").unselect();
-              ed.select();
-            } catch (e) { }
-          });
         } else {
           window.kbCy.batch(() => {
             window.kbCy.elements().remove();
@@ -17524,8 +17642,9 @@
     }
 
     // Click to edit
-    async function enterEditById(nodeId) {
+    async function enterEditById(nodeId, options = {}) {
       try {
+        const skipGraphFocus = options?.skipGraphFocus === true;
         const fullId = ensureEntityIdPrefix(nodeId);
         const routeId = stripEntityIdPrefix(fullId) || fullId;
         const tableNodeMap = window.kbTableNodeMap;
@@ -17539,9 +17658,11 @@
           setFormToEdit(cachedNode);
         }
         // highlight selection
-        try {
-          focusNode(fullId, { fit: false });
-        } catch { }
+        if (!skipGraphFocus) {
+          try {
+            focusNode(fullId, { fit: false });
+          } catch { }
+        }
         if (routeId) {
           window.kbActiveVisNodeId = routeId;
           const currentMode = window.kbViewMode || "table";
@@ -17577,7 +17698,9 @@
             if (window.kbCy) {
               window.kbCy.resize();
               if (window.kbViewMode === "vis") {
-                focusNode(fullId, { fit: false, duration: 180 });
+                if (!skipGraphFocus) {
+                  focusNode(fullId, { fit: false, duration: 180 });
+                }
               } else {
                 window.kbCy.fit();
               }

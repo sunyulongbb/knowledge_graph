@@ -1268,7 +1268,9 @@ if (btnAttrReset) {
     if (attrEntitySearchInput) {
       attrEntitySearchInput.value = text;
     }
-    attrEntitySelectedPreview.style.display = "none";
+    attrEntitySelectedPreview.style.display = "";
+    attrEntitySelectedPreview.textContent =
+      label && label !== id ? `当前实体：${label} (${id})` : `当前实体：${id}`;
   }
 
   function renderEntitySearchResults(items) {
@@ -1793,6 +1795,115 @@ if (btnAttrReset) {
     } catch {}
   }
 
+  function normalizeRelationEntityId(value) {
+    const raw = (value || "").toString().trim();
+    if (!raw) return "";
+    return raw.replace(/^entity\//i, "");
+  }
+
+  function resolveRelationRowDataIdByEdgeId(edgeId) {
+    const rawEdgeId = (edgeId || "").toString().trim();
+    if (!rawEdgeId) return "";
+    const splitIndex = rawEdgeId.lastIndexOf(":");
+    if (splitIndex <= 0) return "";
+    const attrDbId = rawEdgeId.slice(0, splitIndex);
+    const targetId = normalizeRelationEntityId(rawEdgeId.slice(splitIndex + 1));
+    const items = Array.isArray(window.kbAttrItems) ? window.kbAttrItems : [];
+    const relationItem = items.find((item) => String(item?.id || "") === attrDbId);
+    if (!relationItem) return "";
+    const values = Array.isArray(relationItem.value)
+      ? relationItem.value
+      : [relationItem.value];
+    for (let index = 0; index < values.length; index += 1) {
+      const value = values[index];
+      const valueTargetId = normalizeRelationEntityId(
+        value?.id ||
+          value?.entity_id ||
+          value?.entityId ||
+          value?.value?.id ||
+          "",
+      );
+      if (valueTargetId && valueTargetId === targetId) {
+        return `${attrDbId}::${index}`;
+      }
+    }
+    return `${attrDbId}::0`;
+  }
+
+  function highlightRelationAttrByEdgeId(edgeId, options = {}) {
+    try {
+      const dataId = resolveRelationRowDataIdByEdgeId(edgeId);
+      if (!dataId || !attrList) return false;
+      const escapedDataId =
+        typeof CSS !== "undefined" && typeof CSS.escape === "function"
+          ? CSS.escape(dataId)
+          : dataId.replace(/"/g, '\\"');
+      const row = attrList.querySelector(`div[data-id="${escapedDataId}"]`);
+      if (!row) return false;
+      if (
+        window.kbSelectedAttrIds &&
+        typeof window.kbSelectedAttrIds.clear === "function"
+      ) {
+        window.kbSelectedAttrIds.clear();
+        window.kbSelectedAttrIds.add(dataId);
+      }
+      window.kbLastAttrAnchorId = dataId;
+      updateAttrSelectionStyles();
+      ensureAttrButtonsState();
+      if (options.scroll !== false) {
+        row.scrollIntoView({
+          behavior: options.behavior || "smooth",
+          block: options.block || "nearest",
+          inline: "nearest",
+        });
+      }
+      return true;
+    } catch (err) {
+      console.error("highlightRelationAttrByEdgeId failed", err);
+      return false;
+    }
+  }
+
+  function openRelationAttrEditorByEdgeId(edgeId, options = {}) {
+    try {
+      const dataId = resolveRelationRowDataIdByEdgeId(edgeId);
+      if (!dataId || !attrList) return false;
+      const escapedDataId =
+        typeof CSS !== "undefined" && typeof CSS.escape === "function"
+          ? CSS.escape(dataId)
+          : dataId.replace(/"/g, '\\"');
+      const row = attrList.querySelector(`div[data-id="${escapedDataId}"]`);
+      if (!row) return false;
+      const parts = dataId.split("::");
+      const attrDbId = parts[0] || "";
+      const valueIndex = parts.length > 1 ? parseInt(parts[1], 10) : 0;
+      const items = Array.isArray(window.kbAttrItems) ? window.kbAttrItems : [];
+      const relationItem = items.find((item) => String(item?.id || "") === attrDbId);
+      const nodeIdRaw =
+        (relationItem?.node_id || "").toString().trim() ||
+        (options.nodeId || "").toString().trim() ||
+        (byId("fId")?.value || "").trim();
+      const nodeId = nodeIdRaw
+        ? nodeIdRaw.startsWith("entity/")
+          ? nodeIdRaw
+          : `entity/${nodeIdRaw}`
+        : "";
+      if (!relationItem || !nodeId) return false;
+      if (options.highlightFirst !== false) {
+        highlightRelationAttrByEdgeId(edgeId, {
+          scroll: options.scroll !== false,
+          behavior: options.behavior,
+          block: options.block,
+        });
+      }
+      openAttrEditorForRow(row, relationItem, Number.isFinite(valueIndex) ? valueIndex : 0, nodeId);
+      return true;
+    } catch (err) {
+      console.error("openRelationAttrEditorByEdgeId failed", err);
+      return false;
+    }
+  }
+
   function ensureAttrButtonsState() {
     const count = window.kbSelectedAttrIds.size || 0;
     if (btnAttrEditSelected) btnAttrEditSelected.disabled = count !== 1;
@@ -2254,11 +2365,25 @@ if (btnAttrReset) {
         // value expected as { "entity-type": "item", "id": "Q...", "numeric-id": 123 }
         try {
           const v = val || {};
-          const entityId = v.id || "";
-          const numericRaw = v?.["numeric-id"] ?? v?.numeric_id ?? "";
+          const entityId =
+            extractEntityIdFromAttrValue(v) ||
+            parseEntityIdFromInput(typeof v === "string" ? v : "") ||
+            "";
+          const numericRaw =
+            v?.["numeric-id"] ??
+            v?.numeric_id ??
+            v?.numericId ??
+            v?.value?.["numeric-id"] ??
+            v?.value?.numeric_id ??
+            v?.value?.numericId ??
+            "";
           attrValueEntityType.value =
             v?.["entity-type"] ||
             v?.entity_type ||
+            v?.entityType ||
+            v?.value?.["entity-type"] ||
+            v?.value?.entity_type ||
+            v?.value?.entityType ||
             inferEntityTypeFromId(entityId);
           attrValueEntityId.value = entityId;
           attrValueEntityNumericId.value =
@@ -2266,7 +2391,17 @@ if (btnAttrReset) {
               ? String(numericRaw)
               : "";
           const entityLabel =
-            v?.entity_label_zh || v?.entity_label || v?.label || "";
+            v?.entity_label_zh ||
+            v?.entity_label ||
+            v?.label_zh ||
+            v?.label ||
+            v?.name ||
+            v?.value?.entity_label_zh ||
+            v?.value?.entity_label ||
+            v?.value?.label_zh ||
+            v?.value?.label ||
+            v?.value?.name ||
+            "";
           updateEntitySelectionPreview(entityLabel, entityId);
           if (attrEntitySearchStatus) attrEntitySearchStatus.textContent = "";
           renderEntitySearchResults([]);
@@ -2756,6 +2891,8 @@ if (btnAttrReset) {
   window.updateAttrSelectionStyles = updateAttrSelectionStyles;
   window.ensureAttrButtonsState = ensureAttrButtonsState;
   window.fillAttrForm = fillAttrForm;
+  window.kbHighlightRelationAttrByEdgeId = highlightRelationAttrByEdgeId;
+  window.kbOpenRelationAttrEditorByEdgeId = openRelationAttrEditorByEdgeId;
   window.deleteAttr = deleteAttr;
   window.syncCyNodeImage = syncCyNodeImage;
   window.addEventListener("kb:url-param-changed", (event) => {
