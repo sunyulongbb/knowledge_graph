@@ -6207,12 +6207,44 @@
             } catch {}
             if (opts.focusGraph === true) {
               try {
-                focusNode(ele.id(), { fit: false, duration: 0 });
+                armRouteNodeCenterLock(ele.id(), {
+                  reason: "enforce-route",
+                  durationMs: 3200,
+                });
+                forceCenterGraphNode(ele.id());
+                schedulePersistentRouteNodeCenter(ele.id(), {
+                  reason: "enforce-route",
+                });
               } catch {}
             }
           }
         }
       } catch {}
+      if (opts.focusGraph === true) {
+        try {
+          const stableFullId = fullId;
+          const stableSeq = seq;
+          const recenter = () => {
+            if ((window.kbRouteEnforceSeq || 0) !== stableSeq) return;
+            try {
+              forceCenterGraphNode(stableFullId);
+            } catch {}
+          };
+          requestAnimationFrame(() => {
+            requestAnimationFrame(recenter);
+          });
+          window.setTimeout(recenter, 120);
+          window.setTimeout(recenter, 320);
+          window.setTimeout(recenter, 640);
+          armRouteNodeCenterLock(stableFullId, {
+            reason: "enforce-route-tail",
+            durationMs: 3200,
+          });
+          schedulePersistentRouteNodeCenter(stableFullId, {
+            reason: "enforce-route-tail",
+          });
+        } catch {}
+      }
       return true;
     }
 
@@ -9115,6 +9147,10 @@
             window.kbSelectedRowId = resolvedVisNodeId;
             window.kbSelectedRowIds = new Set([resolvedVisNodeId]);
             window.kbLastAnchorRowId = resolvedVisNodeId;
+            window.kbSelectedNodeId = resolvedVisNodeId;
+            window.kbCurrentNodeId = resolvedVisNodeId;
+            window.kbActiveDetailRouteId = resolvedVisNodeId;
+            window.kbActiveDetailNodeId = ensureEntityIdPrefix(resolvedVisNodeId);
           } catch { }
         } else if (!window.kbActiveVisNodeId) {
           window.kbActiveVisNodeId =
@@ -10178,6 +10214,11 @@
       const hasValidHash = Boolean(modeFromHash);
       const next = hasValidHash ? modeFromHash : "table";
       const options = { skipRouteUpdate: hasValidHash };
+      if (next !== "vis") {
+        try {
+          clearRouteNodeCenterLock();
+        } catch { }
+      }
       if (nodeFromHash) {
         options.targetNodeId = nodeFromHash;
         // 自动同步选中节点
@@ -11243,6 +11284,7 @@
           ? getCurrentGraphSnapshotScopeId()
           : getCurrentGraphSnapshotScopeId(canonicalRouteId || fullId);
         const hasSavedSnapshot = Boolean(readGraphSnapshot(snapshotScopeId));
+        const restoreSnapshotViewport = !shouldPreferRouteNodeViewport();
 
         // If cytoscape instance doesn't exist yet, initialize it with neighborhood data
         if (!window.kbCy) {
@@ -11250,8 +11292,12 @@
           if (!preserveSnapshotOwner) {
             await restoreExpandedOutgoingState(snapshotScopeId);
           }
-          if (!hasSavedSnapshot && !consumeGraphSnapshotAutoFocusSkip(snapshotScopeId)) {
-            try { focusNode(fullId); } catch { }
+          if ((!hasSavedSnapshot || !restoreSnapshotViewport) && !consumeGraphSnapshotAutoFocusSkip(snapshotScopeId)) {
+            try {
+              if (!forceCenterGraphNode(fullId)) {
+                focusNode(fullId, { fit: restoreSnapshotViewport, duration: 0 });
+              }
+            } catch { }
           }
           return;
         }
@@ -11263,7 +11309,9 @@
               window.kbCy.add(elements);
             });
             syncGraphLayoutAppearance();
-            const willRestoreSnapshot = restoreGraphSnapshotAfterNextLayout(snapshotScopeId);
+            const willRestoreSnapshot = restoreGraphSnapshotAfterNextLayout(snapshotScopeId, {
+              restoreViewport: restoreSnapshotViewport,
+            });
             window.kbCy
               .layout(
                 getSelectedGraphLayoutOpts({
@@ -11275,8 +11323,10 @@
             if (!preserveSnapshotOwner) {
               void restoreExpandedOutgoingState(snapshotScopeId);
             }
-            if (!willRestoreSnapshot) {
-              focusNode(fullId);
+            if (!willRestoreSnapshot || !restoreSnapshotViewport) {
+              if (!forceCenterGraphNode(fullId)) {
+                focusNode(fullId, { fit: restoreSnapshotViewport, duration: 0 });
+              }
             }
             try {
               window.kbCy.resize();
@@ -11339,7 +11389,9 @@
                 if (layoutName === "dagre" && newNodeIds.size) {
                   placeNewNodesForDagreMerge(toAdd, newNodeIds, fullId);
                 } else {
-                  const willRestoreSnapshot = restoreGraphSnapshotAfterNextLayout(snapshotScopeId);
+                  const willRestoreSnapshot = restoreGraphSnapshotAfterNextLayout(snapshotScopeId, {
+                    restoreViewport: restoreSnapshotViewport,
+                  });
                   const layout = window.kbCy.layout(
                     getSelectedGraphLayoutOpts({
                       animate: true,
@@ -11348,7 +11400,7 @@
                     })
                   );
                   layout.run();
-                  if (willRestoreSnapshot) {
+                  if (willRestoreSnapshot && restoreSnapshotViewport) {
                     try {
                       window.kbSkipAutoFocusAfterSnapshot = true;
                       window.kbLastRestoredGraphSnapshotScopeId = snapshotScopeId;
@@ -11763,14 +11815,27 @@
       }, 220);
     }
 
-    function restoreGraphSnapshotAfterNextLayout(scopeId) {
+    function restoreGraphSnapshotAfterNextLayout(scopeId, options = {}) {
       const targetScopeId = getCurrentGraphSnapshotScopeId(scopeId);
       if (!targetScopeId || !window.kbCy) return false;
       const snapshot = readGraphSnapshot(targetScopeId);
       if (!snapshot) return false;
       const handle = () => {
         try {
-          restoreGraphSnapshot(targetScopeId);
+          restoreGraphSnapshot(targetScopeId, options);
+          if (options.restoreViewport === false) {
+            const forcedNodeId = getPreferredRouteViewportNodeId();
+            if (forcedNodeId) {
+              window.setTimeout(() => {
+                try {
+                  forceCenterGraphNode(forcedNodeId);
+                  schedulePersistentRouteNodeCenter(forcedNodeId, {
+                    reason: "restore-snapshot",
+                  });
+                } catch { }
+              }, 0);
+            }
+          }
         } catch (err) {
           console.warn("restoreGraphSnapshotAfterNextLayout failed", err);
         }
@@ -11816,7 +11881,15 @@
         const ro = new ResizeObserver(() => {
           try {
             instance.resize();
-            if (window.kbViewMode === 'vis' && window.kbActiveVisNodeId) {
+            const forcedNodeId = getPreferredRouteViewportNodeId();
+            if (window.kbViewMode === 'vis' && forcedNodeId) {
+              forceCenterGraphNode(forcedNodeId);
+              if (isRouteNodeCenterLockActive(forcedNodeId)) {
+                schedulePersistentRouteNodeCenter(forcedNodeId, {
+                  reason: "resize-lock",
+                });
+              }
+            } else if (window.kbViewMode === 'vis' && window.kbActiveVisNodeId) {
               focusNode(window.kbActiveVisNodeId, { fit: false, duration: 0 });
             } else {
               instance.fit();
@@ -12080,10 +12153,155 @@
       };
     }
 
-    function restoreGraphSnapshot(scopeId) {
+    function shouldPreferRouteNodeViewport() {
+      try {
+        const route =
+          typeof getRouteStateFromHash === "function"
+            ? getRouteStateFromHash()
+            : { view: "", node: "" };
+        return (
+          (window.kbViewMode || "table") === "vis" &&
+          String(route?.view || "").trim() === "vis" &&
+          Boolean(String(route?.node || "").trim())
+        );
+      } catch {
+        return false;
+      }
+    }
+
+    function getPreferredRouteViewportNodeId() {
+      try {
+        if (!shouldPreferRouteNodeViewport()) return "";
+        const route =
+          typeof getRouteStateFromHash === "function"
+            ? getRouteStateFromHash()
+            : { node: "" };
+        return ensureEntityIdPrefix(String(route?.node || "").trim());
+      } catch {
+        return "";
+      }
+    }
+
+    function forceCenterGraphNode(nodeId) {
+      try {
+        if (!window.kbCy) return false;
+        const fullId = ensureEntityIdPrefix(nodeId);
+        const rawId = stripEntityIdPrefix(nodeId) || String(nodeId || "").trim();
+        const ele =
+          window.kbCy.getElementById(fullId) ||
+          window.kbCy.getElementById(rawId) ||
+          null;
+        if (!ele || ele.empty()) return false;
+        const activeId = ele.id();
+        try {
+          window.kbCy.stop();
+        } catch { }
+        try {
+          window.kbCy.nodes(":selected").filter((n) => n.id() !== activeId).unselect();
+        } catch { }
+        try {
+          window.kbCy.nodes(".highlight").filter((n) => n.id() !== activeId).removeClass("highlight");
+        } catch { }
+        try {
+          ele.addClass("highlight");
+          ele.select();
+        } catch { }
+        try {
+          window.kbCy.center(ele);
+        } catch {
+          return false;
+        }
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    function schedulePersistentRouteNodeCenter(nodeId, options = {}) {
+      try {
+        const routeNodeId = ensureEntityIdPrefix(nodeId || getPreferredRouteViewportNodeId());
+        if (!routeNodeId) return false;
+        const reason = String(options.reason || "").trim();
+        const clearOnly = options.clearOnly === true;
+        if (!Array.isArray(window.kbRouteCenterTimers)) {
+          window.kbRouteCenterTimers = [];
+        }
+        if (window.kbRouteCenterTimers.length) {
+          window.kbRouteCenterTimers.forEach((timerId) => {
+            try {
+              window.clearTimeout(timerId);
+            } catch { }
+          });
+          window.kbRouteCenterTimers = [];
+        }
+        if (clearOnly) return true;
+        window.kbPendingRouteCenterNodeId = routeNodeId;
+        window.kbPendingRouteCenterReason = reason;
+        const steps = [0, 80, 180, 320, 520, 820, 1200];
+        const timers = [];
+        const recenter = () => {
+          try {
+            const currentPreferredId = ensureEntityIdPrefix(
+              window.kbPendingRouteCenterNodeId || getPreferredRouteViewportNodeId(),
+            );
+            if (!currentPreferredId || currentPreferredId !== routeNodeId) return;
+            forceCenterGraphNode(routeNodeId);
+          } catch { }
+        };
+        steps.forEach((delay) => {
+          const timerId = window.setTimeout(recenter, delay);
+          timers.push(timerId);
+        });
+        window.kbRouteCenterTimers = timers;
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    function armRouteNodeCenterLock(nodeId, options = {}) {
+      try {
+        const routeNodeId = ensureEntityIdPrefix(nodeId || getPreferredRouteViewportNodeId());
+        if (!routeNodeId) return false;
+        const durationMs = Math.max(400, Number(options.durationMs) || 2600);
+        window.kbRouteCenterLockNodeId = routeNodeId;
+        window.kbRouteCenterLockUntil = Date.now() + durationMs;
+        schedulePersistentRouteNodeCenter(routeNodeId, {
+          reason: String(options.reason || "lock").trim(),
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    function clearRouteNodeCenterLock() {
+      try {
+        window.kbRouteCenterLockNodeId = "";
+        window.kbRouteCenterLockUntil = 0;
+      } catch { }
+      try {
+        schedulePersistentRouteNodeCenter("", { clearOnly: true });
+      } catch { }
+    }
+
+    function isRouteNodeCenterLockActive(nodeId) {
+      try {
+        const lockUntil = Number(window.kbRouteCenterLockUntil || 0);
+        if (!lockUntil || Date.now() > lockUntil) return false;
+        const lockedId = ensureEntityIdPrefix(window.kbRouteCenterLockNodeId || "");
+        const targetId = ensureEntityIdPrefix(nodeId || getPreferredRouteViewportNodeId());
+        return Boolean(lockedId && targetId && lockedId === targetId);
+      } catch {
+        return false;
+      }
+    }
+
+    function restoreGraphSnapshot(scopeId, options = {}) {
       if (!window.kbCy) return false;
       const snapshot = readGraphSnapshot(scopeId);
       if (!snapshot || !snapshot.nodes || typeof snapshot.nodes !== "object") return false;
+      const restoreViewport = options.restoreViewport !== false;
       try {
         let matched = 0;
         window.kbCy.batch(() => {
@@ -12098,15 +12316,24 @@
           });
         });
         if (!matched) return false;
-        if (snapshot.pan && typeof snapshot.pan.x === "number" && typeof snapshot.pan.y === "number") {
+        if (
+          restoreViewport &&
+          snapshot.pan &&
+          typeof snapshot.pan.x === "number" &&
+          typeof snapshot.pan.y === "number"
+        ) {
           try { window.kbCy.pan(snapshot.pan); } catch { }
         }
-        if (typeof snapshot.zoom === "number" && Number.isFinite(snapshot.zoom)) {
+        if (
+          restoreViewport &&
+          typeof snapshot.zoom === "number" &&
+          Number.isFinite(snapshot.zoom)
+        ) {
           try { window.kbCy.zoom(snapshot.zoom); } catch { }
         }
         resetExpandedOutgoingNodeIds(snapshot.expandedOutgoingNodeIds || []);
         try {
-          window.kbSkipAutoFocusAfterSnapshot = true;
+          window.kbSkipAutoFocusAfterSnapshot = restoreViewport;
           window.kbLastRestoredGraphSnapshotScopeId = getCurrentGraphSnapshotScopeId(scopeId);
         } catch { }
         scheduleDagreEdgeLabelVisibilityRefresh();
@@ -12552,6 +12779,7 @@
         const container = document.getElementById("cy");
         applyGraphCanvasBackground();
         const initialSnapshotScopeId = getCurrentGraphSnapshotScopeId();
+        const restoreInitialSnapshotViewport = !shouldPreferRouteNodeViewport();
         let willRestoreInitialSnapshot = false;
         if (!window.kbCy) {
           window.kbCy = cytoscape({
@@ -12564,11 +12792,24 @@
             wheelSensitivity: 0.2,
             boxSelectionEnabled: false,
           });
-          willRestoreInitialSnapshot = restoreGraphSnapshotAfterNextLayout(initialSnapshotScopeId);
+          willRestoreInitialSnapshot = restoreGraphSnapshotAfterNextLayout(initialSnapshotScopeId, {
+            restoreViewport: restoreInitialSnapshotViewport,
+          });
           syncGraphLayoutAppearance();
           window.kbCy.on("layoutstop", () => {
             try {
               scheduleGraphSnapshotPersist();
+              const forcedNodeId = getPreferredRouteViewportNodeId();
+              if (forcedNodeId) {
+                if (isRouteNodeCenterLockActive(forcedNodeId)) {
+                  schedulePersistentRouteNodeCenter(forcedNodeId, {
+                    reason: "layoutstop-lock",
+                  });
+                }
+                schedulePersistentRouteNodeCenter(forcedNodeId, {
+                  reason: "layoutstop",
+                });
+              }
               if (getCurrentGraphLayoutName() !== "dagre") return;
               requestAnimationFrame(() => {
                 annotateDagreEdgeLabelOffsets();
@@ -12581,7 +12822,21 @@
           window.kbCy.on("pan zoom", () => {
             scheduleGraphSnapshotPersist();
           });
-          if (willRestoreInitialSnapshot) {
+          const releaseRouteCenterLock = () => {
+            try {
+              clearRouteNodeCenterLock();
+            } catch { }
+          };
+          try {
+            container.addEventListener("wheel", releaseRouteCenterLock, { passive: true });
+          } catch { }
+          try {
+            container.addEventListener("pointerdown", releaseRouteCenterLock, { passive: true });
+          } catch { }
+          try {
+            container.addEventListener("touchstart", releaseRouteCenterLock, { passive: true });
+          } catch { }
+          if (willRestoreInitialSnapshot && restoreInitialSnapshotViewport) {
             try {
               window.kbSkipAutoFocusAfterSnapshot = true;
               window.kbLastRestoredGraphSnapshotScopeId = initialSnapshotScopeId;
@@ -12600,8 +12855,14 @@
           fitOnDblClick(window.kbCy);
           observeResize(window.kbCy, container);
           try {
-            if (!willRestoreInitialSnapshot && window.kbViewMode === 'vis' && window.kbActiveVisNodeId) {
-              focusNode(window.kbActiveVisNodeId, { fit: false, duration: 180 });
+            if (
+              window.kbViewMode === 'vis' &&
+              window.kbActiveVisNodeId &&
+              (!willRestoreInitialSnapshot || !restoreInitialSnapshotViewport)
+            ) {
+              if (!forceCenterGraphNode(window.kbActiveVisNodeId)) {
+                focusNode(window.kbActiveVisNodeId, { fit: false, duration: 180 });
+              }
             }
           } catch (err) {
             console.error('initial focusNode failed', err);
@@ -14230,12 +14491,15 @@
             window.kbCy.add(arr);
           });
           syncGraphLayoutAppearance();
-          willRestoreInitialSnapshot = restoreGraphSnapshotAfterNextLayout(initialSnapshotScopeId);
+          willRestoreInitialSnapshot = restoreGraphSnapshotAfterNextLayout(initialSnapshotScopeId, {
+            restoreViewport: restoreInitialSnapshotViewport,
+          });
           window.kbCy.layout(getSelectedGraphLayoutOpts({ animate: false, randomize: true })).run();
           void restoreExpandedOutgoingState(initialSnapshotScopeId);
         }
         const shouldSkipAutoFocusAfterSnapshot =
-          willRestoreInitialSnapshot || consumeGraphSnapshotAutoFocusSkip(initialSnapshotScopeId);
+          (restoreInitialSnapshotViewport && willRestoreInitialSnapshot) ||
+          consumeGraphSnapshotAutoFocusSkip(initialSnapshotScopeId);
         try {
           window.kbCy.resize();
           if (!shouldSkipAutoFocusAfterSnapshot) {
@@ -14249,6 +14513,15 @@
               ? getRouteStateFromHash()
               : { node: "" };
           if ((window.kbViewMode || "table") === "vis" && route?.node) {
+            try {
+              armRouteNodeCenterLock(route.node, {
+                reason: "load-graph-route",
+                durationMs: 3200,
+              });
+              schedulePersistentRouteNodeCenter(route.node, {
+                reason: "load-graph-route",
+              });
+            } catch { }
             Promise.resolve().then(() =>
               enforceRouteNodeSelectionAndEdit({
                 nodeId: route.node,
@@ -14347,7 +14620,9 @@
             } catch {}
             if (shouldFocusGraph) {
               try {
-                focusNode(targetId, { fit: false, duration: 0 });
+                if (!forceCenterGraphNode(targetId)) {
+                  focusNode(targetId, { fit: false, duration: 0 });
+                }
               } catch {}
             }
             try {
@@ -15004,6 +15279,11 @@
         entryTaskId: hashEntryTaskId,
         entryScreen: hashEntryScreen,
       });
+      if (initialMode !== "vis") {
+        try {
+          clearRouteNodeCenterLock();
+        } catch { }
+      }
       restoreKnowledgeRouteState({
         view: initialMode,
         nodeId: initialNodeId,
@@ -17876,7 +18156,9 @@
               window.kbCy.resize();
               if (window.kbViewMode === "vis") {
                 if (!skipGraphFocus) {
-                  focusNode(fullId, { fit: false, duration: 180 });
+                  if (!forceCenterGraphNode(fullId)) {
+                    focusNode(fullId, { fit: false, duration: 180 });
+                  }
                 }
               } else {
                 window.kbCy.fit();

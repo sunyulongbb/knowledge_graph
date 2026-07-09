@@ -5029,6 +5029,14 @@ body {
   flex-direction: column;
   gap: 0;
   will-change: scroll-position;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+#tblNodes.entity-list::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 #tblNodes .entity-list-item {
@@ -6714,6 +6722,17 @@ body {
   flex: 1 1 auto;
   max-height: none;
   overflow: auto;
+}
+
+#tablePanel .tbl-wrap {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+#tablePanel .tbl-wrap::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 #cywrap {
