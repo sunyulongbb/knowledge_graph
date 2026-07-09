@@ -179,6 +179,9 @@ if (btnAttrReset) {
   const btnAttrEditSelected = byId("btnAttrEditSelected");
   const btnAttrDeleteSelected = byId("btnAttrDeleteSelected");
   let currentAttrEditingRow = null;
+  let currentAttrEditingValueCell = null;
+  let currentAttrEditingValueHtml = "";
+  let currentAttrEditingPreserveRow = false;
 
   function ensureAttrInlineEditorLayout() {
     if (!attrForm) return;
@@ -193,9 +196,15 @@ if (btnAttrReset) {
       propCell.className = "wd-prop-cell";
     }
 
-    const currentProp = byId("attrCurrentProp");
-    if (currentProp && propCell.firstElementChild !== currentProp) {
-      propCell.appendChild(currentProp);
+    let currentProp = byId("attrCurrentProp");
+    if (!currentProp) {
+      currentProp = document.createElement("div");
+      currentProp.id = "attrCurrentProp";
+      currentProp.className = "wd-current-prop";
+      currentProp.textContent = "当前属性：未选择";
+    }
+    if (propCell.firstElementChild !== currentProp) {
+      propCell.insertBefore(currentProp, propCell.firstChild || null);
     }
     if (propCell.lastElementChild !== propPicker) {
       propCell.appendChild(propPicker);
@@ -206,19 +215,344 @@ if (btnAttrReset) {
   }
 
   function resetEditingRow() {
+    if (
+      currentAttrEditingPreserveRow &&
+      currentAttrEditingValueCell &&
+      attrFormBody
+    ) {
+      try {
+        if (attrFormBody.parentElement === currentAttrEditingValueCell) {
+          currentAttrEditingValueCell.removeChild(attrFormBody);
+        }
+      } catch {}
+      currentAttrEditingValueCell.innerHTML = currentAttrEditingValueHtml || "";
+      currentAttrEditingValueCell.classList.remove("attr-value-inline-editor");
+      currentAttrEditingValueCell = null;
+      currentAttrEditingValueHtml = "";
+      currentAttrEditingPreserveRow = false;
+    }
     if (currentAttrEditingRow) {
       currentAttrEditingRow.classList.remove("attr-editing-hidden");
+      currentAttrEditingRow.classList.remove("attr-row-inline-editing");
       currentAttrEditingRow = null;
     }
-    if (attrFormBody) attrFormBody.classList.remove("inline-editing");
+    if (attrFormBody) {
+      attrFormBody.classList.remove("inline-editing");
+      attrFormBody.classList.remove("inline-value-editing");
+    }
   }
 
   window.kbResetAttrEditingRow = resetEditingRow;
+
+  function getAttrItemValueAtIndex(item, valueIndex = -1) {
+    let val = item?.value;
+    if (
+      (val === null || val === undefined) &&
+      item?.datavalue?.value !== undefined
+    ) {
+      val = item.datavalue.value;
+    }
+    if (typeof val === "string") {
+      const trimmed = val.trim();
+      if (
+        (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+        (trimmed.startsWith("[") && trimmed.endsWith("]"))
+      ) {
+        try {
+          val = JSON.parse(trimmed);
+        } catch {}
+      }
+    }
+    if (valueIndex >= 0 && Array.isArray(val)) {
+      return val[valueIndex];
+    }
+    return val;
+  }
+
+  function getEntityLabelFromAttrValue(value) {
+    if (!value) return "";
+    if (typeof value === "string") return value.trim();
+    return (
+      value?.entity_label_zh ||
+      value?.entity_label ||
+      value?.label_zh ||
+      value?.label ||
+      value?.name ||
+      value?.value?.entity_label_zh ||
+      value?.value?.entity_label ||
+      value?.value?.label_zh ||
+      value?.value?.label ||
+      value?.value?.name ||
+      ""
+    );
+  }
+
+  async function searchRelationInlineEntities(keyword) {
+    const term = (keyword || "").trim();
+    if (!term) return [];
+    const url = new URL("/api/kb/entity_search", window.location.origin);
+    if (typeof window.appendCurrentDbParam === "function") {
+      const scopedUrl = window.appendCurrentDbParam(url);
+      if (scopedUrl instanceof URL) {
+        url.search = scopedUrl.search;
+      }
+    }
+    url.searchParams.set("limit", 20);
+    url.searchParams.set("offset", 0);
+    url.searchParams.set("q", term);
+    const resp = await fetch(url.toString());
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const data = await resp.json();
+    const items = Array.isArray(data?.nodes) ? data.nodes : [];
+    return items
+      .map((raw) => normalizeEntitySearchItem(raw))
+      .filter((item) => item && item.id);
+  }
+
+  async function saveRelationInlineEdit(item, valueIndex, nodeId, selectedEntity, inputValue) {
+    const currentValue = getAttrItemValueAtIndex(item, valueIndex);
+    const directEntityId = parseEntityIdFromInput(inputValue || "");
+    const fallbackEntity = directEntityId
+      ? normalizeEntitySearchItem(directEntityId)
+      : null;
+    const nextEntity = selectedEntity || fallbackEntity;
+    const entityId = (nextEntity?.id || directEntityId || "").trim();
+    if (!entityId) {
+      throw new Error("请输入实体ID，或先检索并选择一个实体");
+    }
+    const entityType =
+      nextEntity?.entity_type || inferEntityTypeFromId(entityId) || "item";
+    let numericId =
+      nextEntity?.numeric_id ||
+      nextEntity?.numericId ||
+      nextEntity?.["numeric-id"] ||
+      "";
+    if (!numericId) {
+      const numericMatch = entityId.match(/(\d+)/);
+      numericId = numericMatch ? numericMatch[1] : "";
+    }
+    if (!numericId) {
+      throw new Error("无法识别实体 numeric-id");
+    }
+    const nextValue = {
+      "entity-type": entityType,
+      id: entityId,
+      "numeric-id": Number.parseInt(String(numericId), 10),
+    };
+    const entityLabel =
+      nextEntity?.label ||
+      nextEntity?.name ||
+      getEntityLabelFromAttrValue(currentValue) ||
+      inputValue ||
+      "";
+    if (entityLabel) {
+      nextValue.entity_label_zh = entityLabel;
+      nextValue.label = entityLabel;
+    }
+    if (currentValue && typeof currentValue === "object" && currentValue.qualifier) {
+      nextValue.qualifier = currentValue.qualifier;
+    }
+
+    let saveValue = nextValue;
+    if (Array.isArray(item?.value)) {
+      const nextValues = [...item.value];
+      nextValues[valueIndex >= 0 ? valueIndex : 0] = nextValue;
+      saveValue = nextValues;
+    }
+
+    const saveUrl = new URL("/api/kb/attributes/save", window.location.origin);
+    if (typeof window.appendCurrentDbParam === "function") {
+      const scopedUrl = window.appendCurrentDbParam(saveUrl);
+      if (scopedUrl instanceof URL) {
+        saveUrl.search = scopedUrl.search;
+      }
+    }
+    const resp = await fetch(saveUrl.toString(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: item?.id || undefined,
+        node_id: nodeId,
+        property: item?.property || "",
+        datatype: item?.datatype || "wikibase-entityid",
+        value: saveValue,
+        property_label_zh: item?.property_label_zh || item?.property || undefined,
+      }),
+    });
+    if (!resp.ok) {
+      let detail = "";
+      try {
+        const json = await resp.json();
+        detail = json?.detail || json?.error || "";
+      } catch {}
+      throw new Error(`HTTP ${resp.status}${detail ? `: ${detail}` : ""}`);
+    }
+    await resp.json();
+  }
+
+  function openRelationInlineEditor(row, item, valueIndex, nodeId) {
+    const valueCell = row?.children?.[1];
+    if (!row || !valueCell) return false;
+    const currentValue = getAttrItemValueAtIndex(item, valueIndex);
+    const currentEntityId = extractEntityIdFromAttrValue(currentValue);
+    const currentEntityLabel = getEntityLabelFromAttrValue(currentValue);
+    currentAttrEditingPreserveRow = true;
+    currentAttrEditingRow = row;
+    currentAttrEditingValueCell = valueCell;
+    currentAttrEditingValueHtml = valueCell.innerHTML;
+    row.classList.add("attr-row-inline-editing");
+    valueCell.classList.add("attr-value-inline-editor");
+    valueCell.innerHTML = "";
+
+    const editor = document.createElement("div");
+    editor.className = "relation-inline-editor";
+
+    const inputRow = document.createElement("div");
+    inputRow.className = "relation-inline-editor__input-row";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "wd-input relation-inline-editor__input";
+    input.placeholder = "输入实体ID，或输入关键词后回车检索";
+    input.value = currentEntityLabel || currentEntityId || "";
+    inputRow.appendChild(input);
+
+    const resultsWrap = document.createElement("div");
+    resultsWrap.className = "relation-inline-editor__results";
+    resultsWrap.style.display = "none";
+    const results = document.createElement("select");
+    results.size = 6;
+    results.className = "wd-prop-list relation-inline-editor__select";
+    resultsWrap.appendChild(results);
+
+    const actions = document.createElement("div");
+    actions.className = "relation-inline-editor__actions";
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "button";
+    saveBtn.className = "btn wd-btn-icon wd-btn-primary";
+    saveBtn.title = "保存";
+    saveBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i>';
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "btn wd-btn-icon wd-btn-secondary";
+    cancelBtn.title = "取消";
+    cancelBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+    actions.appendChild(saveBtn);
+    actions.appendChild(cancelBtn);
+
+    editor.appendChild(inputRow);
+    editor.appendChild(resultsWrap);
+    editor.appendChild(actions);
+    valueCell.appendChild(editor);
+
+    let localResults = [];
+    let selectedEntity =
+      currentEntityId || currentEntityLabel
+        ? normalizeEntitySearchItem({
+            id: currentEntityId,
+            label: currentEntityLabel || currentEntityId,
+          })
+        : null;
+
+    const renderLocalResults = (items) => {
+      localResults = Array.isArray(items) ? items : [];
+      results.innerHTML = "";
+      if (!localResults.length) {
+        resultsWrap.style.display = "none";
+        return;
+      }
+      const frag = document.createDocumentFragment();
+      localResults.forEach((entry, index) => {
+        const option = document.createElement("option");
+        option.value = entry.id;
+        option.textContent = `${entry.label || entry.id} (${entry.id})`;
+        if (index === 0) option.selected = true;
+        frag.appendChild(option);
+      });
+      results.appendChild(frag);
+      resultsWrap.style.display = "";
+    };
+
+    const applySelection = (entry) => {
+      selectedEntity = entry || null;
+      input.value = entry ? entry.label || entry.id : input.value;
+      renderLocalResults([]);
+    };
+
+    input.addEventListener("keydown", async (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      const raw = (input.value || "").trim();
+      if (!raw) {
+        return;
+      }
+      const directEntityId = parseEntityIdFromInput(raw);
+      if (directEntityId) {
+        applySelection(
+          normalizeEntitySearchItem({
+            id: directEntityId,
+            label: raw === directEntityId ? directEntityId : raw,
+          }),
+        );
+        return;
+      }
+      try {
+        const items = await searchRelationInlineEntities(raw);
+        renderLocalResults(items);
+      } catch (err) {
+        console.error("searchRelationInlineEntities failed", err);
+        renderLocalResults([]);
+      }
+    });
+
+    results.addEventListener("change", () => {
+      const selectedId = (results.value || "").trim();
+      const found = localResults.find((entry) => entry.id === selectedId);
+      if (found) applySelection(found);
+    });
+    results.addEventListener("dblclick", () => {
+      const selectedId = (results.value || "").trim();
+      const found = localResults.find((entry) => entry.id === selectedId);
+      if (found) applySelection(found);
+    });
+
+    saveBtn.addEventListener("click", async () => {
+      saveBtn.disabled = true;
+      cancelBtn.disabled = true;
+      try {
+        await saveRelationInlineEdit(
+          item,
+          valueIndex,
+          nodeId,
+          selectedEntity,
+          input.value,
+        );
+        await loadAttributes(nodeId);
+      } catch (err) {
+        console.error("saveRelationInlineEdit failed", err);
+        alert(err?.message || "保存失败");
+        saveBtn.disabled = false;
+        cancelBtn.disabled = false;
+      }
+    });
+
+    cancelBtn.addEventListener("click", () => {
+      resetEditingRow();
+    });
+
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 0);
+    return true;
+  }
 
   function openAttrEditorForRow(row, it, valueIndex, nodeId) {
     if (!row) return;
     resetEditingRow();
     ensureAttrInlineEditorLayout();
+    const isRelationEdit =
+      (pickUiDatatype(it) || it?.datatype || "").toLowerCase() ===
+      "wikibase-entityid";
     try {
       if (
         window.kbSelectedAttrIds &&
@@ -230,17 +564,37 @@ if (btnAttrReset) {
       updateAttrSelectionStyles();
       ensureAttrButtonsState();
     } catch {}
+    if (isRelationEdit) {
+      return openRelationInlineEditor(row, it, valueIndex, nodeId);
+    }
     if (attrForm && attrFormBody && btnShowAttrForm) {
       attrFormBody.style.display = "";
       attrFormBody.classList.remove("collapsed");
       attrFormBody.classList.add("inline-editing");
-      attrForm.classList.add("value-only-editing");
-      if (row.parentNode) {
+      attrForm.classList.toggle("value-only-editing", !isRelationEdit);
+      attrForm.classList.toggle("relation-inline-editing", isRelationEdit);
+      if (isRelationEdit) {
+        const valueCell = row.children[1];
+        currentAttrEditingPreserveRow = true;
+        currentAttrEditingValueCell = valueCell || null;
+        currentAttrEditingValueHtml = valueCell ? valueCell.innerHTML : "";
+        row.classList.add("attr-row-inline-editing");
+        if (valueCell) {
+          valueCell.innerHTML = "";
+          valueCell.classList.add("attr-value-inline-editor");
+          attrFormBody.classList.add("inline-value-editing");
+          valueCell.appendChild(attrFormBody);
+        } else if (row.parentNode) {
+          row.insertAdjacentElement("afterend", attrFormBody);
+        }
+      } else if (row.parentNode) {
         row.insertAdjacentElement("afterend", attrFormBody);
       }
     }
     currentAttrEditingRow = row;
-    row.classList.add("attr-editing-hidden");
+    if (!isRelationEdit) {
+      row.classList.add("attr-editing-hidden");
+    }
     try {
       fillAttrForm(nodeId, it, valueIndex);
     } catch (err) {
@@ -860,7 +1214,10 @@ if (btnAttrReset) {
         } catch (e) {
           val.textContent = formatAttrValue(valDtype, valItem);
         }
-        if (String(valDtype || "").toLowerCase() === "wikibase-entityid") {
+        if (
+          readOnly &&
+          String(valDtype || "").toLowerCase() === "wikibase-entityid"
+        ) {
           val.style.cursor = "pointer";
           val.title = "点击查看该对象详情";
           val.addEventListener("click", (e) => {
@@ -1052,6 +1409,7 @@ if (btnAttrReset) {
     ensureAttrInlineEditorLayout();
     resetEditingRow();
     if (attrForm) attrForm.classList.remove("value-only-editing");
+    if (attrForm) attrForm.classList.remove("relation-inline-editing");
     try {
       if (
         window.kbSelectedAttrIds &&
@@ -2299,6 +2657,14 @@ if (btnAttrReset) {
     attrId.value = it?.id || "";
     attrProp.value = it?.property || "";
     attrPropLabel.value = it?.property_label_zh || "";
+    const currentPropEl = byId("attrCurrentProp");
+    if (currentPropEl) {
+      const propId = it?.property || "";
+      const propLabel = it?.property_label_zh || propId || "";
+      currentPropEl.textContent = propId
+        ? `当前属性：${propLabel} (${propId})`
+        : "当前属性：未选择";
+    }
     if (attrPropSearchInput) {
       attrPropSearchInput.value = it?.property_label_zh || it?.property || "";
     }
@@ -2402,8 +2768,15 @@ if (btnAttrReset) {
             v?.value?.label ||
             v?.value?.name ||
             "";
+          if (attrEntitySearchInput) {
+            attrEntitySearchInput.value = entityLabel || entityId || "";
+          }
           updateEntitySelectionPreview(entityLabel, entityId);
-          if (attrEntitySearchStatus) attrEntitySearchStatus.textContent = "";
+          if (attrEntitySearchStatus) {
+            attrEntitySearchStatus.textContent = entityId
+              ? `当前值：${entityLabel || entityId}`
+              : "";
+          }
           renderEntitySearchResults([]);
         } catch {
           attrValueEntityType.value = "";

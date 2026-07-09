@@ -6073,10 +6073,13 @@
           const tableNodeMap = window.kbTableNodeMap;
           const cachedNode =
             tableNodeMap && typeof tableNodeMap.get === "function"
-              ? tableNodeMap.get(nextNodeId)
+              ? tableNodeMap.get(nextNodeId) ||
+                tableNodeMap.get(ensureEntityIdPrefix(nextNodeId)) ||
+                tableNodeMap.get(stripEntityIdPrefix(nextNodeId))
               : null;
           if (cachedNode) {
             setFormToEdit(cachedNode);
+            return;
           }
         }
       } catch (err) {
@@ -6084,6 +6087,133 @@
           console.warn("restoreKnowledgeRouteState left card failed", err);
         }
       }
+
+      try {
+        const fullId = ensureEntityIdPrefix(nextNodeId);
+        if (!fullId) return;
+        Promise.resolve()
+          .then(async () => {
+            const url = new URL("/api/kb/node", window.location.origin);
+            url.searchParams.set("id", fullId);
+            const resp = await fetch(url.toString());
+            if (!resp.ok) throw new Error("HTTP " + resp.status);
+            const data = await resp.json();
+            if (!data?.node) return;
+            const currentRoute =
+              typeof getRouteStateFromHash === "function"
+                ? getRouteStateFromHash()
+                : { node: "" };
+            const currentRouteNode = String(currentRoute?.node || "").trim();
+            if (
+              currentRouteNode &&
+              currentRouteNode !== nextNodeId &&
+              ensureEntityIdPrefix(currentRouteNode) !== fullId
+            ) {
+              return;
+            }
+            if (typeof setFormToEdit === "function") {
+              setFormToEdit(data.node);
+            }
+          })
+          .catch((err) => {
+            if (window.console && console.warn) {
+              console.warn("restoreKnowledgeRouteState fetch fallback failed", err);
+            }
+          });
+      } catch (err) {
+        if (window.console && console.warn) {
+          console.warn("restoreKnowledgeRouteState fallback setup failed", err);
+        }
+      }
+    }
+
+    async function enforceRouteNodeSelectionAndEdit(options = {}) {
+      const opts = options || {};
+      const route =
+        typeof getRouteStateFromHash === "function"
+          ? getRouteStateFromHash()
+          : { node: "" };
+      const routeNodeId = String(
+        opts.nodeId || route?.node || getUrlParams()?.node || "",
+      ).trim();
+      if (!routeNodeId) return false;
+      const seq = (window.kbRouteEnforceSeq || 0) + 1;
+      window.kbRouteEnforceSeq = seq;
+      const fullId = ensureEntityIdPrefix(routeNodeId);
+      const rawId = stripEntityIdPrefix(routeNodeId) || routeNodeId;
+      try {
+        window.kbSelectedRowId = routeNodeId;
+        window.kbSelectedRowIds = new Set([routeNodeId]);
+        window.kbLastAnchorRowId = routeNodeId;
+        window.kbSelectedNodeId = routeNodeId;
+        window.kbCurrentNodeId = routeNodeId;
+        window.kbActiveDetailRouteId = routeNodeId;
+        window.kbActiveDetailNodeId = fullId;
+        window.kbActiveVisNodeId = rawId;
+      } catch {}
+
+      try {
+        const tableNodeMap = window.kbTableNodeMap;
+        const cachedNode =
+          tableNodeMap && typeof tableNodeMap.get === "function"
+            ? tableNodeMap.get(routeNodeId) ||
+              tableNodeMap.get(fullId) ||
+              tableNodeMap.get(rawId)
+            : null;
+        if (cachedNode && typeof setFormToEdit === "function") {
+          setFormToEdit(cachedNode);
+        }
+      } catch {}
+
+      try {
+        const url = new URL("/api/kb/node", window.location.origin);
+        url.searchParams.set("id", fullId);
+        const resp = await fetch(url.toString());
+        if (!resp.ok) throw new Error("HTTP " + resp.status);
+        const data = await resp.json();
+        if ((window.kbRouteEnforceSeq || 0) !== seq) return false;
+        if (data?.node && typeof setFormToEdit === "function") {
+          setFormToEdit(data.node);
+        }
+        try {
+          await Promise.allSettled([
+            typeof loadAttributes === "function" ? loadAttributes(fullId) : null,
+            typeof loadRelations === "function" ? loadRelations(fullId) : null,
+            typeof loadEntityClass === "function" ? loadEntityClass(fullId) : null,
+          ]);
+        } catch {}
+      } catch (err) {
+        if (window.console && console.warn) {
+          console.warn("enforceRouteNodeSelectionAndEdit fetch failed", err);
+        }
+      }
+
+      try {
+        if (window.kbCy) {
+          const ele =
+            window.kbCy.getElementById(fullId) ||
+            window.kbCy.getElementById(rawId) ||
+            null;
+          if (ele && !ele.empty()) {
+            try {
+              window.kbCy.nodes(":selected").unselect();
+            } catch {}
+            try {
+              window.kbCy.nodes(".highlight").removeClass("highlight");
+            } catch {}
+            try {
+              ele.addClass("highlight");
+              ele.select();
+            } catch {}
+            if (opts.focusGraph === true) {
+              try {
+                focusNode(ele.id(), { fit: false, duration: 0 });
+              } catch {}
+            }
+          }
+        }
+      } catch {}
+      return true;
     }
 
     function startCleanTaskPolling() {
@@ -8814,14 +8944,6 @@
           if (neighborId) {
             loadNodeNeighborhood(neighborId, { replace: true });
           }
-          if (hasResolvedVisNode) {
-            focusNode(resolvedVisNodeId);
-            try {
-              if (typeof enterEditById === "function") {
-                enterEditById(resolvedVisNodeId);
-              }
-            } catch (e) { }
-          }
           if (!skipRouteUpdate) {
             const visRouteNode =
               resolvedVisNodeId ||
@@ -9009,13 +9131,6 @@
           );
           if (defaultVisNodeId) {
             loadNodeNeighborhood(defaultVisNodeId, { replace: true });
-            try {
-              enterEditById(defaultVisNodeId);
-            } catch (err) {
-              if (window.console && console.warn) {
-                console.warn('enterEditById failed on vis view switch', err);
-              }
-            }
           }
         } else {
           try {
@@ -9025,16 +9140,7 @@
               ensureEntityIdPrefix(window.kbActiveVisNodeId || "") ||
               ensureEntityIdPrefix(window.kbSelectedRowId || "") ||
               (document.getElementById("fId")?.value || "").trim();
-            if (currentVisId) {
-              focusNode(currentVisId);
-              try {
-                enterEditById(currentVisId);
-              } catch (err) {
-                if (window.console && console.warn) {
-                  console.warn("enterEditById failed on vis view switch", err);
-                }
-              }
-            } else window.kbCy.fit();
+            if (!currentVisId) window.kbCy.fit();
           } catch { }
         }
       } else if (isAttr) {
@@ -10099,19 +10205,13 @@
         options.entryScreen = entryScreenFromHash;
       }
       setViewMode(next, options);
-      if (next === "vis" && nodeFromHash) {
-        requestAnimationFrame(() => {
-          try {
-            if (typeof focusNode === "function") {
-              focusNode(nodeFromHash, { fit: false, duration: 180 });
-            }
-          } catch { }
-        });
-        try {
-          if (typeof enterEditById === "function") {
-            enterEditById(nodeFromHash);
-          }
-        } catch (e) { }
+      if (nodeFromHash) {
+        Promise.resolve().then(() =>
+          enforceRouteNodeSelectionAndEdit({
+            nodeId: nodeFromHash,
+            focusGraph: next === "vis",
+          }),
+        );
       }
     });
 
@@ -14142,6 +14242,21 @@
             window.kbCy.fit();
           }
         } catch { }
+
+        try {
+          const route =
+            typeof getRouteStateFromHash === "function"
+              ? getRouteStateFromHash()
+              : { node: "" };
+          if ((window.kbViewMode || "table") === "vis" && route?.node) {
+            Promise.resolve().then(() =>
+              enforceRouteNodeSelectionAndEdit({
+                nodeId: route.node,
+                focusGraph: !shouldSkipAutoFocusAfterSnapshot,
+              }),
+            );
+          }
+        } catch {}
         const counts = data.counts || {};
 
         // Update vis panel elements
@@ -14198,18 +14313,71 @@
               );
             if (candidates && candidates.length) target = candidates[0];
           }
+          const restoreVisSelection = (targetId, options = {}) => {
+            if (!targetId) return;
+            const shouldFocusGraph = options.focusGraph !== false;
+            try {
+              if (typeof setTableSelection === "function") {
+                setTableSelection(targetId, false, {
+                  skipDetailRefresh: true,
+                  skipGraphFocus: true,
+                });
+              }
+            } catch {}
+            try {
+              const ele = window.kbCy?.getElementById?.(targetId);
+              if (ele && !ele.empty()) {
+                try {
+                  window.kbCy
+                    .nodes(":selected")
+                    .filter((n) => n.id() !== ele.id())
+                    .unselect();
+                } catch {}
+                try {
+                  window.kbCy
+                    .nodes(".highlight")
+                    .filter((n) => n.id() !== ele.id())
+                    .removeClass("highlight");
+                } catch {}
+                try {
+                  ele.addClass("highlight");
+                  ele.select();
+                } catch {}
+              }
+            } catch {}
+            if (shouldFocusGraph) {
+              try {
+                focusNode(targetId, { fit: false, duration: 0 });
+              } catch {}
+            }
+            try {
+              if (targetId) {
+                window.kbActiveVisNodeId =
+                  stripEntityIdPrefix(targetId) || targetId;
+              }
+            } catch {}
+            try {
+              enterEditById(targetId, { skipGraphFocus: true });
+            } catch {}
+          };
           // 新增：可视化视图页面，路由有节点参数时默认高亮并选中
-          if (isVisMode && nodeParam && !shouldSkipAutoFocusAfterSnapshot) {
+          if (isVisMode && nodeParam) {
             const visTargetId = ensureEntityIdPrefix(nodeParam);
             const visTarget = window.kbCy.getElementById(visTargetId);
             if (visTarget && !visTarget.empty()) {
-              focusNode(visTargetId);
-              enterEditById(visTargetId);
+              restoreVisSelection(visTargetId, {
+                focusGraph: !shouldSkipAutoFocusAfterSnapshot,
+              });
             }
-          } else if (target && !target.empty() && !shouldSkipAutoFocusAfterSnapshot) {
-            focusNode(target.id());
+          } else if (target && !target.empty()) {
             if (isVisMode) {
-              enterEditById(target.id());
+              restoreVisSelection(target.id(), {
+                focusGraph: !shouldSkipAutoFocusAfterSnapshot,
+              });
+            } else {
+              if (!shouldSkipAutoFocusAfterSnapshot) {
+                focusNode(target.id());
+              }
             }
             if (
               !isVisMode &&
@@ -14840,9 +15008,13 @@
         view: initialMode,
         nodeId: initialNodeId,
       });
-      // 新增：所有页面只要有节点参数都自动进入编辑模式
       if (initialNodeId) {
-        enterEditById(initialNodeId);
+        Promise.resolve().then(() =>
+          enforceRouteNodeSelectionAndEdit({
+            nodeId: initialNodeId,
+            focusGraph: initialMode === "vis",
+          }),
+        );
       }
     })();
 
@@ -17644,6 +17816,8 @@
     // Click to edit
     async function enterEditById(nodeId, options = {}) {
       try {
+        const requestSeq = (window.kbEnterEditRequestSeq || 0) + 1;
+        window.kbEnterEditRequestSeq = requestSeq;
         const skipGraphFocus = options?.skipGraphFocus === true;
         const fullId = ensureEntityIdPrefix(nodeId);
         const routeId = stripEntityIdPrefix(fullId) || fullId;
@@ -17678,6 +17852,9 @@
         const resp = await fetch(url);
         if (!resp.ok) throw new Error("HTTP " + resp.status);
         const data = await resp.json();
+        if ((window.kbEnterEditRequestSeq || 0) !== requestSeq) {
+          return;
+        }
         if (data && data.node) {
           setFormToEdit(data.node);
 
@@ -17712,6 +17889,9 @@
             typeof loadRelations === "function" ? loadRelations(fullId) : null,
             typeof loadEntityClass === "function" ? loadEntityClass(fullId) : null,
           ]);
+          if ((window.kbEnterEditRequestSeq || 0) !== requestSeq) {
+            return;
+          }
         }
       } catch (e) {
         console.error("enterEditById failed", e);
@@ -17757,7 +17937,16 @@
               .filter((n) => n.id() !== activeId)
               .forEach((n) => n.removeClass("highlight"));
           } catch { }
+          try {
+            window.kbCy
+              .nodes(":selected")
+              .filter((n) => n.id() !== activeId)
+              .unselect();
+          } catch { }
           ele.addClass("highlight");
+          try {
+            ele.select();
+          } catch { }
           if (autoFit) {
             try {
               window.kbCy.stop();

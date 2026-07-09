@@ -4585,6 +4585,140 @@ body {
   border: none;
   box-shadow: none;
 }
+#attrFormBody.inline-value-editing {
+  padding: 0;
+}
+#attrFormBody.inline-value-editing .wd-statement-form {
+  padding: 0;
+}
+.attr-row-inline-editing {
+  align-items: flex-start !important;
+  flex-wrap: nowrap;
+  gap: 8px !important;
+}
+.attr-row-inline-editing > div:first-child {
+  flex: 0 0 140px !important;
+  max-width: 140px !important;
+  min-width: 0 !important;
+}
+.attr-row-inline-editing > .attr-row-del-btn,
+.attr-row-inline-editing > .attr-quick-add-btn {
+  display: none !important;
+}
+.attr-value-inline-editor {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  width: 0 !important;
+  display: block !important;
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  padding: 2px 6px !important;
+  background: transparent !important;
+  border-radius: 4px !important;
+}
+.attr-value-inline-editor #attrForm .wd-attr-edit-row {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.attr-value-inline-editor #attrForm .wd-value-wrap {
+  gap: 8px;
+  width: 100%;
+}
+.attr-value-inline-editor #attrForm #attrValueWrap {
+  width: 100%;
+}
+.attr-value-inline-editor #attrForm .wd-value-action-row {
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: stretch;
+}
+.attr-value-inline-editor #attrForm .wd-value-action-row > .wd-value-input-row {
+  flex: 1 1 100%;
+  width: 100%;
+  min-width: 0;
+}
+.attr-value-inline-editor
+  #attrForm
+  .wd-value-action-row
+  > .attr-inline-actions {
+  flex: 1 1 100%;
+  width: 100%;
+  justify-content: flex-end;
+}
+.attr-value-inline-editor #attrForm .wd-form-actions.attr-inline-actions {
+  padding-top: 0;
+  margin-left: 0;
+  border-top: none;
+}
+.attr-value-inline-editor #attrForm #attrDatatypeGroups,
+.attr-value-inline-editor #attrForm .dtype-group,
+.attr-value-inline-editor #attrForm .wd-inline-row {
+  width: 100%;
+  max-width: 100%;
+}
+.attr-value-inline-editor #attrForm .wd-value-input-row {
+  width: 100%;
+}
+.attr-value-inline-editor #attrForm .wd-value-input-row > .wd-qualifier-toggle {
+  flex: 0 0 auto;
+}
+.attr-value-inline-editor #attrForm .wd-dtype-stack[data-dtype="wikibase-entityid"] {
+  gap: 6px;
+}
+.attr-value-inline-editor #attrForm .wd-input {
+  width: 100%;
+  max-width: 100%;
+}
+.relation-inline-editor {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.relation-inline-editor__input-row {
+  width: 100%;
+  min-width: 0;
+}
+.relation-inline-editor__input {
+  width: 100%;
+  min-width: 0;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--fg) !important;
+  font-size: 12px !important;
+  line-height: 1.5 !important;
+}
+.relation-inline-editor__input::placeholder {
+  color: color-mix(in srgb, var(--muted) 84%, transparent);
+}
+.relation-inline-editor__input:focus {
+  outline: none !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--accent) 42%, transparent) !important;
+}
+.relation-inline-editor__results {
+  width: 100%;
+}
+.relation-inline-editor__select {
+  width: 100%;
+  min-height: 120px;
+}
+.relation-inline-editor__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-top: 4px;
+}
 #attrForm .wd-attr-edit-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -4610,6 +4744,15 @@ body {
   display: none;
 }
 #attrForm.value-only-editing .wd-attr-edit-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+#attrForm.relation-inline-editing .wd-prop-cell {
+  display: none;
+}
+#attrForm.relation-inline-editing .wd-prop-picker {
+  display: none;
+}
+#attrForm.relation-inline-editing .wd-attr-edit-row {
   grid-template-columns: minmax(0, 1fr);
 }
 #attrForm .wd-prop-cell .wd-prop-picker {
