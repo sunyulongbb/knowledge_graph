@@ -2158,8 +2158,9 @@ export async function handleCoreKbRoutes(
       countParams.push(scopedProjectId);
     }
 
-    const orderBy = (url.searchParams.get("order") || "").trim();
-    let orderClause = " ORDER BY n.rowid DESC";
+    const orderBy = (url.searchParams.get("order") || "modified_desc").trim();
+    let orderClause =
+      " ORDER BY datetime(COALESCE(n.updated_at, n.created_at)) DESC, n.rowid DESC";
     if (orderBy === "modified_desc") {
       orderClause =
         " ORDER BY datetime(COALESCE(n.updated_at, n.created_at)) DESC, n.rowid DESC";
@@ -3603,9 +3604,10 @@ export async function handleCoreKbRoutes(
       if (updates.length > 0) {
         params.push(id);
         const scopeSql = hasProjectScope ? ` AND ${scopedClause()}` : "";
+        const setClauses = [...updates, "updated_at = CURRENT_TIMESTAMP"];
         const runUpdate = () =>
           db.run(
-            `UPDATE nodes SET ${updates.join(", ")} WHERE id = ?${scopeSql}`,
+            `UPDATE nodes SET ${setClauses.join(", ")} WHERE id = ?${scopeSql}`,
             hasProjectScope ? [...params, scopedProjectId] : params,
           );
         try {

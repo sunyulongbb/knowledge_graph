@@ -645,12 +645,13 @@
 
   function initTablePanel() {
     const initial = getUrlParams();
-    if (tblSortSelect && initial.order) {
+    if (tblSortSelect) {
       const allowedSortValues = Array.from(tblSortSelect.options || []).map(
         (opt) => opt.value,
       );
-      if (allowedSortValues.includes(initial.order)) {
-        tblSortSelect.value = initial.order;
+      const initialOrder = initial.order || "modified_desc";
+      if (allowedSortValues.includes(initialOrder)) {
+        tblSortSelect.value = initialOrder;
       }
     }
 
