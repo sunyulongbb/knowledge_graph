@@ -5957,8 +5957,14 @@
     ) {
       const normalizedMode = normalizeViewModeInput(mode) || "table";
       let normalizedNode = nodeId ? String(nodeId).trim() : "";
+      const currentRoute =
+        typeof getRouteStateFromHash === "function"
+          ? getRouteStateFromHash()
+          : { node: "" };
+      const currentRouteNode = String(currentRoute?.node || "").trim();
       if (!normalizedNode) {
         const pinnedNode = String(
+          currentRouteNode ||
           window.kbActiveDetailRouteId ||
           window.kbActiveDetailNodeId ||
           window.kbActiveVisNodeId ||
@@ -5968,7 +5974,7 @@
         ).trim();
         if (
           pinnedNode &&
-          ["detail", "report_detail", "vis"].includes(normalizedMode)
+          ["table", "detail", "report_detail", "vis"].includes(normalizedMode)
         ) {
           normalizedNode = pinnedNode;
         }
@@ -5980,7 +5986,8 @@
         entryScreen === "editor" && normalizedEntryTaskId ? "editor" : "manager";
       const shouldIncludeNode =
         normalizedNode &&
-        (normalizedMode === "detail" ||
+        (normalizedMode === "table" ||
+          normalizedMode === "detail" ||
           normalizedMode === "report_detail" ||
           normalizedMode === "vis" ||
           includeNode === true);
@@ -6049,6 +6056,8 @@
           window.kbSelectedNodeId = nextNodeId;
           window.kbCurrentNodeId = nextNodeId;
           window.kbActiveDetailRouteId = nextNodeId;
+          window.kbActiveDetailNodeId = ensureEntityIdPrefix(nextNodeId);
+          window.kbActiveVisNodeId = stripEntityIdPrefix(nextNodeId) || nextNodeId;
         } catch {}
       }
 
@@ -8870,6 +8879,7 @@
 
     function setViewMode(mode, options = {}) {
       const normalized = normalizeViewModeInput(mode) || "table";
+      const preservedEditorNode = captureCurrentEditorNodeState();
       const skipRouteUpdate = options.skipRouteUpdate === true;
       const replaceRoute = options.replaceRoute === true;
       const focusDetailOnly = options.focusDetailOnly === true;
@@ -8994,7 +9004,11 @@
           let routeNode = "";
           let includeNode = false;
           // 优先 targetNodeIdRaw
-          routeNode = targetNodeIdRaw || (window.kbSelectedRowId || "").trim() || (document.getElementById("fId")?.value || "").trim();
+          routeNode =
+            targetNodeIdRaw ||
+            (window.kbSelectedRowId || "").trim() ||
+            (document.getElementById("fId")?.value || "").trim() ||
+            String(getRouteStateFromHash()?.node || "").trim();
           includeNode = Boolean(routeNode);
           syncHashForView(normalized, {
             replace: replaceRoute,
@@ -9120,13 +9134,25 @@
         }
       } else if (isTable) {
         if (!hasTargetNode) {
-          window.kbSelectedRowId = "";
-          window.kbSelectedRowIds = new Set();
-          window.kbSelectedNodeId = "";
-          window.kbCurrentNodeId = "";
-          window.kbActiveDetailRouteId = "";
-          window.kbActiveDetailNodeId = "";
-          window.kbActiveVisNodeId = "";
+          const preservedNodeId = String(
+            window.kbSelectedRowId ||
+            window.kbSelectedNodeId ||
+            window.kbCurrentNodeId ||
+            window.kbActiveDetailRouteId ||
+            document.getElementById("fId")?.value ||
+            "",
+          ).trim();
+          if (preservedNodeId) {
+            window.kbSelectedRowId = preservedNodeId;
+            window.kbSelectedRowIds = new Set([preservedNodeId]);
+            window.kbLastAnchorRowId = preservedNodeId;
+            window.kbSelectedNodeId = preservedNodeId;
+            window.kbCurrentNodeId = preservedNodeId;
+            window.kbActiveDetailRouteId = preservedNodeId;
+            window.kbActiveDetailNodeId = ensureEntityIdPrefix(preservedNodeId);
+            window.kbActiveVisNodeId =
+              stripEntityIdPrefix(preservedNodeId) || preservedNodeId;
+          }
         }
         try {
           renderTableList();
@@ -9260,7 +9286,11 @@
       if (!skipRouteUpdate) {
         let routeNode = "";
         let includeNode = false;
-        routeNode = targetNodeIdRaw || (window.kbSelectedRowId || "").trim() || (document.getElementById("fId")?.value || "").trim();
+        routeNode =
+          targetNodeIdRaw ||
+          (window.kbSelectedRowId || "").trim() ||
+          (document.getElementById("fId")?.value || "").trim() ||
+          String(getRouteStateFromHash()?.node || "").trim();
         includeNode = Boolean(routeNode);
         syncHashForView(normalized, {
           replace: replaceRoute,
@@ -9269,6 +9299,15 @@
           entryScreen: normalized === "entry" ? entryActiveScreen : "manager",
           entryTaskId: normalized === "entry" ? entryCurrentTaskId : "",
         });
+      }
+      if (!hasTargetNode && preservedEditorNode) {
+        try {
+          const currentFormId = String(fId?.value || "").trim();
+          const currentFormName = String(fName?.value || "").trim();
+          if (!currentFormId && !currentFormName) {
+            restoreCurrentEditorNodeState(preservedEditorNode);
+          }
+        } catch { }
       }
       // update nav underline to reflect new active state
       try { if (typeof updateNavUnderline === 'function') updateNavUnderline(); } catch (e) { }
@@ -16686,6 +16725,67 @@
       } catch { }
     }
     window.resetFormToAdd = resetFormToAdd;
+    function captureCurrentEditorNodeState() {
+      try {
+        if (
+          window.kbCurrentNodePayload &&
+          typeof window.kbCurrentNodePayload === "object" &&
+          (window.kbCurrentNodePayload.id || window.kbCurrentNodePayload._id)
+        ) {
+          return JSON.parse(JSON.stringify(window.kbCurrentNodePayload));
+        }
+      } catch { }
+      try {
+        const id = String(fId?.value || "").trim();
+        const name = String(fName?.value || "").trim();
+        const desc = String(fDesc?.value || "").trim();
+        const type = String(fType?.value || "").trim();
+        const link = String(fLink?.value || "").trim();
+        const pdf = String(uploadedPdfUrl || fPdf?.value || "").trim();
+        const aliases = toListArray(fAliases?.value || "");
+        const tags = toListArray(fTags?.value || "");
+        if (!id && !name && !desc && !type && !link && !pdf && !aliases.length && !tags.length) {
+          return null;
+        }
+        return {
+          id,
+          _id: id,
+          label: name,
+          label_zh: name,
+          description: desc,
+          desc: desc,
+          type,
+          link,
+          pdf,
+          aliases,
+          tags,
+          images: [],
+          mentions:
+            window.kbComposerMentionEntityMap &&
+            typeof window.kbComposerMentionEntityMap === "object"
+              ? { ...window.kbComposerMentionEntityMap }
+              : Object.create(null),
+        };
+      } catch {
+        return null;
+      }
+    }
+    function restoreCurrentEditorNodeState(node) {
+      try {
+        if (!node || typeof node !== "object") return false;
+        const nodeId = String(node._id || node.id || "").trim();
+        const hasMeaningfulContent =
+          Boolean(nodeId) ||
+          Boolean(String(node.label_zh || node.label || node.name || "").trim()) ||
+          Boolean(String(node.desc_zh || node.description || node.desc || "").trim());
+        if (!hasMeaningfulContent) return false;
+        if (typeof setFormToEdit === "function") {
+          setFormToEdit(node);
+          return true;
+        }
+      } catch { }
+      return false;
+    }
     function clearEntityListSelection() {
       try {
         if (typeof window.setTableSelection === "function") {

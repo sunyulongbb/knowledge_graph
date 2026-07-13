@@ -333,6 +333,7 @@ function __kbInitTableSelection() {
     }
     if (!id) {
       window.kbSelectionHydrated = false;
+      window.kbTableSidebarHydratedId = "";
     }
     updateSelectedRowStyles();
     syncCheckboxStates();
@@ -1053,6 +1054,47 @@ function __kbInitTableSelection() {
     ).finally(() => {
       setVideoByIndex(initialIndex, { keepTime: true });
     });
+  }
+
+  function scheduleTableSidebarSync(targetId) {
+    const pendingId = String(targetId || "").trim();
+    if (!pendingId) return;
+    try {
+      if (window.kbTableSidebarSyncTimer) {
+        clearTimeout(window.kbTableSidebarSyncTimer);
+      }
+    } catch {}
+    window.kbTablePendingSidebarNodeId = pendingId;
+    window.kbTableSidebarSyncTimer = setTimeout(async () => {
+      try {
+        if ((window.kbViewMode || "table") !== "table") return;
+        const stablePendingId = String(
+          window.kbTablePendingSidebarNodeId || "",
+        ).trim();
+        if (!stablePendingId || stablePendingId !== pendingId) return;
+        const currentFormId = String(
+          document.getElementById("fId")?.value || "",
+        ).trim();
+        const normalizedPendingId = normalizeEntityIdLike(stablePendingId);
+        const normalizedFormId = normalizeEntityIdLike(currentFormId);
+        const normalizedHydratedId = normalizeEntityIdLike(
+          window.kbTableSidebarHydratedId || "",
+        );
+        if (
+          normalizedHydratedId === normalizedPendingId &&
+          normalizedFormId === normalizedPendingId
+        ) {
+          return;
+        }
+        if (typeof enterEditById === "function") {
+          await enterEditById(stablePendingId, { skipGraphFocus: true });
+          window.kbTableSidebarHydratedId = stablePendingId;
+          window.kbSelectionHydrated = true;
+        }
+      } catch (err) {
+        console.warn("table sidebar sync failed", err);
+      }
+    }, 80);
   }
 
   function buildPreviewVideoElement(node, videoUrls, posterSource) {
@@ -2917,6 +2959,13 @@ function __kbInitTableSelection() {
         updateSelectedRowStyles();
         syncCheckboxStates();
         // Disable auto locate after each render to keep scrolling smooth.
+        const selectedRow = findSelectedRow();
+        const selectedRowId = String(
+          selectedRow?.getAttribute("data-id") || window.kbSelectedRowId || "",
+        ).trim();
+        if (isTableViewActive && selectedRowId) {
+          scheduleTableSidebarSync(selectedRowId);
+        }
       }
     } catch {}
 
