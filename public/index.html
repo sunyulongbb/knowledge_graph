@@ -2453,8 +2453,8 @@
             </button>
             <label for="tblSort" class="muted" style="font-size: 12px">排序：</label>
             <select id="tblSort" class="kb-select sm">
-              <option value="id" selected>按编号</option>
-              <option value="modified_desc">按更新时间↓</option>
+              <option value="id">按编号</option>
+              <option value="modified_desc" selected>按更新时间↓</option>
               <option value="modified_asc">按更新时间↑</option>
             </select>
             <select id="tblPageSize" class="kb-select sm">
@@ -17185,65 +17185,17 @@
           await loadTablePage({ resetPage: !isEdit });
         }
 
-        if (isEdit) {
-          const updatedNode =
-            nodeData && typeof nodeData === "object" ? nodeData : null;
-          try {
-            if (nodeId) {
-              if (typeof window.setTableSelection === "function") {
-                window.setTableSelection(nodeId, true, {
-                  skipDetailRefresh: window.kbViewMode !== "detail",
-                });
-              } else {
-                window.kbSelectedRowId = nodeId;
-                window.kbSelectedRowIds = new Set([nodeId]);
-                window.kbSelectedNodeId = nodeId;
-                window.kbCurrentNodeId = nodeId;
-                window.kbLastAnchorRowId = nodeId;
-              }
-            }
-          } catch (err) {
-            console.warn("restore selection after save failed", err);
-          }
-          try {
-            if (updatedNode && typeof setFormToEdit === "function") {
-              setFormToEdit(updatedNode);
-            }
-          } catch (err) {
-            console.warn("restore left card after save failed", err);
-          }
-          try {
-            if (
-              nodeId &&
-              window.kbViewMode === "detail" &&
-              typeof syncHashForView === "function"
-            ) {
-              syncHashForView("detail", {
-                replace: true,
-                nodeId,
-                includeNode: true,
-              });
-            }
-          } catch (err) {
-            console.warn("restore detail route after save failed", err);
-          }
-          try {
-            if (
-              nodeId &&
-              window.kbViewMode === 'vis' &&
-              typeof loadNodeNeighborhood === 'function'
-            ) {
-              await loadNodeNeighborhood(ensureEntityIdPrefix(nodeId), {
-                replace: false,
-              });
-            }
-          } catch (err) {
-            console.warn('refresh vis relations after save failed', err);
-          }
-        } else {
-          resetFormToAdd();
-        }
         if (res?.ok) {
+          const savedStatusText = addMsg.textContent;
+          resetFormToAdd();
+          clearEntityListSelection();
+          try {
+            if (window.kbCy) {
+              window.kbCy.$(":selected").unselect();
+              window.kbCy.nodes(".new-node").removeClass("new-node");
+            }
+          } catch { }
+          addMsg.textContent = savedStatusText;
           window.kbPendingEntityImageDataUrl = "";
           try {
             if (typeof window.registerNodeTagsToTagManager === "function") {

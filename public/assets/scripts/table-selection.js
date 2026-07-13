@@ -1875,13 +1875,17 @@ function __kbInitTableSelection() {
     if (mediaItems.some((item) => item.type === "video")) {
       grid.classList.add("has-video");
     }
+    if (mediaItems.length > 1) {
+      grid.classList.add("is-scroll-strip");
+    }
     if (mediaItems.length === 1 && mediaItems[0]?.type === "video") {
       grid.classList.add("single-video");
     }
     if (!mediaItems.length) return grid;
 
-    const visibleItems = mediaItems.slice(0, 4);
-    const hiddenCount = Math.max(0, mediaItems.length - visibleItems.length);
+    const visibleItems = mediaItems.length > 1 ? mediaItems : mediaItems.slice(0, 4);
+    const hiddenCount =
+      mediaItems.length > 1 ? 0 : Math.max(0, mediaItems.length - visibleItems.length);
 
     visibleItems.forEach((item, visibleIndex) => {
       const cell = document.createElement("div");
@@ -1893,30 +1897,71 @@ function __kbInitTableSelection() {
         if (visibleIndex === 0) video.classList.add("table-feed-video-observe");
         video.src = resolveMediaUrl(item.src);
         video.controls = false;
-        video.preload = visibleIndex === 0 ? "metadata" : "none";
+        video.preload = mediaItems.length === 1 ? "metadata" : "none";
         video.playsInline = true;
         video.muted = true;
         video.loop = true;
         if (item.poster) video.poster = resolveMediaUrl(item.poster);
-        if (mediaItems.length === 1) {
-          const applyVideoRatio = () => {
-            const width = Number(video.videoWidth || 0);
-            const height = Number(video.videoHeight || 0);
-            if (!width || !height) return;
+        const applyVideoRatio = () => {
+          const width = Number(video.videoWidth || 0);
+          const height = Number(video.videoHeight || 0);
+          if (!width || !height) return;
+          if (mediaItems.length === 1) {
+            cell.style.aspectRatio = `${width} / ${height}`;
             grid.style.aspectRatio = `${width} / ${height}`;
-          };
-          video.addEventListener("loadedmetadata", applyVideoRatio, {
-            once: true,
-          });
-          if (video.readyState >= 1) applyVideoRatio();
-        }
+            cell.style.width = "fit-content";
+          }
+        };
+        video.addEventListener("loadedmetadata", applyVideoRatio, {
+          once: true,
+        });
+        if (video.readyState >= 1) applyVideoRatio();
 
         const playBadge = document.createElement("button");
         playBadge.type = "button";
-        playBadge.className = "table-feed-media-play-badge";
+        playBadge.className = "table-feed-media-play-badge is-position-pending";
         playBadge.title = "播放视频";
         playBadge.setAttribute("aria-label", "播放视频");
         playBadge.innerHTML = '<i class="fa-solid fa-play"></i>';
+
+        const syncVideoPlayBadgePosition = () => {
+          if (mediaItems.length > 1) {
+            playBadge.style.left = "50%";
+            playBadge.style.top = "50%";
+            playBadge.classList.remove("is-position-pending");
+            return;
+          }
+          const box = cell.getBoundingClientRect();
+          const width = Number(video.videoWidth || 0);
+          const height = Number(video.videoHeight || 0);
+          if (!box.width || !box.height || !width || !height) return;
+          const mediaRatio = width / height;
+          const boxRatio = box.width / box.height;
+          let renderedWidth = box.width;
+          let renderedHeight = box.height;
+          if (boxRatio > mediaRatio) {
+            renderedWidth = box.height * mediaRatio;
+          } else {
+            renderedHeight = box.width / mediaRatio;
+          }
+          playBadge.style.left = `${renderedWidth / 2}px`;
+          playBadge.style.top = `${
+            (box.height - renderedHeight) / 2 + renderedHeight / 2
+          }px`;
+          playBadge.classList.remove("is-position-pending");
+        };
+        video.addEventListener("loadedmetadata", syncVideoPlayBadgePosition);
+        video.addEventListener("loadeddata", syncVideoPlayBadgePosition);
+        if (mediaItems.length === 1) {
+          window.addEventListener("resize", syncVideoPlayBadgePosition, {
+            passive: true,
+          });
+          if (typeof ResizeObserver === "function") {
+            const observer = new ResizeObserver(syncVideoPlayBadgePosition);
+            observer.observe(cell);
+          }
+        }
+        requestAnimationFrame(syncVideoPlayBadgePosition);
 
         const syncPlayBadge = () => {
           const isPaused = video.paused || video.ended;
@@ -2003,11 +2048,26 @@ function __kbInitTableSelection() {
           openImageLightbox(imageSources, item.index);
         });
         const img = document.createElement("img");
+        const imageUrl = resolveMediaUrl(item.src);
         img.alt =
           node?.label_zh || node?.label || node?.name || `图片 ${item.index + 1}`;
         img.loading = "lazy";
         img.decoding = "async";
-        img.src = resolveMediaUrl(item.src);
+        img.src = imageUrl;
+        const applyImageRatio = () => {
+          const width = Number(img.naturalWidth || 0);
+          const height = Number(img.naturalHeight || 0);
+          if (!width || !height) return;
+          const ratio = width / height;
+          if (ratio > 0.34 && ratio < 3.2) {
+            cell.style.aspectRatio = `${width} / ${height}`;
+            if (mediaItems.length === 1) {
+              grid.style.aspectRatio = `${width} / ${height}`;
+            }
+          }
+        };
+        img.addEventListener("load", applyImageRatio, { once: true });
+        if (img.complete) applyImageRatio();
         button.appendChild(img);
 
         const delBtn = document.createElement("button");
@@ -2634,6 +2694,13 @@ function __kbInitTableSelection() {
 
     const filteredList = rawList.filter((n) => {
       if (!n || typeof n !== "object") return false;
+
+      if (isTableLayout) {
+        const displayName = String(
+          n.label_zh || n.label || n.name || "",
+        ).trim();
+        if (!displayName) return false;
+      }
 
       if (keyword) {
         const text = [
