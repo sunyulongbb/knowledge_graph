@@ -37,6 +37,7 @@
       window["@tiptap/starter-kit"] || window.TiptapStarterKit;
   </script>
   <link rel="stylesheet" href="/assets/styles/app.css" />
+  <link rel="stylesheet" href="/assets/styles/sparql.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
   <script src="https://unpkg.com/cytoscape-edgehandles@4.0.1/cytoscape-edgehandles.js"></script>
   <script src="/node_modules/cytoscape-dagre/dist/cytoscape-dagre.min.js"></script>
@@ -2313,6 +2314,10 @@
               <input id="entryExcelFileInput" type="file" accept=".xlsx,.xls,.csv,.json" style="display:none" />
             </div>
           </div>
+          <div class="sparql-mode-switch" id="entryModeSwitch">
+            <button id="btnEntryModeSheet" class="btn sm accent" type="button">表格录入</button>
+            <button id="btnEntryModeSparql" class="btn sm" type="button">SPARQL 导入</button>
+          </div>
           <div id="entryApiForm" class="panel" style="display:none; padding: 14px; border: 1px solid var(--border); background: var(--surface-0); margin-top: 12px; gap: 10px;">
             <div style="display:flex; align-items:center; justify-content:space-between; gap: 12px; flex-wrap:wrap;">
               <div>
@@ -2427,6 +2432,126 @@
                 建议至少填写“名称”列；类型固定，其余列可自由新增、删除、重命名。
               </p>
             </div>
+          </div>
+          <div id="sparqlImportView" class="sparql-view" style="display:none; min-width:0; min-height:0; flex:1 1 auto; flex-direction:column; gap:12px;">
+            <div class="sparql-layout sparql-layout-top">
+              <section class="panel sparql-card sparql-card-sidebar">
+                <div class="sparql-card-head">
+                  <div>
+                    <div class="sparql-card-title">数据源</div>
+                    <div class="muted">管理已保存 SPARQL Endpoint</div>
+                  </div>
+                  <div class="sparql-actions">
+                    <button id="btnSparqlEndpointNew" class="btn sm" type="button">新建</button>
+                    <button id="btnSparqlEndpointSave" class="btn sm accent" type="button">保存</button>
+                    <button id="btnSparqlEndpointDelete" class="btn sm" type="button">删除</button>
+                    <button id="btnSparqlEndpointTest" class="btn sm" type="button">测试连接</button>
+                  </div>
+                </div>
+                <div class="sparql-form-grid sparql-form-compact">
+                  <label class="field sparql-span-2">
+                    <span>选择数据源</span>
+                    <select id="sparqlEndpointSelect" class="kb-select"></select>
+                    <small class="field-hint">优先从内置或已保存的数据源中选择，再按需补充下面的必要字段。</small>
+                  </label>
+                  <label class="field"><span>名称</span><input id="sparqlEndpointName" class="kb-input" placeholder="例如：Wikidata 公共端点" /></label>
+                  <label class="field"><span>请求方式</span><select id="sparqlEndpointMethod" class="kb-select"><option value="GET">GET</option><option value="POST">POST 表单</option><option value="SPARQL_POST">SPARQL POST</option></select></label>
+                  <label class="field sparql-span-2"><span>Endpoint</span><input id="sparqlEndpointUrl" class="kb-input" placeholder="https://query.wikidata.org/sparql" /></label>
+                  <label class="field"><span>认证方式</span><select id="sparqlEndpointAuthType" class="kb-select"><option value="none">无认证</option><option value="basic">Basic Auth</option><option value="bearer">Bearer Token</option></select></label>
+                  <label class="field"><span>超时(ms)</span><input id="sparqlEndpointTimeout" class="kb-input" type="number" value="30000" /></label>
+                  <label id="sparqlBasicAuthUserField" class="field"><span>用户名</span><input id="sparqlEndpointUsername" class="kb-input" placeholder="Basic Auth 用户名" /></label>
+                  <label id="sparqlBasicAuthPasswordField" class="field"><span>密码</span><input id="sparqlEndpointPassword" class="kb-input" type="password" placeholder="留空则不修改" /></label>
+                  <label id="sparqlBearerTokenField" class="field sparql-span-2"><span>Token</span><input id="sparqlEndpointToken" class="kb-input" type="password" placeholder="Bearer Token，留空则不修改" /></label>
+                </div>
+                <details class="sparql-advanced">
+                  <summary>高级设置</summary>
+                  <div class="sparql-form-grid">
+                    <label class="field"><span>重试次数</span><input id="sparqlEndpointRetries" class="kb-input" type="number" value="1" /></label>
+                    <label class="field"><span>User-Agent</span><input id="sparqlEndpointUserAgent" class="kb-input" value="KnowledgeGraphSPARQL/1.0" /></label>
+                    <label class="field sparql-span-2"><span>自定义请求头(JSON)</span><textarea id="sparqlEndpointHeaders" class="kb-input" rows="3">{}</textarea></label>
+                    <label class="field sparql-span-2"><span>说明</span><textarea id="sparqlEndpointDescription" class="kb-input" rows="2" placeholder="记录该数据源用途、限流说明或特殊约束"></textarea></label>
+                  </div>
+                </details>
+                <div id="sparqlConnectionStatus" class="entry-hint">默认内置多套测试数据源与模板，通常只需要选择一个数据源并补充必要信息即可。</div>
+              </section>
+
+              <section class="panel sparql-card sparql-card-main">
+                <div class="sparql-card-head">
+                  <div>
+                    <div class="sparql-card-title">模板与查询</div>
+                    <div class="muted">支持 Ctrl+Enter 执行</div>
+                  </div>
+                  <div class="sparql-actions">
+                    <button id="btnSparqlTemplateSave" class="btn sm" type="button">保存模板</button>
+                    <button id="btnSparqlRun" class="btn sm accent" type="button">执行查询</button>
+                    <button id="btnSparqlClear" class="btn sm" type="button">清空</button>
+                  </div>
+                </div>
+                <div class="sparql-template-toolbar">
+                  <select id="sparqlTemplateSelect" class="kb-select"></select>
+                  <button id="btnSparqlTemplateFavorite" class="btn sm" type="button">收藏/取消收藏</button>
+                </div>
+                <textarea id="sparqlQueryEditor" class="sparql-editor" spellcheck="false"></textarea>
+                <div class="sparql-editor-footer">
+                  <span id="sparqlQueryMeta" class="muted">仅允许只读查询：SELECT / ASK / CONSTRUCT / DESCRIBE</span>
+                  <label class="sparql-inline-check"><input id="sparqlAutoLimit" type="checkbox" checked /> 自动提示 LIMIT</label>
+                </div>
+              </section>
+            </div>
+
+            <div class="sparql-layout sparql-layout-middle">
+              <section class="panel sparql-card sparql-card-main">
+                <div class="sparql-card-head">
+                  <div>
+                    <div class="sparql-card-title">查询结果预览</div>
+                    <div class="muted">支持本地分页与原始响应查看</div>
+                  </div>
+                  <div class="sparql-actions">
+                    <select id="sparqlPageSize" class="kb-select sm"><option>20</option><option selected>50</option><option>100</option><option>200</option></select>
+                    <button id="btnSparqlShowRaw" class="btn sm" type="button">原始响应</button>
+                  </div>
+                </div>
+                <div id="sparqlResultSummary" class="entry-hint">还没有执行查询。</div>
+                <div class="sparql-result-tools">
+                  <input id="sparqlResultSearch" class="kb-input" placeholder="搜索结果..." />
+                </div>
+                <div id="sparqlResultTable" class="sparql-table-wrap"></div>
+                <pre id="sparqlRawResponse" class="sparql-raw" style="display:none;"></pre>
+              </section>
+
+              <section class="panel sparql-card sparql-card-sidebar">
+                <div class="sparql-card-head">
+                  <div>
+                    <div class="sparql-card-title">字段映射与导入</div>
+                    <div class="muted">查询成功后自动生成推荐</div>
+                  </div>
+                  <div class="sparql-actions">
+                    <button id="btnSparqlBuildPreview" class="btn sm" type="button" disabled>生成预览</button>
+                    <button id="btnSparqlImport" class="btn sm accent" type="button" disabled>确认导入</button>
+                  </div>
+                </div>
+                <div class="sparql-form-grid">
+                  <label class="field"><span>目标分类 Schema</span><select id="sparqlSchemaSelect" class="kb-select"></select></label>
+                  <label class="field"><span>默认实体类型</span><input id="sparqlDefaultEntityType" class="kb-input" value="SPARQL实体" /></label>
+                  <label class="field sparql-span-2"><span>导入任务名称</span><input id="sparqlTaskName" class="kb-input" placeholder="SPARQL 导入任务" /></label>
+                </div>
+                <div id="sparqlMappingTable" class="sparql-table-wrap"></div>
+                <div id="sparqlPreviewSummary" class="entry-hint">尚未生成导入预览。</div>
+                <div id="sparqlPreviewEntities" class="sparql-table-wrap"></div>
+                <div id="sparqlPreviewRelations" class="sparql-table-wrap"></div>
+              </section>
+            </div>
+
+            <section class="panel sparql-card sparql-card-full">
+              <div class="sparql-card-head">
+                <div>
+                  <div class="sparql-card-title">导入任务与日志</div>
+                  <div class="muted">可查看状态、日志与重新执行</div>
+                </div>
+              </div>
+              <div id="sparqlTaskList" class="sparql-task-list"></div>
+              <pre id="sparqlTaskLogs" class="sparql-raw"></pre>
+            </section>
           </div>
         </div>
         <!-- Table panel (default) -->
@@ -18557,6 +18682,7 @@
   <script src="/assets/scripts/sidebar-panel.js"></script>
   <script src="/assets/scripts/auth-panel.js"></script>
   <script src="/assets/scripts/db-modal.js"></script>
+  <script src="/assets/scripts/sparql-panel.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       const split = document.querySelector('.kb-split');

@@ -7,6 +7,7 @@ import { serveStaticRoute } from "./src/server/static.ts";
 import { handleWikiRoutes } from "./src/server/routes/wiki.ts";
 import { handleChatRoutes } from "./src/server/routes/chat.ts";
 import { handleSemanticMapRoutes } from "./src/server/routes/semantic-map.ts";
+import { handleSparqlRoutes } from "./src/server/routes/sparql.ts";
 
 const port = parseInt(process.env.PORT || "8080");
 
@@ -50,6 +51,9 @@ const server = Bun.serve({
 
       const semanticMapRes = await handleSemanticMapRoutes(req, url, method);
       if (semanticMapRes) return semanticMapRes;
+
+      const sparqlRes = await handleSparqlRoutes(req, url, method);
+      if (sparqlRes) return sparqlRes;
 
       const staticResponse = await serveStaticRoute(req, url.pathname);
       if (staticResponse) return staticResponse;

@@ -744,6 +744,126 @@ function ensureSharedTables() {
   runSafe(
     "CREATE INDEX IF NOT EXISTS idx_entry_tasks_project_updated ON entry_tasks(project_id, updated_at DESC)",
   );
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS sparql_endpoints (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      endpoint TEXT NOT NULL,
+      method TEXT NOT NULL DEFAULT 'POST',
+      auth_type TEXT NOT NULL DEFAULT 'none',
+      username TEXT,
+      password TEXT,
+      token TEXT,
+      headers TEXT,
+      timeout INTEGER DEFAULT 30000,
+      retries INTEGER DEFAULT 1,
+      user_agent TEXT,
+      description TEXT,
+      default_query TEXT,
+      project_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  runSafe("ALTER TABLE sparql_endpoints ADD COLUMN project_id INTEGER");
+  runSafe("ALTER TABLE sparql_endpoints ADD COLUMN headers TEXT");
+  runSafe("ALTER TABLE sparql_endpoints ADD COLUMN retries INTEGER DEFAULT 1");
+  runSafe("ALTER TABLE sparql_endpoints ADD COLUMN user_agent TEXT");
+  runSafe("ALTER TABLE sparql_endpoints ADD COLUMN description TEXT");
+  runSafe("ALTER TABLE sparql_endpoints ADD COLUMN default_query TEXT");
+  runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_sparql_endpoints_project_updated ON sparql_endpoints(project_id, updated_at DESC)",
+  );
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS sparql_templates (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      category TEXT,
+      source_type TEXT,
+      endpoint_id TEXT,
+      query TEXT NOT NULL,
+      description TEXT,
+      is_builtin INTEGER DEFAULT 0,
+      is_favorite INTEGER DEFAULT 0,
+      project_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  runSafe("ALTER TABLE sparql_templates ADD COLUMN project_id INTEGER");
+  runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_sparql_templates_project_category ON sparql_templates(project_id, category, updated_at DESC)",
+  );
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS sparql_query_history (
+      id TEXT PRIMARY KEY,
+      endpoint_id TEXT,
+      query TEXT NOT NULL,
+      query_type TEXT,
+      result_count INTEGER DEFAULT 0,
+      duration INTEGER DEFAULT 0,
+      success INTEGER DEFAULT 0,
+      error_message TEXT,
+      project_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  runSafe("ALTER TABLE sparql_query_history ADD COLUMN project_id INTEGER");
+  runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_sparql_query_history_project_created ON sparql_query_history(project_id, created_at DESC)",
+  );
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS sparql_import_tasks (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      endpoint_id TEXT,
+      endpoint TEXT,
+      query TEXT NOT NULL,
+      query_type TEXT,
+      schema_id TEXT,
+      mapping_config TEXT,
+      import_config TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      result_count INTEGER DEFAULT 0,
+      entity_count INTEGER DEFAULT 0,
+      relation_count INTEGER DEFAULT 0,
+      success_count INTEGER DEFAULT 0,
+      failed_count INTEGER DEFAULT 0,
+      skipped_count INTEGER DEFAULT 0,
+      error_message TEXT,
+      last_import_time DATETIME,
+      started_at DATETIME,
+      finished_at DATETIME,
+      project_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  runSafe("ALTER TABLE sparql_import_tasks ADD COLUMN endpoint TEXT");
+  runSafe("ALTER TABLE sparql_import_tasks ADD COLUMN project_id INTEGER");
+  runSafe("ALTER TABLE sparql_import_tasks ADD COLUMN last_import_time DATETIME");
+  runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_sparql_import_tasks_project_updated ON sparql_import_tasks(project_id, updated_at DESC)",
+  );
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS sparql_import_logs (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      level TEXT NOT NULL,
+      stage TEXT NOT NULL,
+      message TEXT NOT NULL,
+      detail TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_sparql_import_logs_task_created ON sparql_import_logs(task_id, created_at ASC)",
+  );
 }
 
 function getProjectByIdentifier(

@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "dev": "bun run index.ts",
-    "seed:semantic": "bun run scripts/seed-semantic-nodes.ts"
+    "seed:semantic": "bun run scripts/seed-semantic-nodes.ts",
+    "test": "bun test"
   },
   "devDependencies": {
     "@types/bun": "latest",
