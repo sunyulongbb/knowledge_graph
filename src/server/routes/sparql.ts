@@ -195,7 +195,7 @@ export async function handleSparqlRoutes(req: Request, url: URL, method: string)
       if (result.queryType !== "SELECT") {
         return fail("导入预览目前只支持 SELECT 查询结果", "SPARQL_IMPORT_QUERY_TYPE_UNSUPPORTED", result.queryType, 400);
       }
-      const preview = buildImportPreview(result, body?.mapping || {}, endpoint);
+      const preview = buildImportPreview(result, body?.mapping || {}, endpoint, projectId);
       return ok("预览生成成功", preview);
     } catch (error) {
       return fail("生成导入预览失败", "SPARQL_IMPORT_PREVIEW_FAILED", String((error as Error)?.message || error), 400);
@@ -209,7 +209,7 @@ export async function handleSparqlRoutes(req: Request, url: URL, method: string)
       if (!endpoint) return fail("数据源不存在", "SPARQL_ENDPOINT_NOT_FOUND", null, 404);
 
       const result = await executeSparqlRequest(endpoint, String(body?.query || ""), body);
-      const preview = buildImportPreview(result, body?.mapping || {}, endpoint);
+      const preview = buildImportPreview(result, body?.mapping || {}, endpoint, projectId);
       const taskId = createTask(projectId, {
         name: body?.name || `SPARQL 导入 ${new Date().toLocaleString("zh-CN")}`,
         endpoint_id: endpoint.id,
@@ -230,7 +230,10 @@ export async function handleSparqlRoutes(req: Request, url: URL, method: string)
         endpoint: endpoint.endpoint,
       });
 
-      const importSummary = importPreviewToGraph(preview, body?.importConfig || {});
+      const importSummary = importPreviewToGraph(preview, {
+        ...(body?.importConfig || {}),
+        projectId,
+      });
 
       addTaskLog(taskId, "info", "completed", "导入完成", importSummary);
       updateTask(projectId, taskId, {

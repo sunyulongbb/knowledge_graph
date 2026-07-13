@@ -9,6 +9,7 @@ async function readLimitedBody(response: Response) {
   if (!reader) return "";
   const chunks: Uint8Array[] = [];
   let total = 0;
+
   while (true) {
     const next = await reader.read();
     if (next.done) break;
@@ -18,14 +19,62 @@ async function readLimitedBody(response: Response) {
     }
     chunks.push(next.value);
   }
+
   return new TextDecoder().decode(Buffer.concat(chunks.map((item) => Buffer.from(item))));
+}
+
+function isTransientSocketError(error: unknown) {
+  const message = String((error as Error)?.message || error || "").toLowerCase();
+  return (
+    message.includes("socket connection was closed unexpectedly") ||
+    message.includes("other side closed") ||
+    message.includes("econnreset") ||
+    message.includes("terminated")
+  );
+}
+
+function buildRequest(targetUrl: URL, query: string, method: string, headers: Record<string, string>, signal: AbortSignal) {
+  let target = targetUrl.toString();
+  const requestHeaders = { ...headers };
+  const init: RequestInit = {
+    method,
+    headers: requestHeaders,
+    redirect: "follow",
+    signal,
+  };
+
+  if (method === "GET") {
+    const requestUrl = new URL(target);
+    requestUrl.searchParams.set("query", query);
+    target = requestUrl.toString();
+  } else if (method === "SPARQL_POST") {
+    init.method = "POST";
+    requestHeaders["Content-Type"] = "application/sparql-query; charset=utf-8";
+    init.body = query;
+  } else {
+    init.method = "POST";
+    requestHeaders["Content-Type"] = "application/x-www-form-urlencoded; charset=utf-8";
+    init.body = new URLSearchParams({ query }).toString();
+  }
+
+  return { target, init };
+}
+
+function resolveTimeout(endpointUrl: URL, requestedTimeout: number) {
+  const host = endpointUrl.hostname.toLowerCase();
+  if (host.includes("wikidata.org")) return Math.max(requestedTimeout, 60000);
+  if (host.includes("dbpedia.org")) return Math.max(requestedTimeout, 45000);
+  return requestedTimeout;
 }
 
 export async function executeSparqlRequest(config: any, query: string, options: any = {}) {
   const queryType = ensureReadOnlyQuery(query);
   const endpointUrl = await validateEndpointUrl(config.endpoint);
-  const method = String(options?.method || config.method || "POST").toUpperCase();
-  const timeout = Math.max(1000, Math.min(Number(options?.timeout || config.timeout || 30000), 120000));
+  const preferredMethod = String(options?.method || config.method || "POST").toUpperCase();
+  const timeout = resolveTimeout(
+    endpointUrl,
+    Math.max(1000, Math.min(Number(options?.timeout || config.timeout || 30000), 120000)),
+  );
   const retries = Math.max(0, Math.min(Number(config.retries || 1), 3));
   const headers: Record<string, string> = {
     Accept:
@@ -35,6 +84,7 @@ export async function executeSparqlRequest(config: any, query: string, options: 
     "User-Agent": config.user_agent || "KnowledgeGraphSPARQL/1.0",
     ...sanitizeHeaders(config.headers),
   };
+
   if (config.auth_type === "basic" && config.username && config.password) {
     headers.Authorization = `Basic ${Buffer.from(`${config.username}:${config.password}`).toString("base64")}`;
   }
@@ -42,52 +92,43 @@ export async function executeSparqlRequest(config: any, query: string, options: 
     headers.Authorization = `Bearer ${config.token}`;
   }
 
+  const methodsToTry = preferredMethod === "GET" ? ["GET", "POST"] : [preferredMethod];
   const start = Date.now();
   let lastError: unknown = null;
-  for (let attempt = 0; attempt <= retries; attempt += 1) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeout);
-    try {
-      let target = endpointUrl.toString();
-      const init: RequestInit = {
-        method,
-        headers,
-        redirect: "follow",
-        signal: controller.signal,
-      };
-      if (method === "GET") {
-        const requestUrl = new URL(target);
-        requestUrl.searchParams.set("query", query);
-        target = requestUrl.toString();
-      } else if (method === "SPARQL_POST") {
-        init.method = "POST";
-        headers["Content-Type"] = "application/sparql-query; charset=utf-8";
-        init.body = query;
-      } else {
-        init.method = "POST";
-        headers["Content-Type"] = "application/x-www-form-urlencoded; charset=utf-8";
-        init.body = new URLSearchParams({ query }).toString();
+
+  for (const method of methodsToTry) {
+    for (let attempt = 0; attempt <= retries; attempt += 1) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeout);
+      try {
+        const { target, init } = buildRequest(endpointUrl, query, method, headers, controller.signal);
+        const response = await fetch(target, init);
+        const contentType = response.headers.get("content-type") || "";
+        const body = await readLimitedBody(response);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${body.slice(0, 300)}`);
+        }
+
+        const duration = Date.now() - start;
+        const parsed = parseSparqlResponse(body, contentType, duration, query);
+        return {
+          ...parsed,
+          endpoint: endpointUrl.toString(),
+          responseFormat: contentType,
+          httpStatus: response.status,
+        };
+      } catch (error) {
+        lastError = error;
+        if (method === "GET" && isTransientSocketError(error)) {
+          break;
+        }
+        if (attempt >= retries) break;
+      } finally {
+        clearTimeout(timer);
       }
-      const response = await fetch(target, init);
-      const contentType = response.headers.get("content-type") || "";
-      const body = await readLimitedBody(response);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${body.slice(0, 300)}`);
-      }
-      const duration = Date.now() - start;
-      const parsed = parseSparqlResponse(body, contentType, duration, query);
-      return {
-        ...parsed,
-        endpoint: endpointUrl.toString(),
-        responseFormat: contentType,
-        httpStatus: response.status,
-      };
-    } catch (error) {
-      lastError = error;
-      if (attempt >= retries) break;
-    } finally {
-      clearTimeout(timer);
     }
   }
+
   throw new Error(mapNetworkError(lastError));
 }

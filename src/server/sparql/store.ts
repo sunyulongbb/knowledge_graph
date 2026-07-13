@@ -10,8 +10,8 @@ const BUILTIN_ENDPOINTS = [
     auth_type: "none",
     username: "",
     headers: {},
-    timeout: 30000,
-    retries: 1,
+    timeout: 60000,
+    retries: 2,
     user_agent: "KnowledgeGraphSPARQL/1.0",
     description: "Wikidata 公共查询端点",
     default_query: `SELECT ?item ?itemLabel ?itemDescription
@@ -19,7 +19,7 @@ WHERE {
   ?item wdt:P31 wd:Q5.
   SERVICE wikibase:label { bd:serviceParam wikibase:language "zh,en". }
 }
-LIMIT 100`,
+LIMIT 20`,
   },
   {
     id: "builtin-dbpedia",
@@ -29,8 +29,8 @@ LIMIT 100`,
     auth_type: "none",
     username: "",
     headers: {},
-    timeout: 30000,
-    retries: 1,
+    timeout: 45000,
+    retries: 2,
     user_agent: "KnowledgeGraphSPARQL/1.0",
     description: "DBpedia 公共查询端点",
     default_query: `PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -40,7 +40,7 @@ WHERE {
   ?item rdfs:label ?label .
   FILTER(lang(?label) = "zh" || lang(?label) = "en")
 }
-LIMIT 100`,
+LIMIT 20`,
   },
 ] as const;
 
@@ -66,7 +66,7 @@ WHERE {
   ?item wdt:P31 wd:Q5.
   SERVICE wikibase:label { bd:serviceParam wikibase:language "zh,en". }
 }
-LIMIT 100`,
+LIMIT 20`,
     description: "适合测试人物实体导入",
     is_builtin: 1,
     is_favorite: 0,
@@ -82,7 +82,7 @@ WHERE {
   ?item wdt:P31 wd:Q6256.
   SERVICE wikibase:label { bd:serviceParam wikibase:language "zh,en". }
 }
-LIMIT 100`,
+LIMIT 20`,
     description: "适合测试国家实体导入",
     is_builtin: 1,
     is_favorite: 0,
@@ -100,7 +100,7 @@ WHERE {
   FILTER(isIRI(?object))
   SERVICE wikibase:label { bd:serviceParam wikibase:language "zh,en". }
 }
-LIMIT 100`,
+LIMIT 20`,
     description: "适合测试关系映射与导入",
     is_builtin: 1,
     is_favorite: 0,
@@ -117,7 +117,7 @@ WHERE {
   OPTIONAL { ?item wdt:P27 ?country. }
   SERVICE wikibase:label { bd:serviceParam wikibase:language "zh,en". }
 }
-LIMIT 50`,
+LIMIT 20`,
     description: "同时测试实体与国家关系导入",
     is_builtin: 1,
     is_favorite: 0,
@@ -134,7 +134,7 @@ WHERE {
   OPTIONAL { ?item wdt:P17 ?country. }
   SERVICE wikibase:label { bd:serviceParam wikibase:language "zh,en". }
 }
-LIMIT 50`,
+LIMIT 20`,
     description: "适合测试城市和国家关系导入",
     is_builtin: 1,
     is_favorite: 0,
@@ -150,7 +150,7 @@ WHERE {
   ?item wdt:P31/wdt:P279* wd:Q43229.
   SERVICE wikibase:label { bd:serviceParam wikibase:language "zh,en". }
 }
-LIMIT 50`,
+LIMIT 20`,
     description: "适合测试组织类实体导入",
     is_builtin: 1,
     is_favorite: 0,
@@ -167,7 +167,7 @@ WHERE {
   OPTIONAL { ?item wdt:P569 ?birthDate. }
   SERVICE wikibase:label { bd:serviceParam wikibase:language "zh,en". }
 }
-LIMIT 50`,
+LIMIT 20`,
     description: "适合测试普通属性和日期字段导入",
     is_builtin: 1,
     is_favorite: 0,
@@ -184,13 +184,131 @@ PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 SELECT ?item ?label ?abstract
 WHERE {
   ?item a dbo:Place ;
-        rdfs:label ?label ;
-        dbo:abstract ?abstract .
-  FILTER(lang(?label) = "zh" || lang(?label) = "en")
-  FILTER(lang(?abstract) = "zh" || lang(?abstract) = "en")
+        rdfs:label ?label .
+  OPTIONAL {
+    ?item dbo:abstract ?abstract .
+    FILTER(lang(?abstract) = "en")
+  }
+  FILTER(lang(?label) = "en")
 }
-LIMIT 30`,
+LIMIT 20`,
     description: "适合测试 DBpedia 文本字段导入",
+    is_builtin: 1,
+    is_favorite: 0,
+  },
+  {
+    id: "template-dbpedia-person",
+    name: "DBpedia 人物测试",
+    category: "DBpedia 模板",
+    source_type: "dbpedia",
+    endpoint_id: "builtin-dbpedia",
+    query: `PREFIX dbo: <http://dbpedia.org/ontology/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?item ?label ?abstract ?birthPlace
+WHERE {
+  ?item a dbo:Person ;
+        rdfs:label ?label .
+  OPTIONAL {
+    ?item dbo:abstract ?abstract .
+    FILTER(lang(?abstract) = "en")
+  }
+  OPTIONAL { ?item dbo:birthPlace ?birthPlace. }
+  FILTER(lang(?label) = "en")
+}
+LIMIT 20`,
+    description: "适合测试人物实体、简介和出生地关系导入",
+    is_builtin: 1,
+    is_favorite: 0,
+  },
+  {
+    id: "template-dbpedia-organization",
+    name: "DBpedia 组织测试",
+    category: "DBpedia 模板",
+    source_type: "dbpedia",
+    endpoint_id: "builtin-dbpedia",
+    query: `PREFIX dbo: <http://dbpedia.org/ontology/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?item ?label ?abstract ?industry
+WHERE {
+  ?item a dbo:Organisation ;
+        rdfs:label ?label .
+  OPTIONAL {
+    ?item dbo:abstract ?abstract .
+    FILTER(lang(?abstract) = "en")
+  }
+  OPTIONAL { ?item dbo:industry ?industry. }
+  FILTER(lang(?label) = "en")
+}
+LIMIT 20`,
+    description: "适合测试组织实体与行业属性导入",
+    is_builtin: 1,
+    is_favorite: 0,
+  },
+  {
+    id: "template-dbpedia-city-country",
+    name: "DBpedia 城市与国家",
+    category: "DBpedia 模板",
+    source_type: "dbpedia",
+    endpoint_id: "builtin-dbpedia",
+    query: `PREFIX dbo: <http://dbpedia.org/ontology/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?item ?label ?country
+WHERE {
+  ?item a dbo:City ;
+        rdfs:label ?label .
+  OPTIONAL { ?item dbo:country ?country. }
+  FILTER(lang(?label) = "en")
+}
+LIMIT 20`,
+    description: "适合测试城市实体及所属国家关系导入",
+    is_builtin: 1,
+    is_favorite: 0,
+  },
+  {
+    id: "template-dbpedia-category-relations",
+    name: "DBpedia 分类关系测试",
+    category: "DBpedia 模板",
+    source_type: "dbpedia",
+    endpoint_id: "builtin-dbpedia",
+    query: `PREFIX dct: <http://purl.org/dc/terms/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?item ?label ?category
+WHERE {
+  ?item rdfs:label ?label ;
+        dct:subject ?category .
+  FILTER(lang(?label) = "en")
+}
+LIMIT 20`,
+    description: "适合测试实体到分类的关系导入",
+    is_builtin: 1,
+    is_favorite: 0,
+  },
+  {
+    id: "template-dbpedia-museum",
+    name: "DBpedia 博物馆测试",
+    category: "DBpedia 模板",
+    source_type: "dbpedia",
+    endpoint_id: "builtin-dbpedia",
+    query: `PREFIX dbo: <http://dbpedia.org/ontology/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?item ?label ?abstract ?location
+WHERE {
+  ?item a dbo:Museum ;
+        rdfs:label ?label .
+  OPTIONAL {
+    ?item dbo:abstract ?abstract .
+    FILTER(lang(?abstract) = "en")
+  }
+  OPTIONAL { ?item dbo:location ?location. }
+  FILTER(lang(?label) = "en")
+}
+LIMIT 20`,
+    description: "适合测试文化机构实体和地点关系导入",
     is_builtin: 1,
     is_favorite: 0,
   },
@@ -235,7 +353,7 @@ export async function getEndpoint(projectId: number | null, id: string) {
   const row = db
     .query(`SELECT * FROM sparql_endpoints WHERE id = ? AND ${scopeWhere(projectId)} LIMIT 1`)
     .get(id, ...scopeParams(projectId)) as any;
-  if (row) return mapEndpoint(row);
+  if (row) return mergeBuiltinEndpoint(await mapEndpoint(row));
   return getBuiltinEndpoint(id);
 }
 
@@ -296,8 +414,25 @@ function getBuiltinEndpoint(id: string) {
   };
 }
 
+function mergeBuiltinEndpoint(item: any) {
+  const builtin = BUILTIN_ENDPOINTS.find((entry) => entry.id === item?.id);
+  if (!builtin) return item;
+  return {
+    ...item,
+    method: builtin.method,
+    endpoint: builtin.endpoint,
+    auth_type: item?.auth_type || builtin.auth_type,
+    timeout: Math.max(Number(item?.timeout || 0), builtin.timeout),
+    retries: Math.max(Number(item?.retries || 0), builtin.retries),
+    user_agent: item?.user_agent || builtin.user_agent,
+    description: item?.description || builtin.description,
+    default_query: item?.default_query || builtin.default_query,
+  };
+}
+
 function mergeBuiltinEndpoints(items: any[]) {
-  const existing = new Set(items.map((item) => item.id));
+  const normalizedItems = items.map(mergeBuiltinEndpoint);
+  const existing = new Set(normalizedItems.map((item) => item.id));
   const builtins = BUILTIN_ENDPOINTS.filter((item) => !existing.has(item.id)).map((item) => ({
     ...item,
     password_masked: "",
@@ -305,7 +440,7 @@ function mergeBuiltinEndpoints(items: any[]) {
     created_at: null,
     updated_at: null,
   }));
-  return [...items, ...builtins];
+  return [...normalizedItems, ...builtins];
 }
 
 export function deleteEndpoint(projectId: number | null, id: string) {
@@ -340,12 +475,12 @@ export async function getEndpointSecrets(projectId: number | null, id: string) {
     .query(`SELECT * FROM sparql_endpoints WHERE id = ? AND ${scopeWhere(projectId)} LIMIT 1`)
     .get(id, ...scopeParams(projectId)) as any;
   if (row) {
-    return {
+    return mergeBuiltinEndpoint({
       ...row,
       headers: parseJson(row.headers, {}),
       password: await decryptSecret(String(row.password || "")),
       token: await decryptSecret(String(row.token || "")),
-    };
+    });
   }
   const item = BUILTIN_ENDPOINTS.find((entry) => entry.id === id);
   if (!item) return null;
@@ -364,9 +499,23 @@ export function listTemplates(projectId: number | null) {
 }
 
 function mergeBuiltinTemplates(items: any[]) {
-  const existing = new Set(items.map((item) => item.id));
+  const normalizedItems = items.map((item) => {
+    const builtin = BUILTIN_TEMPLATES.find((entry) => entry.id === item?.id);
+    if (!builtin) return item;
+    return {
+      ...item,
+      name: builtin.name,
+      category: builtin.category,
+      source_type: builtin.source_type,
+      endpoint_id: builtin.endpoint_id,
+      query: builtin.query,
+      description: builtin.description,
+      is_builtin: 1,
+    };
+  });
+  const existing = new Set(normalizedItems.map((item) => item.id));
   const builtins = BUILTIN_TEMPLATES.filter((item) => !existing.has(item.id));
-  return [...items, ...builtins];
+  return [...normalizedItems, ...builtins];
 }
 
 export function saveTemplate(projectId: number | null, payload: any) {

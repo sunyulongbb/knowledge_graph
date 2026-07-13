@@ -29,6 +29,32 @@ function recommendFieldRole(field: string) {
   return "property";
 }
 
+function scopedNodeWhere(projectId: number | null) {
+  return projectId !== null ? "project_id = ?" : "project_id IS NULL";
+}
+
+function scopedNodeParams(projectId: number | null) {
+  return projectId !== null ? [projectId] : [];
+}
+
+function makeScopedNodeId(sourceId: string, projectId: number | null) {
+  return projectId !== null ? `sparql:${projectId}:${sourceId}` : sourceId;
+}
+
+function findExistingNode(projectId: number | null, sourceId: string, label: string) {
+  const scopedId = makeScopedNodeId(sourceId, projectId);
+  const row = db
+    .query(
+      `SELECT id, name
+       FROM nodes
+       WHERE ${scopedNodeWhere(projectId)}
+         AND (id = ? OR lower(name) = lower(?))
+       LIMIT 1`,
+    )
+    .get(...scopedNodeParams(projectId), scopedId, label || sourceId) as any;
+  return row || null;
+}
+
 export function buildFieldSuggestions(result: any) {
   const sampleRow = (Array.isArray(result?.rows) ? result.rows[0] : null) || {};
   return (result?.columns || []).map((column: string) => ({
@@ -38,7 +64,7 @@ export function buildFieldSuggestions(result: any) {
   }));
 }
 
-export function buildImportPreview(result: any, mapping: any, endpointMeta: any) {
+export function buildImportPreview(result: any, mapping: any, endpointMeta: any, projectId: number | null = null) {
   const rows = Array.isArray(result?.rows) ? result.rows : [];
   const fieldMappings = Array.isArray(mapping?.fields) ? mapping.fields : [];
   const roleByField = new Map(fieldMappings.map((item: any) => [item.source, item]));
@@ -75,6 +101,7 @@ export function buildImportPreview(result: any, mapping: any, endpointMeta: any)
     if (sourceId) {
       const entity = entityMap.get(sourceId) || {
         sourceId,
+        nodeId: makeScopedNodeId(sourceId, projectId),
         label: "",
         type,
         description: "",
@@ -85,6 +112,7 @@ export function buildImportPreview(result: any, mapping: any, endpointMeta: any)
           type: "sparql",
           endpointId: endpointMeta?.id || null,
           endpoint: endpointMeta?.endpoint || "",
+          projectId,
         },
       };
       if (label) {
@@ -107,21 +135,23 @@ export function buildImportPreview(result: any, mapping: any, endpointMeta: any)
       relationMap.set(key, {
         fromSourceId: relationFrom,
         toSourceId: relationTo,
+        fromNodeId: makeScopedNodeId(relationFrom, projectId),
+        toNodeId: makeScopedNodeId(relationTo, projectId),
         property: relationType,
         source: {
           type: "sparql",
           endpointId: endpointMeta?.id || null,
+          projectId,
         },
       });
     }
   }
 
   const entityPreview = Array.from(entityMap.values()).map((entity) => {
-    const existing = db
-      .query("SELECT id, name FROM nodes WHERE id = ? OR lower(name) = lower(?) LIMIT 1")
-      .get(entity.sourceId, entity.label || entity.sourceId) as any;
+    const existing = findExistingNode(projectId, entity.sourceId, entity.label || entity.sourceId);
     return {
       sourceId: entity.sourceId,
+      nodeId: entity.nodeId,
       label: entity.label || entity.sourceId,
       type: entity.type,
       action: existing?.id ? "update" : "create",
@@ -163,7 +193,7 @@ export function buildImportPreview(result: any, mapping: any, endpointMeta: any)
 }
 
 export function importPreviewToGraph(preview: any, config: any = {}) {
-  void config;
+  const projectId = typeof config?.projectId === "number" && Number.isFinite(config.projectId) ? config.projectId : null;
   const summary = {
     imported: 0,
     createdNodes: 0,
@@ -174,12 +204,16 @@ export function importPreviewToGraph(preview: any, config: any = {}) {
   };
   const entityIdMap = new Map<string, string>();
 
-  const ensureNodeExistsById = (nodeId: string) => {
-    const existing = db.query("SELECT id FROM nodes WHERE id = ? LIMIT 1").get(nodeId) as any;
+  const ensureNodeExistsById = (sourceId: string, fallbackLabel?: string) => {
+    const nodeId = makeScopedNodeId(sourceId, projectId);
+    const existing = db
+      .query(`SELECT id FROM nodes WHERE id = ? AND ${scopedNodeWhere(projectId)} LIMIT 1`)
+      .get(nodeId, ...scopedNodeParams(projectId)) as any;
     if (existing?.id) return existing.id;
     db.run(
-      "INSERT INTO nodes (id, name, type, description, aliases, tags, data, created_at, updated_at) VALUES (?, ?, 'SPARQL实体', '', '[]', '[]', '{}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
-      [nodeId, nodeId],
+      `INSERT INTO nodes (id, name, type, description, aliases, tags, data, project_id, created_at, updated_at)
+       VALUES (?, ?, 'SPARQL实体', '', '[]', '[]', '{}', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+      [nodeId, fallbackLabel || sourceId, projectId],
     );
     return nodeId;
   };
@@ -187,13 +221,18 @@ export function importPreviewToGraph(preview: any, config: any = {}) {
   for (const item of preview?.entities || []) {
     try {
       const entity = item.entity;
-      const nodeId = entity.sourceId;
-      const existing = db.query("SELECT id, name FROM nodes WHERE id = ? LIMIT 1").get(nodeId) as any;
+      const nodeId = entity.nodeId || makeScopedNodeId(entity.sourceId, projectId);
+      const existing = db
+        .query(`SELECT id, name FROM nodes WHERE id = ? AND ${scopedNodeWhere(projectId)} LIMIT 1`)
+        .get(nodeId, ...scopedNodeParams(projectId)) as any;
+
       if (existing?.id) {
         db.run(
-          "UPDATE nodes SET name = ?, type = ?, description = COALESCE(NULLIF(description, ''), ?), data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+          `UPDATE nodes
+           SET name = ?, type = ?, description = COALESCE(NULLIF(description, ''), ?), data = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ? AND ${scopedNodeWhere(projectId)}`,
           [
-            entity.label || existing.name || nodeId,
+            entity.label || existing.name || entity.sourceId,
             entity.type || "SPARQL实体",
             entity.description || "",
             JSON.stringify({
@@ -204,16 +243,18 @@ export function importPreviewToGraph(preview: any, config: any = {}) {
               source: entity.source,
             }),
             existing.id,
+            ...scopedNodeParams(projectId),
           ],
         );
         summary.updatedNodes += 1;
         entityIdMap.set(entity.sourceId, existing.id);
       } else {
         db.run(
-          "INSERT INTO nodes (id, name, type, description, aliases, tags, data, created_at, updated_at) VALUES (?, ?, ?, ?, '[]', '[]', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+          `INSERT INTO nodes (id, name, type, description, aliases, tags, data, project_id, created_at, updated_at)
+           VALUES (?, ?, ?, ?, '[]', '[]', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
           [
             nodeId,
-            entity.label || nodeId,
+            entity.label || entity.sourceId,
             entity.type || "SPARQL实体",
             entity.description || "",
             JSON.stringify({
@@ -223,6 +264,7 @@ export function importPreviewToGraph(preview: any, config: any = {}) {
               properties: entity.properties,
               source: entity.source,
             }),
+            projectId,
           ],
         );
         summary.createdNodes += 1;
@@ -230,7 +272,7 @@ export function importPreviewToGraph(preview: any, config: any = {}) {
       }
 
       for (const [key, value] of Object.entries(entity.properties || {})) {
-        const property = ensurePropertyRecord(key, key);
+        const property = ensurePropertyRecord(key, key, undefined, { projectId });
         if (!property.id) continue;
         ensureAttributeRecord(nodeId, property.id, [String(value ?? "")], {
           datatype: "string",
@@ -245,9 +287,9 @@ export function importPreviewToGraph(preview: any, config: any = {}) {
   for (const item of preview?.relations || []) {
     try {
       const relation = item.relation;
-      const fromId = ensureNodeExistsById(entityIdMap.get(relation.fromSourceId) || relation.fromSourceId);
-      const toId = ensureNodeExistsById(entityIdMap.get(relation.toSourceId) || relation.toSourceId);
-      const property = ensurePropertyRecord(relation.property, relation.property, "entity");
+      const fromId = ensureNodeExistsById(relation.fromSourceId, relation.fromSourceId);
+      const toId = ensureNodeExistsById(relation.toSourceId, relation.toSourceId);
+      const property = ensurePropertyRecord(relation.property, relation.property, "entity", { projectId });
       if (!property.id) {
         summary.skipped += 1;
         continue;

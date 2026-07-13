@@ -19,6 +19,31 @@
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
 
+  function normalizeApiError(payload, status) {
+    const detail = String(payload?.error?.detail || "");
+    const message = String(payload?.message || "");
+    const source = detail || message;
+    const upper = source.toUpperCase();
+
+    if (upper.includes("SOCKET CONNECTION WAS CLOSED UNEXPECTEDLY") || upper.includes("ECONNRESET")) {
+      return "远程 SPARQL 服务提前断开连接，请重试；如果是 Wikidata/DBpedia，建议减少 LIMIT 条数。";
+    }
+    if (upper.includes("TIMEOUT") || upper.includes("ABORT")) {
+      return "请求超时，请稍后重试或缩小查询范围。";
+    }
+    if (upper.includes("ENOTFOUND")) {
+      return "Endpoint 无法访问，请检查网络或域名是否正确。";
+    }
+    if (upper.includes("ECONNREFUSED")) {
+      return "目标服务拒绝连接。";
+    }
+    if (upper.includes("CERT")) {
+      return "HTTPS 证书错误。";
+    }
+
+    return source || `HTTP ${status}`;
+  }
+
   async function api(path, options = {}) {
     const response = await fetch(path + window.location.search, {
       headers: {
@@ -29,7 +54,7 @@
     });
     const payload = await response.json().catch(() => null);
     if (!response.ok || payload?.success === false) {
-      throw new Error(payload?.error?.detail || payload?.message || `HTTP ${response.status}`);
+      throw new Error(normalizeApiError(payload, response.status));
     }
     return payload?.data ?? payload;
   }
@@ -85,6 +110,83 @@
     byId("sparqlBearerTokenField")?.classList.toggle("is-hidden", authType !== "bearer");
   }
 
+  function getSelectedEndpoint() {
+    const endpointId = byId("sparqlEndpointSelect")?.value || state.endpointId;
+    return state.endpoints.find((item) => item.id === endpointId) || null;
+  }
+
+  function inferEndpointSourceType(endpoint) {
+    const id = String(endpoint?.id || "").toLowerCase();
+    const url = String(endpoint?.endpoint || "").toLowerCase();
+    if (id.includes("wikidata") || url.includes("wikidata.org")) return "wikidata";
+    if (id.includes("dbpedia") || url.includes("dbpedia.org")) return "dbpedia";
+    return "generic";
+  }
+
+  function getCompatibleTemplates(endpoint) {
+    if (!endpoint) return [];
+    const sourceType = inferEndpointSourceType(endpoint);
+    return state.templates.filter((item) => {
+      const templateEndpointId = String(item?.endpoint_id || "").trim();
+      const templateSourceType = String(item?.source_type || "generic").trim().toLowerCase();
+      if (templateEndpointId && templateEndpointId === endpoint.id) return true;
+      if (!templateEndpointId && templateSourceType === "generic") return true;
+      return templateSourceType === sourceType;
+    });
+  }
+
+  function flattenOntologyTree(items, depth = 0, result = []) {
+    (Array.isArray(items) ? items : []).forEach((item) => {
+      if (!item) return;
+      result.push({
+        id: item.id || item.name || "",
+        label: item.label || item.name || item.id || "",
+        depth,
+      });
+      if (Array.isArray(item.children) && item.children.length) {
+        flattenOntologyTree(item.children, depth + 1, result);
+      }
+    });
+    return result;
+  }
+
+  function refreshTemplateOptions(options = {}) {
+    const endpoint = getSelectedEndpoint();
+    const select = byId("sparqlTemplateSelect");
+    const btnFavorite = byId("btnSparqlTemplateFavorite");
+    const btnSave = byId("btnSparqlTemplateSave");
+    const compatibleTemplates = getCompatibleTemplates(endpoint);
+    const previousTemplateId = options.keepSelection ? select?.value || "" : "";
+
+    if (!endpoint) {
+      renderOptions(select, [], "请先选择数据源", (item) => ({ value: item.id, label: item.name }));
+      if (select) select.disabled = true;
+      if (btnFavorite) btnFavorite.disabled = true;
+      if (btnSave) btnSave.disabled = true;
+      return;
+    }
+
+    renderOptions(select, compatibleTemplates, compatibleTemplates.length ? "选择模板" : "当前数据源暂无可用模板", (item) => ({
+      value: item.id,
+      label: `${item.category || "模板"} · ${item.name}`,
+    }));
+
+    if (select) select.disabled = compatibleTemplates.length === 0;
+
+    const activeTemplate =
+      compatibleTemplates.find((item) => item.id === previousTemplateId) ||
+      compatibleTemplates[0] ||
+      null;
+
+    if (select) select.value = activeTemplate?.id || "";
+    if (btnFavorite) btnFavorite.disabled = !activeTemplate;
+    if (btnSave) btnSave.disabled = false;
+
+    if (activeTemplate && (!byId("sparqlQueryEditor").value.trim() || options.forceTemplateQuery)) {
+      byId("sparqlQueryEditor").value = activeTemplate.query || "";
+    }
+  }
+
   function readEndpointForm() {
     return {
       id: state.endpointId || undefined,
@@ -119,7 +221,7 @@
     byId("sparqlEndpointDescription").value = item?.description || "";
     byId("sparqlEndpointHeaders").value = JSON.stringify(item?.headers || {}, null, 2);
     toggleEndpointAuthFields(item?.auth_type || "none");
-    if (item?.default_query) {
+    if (item?.default_query && !byId("sparqlQueryEditor").value.trim()) {
       byId("sparqlQueryEditor").value = item.default_query;
     }
   }
@@ -135,29 +237,23 @@
       fillEndpointForm(state.endpoints[0]);
       byId("sparqlEndpointSelect").value = state.endpoints[0].id;
     }
+    refreshTemplateOptions({ keepSelection: true });
   }
 
   async function loadTemplates() {
     const data = await api("/api/sparql/templates");
     state.templates = data.items || [];
-    renderOptions(byId("sparqlTemplateSelect"), state.templates, "选择模板", (item) => ({
-      value: item.id,
-      label: `${item.category || "模板"} · ${item.name}`,
-    }));
-    if (state.templates.length && !byId("sparqlQueryEditor").value.trim()) {
-      byId("sparqlTemplateSelect").value = state.templates[0].id;
-      byId("sparqlQueryEditor").value = state.templates[0].query || "";
-    }
+    refreshTemplateOptions({ keepSelection: true });
   }
 
   async function loadSchemas() {
-    const response = await fetch("/api/kb/classes" + window.location.search)
+    const response = await fetch("/api/kb/ontology/tree" + window.location.search)
       .then((res) => res.json())
       .catch(() => ({ items: [] }));
-    state.schemaItems = response.items || [];
-    renderOptions(byId("sparqlSchemaSelect"), state.schemaItems, "可选 Schema", (item) => ({
+    state.schemaItems = flattenOntologyTree(response.items || []);
+    renderOptions(byId("sparqlSchemaSelect"), state.schemaItems, "从本体树选择目标分类", (item) => ({
       value: item.id,
-      label: item.label || item.name,
+      label: `${"　".repeat(Number(item.depth || 0))}${item.label || item.id}`,
     }));
   }
 
@@ -397,9 +493,13 @@
     state.endpointId = result.id;
     await loadEndpoints();
     byId("sparqlEndpointSelect").value = result.id;
+    refreshTemplateOptions({ forceTemplateQuery: true });
   }
 
   async function saveTemplateFromEditor() {
+    const endpoint = getSelectedEndpoint();
+    if (!endpoint) throw new Error("请先选择数据源，再保存查询模板。");
+
     const name = prompt("模板名称", "我的 SPARQL 模板");
     if (!name) return;
     await api("/api/sparql/templates", {
@@ -407,7 +507,8 @@
       body: JSON.stringify({
         name,
         category: "我的模板",
-        source_type: "generic",
+        source_type: inferEndpointSourceType(endpoint),
+        endpoint_id: endpoint.id,
         query: byId("sparqlQueryEditor").value,
         description: "",
       }),
@@ -448,6 +549,7 @@
       const selected = state.endpoints.find((item) => item.id === event.target.value);
       if (selected) {
         fillEndpointForm(selected);
+        refreshTemplateOptions({ forceTemplateQuery: true });
         byId("sparqlConnectionStatus").textContent = `已载入数据源：${selected.name}`;
       }
     });
@@ -457,14 +559,25 @@
     });
 
     byId("sparqlTemplateSelect")?.addEventListener("change", (event) => {
-      const template = state.templates.find((item) => item.id === event.target.value);
-      if (template) byId("sparqlQueryEditor").value = template.query || "";
+      const template = getCompatibleTemplates(getSelectedEndpoint()).find((item) => item.id === event.target.value);
+      byId("btnSparqlTemplateFavorite").disabled = !template;
+      if (template) {
+        byId("sparqlQueryEditor").value = template.query || "";
+      }
+    });
+
+    byId("sparqlSchemaSelect")?.addEventListener("change", (event) => {
+      const selected = state.schemaItems.find((item) => item.id === event.target.value);
+      if (selected && byId("sparqlDefaultEntityType")) {
+        byId("sparqlDefaultEntityType").value = selected.label || selected.id || "SPARQL实体";
+      }
     });
 
     byId("btnSparqlEndpointNew")?.addEventListener("click", () => {
       state.endpointId = "";
       fillEndpointForm({});
       byId("sparqlEndpointSelect").value = "";
+      refreshTemplateOptions();
       byId("sparqlConnectionStatus").textContent = "请填写新的数据源必要信息。";
     });
 
@@ -515,6 +628,7 @@
     await loadSchemas();
     await loadTasks();
     renderMappingTable();
+    refreshTemplateOptions({ keepSelection: true });
   }
 
   document.addEventListener("DOMContentLoaded", bootstrap);

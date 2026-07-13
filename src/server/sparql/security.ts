@@ -87,9 +87,22 @@ export function sanitizeHeaders(input: any) {
 export function mapNetworkError(error: unknown) {
   const message = String((error as Error)?.message || error || "");
   const upper = message.toUpperCase();
-  if (upper.includes("TIMEOUT") || upper.includes("ABORT")) return "请求超时";
-  if (upper.includes("ENOTFOUND")) return "Endpoint 无法访问";
-  if (upper.includes("ECONNREFUSED")) return "服务拒绝连接";
-  if (upper.includes("CERT")) return "HTTPS 证书错误";
+
+  if (upper.includes("TIMEOUT") || upper.includes("ABORT")) {
+    return "请求超时，请稍后重试或缩小查询范围";
+  }
+  if (upper.includes("ENOTFOUND")) {
+    return "Endpoint 无法访问，请检查网络或域名是否正确";
+  }
+  if (upper.includes("ECONNREFUSED")) {
+    return "目标服务拒绝连接";
+  }
+  if (upper.includes("CERT")) {
+    return "HTTPS 证书错误";
+  }
+  if (upper.includes("SOCKET CONNECTION WAS CLOSED UNEXPECTEDLY") || upper.includes("ECONNRESET")) {
+    return "远程 SPARQL 服务提前断开连接，请重试，或改用 POST 请求并减少返回条数";
+  }
+
   return message || "SPARQL 请求失败";
 }

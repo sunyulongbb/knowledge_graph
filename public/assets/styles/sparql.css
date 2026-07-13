@@ -1,19 +1,28 @@
 .sparql-mode-switch {
   display: flex;
   gap: 8px;
-  margin: 12px 0;
+  margin: 0 0 12px auto;
+  width: fit-content;
+  align-self: flex-end;
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .sparql-view {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .sparql-layout {
   display: grid;
   gap: 12px;
   align-items: start;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .sparql-layout-top,
@@ -29,11 +38,20 @@
   flex-direction: column;
   gap: 12px;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .sparql-card-sidebar {
   position: sticky;
   top: 8px;
+  align-self: start;
+}
+
+.sparql-card-main,
+.sparql-card-full {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .sparql-card-head {
@@ -65,6 +83,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
 
 .sparql-form-compact {
@@ -134,10 +153,12 @@
 
 .sparql-template-toolbar .kb-select {
   flex: 1 1 260px;
+  min-width: 0;
 }
 
 .sparql-editor {
   width: 100%;
+  max-width: 100%;
   min-height: 360px;
   resize: vertical;
   border-radius: 12px;
@@ -146,6 +167,7 @@
   color: var(--fg);
   padding: 12px;
   font: 13px/1.6 Consolas, "Courier New", monospace;
+  box-sizing: border-box;
 }
 
 .sparql-inline-check {
@@ -161,6 +183,8 @@
   border-radius: 12px;
   background: var(--surface-1);
   max-height: 360px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 #sparqlMappingTable.sparql-table-wrap {
@@ -174,8 +198,10 @@
 
 .sparql-table {
   width: 100%;
+  min-width: 0;
   border-collapse: collapse;
   font-size: 12px;
+  table-layout: fixed;
 }
 
 .sparql-table th,
@@ -184,6 +210,8 @@
   padding: 8px 10px;
   text-align: left;
   vertical-align: top;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .sparql-table th {
@@ -206,12 +234,15 @@
   white-space: pre-wrap;
   word-break: break-word;
   font-size: 12px;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .sparql-task-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 10px;
+  min-width: 0;
 }
 
 .sparql-task-item {
@@ -222,11 +253,32 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .sparql-task-item .status {
   font-size: 12px;
   color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.sparql-view .kb-input,
+.sparql-view .kb-select,
+.sparql-view textarea,
+.sparql-view input {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.sparql-actions > * {
+  min-width: 0;
+}
+
+.sparql-editor-footer > * {
+  min-width: 0;
 }
 
 @media (max-width: 900px) {
@@ -242,5 +294,12 @@
 
   .sparql-card-sidebar {
     position: static;
+  }
+}
+
+@media (max-width: 1200px) {
+  .sparql-layout-top,
+  .sparql-layout-middle {
+    grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
   }
 }
