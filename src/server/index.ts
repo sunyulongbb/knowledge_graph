@@ -7,6 +7,7 @@ import { serveStaticRoute } from "./static.ts";
 import { handleWikiRoutes } from "./routes/wiki.ts";
 import { handleChatRoutes } from "./routes/chat.ts";
 import { handleSemanticMapRoutes } from "./routes/semantic-map.ts";
+import { handleSparqlRoutes } from "./routes/sparql.ts";
 
 const port = parseInt(process.env.PORT || "8080");
 
