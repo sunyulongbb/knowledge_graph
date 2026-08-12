@@ -18,6 +18,40 @@ import {
   extractEntityId,
 } from "../utils.ts";
 
+const WIKIDATA_CACHE_TTL_MS = 10 * 60 * 1000;
+const WIKIDATA_CACHE_MAX_ENTRIES = 50;
+const WIKIDATA_SPARQL_ENDPOINT =
+  process.env.WIKIDATA_SPARQL_ENDPOINT?.trim() ||
+  "https://qlever.dev/api/wikidata";
+const WIKIDATA_REQUEST_TIMEOUT_MS = Math.max(
+  5_000,
+  Number(process.env.WIKIDATA_REQUEST_TIMEOUT_MS || 20_000) || 20_000,
+);
+const wikidataQueryCache = new Map<
+  string,
+  { expiresAt: number; responseText: string }
+>();
+const WIKIDATA_COMMON_PREFIXES: Record<string, string> = {
+  wd: "http://www.wikidata.org/entity/",
+  wdt: "http://www.wikidata.org/prop/direct/",
+  p: "http://www.wikidata.org/prop/",
+  ps: "http://www.wikidata.org/prop/statement/",
+  pq: "http://www.wikidata.org/prop/qualifier/",
+  rdfs: "http://www.w3.org/2000/01/rdf-schema#",
+  schema: "http://schema.org/",
+  xsd: "http://www.w3.org/2001/XMLSchema#",
+};
+
+function addMissingWikidataPrefixes(query: string) {
+  const declarations = Object.entries(WIKIDATA_COMMON_PREFIXES)
+    .filter(([prefix]) => {
+      const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      return !new RegExp(`\\bPREFIX\\s+${escaped}\\s*:`, "i").test(query);
+    })
+    .map(([prefix, iri]) => `PREFIX ${prefix}: <${iri}>`);
+  return declarations.length ? `${declarations.join("\n")}\n${query}` : query;
+}
+
 type EntityAttributeValue = {
   [key: string]: any;
 };
@@ -3150,6 +3184,95 @@ export async function handleCoreKbRoutes(
       return Response.json(
         { error: "Failed to fetch remote URL" },
         { status: 500 },
+      );
+    }
+  }
+
+  if (url.pathname === "/api/kb/wikidata/sparql" && method === "POST") {
+    try {
+      const body = (await req.json()) as any;
+      const query = String(body?.query || "").trim();
+      if (!query) {
+        return Response.json({ error: "Missing SPARQL query" }, { status: 400 });
+      }
+      if (query.length > 100_000) {
+        return Response.json({ error: "SPARQL query is too large" }, { status: 413 });
+      }
+      const queryWithoutComments = query
+        .split(/\r?\n/)
+        .filter((line) => !/^\s*#/.test(line))
+        .join("\n");
+      if (!/^\s*(?:(?:PREFIX|BASE)\s+[^\r\n]+\s*)*SELECT\b/i.test(queryWithoutComments)) {
+        return Response.json(
+          { error: "仅支持 SELECT 查询" },
+          { status: 400 },
+        );
+      }
+      const cacheKey = `${WIKIDATA_SPARQL_ENDPOINT}\n${query}`;
+      const cached = wikidataQueryCache.get(cacheKey);
+      if (cached && cached.expiresAt > Date.now()) {
+        return new Response(cached.responseText, {
+          status: 200,
+          headers: {
+            "Content-Type": "application/sparql-results+json; charset=utf-8",
+            "X-Wikidata-Cache": "HIT",
+          },
+        });
+      }
+      if (cached) wikidataQueryCache.delete(cacheKey);
+      const controller = new AbortController();
+      const upstreamQuery = addMissingWikidataPrefixes(query);
+      const timeout = setTimeout(
+        () => controller.abort(),
+        WIKIDATA_REQUEST_TIMEOUT_MS,
+      );
+      try {
+        const resp = await fetch(WIKIDATA_SPARQL_ENDPOINT, {
+          method: "POST",
+          signal: controller.signal,
+          headers: {
+            "Content-Type": "application/sparql-query; charset=utf-8",
+            Accept: "application/sparql-results+json",
+            "User-Agent": "KnowledgeGraphEntryImporter/1.0",
+          },
+          body: upstreamQuery,
+        });
+        const responseText = await resp.text();
+        if (!resp.ok) {
+          return Response.json(
+            { error: `Wikidata 查询失败（HTTP ${resp.status}）：${responseText.slice(0, 500)}` },
+            { status: resp.status },
+          );
+        }
+        if (wikidataQueryCache.size >= WIKIDATA_CACHE_MAX_ENTRIES) {
+          const oldestKey = wikidataQueryCache.keys().next().value;
+          if (oldestKey) wikidataQueryCache.delete(oldestKey);
+        }
+        wikidataQueryCache.set(cacheKey, {
+          expiresAt: Date.now() + WIKIDATA_CACHE_TTL_MS,
+          responseText,
+        });
+        return new Response(responseText, {
+          status: 200,
+          headers: {
+            "Content-Type": "application/sparql-results+json; charset=utf-8",
+            "X-Wikidata-Cache": "MISS",
+          },
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err || "");
+      const timedOut = /abort/i.test(message);
+      return Response.json(
+        {
+          error: timedOut
+            ? `无法在 ${Math.round(WIKIDATA_REQUEST_TIMEOUT_MS / 1000)} 秒内连接 Wikidata 查询服务，请检查服务器网络，或配置 WIKIDATA_SPARQL_ENDPOINT`
+            : `Wikidata 查询失败：${message}`,
+          endpoint: WIKIDATA_SPARQL_ENDPOINT,
+        },
+        { status: timedOut ? 504 : 500 },
       );
     }
   }

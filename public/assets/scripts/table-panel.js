@@ -35,6 +35,10 @@
   const btnClearTableFilter = document.getElementById("btnClearTableFilter");
   const btnTableRefresh = document.getElementById("btnTableRefresh");
   const btnTblLayoutToggle = document.getElementById("btnTblLayoutToggle");
+  const tblGridZoomControls = document.getElementById("tblGridZoomControls");
+  const tblGridZoom = document.getElementById("tblGridZoom");
+  const btnTblGridZoomOut = document.getElementById("btnTblGridZoomOut");
+  const btnTblGridZoomIn = document.getElementById("btnTblGridZoomIn");
   const btnDeleteSelected = document.getElementById("btnDeleteSelected");
   const tblCount = document.getElementById("tblCount");
   const tblPagination = document.getElementById("tblPagination");
@@ -55,6 +59,32 @@
   };
   const isInfiniteTableLayoutMode = (mode = window.kbTableLayoutMode) =>
     mode === "list" || mode === "grid";
+
+  const clampGridSize = (value) =>
+    Math.min(280, Math.max(88, Number(value) || 136));
+  const getInitialGridSize = () => {
+    try {
+      return clampGridSize(localStorage.getItem("kbTableGridSize"));
+    } catch {
+      return 136;
+    }
+  };
+  const applyGridSize = (value, persist = true) => {
+    const size = clampGridSize(value);
+    const tblNodes = document.getElementById("tblNodes");
+    if (tblNodes) tblNodes.style.setProperty("--table-grid-card-size", `${size}px`);
+    if (tblGridZoom) {
+      tblGridZoom.value = String(size);
+      tblGridZoom.setAttribute("aria-valuetext", `${size} 像素`);
+    }
+    if (btnTblGridZoomOut) btnTblGridZoomOut.disabled = size <= 88;
+    if (btnTblGridZoomIn) btnTblGridZoomIn.disabled = size >= 280;
+    if (persist) {
+      try {
+        localStorage.setItem("kbTableGridSize", String(size));
+      } catch {}
+    }
+  };
 
   const applyTableLayoutMode = (mode) => {
     const normalized = normalizeTableLayoutMode(mode);
@@ -88,14 +118,19 @@
       btnTblLayoutToggle.title = `切换到${nextLabel}`;
       btnTblLayoutToggle.setAttribute("aria-label", `切换到${nextLabel}`);
     }
+    if (tblGridZoomControls) {
+      tblGridZoomControls.style.display = normalized === "grid" ? "flex" : "none";
+    }
     if (tblPagination) {
       tblPagination.style.display = normalized === "table" ? "" : "none";
     }
     if (typeof window.renderTableList === "function") {
       window.renderTableList();
     }
+    updateGridManualLoadButton();
   };
   window.applyTableLayoutMode = applyTableLayoutMode;
+  applyGridSize(getInitialGridSize(), false);
   if (tblPageSizeSelect) {
     tblPageSizeSelect.value = tblPageSize.toString();
   }
@@ -149,7 +184,33 @@
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
     tblTypeTreeCache = Array.isArray(data?.items) ? data.items : [];
+    const flat = flattenOntologyTreeWithShape(tblTypeTreeCache);
+    window.kbOntologyDisplayShapes = new Map();
+    flat.forEach((item) => {
+      [item.id, item.name, ...(Array.isArray(item.alias) ? item.alias : [])]
+        .map((value) => String(value || "").trim())
+        .filter(Boolean)
+        .forEach((key) => {
+          window.kbOntologyDisplayShapes.set(key, item.display_shape || "rectangle");
+          window.kbOntologyDisplayShapes.set(key.toLowerCase(), item.display_shape || "rectangle");
+        });
+    });
     return tblTypeTreeCache;
+  }
+
+  function flattenOntologyTreeWithShape(items, bucket = []) {
+    (Array.isArray(items) ? items : []).forEach((item) => {
+      if (!item) return;
+      const id = String(item.id || "").trim();
+      if (id) bucket.push({
+        id,
+        name: item.name || item.label || "",
+        alias: item.alias || [],
+        display_shape: item.display_shape || "rectangle",
+      });
+      flattenOntologyTreeWithShape(item.children, bucket);
+    });
+    return bucket;
   }
 
   function updateTableTypeTreeLabel() {
@@ -272,6 +333,53 @@
     }
   }
 
+  function updateGridManualLoadButton(state = "idle") {
+    const tblNodes = document.getElementById("tblNodes");
+    if (!tblNodes) return;
+    tblNodes.querySelector(".table-grid-load-more")?.remove();
+    if (window.kbTableLayoutMode !== "grid") return;
+
+    const loaded = Array.isArray(window.kbTableNodes)
+      ? window.kbTableNodes.length
+      : tblLoadedNodes.length;
+    const hasMore = loaded < tblTotalNodes && !tblGridLoadExhausted;
+    if (!hasMore && state !== "error") return;
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "table-grid-load-more";
+    button.disabled = state === "loading";
+    button.innerHTML = state === "loading"
+      ? '<i class="fa-solid fa-spinner fa-spin"></i><span>正在加载…</span>'
+      : state === "error"
+        ? '<i class="fa-solid fa-rotate-right"></i><span>加载失败，点击重试</span>'
+        : '<i class="fa-solid fa-plus"></i><span>加载更多</span>';
+    button.addEventListener("click", () => loadMoreTableRowsManually());
+    tblNodes.appendChild(button);
+  }
+
+  function loadMoreTableRowsManually() {
+    if (window.kbTableLayoutMode !== "grid") return;
+    if (tblGridLoadingMore || tblGridLoadExhausted) return;
+    if (tblLoadedNodes.length >= tblTotalNodes) {
+      tblGridLoadExhausted = true;
+      updateGridManualLoadButton();
+      return;
+    }
+    tblGridLoadingMore = true;
+    tblPage += 1;
+    updateGridManualLoadButton("loading");
+    loadTablePage({ append: true })
+      .then(() => updateGridManualLoadButton())
+      .catch(() => {
+        tblPage = Math.max(1, tblPage - 1);
+        updateGridManualLoadButton("error");
+      })
+      .finally(() => {
+        tblGridLoadingMore = false;
+      });
+  }
+
   function maybeLoadMoreTableRows() {
     if (!isInfiniteTableLayoutMode()) return;
     if (tblGridLoadingMore || tblGridLoadExhausted) return;
@@ -289,9 +397,16 @@
     }
     tblGridLoadingMore = true;
     tblPage += 1;
-    loadTablePage({ append: true }).finally(() => {
-      tblGridLoadingMore = false;
-    });
+    updateGridManualLoadButton("loading");
+    loadTablePage({ append: true })
+      .catch(() => {
+        tblPage = Math.max(1, tblPage - 1);
+        updateGridManualLoadButton("error");
+      })
+      .finally(() => {
+        tblGridLoadingMore = false;
+        updateGridManualLoadButton();
+      });
   }
 
   function scheduleGridLoadMoreCheck() {
@@ -599,6 +714,7 @@
       if (typeof window.renderTableList === "function") {
         window.renderTableList({ append });
       }
+      updateGridManualLoadButton();
       if (isInfiniteTableLayoutMode()) {
         setTimeout(() => {
           maybeLoadMoreTableRows();
@@ -629,6 +745,7 @@
       if (typeof window.setStatus === "function") {
         window.setStatus(false, "加载失败");
       }
+      if (append) throw e;
       alert("加载失败: " + (e.message || e));
     }
   }
@@ -820,6 +937,29 @@
         tblGridLoadExhausted = false;
         loadTablePage({ resetPage: false, scrollToTop: true });
       });
+    }
+
+    if (tblGridZoom) {
+      tblGridZoom.addEventListener("input", () => applyGridSize(tblGridZoom.value));
+    }
+    if (btnTblGridZoomOut) {
+      btnTblGridZoomOut.addEventListener("click", () =>
+        applyGridSize(Number(tblGridZoom?.value || 136) - 16),
+      );
+    }
+    if (btnTblGridZoomIn) {
+      btnTblGridZoomIn.addEventListener("click", () =>
+        applyGridSize(Number(tblGridZoom?.value || 136) + 16),
+      );
+    }
+
+    const tblNodes = document.getElementById("tblNodes");
+    if (tblNodes) {
+      tblNodes.addEventListener("wheel", (event) => {
+        if (window.kbTableLayoutMode !== "grid" || (!event.ctrlKey && !event.metaKey)) return;
+        event.preventDefault();
+        applyGridSize(Number(tblGridZoom?.value || 136) + (event.deltaY < 0 ? 8 : -8));
+      }, { passive: false });
     }
 
     const scrollContainer = getTableScrollContainer();

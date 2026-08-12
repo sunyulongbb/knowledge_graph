@@ -1,3 +1,0 @@
-typeFilterRaw=
-query=SELECT COUNT(*) FROM nodes WHERE type IS NULL OR TRIM(type) = ''
-count={"count":0}

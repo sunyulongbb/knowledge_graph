@@ -1850,21 +1850,35 @@ function __kbInitTableSelection() {
   }
 
   function buildMixedMediaStripElement(node, imageList, videoList, coverList) {
-    const imageSources = Array.isArray(imageList)
+    const rawImageSources = Array.isArray(imageList)
       ? imageList.map((item) => String(item || "").trim()).filter(Boolean)
       : [];
-    const videoSources = Array.isArray(videoList)
+    const imageSources = rawImageSources.filter(
+      (src) => !isAnimatedImageVideoUrl(src),
+    );
+    const liveVideoSources = rawImageSources.filter((src) =>
+      isAnimatedImageVideoUrl(src),
+    );
+    const nodeVideoSources = Array.isArray(videoList)
       ? videoList.map((item) => String(item || "").trim()).filter(Boolean)
       : [];
+    const videoSources = Array.from(
+      new Set([...liveVideoSources, ...nodeVideoSources]),
+    );
     const posterList = Array.isArray(coverList)
       ? coverList.map((item) => String(item || "").trim())
       : [];
     const mediaItems = [
-      ...videoSources.map((src, index) => ({
+      ...videoSources.map((src) => ({
         src,
         type: "video",
-        index,
-        poster: posterList[index] || "",
+        index: videoSources.indexOf(src),
+        nodeVideoIndex: nodeVideoSources.indexOf(src),
+        isLive: liveVideoSources.includes(src),
+        poster:
+          posterList[nodeVideoSources.indexOf(src)] ||
+          (nodeVideoSources.length === 1 ? posterList[0] : "") ||
+          "",
       })),
       ...imageSources.map((src, index) => ({ src, type: "image", index })),
     ];
@@ -1897,10 +1911,12 @@ function __kbInitTableSelection() {
         if (visibleIndex === 0) video.classList.add("table-feed-video-observe");
         video.src = resolveMediaUrl(item.src);
         video.controls = false;
-        video.preload = mediaItems.length === 1 ? "metadata" : "none";
+        video.preload =
+          item.isLive || mediaItems.length === 1 ? "auto" : "none";
         video.playsInline = true;
         video.muted = true;
         video.loop = true;
+        if (item.isLive) video.classList.add("kb-live-media");
         if (item.poster) video.poster = resolveMediaUrl(item.poster);
         const applyVideoRatio = () => {
           const width = Number(video.videoWidth || 0);
@@ -2002,7 +2018,11 @@ function __kbInitTableSelection() {
           e.preventDefault();
           e.stopPropagation();
           try {
-            await deleteNodeVideo(node, item.src);
+            if (item.isLive && item.nodeVideoIndex < 0) {
+              await deleteNodeImage(node, item.src);
+            } else {
+              await deleteNodeVideo(node, item.src);
+            }
           } catch (err) {
             alert("删除视频失败: " + (err?.message || err));
           }
@@ -2035,7 +2055,15 @@ function __kbInitTableSelection() {
         });
 
         cell.appendChild(video);
-        cell.appendChild(playBadge);
+        if (item.isLive) {
+          const liveTag = document.createElement("span");
+          liveTag.className = "kb-live-badge";
+          liveTag.textContent = "LIVE";
+          cell.appendChild(liveTag);
+        }
+        if (!item.isLive) {
+          cell.appendChild(playBadge);
+        }
         cell.appendChild(delBtn);
       } else {
         const button = document.createElement("button");
@@ -2118,12 +2146,15 @@ function __kbInitTableSelection() {
 
     const imageSources = [];
     const videoSources = [];
+    const liveVideoSources = new Set();
+    const nodeVideoIndexes = new Map();
     if (Array.isArray(imageList)) {
       imageList.forEach((item) => {
         const src = String(item || "").trim();
         if (!src) return;
         if (isAnimatedImageVideoUrl(src)) {
           videoSources.push(src);
+          liveVideoSources.add(src);
         } else {
           imageSources.push(src);
         }
@@ -2133,13 +2164,23 @@ function __kbInitTableSelection() {
       videoList.forEach((item) => {
         const src = String(item || "").trim();
         if (!src) return;
-        videoSources.push(src);
+        if (!nodeVideoIndexes.has(src)) {
+          nodeVideoIndexes.set(src, nodeVideoIndexes.size);
+        }
+        if (!videoSources.includes(src)) videoSources.push(src);
       });
     }
 
     const mediaItems = [
       ...imageSources.map((src, idx) => ({ src, type: "image", index: idx })),
-      ...videoSources.map((src, idx) => ({ src, type: "video", index: idx })),
+      ...videoSources.map((src, idx) => ({
+        src,
+        type: "video",
+        index: idx,
+        nodeVideoIndex: nodeVideoIndexes.has(src)
+          ? nodeVideoIndexes.get(src)
+          : -1,
+      })),
     ];
 
     if (!mediaItems.length) return element;
@@ -2190,6 +2231,10 @@ function __kbInitTableSelection() {
         if (video) {
           video.src = video.dataset.src || "";
           video.removeAttribute("data-src");
+          if (video.classList.contains("kb-live-media")) {
+            video.preload = "auto";
+            video.load();
+          }
         }
       } catch {}
       slide.dataset.mediaLoaded = "1";
@@ -2212,7 +2257,11 @@ function __kbInitTableSelection() {
       slide.style.position = "relative";
 
       if (item.type === "video") {
-        const coverUrl = String(normalizedCoverList[item.index] || "").trim();
+        const coverUrl = String(
+          item.nodeVideoIndex >= 0
+            ? normalizedCoverList[item.nodeVideoIndex] || ""
+            : "",
+        ).trim();
         const wrap = document.createElement("div");
         wrap.className = "table-feed-video-wrap";
         wrap.style.width = "100%";
@@ -2224,10 +2273,19 @@ function __kbInitTableSelection() {
         video.muted = true;
         video.loop = true;
         video.controls = false;
+        if (liveVideoSources.has(item.src)) {
+          video.classList.add("kb-live-media");
+        }
         if (coverUrl) {
           video.poster = resolveMediaUrl(coverUrl);
         }
         wrap.appendChild(video);
+        if (liveVideoSources.has(item.src)) {
+          const liveTag = document.createElement("span");
+          liveTag.className = "kb-live-badge";
+          liveTag.textContent = "LIVE";
+          wrap.appendChild(liveTag);
+        }
         wrap.addEventListener("mouseenter", () => {
           try {
             if (video.dataset.src && !video.src) {
@@ -2771,6 +2829,15 @@ function __kbInitTableSelection() {
 
       const tr = document.createElement("article");
       tr.className = "entity-list-item table-feed-row";
+      const ontologyShapeMap = window.kbOntologyDisplayShapes;
+      const rawTypeIds = normalizeStringList(n.type || n.types || n.ontology_id);
+      const primaryTypeId = rawTypeIds[0] || String(n.type || "").trim();
+      const displayShape = ontologyShapeMap instanceof Map
+        ? ontologyShapeMap.get(primaryTypeId) ||
+          ontologyShapeMap.get(primaryTypeId.toLowerCase()) ||
+          "rectangle"
+        : "rectangle";
+      tr.dataset.displayShape = displayShape;
       tr.classList.add(hasImage || hasVideo ? "has-media" : "no-media");
       tr.tabIndex = -1;
       tr.setAttribute("data-id", nodeId);

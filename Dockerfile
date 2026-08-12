@@ -13,8 +13,8 @@ RUN bun install --production
 # 复制源代码
 COPY . .
 
-# 暴露端口 (默认 3000)
-EXPOSE 3000
+# 暴露应用默认端口
+EXPOSE 8080
 
 # 启动命令
-CMD ["bun", "run", "index.ts"]
+CMD ["bun", "run", "src/server/index.ts"]

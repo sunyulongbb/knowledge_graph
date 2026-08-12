@@ -1,12 +1,11 @@
 {
   "name": "bun",
-  "module": "index.ts",
+  "module": "src/server/index.ts",
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "bun run index.ts",
-    "seed:semantic": "bun run scripts/seed-semantic-nodes.ts",
-    "test": "bun test"
+    "dev": "bun run src/server/index.ts",
+    "seed:semantic": "bun run scripts/seed-semantic-nodes.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
