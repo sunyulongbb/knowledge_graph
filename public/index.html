@@ -2274,177 +2274,84 @@
           </button>
         </div>
         <!-- Entry panel -->
-        <div id="entryPanel" class="panel entry-panel" style="padding: 12px; display: none">
-          <div class="panel-header">
-            <div class="panel-title">
-              <span>知识录入</span>
-              <span id="entryTemplateHint" class="panel-subtitle">实体属性表（Entity Sheet）· 一行一个实体 · 列为属性</span>
-            </div>
-            <div class="entry-actions" id="entryTopActions">
-              <button id="btnEntryBackToTasks" class="btn sm" type="button" style="display:none;">
-                <i class="fa-solid fa-arrow-left"></i>
-                <span style="margin-left: 4px">任务管理</span>
-              </button>
-           
-              <span style="border-left:1px solid #ddd;margin:0 6px"></span>
-              <button id="btnEntryAddRow" class="btn sm" type="button">
-                <i class="fa-solid fa-plus"></i>
-                <span style="margin-left: 4px">新增行</span>
-              </button>
-              <button id="btnEntryImportExcel" class="btn sm" type="button">
-                <i class="fa-solid fa-file-arrow-up"></i>
-                <span style="margin-left: 4px">文件导入（Excel/JSON）</span>
-              </button>
-              <button id="btnEntryImportApi" class="btn sm" type="button">
-                <i class="fa-solid fa-cloud-arrow-down"></i>
-                <span style="margin-left: 4px">API 导入</span>
-              </button>
-              <button id="btnEntryAddColumn" class="btn sm" type="button">
-                <i class="fa-solid fa-table-columns"></i>
-                <span style="margin-left: 4px">新增属性列</span>
-              </button>
-              <button id="btnEntryClear" class="btn sm" type="button">
-                <i class="fa-solid fa-eraser"></i>
-                <span style="margin-left: 4px">清空表格</span>
-              </button>
-              <button id="btnEntrySubmit" class="btn sm accent" type="button">
-                <i class="fa-solid fa-cloud-upload"></i>
-                <span style="margin-left: 4px">导入</span>
-              </button>
-              <input id="entryExcelFileInput" type="file" accept=".xlsx,.xls,.csv,.json" style="display:none" />
-            </div>
-          </div>
-          <div class="sparql-mode-switch" id="entryModeSwitch">
-            <button id="btnEntryModeSheet" class="btn sm accent" type="button">表格录入</button>
-            <button id="btnEntryModeSparql" class="btn sm" type="button">SPARQL 导入</button>
-          </div>
-          <div id="entryApiForm" class="panel" style="display:none; padding: 14px; border: 1px solid var(--border); background: var(--surface-0); margin-top: 12px; gap: 10px;">
-            <div style="display:flex; align-items:center; justify-content:space-between; gap: 12px; flex-wrap:wrap;">
+        <div id="entryPanel" class="panel entry-panel entry-workspace" data-entry-mode="sparql" style="padding: 16px; display: none">
+          <div class="entry-config">
+            <div class="entry-config__heading">
               <div>
-                <div style="font-size: 14px; font-weight: 700;">API 导入设置</div>
-                <div class="muted" style="font-size:12px; margin-top:4px;">填写 JSON API 地址，支持路径定位数组以及字段映射。</div>
+                <div class="panel-title"><span>知识录入</span></div>
               </div>
-              <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                <button id="btnEntryApiSubmit" class="btn sm accent" type="button">开始导入</button>
-                <button id="btnEntryApiCancel" class="btn sm" type="button">取消</button>
+              <div class="entry-source-tabs" role="group" aria-label="选择数据来源">
+                <button class="btn sm accent" type="button" data-entry-source="sparql">SPARQL</button>
+                <button class="btn sm" type="button" data-entry-source="file">文件</button>
+                <button class="btn sm" type="button" data-entry-source="api">API</button>
+                <button class="btn sm" type="button" data-entry-source="manual">手动录入</button>
               </div>
-            </div>
-            <div style="display:grid; gap:10px;">
-              <div class="field">
-                <label style="display:block; font-size:13px; margin-bottom:4px;">API 地址</label>
-                <input id="entryApiUrlInput" type="text" class="kb-input" placeholder="https://..." style="width:100%;" />
-              </div>
-              <div class="field">
-                <label style="display:block; font-size:13px; margin-bottom:4px;">数据路径（可选）</label>
-                <input id="entryApiPathInput" type="text" class="kb-input" placeholder="items 或 data.items" style="width:100%;" />
-              </div>
-              <div class="field">
-                <label style="display:block; font-size:13px; margin-bottom:4px;">字段映射（可选）</label>
-                <textarea id="entryApiMappingInput" class="kb-input" rows="3" placeholder="sourceKey=目标列，可换行多映射" style="width:100%; resize:vertical;"></textarea>
-              </div>
-              <div id="entryApiFormTip" class="muted" style="font-size:12px;">支持字段映射与 JSON 路径自动识别，若返回对象请填写 path。</div>
             </div>
           </div>
-          <div id="entryManagerView" style="display:flex; flex-direction:column; gap:12px;">
-            <div class="panel"
-              style="padding: 14px; border: 1px solid var(--border); background: var(--surface-0); display:flex; flex-direction:column; gap:12px;">
-              <div
-                style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-                <div>
-                  <div style="font-size: 16px; font-weight: 700;">录入任务管理</div>
-                  <div class="muted" style="font-size:12px; margin-top:4px;">先创建录入任务，再点击任务卡片进入录入表格。</div>
-                </div>
-                <div id="entryTaskCurrent" class="muted" style="font-size:12px;">未选择任务</div>
-              </div>
-              <div>
-                <div style="font-size: 13px; font-weight: 700; margin-bottom: 8px;">新建录入任务</div>
-                <div style="display:grid; grid-template-columns: minmax(0, 1fr) 120px auto; gap: 8px;">
-                  <input id="entryTaskNameInput" type="text" class="kb-input" placeholder="任务名称" />
-                  <select id="entryTaskModeSelect" class="kb-select">
-                    <option value="entity_sheet">实体录入</option>
-                    <option value="relation_sheet">关系录入</option>
-                  </select>
-                  <button id="btnEntryTaskCreate" class="btn sm accent" type="button">
-                    <i class="fa-solid fa-plus"></i>
-                    <span style="margin-left: 4px">创建</span>
-                  </button>
-                </div>
-              </div>
-              <div id="entryTaskHint" class="entry-hint">
-                请先创建一个录入任务，再开始录入与导入。
-              </div>
-            </div>
-            <div>
-              <div style="font-size: 13px; font-weight: 700; margin-bottom: 8px;">录入任务</div>
-              <div id="entryTaskList"
-                style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap:12px;"></div>
+          <div id="entryFileForm" class="entry-inline-form" style="display:none;">
+            <div class="entry-inline-form__fields entry-file-form__fields"><span class="muted">支持 Excel、CSV 和 JSON 文件，读取后将统一显示在数据表格中。</span><button id="btnEntryFileChoose" class="btn sm accent" type="button">选择文件</button></div>
+          </div>
+          <div id="entryApiForm" class="entry-inline-form" style="display:none;">
+            <div class="entry-inline-form__fields">
+              <input id="entryApiUrlInput" type="text" class="kb-input" placeholder="API 地址：https://..." />
+              <input id="entryApiPathInput" type="text" class="kb-input" placeholder="数据路径（可选），如 data.items" />
+              <input id="entryApiMappingInput" type="text" class="kb-input" placeholder="字段映射（可选），如 title=名称" />
+              <button id="btnEntryApiSubmit" class="btn sm accent" type="button">加载到表格</button>
             </div>
           </div>
-          <div id="entryEditorView"
-            style="display:none; min-width:0; min-height:0; flex:1 1 auto; flex-direction:column; gap:10px;">
-            <div class="panel"
-              style="padding: 10px 12px; border: 1px solid var(--border); background: var(--surface-0); display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-              <div style="display:flex; flex-direction:column; gap:4px;">
-                <div style="font-size:14px; font-weight:700;">当前录入任务</div>
-                <div id="entryEditorTaskCurrent" class="muted" style="font-size:12px;">未选择任务</div>
-              </div>
-              <div style="display:flex; gap:6px;">
-                <button id="btnEntryTaskSave" class="btn sm" type="button" disabled>
-                  <i class="fa-solid fa-floppy-disk"></i>
-                  <span style="margin-left: 4px">保存</span>
-                </button>
-                <button id="btnEntryTaskDelete" class="btn sm" type="button" disabled>
-                  <i class="fa-solid fa-trash"></i>
-                  <span style="margin-left: 4px">删除</span>
-                </button>
-              </div>
+          <input id="entryExcelFileInput" type="file" accept=".xlsx,.xls,.csv,.json" style="display:none" />
+          <div id="entryEditorView" class="entry-editor-view" style="min-width:0; min-height:0; flex:1 1 auto; display:flex; flex-direction:column; gap:10px;">
+            <aside class="entry-mapping-panel">
+              <div class="entry-mapping-panel__head"><strong>本体映射</strong><span class="muted">选择目标本体及导入字段</span></div>
+              <label class="field entry-mapping-ontology"><span>目标本体</span><select id="entryMappingOntologySelect" class="kb-select"><option value="">请选择本体</option></select></label>
+              <div class="entry-mapping-properties"><div class="entry-mapping-properties__head"><div class="field"><span>导入属性</span><small id="entryMappingPropertyCount" class="field-hint">选择本体后显示可用属性</small></div></div><input id="entryMappingPropertySearch" class="kb-input sm" placeholder="搜索属性" disabled /><div id="entryMappingPropertyChecklist" class="entry-property-checklist"><span class="muted">请先选择本体</span></div></div>
+            </aside>
+            <div class="entry-table-toolbar">
+              <div><strong>数据预览</strong><span id="entryEditorTaskCurrent" class="muted">尚未创建录入任务</span></div>
+              <button id="btnEntryAddRow" class="btn sm" type="button"><i class="fa-solid fa-plus"></i> 新增实体</button>
             </div>
-            <div style="min-width:0; min-height:0; flex:1 1 auto; display:flex; flex-direction:column; gap:10px;">
-              <div class="entry-toolbar">
-                <div class="field" id="entryMultiTips" style="max-width: 420px">
-                  <label>属性列说明</label>
-                  <div class="entry-hint">
-                    每行代表一个实体；名称与类型两列固定，其余列可右键删除、双击重命名。
-                  </div>
-                </div>
-                <div class="field" style="min-width: 220px;">
-                  <label>任务说明</label>
-                  <div class="entry-hint" id="entryEditorTaskHint">请先创建一个录入任务，再开始录入与导入。</div>
-                </div>
-              </div>
-              <div class="entry-grid-shell" style="min-height:360px;">
-                <div id="entryGridHost"></div>
-              </div>
-              <div id="entryProgressWrap" style="display:none; margin: 8px 0;">
-                <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-                  <span id="entryProgressLabel" style="font-size:12px; color:var(--fg-muted,#888);">准备导入…</span>
-                  <span id="entryProgressPercent"
-                    style="font-size:12px; font-weight:600; color:var(--accent,#4a90d9);">0%</span>
-                </div>
-                <div
-                  style="width:100%; height:6px; background:var(--surface-1,#e5e5e5); border-radius:3px; overflow:hidden;">
-                  <div id="entryProgressBar"
-                    style="width:0%; height:100%; background:var(--accent,#4a90d9); border-radius:3px; transition: width 0.2s ease;">
-                  </div>
-                </div>
-              </div>
-              <p class="entry-hint" id="entryHintText">
-                建议至少填写“名称”列；类型固定，其余列可自由新增、删除、重命名。
-              </p>
+            <div class="entry-grid-shell entry-grid-shell--primary" style="min-height:420px;">
+              <div id="entryGridHost"></div>
+              <div id="entryGridEmptyState" class="entry-grid-empty">选择数据来源后加载数据，或点击“新增实体”开始手动录入。</div>
             </div>
+            <aside id="entryDetailDrawer" class="entry-detail-drawer" aria-label="数据详情" aria-hidden="true">
+              <div class="entry-detail-drawer__head"><strong id="entryDetailTitle">数据详情</strong><button id="btnEntryDetailClose" class="btn sm icon" type="button" aria-label="关闭详情">×</button></div>
+              <div id="entryDetailBody" class="entry-detail-drawer__body"></div>
+            </aside>
+            <div id="entryProgressWrap" style="display:none; margin: 8px 0;">
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;"><span id="entryProgressLabel" class="muted">准备导入…</span><span id="entryProgressPercent">0%</span></div>
+              <div class="entry-progress-track"><div id="entryProgressBar"></div></div>
+            </div>
+            <p class="entry-hint" id="entryHintText">默认展示核心字段；双击单元格可编辑。</p>
+          </div>
+          <div class="entry-import-bar">
+            <div><strong id="entryRowCount">共 0 条</strong><span id="entrySelectionCount" class="muted">已选择全部有效数据</span></div>
+            <div class="entry-import-bar__actions"><button id="btnEntryCancelSelection" class="btn sm" type="button">取消选择</button><button id="btnEntryPreview" class="btn sm" type="button">预览导入</button><button id="btnEntrySubmit" class="btn sm accent" type="button">确认导入</button></div>
+          </div>
+          <div class="entry-task-legacy" aria-hidden="true">
+            <div id="entryManagerView">
+              <input id="entryTaskNameInput" /><select id="entryTaskModeSelect"><option value="entity_sheet">实体录入</option><option value="relation_sheet">关系录入</option></select><button id="btnEntryTaskCreate" type="button"></button>
+              <div id="entryTaskHint"></div><div id="entryTaskList"></div>
+            </div>
+          </div>
+          <div id="entryLegacyControls" style="display:none">
+            <button id="btnEntryBackToTasks" type="button"></button>
+            <button id="btnEntryImportExcel" type="button"></button><button id="btnEntryImportApi" type="button"></button>
+            <button id="btnEntryFileCancel" type="button"></button><button id="btnEntryApiCancel" type="button"></button>
+            <button id="btnEntryModeSheet" type="button"></button><button id="btnEntryModeSparql" type="button"></button>
+            <button id="btnEntryAddColumn" type="button"></button><button id="btnEntryClear" type="button"></button>
+            <button id="btnEntryTaskSave" type="button" disabled></button><button id="btnEntryTaskDelete" type="button" disabled></button>
+            <div id="entryMultiTips"></div><div id="entryEditorTaskHint"></div>
           </div>
           <div id="sparqlImportView" class="sparql-view" style="display:none; min-width:0; min-height:0; flex:1 1 auto; flex-direction:column; gap:12px;">
             <div class="sparql-layout sparql-layout-top">
               <section class="panel sparql-card sparql-card-sidebar">
                 <div class="sparql-card-head">
                   <div>
-                    <div class="sparql-card-title">数据源</div>
-                    <div class="muted">管理已保存 SPARQL Endpoint</div>
+                    <div class="sparql-card-title">数据连接</div>
+                    <div class="muted">已固定连接项目数据服务</div>
                   </div>
                   <div class="sparql-actions">
-                    <button id="btnSparqlEndpointNew" class="btn sm" type="button">新建</button>
-                    <button id="btnSparqlEndpointSave" class="btn sm accent" type="button">保存</button>
-                    <button id="btnSparqlEndpointDelete" class="btn sm" type="button">删除</button>
                     <button id="btnSparqlEndpointTest" class="btn sm" type="button">测试连接</button>
                   </div>
                 </div>
@@ -2478,24 +2385,21 @@
               <section class="panel sparql-card sparql-card-main">
                 <div class="sparql-card-head">
                   <div>
-                    <div class="sparql-card-title">模板与查询</div>
-                    <div class="muted">支持 Ctrl+Enter 执行</div>
+                    <div class="sparql-card-title">选择导入内容</div>
+                    <div class="muted">选择类型和属性后自动读取数据</div>
                   </div>
                   <div class="sparql-actions">
-                    <button id="btnSparqlTemplateSave" class="btn sm" type="button">保存模板</button>
-                    <button id="btnSparqlRun" class="btn sm accent" type="button">执行查询</button>
-                    <button id="btnSparqlClear" class="btn sm" type="button">清空</button>
+                    <button id="btnSparqlLoadTypes" class="btn sm" type="button">刷新类型</button>
+                    <button id="btnSparqlStructuredPreview" class="btn sm accent" type="button">预览数据</button>
                   </div>
                 </div>
-                <div class="sparql-template-toolbar">
-                  <select id="sparqlTemplateSelect" class="kb-select"></select>
-                  <button id="btnSparqlTemplateFavorite" class="btn sm" type="button">收藏/取消收藏</button>
+                <div class="sparql-structured-form">
+                  <label class="field"><span>选择类型</span><select id="sparqlSourceTypeSelect" class="kb-select"><option value="">请选择类型</option></select></label>
+                  <div class="sparql-structured-props"><div class="sparql-property-head"><div class="field"><span>导入属性</span></div><label class="sparql-select-all"><input id="sparqlPropertySelectAll" type="checkbox" /> 全选</label></div><input id="sparqlPropertySearch" class="kb-input sm" placeholder="搜索属性名称或 URI" disabled /><div id="sparqlPropertyChecklist" class="sparql-property-checklist"><span class="muted">请先选择类型</span></div></div>
                 </div>
-                <textarea id="sparqlQueryEditor" class="sparql-editor" spellcheck="false"></textarea>
-                <div class="sparql-editor-footer">
-                  <span id="sparqlQueryMeta" class="muted">仅允许只读查询：SELECT / ASK / CONSTRUCT / DESCRIBE</span>
-                  <label class="sparql-inline-check"><input id="sparqlAutoLimit" type="checkbox" checked /> 自动提示 LIMIT</label>
-                </div>
+                <textarea id="sparqlQueryEditor" class="sparql-editor" spellcheck="false" style="display:none"></textarea>
+                <select id="sparqlTemplateSelect" style="display:none"></select><button id="btnSparqlTemplateFavorite" type="button" style="display:none"></button><button id="btnSparqlTemplateSave" type="button" style="display:none"></button><button id="btnSparqlRun" type="button" style="display:none"></button><button id="btnSparqlClear" type="button" style="display:none"></button><input id="sparqlAutoLimit" type="checkbox" checked style="display:none" />
+                <div class="sparql-editor-footer"><span id="sparqlQueryMeta" class="muted">系统将根据所选类型和属性自动生成查询。</span></div>
               </section>
             </div>
 
@@ -2504,54 +2408,34 @@
                 <div class="sparql-card-head">
                   <div>
                     <div class="sparql-card-title">查询结果预览</div>
-                    <div class="muted">支持本地分页与原始响应查看</div>
+                    <div class="muted">确认勾选属性后生成的数据</div>
                   </div>
                   <div class="sparql-actions">
                     <select id="sparqlPageSize" class="kb-select sm"><option>20</option><option selected>50</option><option>100</option><option>200</option></select>
-                    <button id="btnSparqlShowRaw" class="btn sm" type="button">原始响应</button>
+                    <button id="btnSparqlShowRaw" class="btn sm sparql-secondary-control" type="button">原始响应</button>
                   </div>
                 </div>
                 <div id="sparqlResultSummary" class="entry-hint">还没有执行查询。</div>
                 <div class="sparql-result-tools">
                   <input id="sparqlResultSearch" class="kb-input" placeholder="搜索结果..." />
                 </div>
-                <div id="sparqlResultTable" class="sparql-table-wrap"></div>
+                <div class="entry-grid-shell sparql-preview-grid"><div id="sparqlResultTable" class="sparql-result-grid-host"></div></div>
                 <pre id="sparqlRawResponse" class="sparql-raw" style="display:none;"></pre>
               </section>
 
-              <section class="panel sparql-card sparql-card-sidebar">
-                <div class="sparql-card-head">
-                  <div>
-                    <div class="sparql-card-title">字段映射与导入</div>
-                    <div class="muted">查询成功后自动生成推荐</div>
-                  </div>
-                  <div class="sparql-actions">
-                    <button id="btnSparqlBuildPreview" class="btn sm" type="button" disabled>生成预览</button>
-                    <button id="btnSparqlImport" class="btn sm accent" type="button" disabled>确认导入</button>
-                  </div>
-                </div>
-                <div class="sparql-form-grid">
-                  <label class="field"><span>目标分类 Schema</span><select id="sparqlSchemaSelect" class="kb-select"></select></label>
-                  <label class="field"><span>默认实体类型</span><input id="sparqlDefaultEntityType" class="kb-input" value="SPARQL实体" /></label>
-                  <label class="field sparql-span-2"><span>导入任务名称</span><input id="sparqlTaskName" class="kb-input" placeholder="SPARQL 导入任务" /></label>
-                </div>
-                <div id="sparqlMappingTable" class="sparql-table-wrap"></div>
-                <div id="sparqlPreviewSummary" class="entry-hint">尚未生成导入预览。</div>
-                <div id="sparqlPreviewEntities" class="sparql-table-wrap"></div>
-                <div id="sparqlPreviewRelations" class="sparql-table-wrap"></div>
-              </section>
+              <div class="sparql-import-legacy" aria-hidden="true">
+                <button id="btnSparqlBuildPreview" type="button" disabled></button><button id="btnSparqlImport" type="button" disabled></button>
+                <select id="sparqlSchemaSelect"></select><input id="sparqlDefaultEntityType" value="SPARQL实体" /><input id="sparqlTaskName" />
+                <div id="sparqlMappingTable"></div><div id="sparqlPreviewSummary"></div><div id="sparqlPreviewEntities"></div><div id="sparqlPreviewRelations"></div>
+              </div>
             </div>
 
-            <section class="panel sparql-card sparql-card-full">
-              <div class="sparql-card-head">
-                <div>
-                  <div class="sparql-card-title">导入任务与日志</div>
-                  <div class="muted">可查看状态、日志与重新执行</div>
-                </div>
-              </div>
-              <div id="sparqlTaskList" class="sparql-task-list"></div>
-              <pre id="sparqlTaskLogs" class="sparql-raw"></pre>
-            </section>
+            <div class="entry-import-bar sparql-bottom-actions">
+              <div><strong id="sparqlPreviewCount">共 0 条</strong><span id="sparqlImportStatus" class="muted" aria-live="polite">已选择预览数据</span></div>
+              <div class="entry-import-bar__actions"><button id="btnSparqlCancelSelection" class="btn sm" type="button">取消选择</button><button id="btnSparqlPreviewImport" class="btn sm" type="button" disabled>预览导入</button><button id="btnSparqlConfirmImport" class="btn sm accent" type="button" disabled>确认导入</button></div>
+            </div>
+
+            <div class="sparql-task-legacy" aria-hidden="true"><div id="sparqlTaskList"></div><pre id="sparqlTaskLogs"></pre></div>
           </div>
         </div>
         <!-- Table panel (default) -->
@@ -5551,6 +5435,9 @@
     const btnEntryAddRow = document.getElementById("btnEntryAddRow");
     const btnEntryImportExcel = document.getElementById("btnEntryImportExcel");
     const btnEntryImportApi = document.getElementById("btnEntryImportApi");
+    const entryFileForm = document.getElementById("entryFileForm");
+    const btnEntryFileChoose = document.getElementById("btnEntryFileChoose");
+    const btnEntryFileCancel = document.getElementById("btnEntryFileCancel");
     const entryApiForm = document.getElementById("entryApiForm");
     const entryApiUrlInput = document.getElementById("entryApiUrlInput");
     const entryApiPathInput = document.getElementById("entryApiPathInput");
@@ -5561,6 +5448,24 @@
     const btnEntryAddColumn = document.getElementById("btnEntryAddColumn");
     const btnEntryClear = document.getElementById("btnEntryClear");
     const btnEntrySubmit = document.getElementById("btnEntrySubmit");
+    const entryOntologySelect = document.getElementById("entryOntologySelect");
+    const entryKeywordInput = document.getElementById("entryKeywordInput");
+    const btnEntryLoadData = document.getElementById("btnEntryLoadData");
+    const btnEntryAdvancedSparql = document.getElementById("btnEntryAdvancedSparql");
+    const entrySourceButtons = Array.from(document.querySelectorAll("[data-entry-source]"));
+    const entryGridEmptyState = document.getElementById("entryGridEmptyState");
+    const entryRowCount = document.getElementById("entryRowCount");
+    const entrySelectionCount = document.getElementById("entrySelectionCount");
+    const btnEntryCancelSelection = document.getElementById("btnEntryCancelSelection");
+    const btnEntryPreview = document.getElementById("btnEntryPreview");
+    const entryMappingOntologySelect = document.getElementById("entryMappingOntologySelect");
+    const entryMappingPropertyChecklist = document.getElementById("entryMappingPropertyChecklist");
+    const entryMappingPropertySearch = document.getElementById("entryMappingPropertySearch");
+    const entryMappingPropertyCount = document.getElementById("entryMappingPropertyCount");
+    const entryDetailDrawer = document.getElementById("entryDetailDrawer");
+    const entryDetailTitle = document.getElementById("entryDetailTitle");
+    const entryDetailBody = document.getElementById("entryDetailBody");
+    const btnEntryDetailClose = document.getElementById("btnEntryDetailClose");
     const btnEntryModeEntity = document.getElementById("btnEntryModeEntity");
     const btnEntryModeRelation = document.getElementById("btnEntryModeRelation");
     const entryProgressWrap = document.getElementById("entryProgressWrap");
@@ -5724,6 +5629,7 @@
     let entryActiveScreen = "manager";
 
     let entrySubmitInFlight = false;
+    let entrySelectedSource = "sparql";
     let reportTemplateEditorInstance = null;
     const REPORT_TEMPLATE_STORE_KEY = 'kb_report_templates';
     const DEFAULT_REPORT_TEMPLATES = {
@@ -7078,10 +6984,10 @@
     function setEntryScreen(screen) {
       entryActiveScreen = screen === "editor" ? "editor" : "manager";
       if (entryManagerView) {
-        entryManagerView.style.display = entryActiveScreen === "manager" ? "flex" : "none";
+        entryManagerView.style.display = "flex";
       }
       if (entryEditorView) {
-        entryEditorView.style.display = entryActiveScreen === "editor" ? "flex" : "none";
+        entryEditorView.style.display = "flex";
       }
       if (entryTopActions) {
         entryTopActions.style.display = entryActiveScreen === "editor" ? "flex" : "none";
@@ -7120,6 +7026,111 @@
         });
       }
       updateEntryTaskUiState();
+    }
+
+    function updateEntryPreviewSummary() {
+      const schema = entryGridInstance?.schema || getMultiSchema();
+      const rows = entryGridInstance ? getEntryGridDataSnapshot(schema) : (entryMultiState.rows || []);
+      const validRows = rows.filter((row) => Object.values(row || {}).some((value) => String(value ?? "").trim()));
+      if (entryRowCount) entryRowCount.textContent = `共 ${validRows.length} 条`;
+      if (entrySelectionCount) entrySelectionCount.textContent = validRows.length ? `已选择 ${validRows.length} 条` : "尚未选择数据";
+      if (entryGridEmptyState) entryGridEmptyState.style.display = entryCurrentTaskId ? "none" : "flex";
+    }
+
+    async function populateEntryOntologyOptions() {
+      if (!entryOntologySelect) return;
+      try {
+        const response = await fetch(createEntryApiUrl("/api/kb/ontologies").toString());
+        const payload = await response.json();
+        const items = Array.isArray(payload?.items) ? payload.items : Array.isArray(payload) ? payload : [];
+        const current = entryOntologySelect.value;
+        entryOntologySelect.innerHTML = '<option value="">全部类型</option>';
+        items.forEach((item) => {
+          const option = document.createElement("option");
+          option.value = item.id || item.name || "";
+          option.textContent = item.label || item.name || item.id || "未命名本体";
+          entryOntologySelect.appendChild(option);
+        });
+        entryOntologySelect.value = current;
+      } catch (error) {
+        console.warn("load entry ontology options failed", error);
+      }
+    }
+
+    async function populateEntryMappingOptions() {
+      if (!entryMappingOntologySelect) return;
+      try {
+        const response = await fetch(createEntryApiUrl("/api/kb/ontologies").toString());
+        const payload = await response.json();
+        const items = Array.isArray(payload?.items) ? payload.items : Array.isArray(payload) ? payload : [];
+        entryMappingOntologySelect.innerHTML = '<option value="">请选择本体</option>';
+        items.forEach((item) => {
+          const option = document.createElement("option");
+          option.value = item.id || item.name || "";
+          option.textContent = item.label || item.name || item.id || "未命名本体";
+          entryMappingOntologySelect.appendChild(option);
+        });
+      } catch (error) { console.warn("load entry mapping ontologies failed", error); }
+    }
+
+    async function populateEntryMappingProperties() {
+      if (!entryMappingPropertyChecklist) return;
+      const ontologyId = String(entryMappingOntologySelect?.value || "").trim();
+      if (!ontologyId) {
+        entryMappingPropertyChecklist.innerHTML = '<span class="muted">请先选择本体</span>';
+        if (entryMappingPropertySearch) { entryMappingPropertySearch.value = ""; entryMappingPropertySearch.disabled = true; }
+        if (entryMappingPropertyCount) entryMappingPropertyCount.textContent = "选择本体后显示可用属性";
+        return;
+      }
+      entryMappingPropertyChecklist.innerHTML = '<span class="muted">正在加载属性…</span>';
+      try {
+        const url = createEntryApiUrl("/api/kb/ontology/property");
+        url.searchParams.set("ontology_id", ontologyId);
+        const response = await fetch(url.toString());
+        const payload = await response.json();
+        const items = Array.isArray(payload?.items) ? payload.items : Array.isArray(payload) ? payload : [];
+        entryMappingPropertyChecklist.innerHTML = items.length ? items.map((item) => {
+          const name = item.alias || item.name || item.id || "属性";
+          return `<label><input type="checkbox" value="${escapeHtml(name)}" /><span>${escapeHtml(name)}</span></label>`;
+        }).join("") : '<span class="muted">暂无可用属性</span>';
+        if (entryMappingPropertySearch) { entryMappingPropertySearch.value = ""; entryMappingPropertySearch.disabled = !items.length; }
+        if (entryMappingPropertyCount) entryMappingPropertyCount.textContent = `共 ${items.length} 个可用属性`;
+      } catch (error) { entryMappingPropertyChecklist.innerHTML = '<span class="muted">属性加载失败</span>'; console.warn("load entry mapping properties failed", error); }
+    }
+
+    function applyEntryMappingProperties() {
+      if (!entryMappingPropertyChecklist) return;
+      const selected = Array.from(entryMappingPropertyChecklist.querySelectorAll("input:checked")).map((input) => input.value.trim()).filter(Boolean);
+      if (!selected.length || !entryGridInstance || isRelationMode()) return;
+      const schema = getMultiSchema();
+      const existing = new Set(schema.map((column) => column.title));
+      const additions = selected.filter((name) => !existing.has(name)).map((name, index) => ({ title: name, name: `mapped_${Date.now()}_${index}`, width: 150 }));
+      if (!additions.length) return;
+      const rows = getEntryGridDataSnapshot(schema).map((row) => ({ ...row }));
+      additions.forEach((column) => rows.forEach((row) => { row[column.name] = ""; }));
+      entryMultiState.columns = [...schema, ...additions];
+      entryMultiState.rows = rows;
+      applyEntryTemplateToGrid();
+      scheduleEntryTaskSave();
+    }
+
+    async function ensureEntryTaskForInput() {
+      if (entryCurrentTaskId) return true;
+      await createEntryTask();
+      return Boolean(entryCurrentTaskId);
+    }
+
+    function applyEntryOntologyToBlankRows() {
+      const ontology = String(entryMappingOntologySelect?.value || entryOntologySelect?.value || "").trim();
+      if (!ontology || !entryGridInstance) return;
+      const schema = entryGridInstance.schema || [];
+      const typeColumn = schema.find((column) => column?.name === "type");
+      if (!typeColumn) return;
+      entryGridInstance.data.forEach((row) => {
+        if (row && !String(row.type || "").trim()) row.type = ontology;
+      });
+      entryGridInstance.draw?.();
+      scheduleEntryTaskSave();
     }
 
     function createEntryApiUrl(path) {
@@ -7394,6 +7405,7 @@
       });
       if (entryTaskNameInput) entryTaskNameInput.value = "";
       await loadEntryTaskList(created.id);
+      await selectEntryTask(created.id, { skipReloadList: true });
     }
 
     async function deleteCurrentEntryTask() {
@@ -7511,6 +7523,22 @@
         entryGridInstance.style.position = "absolute";
         entryGridInstance.style.inset = "0";
       } catch { }
+      entryGridInstance.addEventListener("click", (event) => {
+        const cell = event?.cell;
+        const rowIndex = Number(cell?.rowIndex);
+        if (!Number.isInteger(rowIndex) || rowIndex < 0) return;
+        const row = entryGridInstance?.data?.[rowIndex];
+        if (!row || !Object.values(row).some((value) => String(value ?? "").trim())) return;
+        if (entryDetailTitle) entryDetailTitle.textContent = row.name || row.head || "数据详情";
+        if (entryDetailBody) {
+          entryDetailBody.innerHTML = Object.entries(row)
+            .filter(([, value]) => String(value ?? "").trim())
+            .map(([key, value]) => `<div class="entry-detail-drawer__field"><span>${escapeHtml(key)}</span><span>${escapeHtml(value)}</span></div>`)
+            .join("");
+        }
+        entryDetailDrawer?.classList.add("is-open");
+        entryDetailDrawer?.setAttribute("aria-hidden", "false");
+      });
       entryGridInstance.addEventListener(
         "contextmenu",
         (event) => {
@@ -7893,6 +7921,7 @@
       updateEntryTemplateHint();
       updateEntryHintCopy();
       resizeSheetColumns();
+      updateEntryPreviewSummary();
     }
 
     function handleEntryTemplateChange(value) {
@@ -7919,6 +7948,8 @@
       }
       entryMultiState.rows = rows;
       scheduleEntryTaskSave();
+      applyEntryOntologyToBlankRows();
+      updateEntryPreviewSummary();
     }
 
     let entryMultiColumnSerial = 0;
@@ -8932,6 +8963,61 @@
           }
         });
       }
+      entrySourceButtons.forEach((button) => {
+        button.addEventListener("click", async () => {
+          const source = button.dataset.entrySource || "manual";
+          entrySelectedSource = source;
+          entrySourceButtons.forEach((item) => item.classList.toggle("accent", item === button));
+          if (source === "sparql") {
+            document.getElementById("btnEntryModeSparql")?.click();
+            return;
+          }
+          document.getElementById("btnEntryModeSheet")?.click();
+          if (source === "file") {
+            if (entryApiForm) entryApiForm.style.display = "none";
+            if (entryFileForm) entryFileForm.style.display = "block";
+          } else if (source === "api") {
+            if (entryFileForm) entryFileForm.style.display = "none";
+            if (await ensureEntryTaskForInput() && entryApiForm) entryApiForm.style.display = "block";
+          } else if (source === "manual") {
+            if (entryFileForm) entryFileForm.style.display = "none";
+            if (entryApiForm) entryApiForm.style.display = "none";
+            if (await ensureEntryTaskForInput()) addEntryRow();
+          }
+        });
+      });
+      if (btnEntryLoadData) {
+        btnEntryLoadData.addEventListener("click", async () => {
+          if (entrySelectedSource === "sparql") {
+            document.getElementById("btnEntryModeSparql")?.click();
+            return;
+          }
+          if (await ensureEntryTaskForInput()) {
+            applyEntryOntologyToBlankRows();
+            if (entrySelectedSource === "manual") addEntryRow();
+          }
+        });
+      }
+      if (btnEntryFileChoose) btnEntryFileChoose.addEventListener("click", async () => {
+        if (await ensureEntryTaskForInput()) entryExcelFileInput?.click();
+      });
+      if (btnEntryFileCancel) btnEntryFileCancel.addEventListener("click", () => { if (entryFileForm) entryFileForm.style.display = "none"; });
+      if (btnEntryAdvancedSparql) btnEntryAdvancedSparql.addEventListener("click", () => document.getElementById("btnEntryModeSparql")?.click());
+      if (entryOntologySelect) entryOntologySelect.addEventListener("change", () => applyEntryOntologyToBlankRows());
+      if (entryMappingOntologySelect) entryMappingOntologySelect.addEventListener("change", () => { applyEntryOntologyToBlankRows(); populateEntryMappingProperties(); });
+      if (entryMappingPropertyChecklist) entryMappingPropertyChecklist.addEventListener("change", () => applyEntryMappingProperties());
+      if (entryMappingPropertySearch) entryMappingPropertySearch.addEventListener("input", (event) => {
+        const keyword = String(event.target.value || "").trim().toLowerCase();
+        entryMappingPropertyChecklist?.querySelectorAll("label").forEach((label) => {
+          label.style.display = !keyword || label.textContent.toLowerCase().includes(keyword) ? "flex" : "none";
+        });
+      });
+      if (btnEntryCancelSelection) btnEntryCancelSelection.addEventListener("click", () => {
+        try { entryGridInstance?.selectArea?.({ top: 0, left: 0, right: 0, bottom: 0 }); } catch { }
+        if (entrySelectionCount) entrySelectionCount.textContent = "已取消当前表格选择";
+      });
+      if (btnEntryPreview) btnEntryPreview.addEventListener("click", () => { entryHintText.textContent = `将导入 ${entryRowCount?.textContent?.replace("共 ", "").replace(" 条", "") || 0} 条有效数据；确认后将调用现有导入接口。`; });
+      if (btnEntryDetailClose) btnEntryDetailClose.addEventListener("click", () => { entryDetailDrawer?.classList.remove("is-open"); entryDetailDrawer?.setAttribute("aria-hidden", "true"); });
       if (btnEntryTaskCreate) {
         btnEntryTaskCreate.addEventListener("click", () => {
           createEntryTask().catch((err) => {
@@ -8987,6 +9073,10 @@
       updateEntryTemplateHint();
       updateEntryHintCopy();
       syncEntryControlVisibility();
+      populateEntryOntologyOptions();
+      populateEntryMappingOptions();
+      populateEntryMappingProperties();
+      updateEntryPreviewSummary();
       loadEntryTaskList().catch((err) => {
         console.error(err);
         setStatus(false, `加载录入任务失败：${err?.message || err}`);

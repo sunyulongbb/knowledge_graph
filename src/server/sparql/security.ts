@@ -32,7 +32,16 @@ function isPrivateIPv6(ip: string) {
   return value === "::1" || value.startsWith("fc") || value.startsWith("fd") || value.startsWith("fe80:");
 }
 
-export async function validateEndpointUrl(endpoint: string) {
+function isConfiguredFusekiEndpoint(url: URL) {
+  const configured = String(process.env.FUSEKI_SPARQL_ENDPOINT || "http://127.0.0.1:3030/wikidata/sparql").trim();
+  try {
+    return url.toString() === new URL(configured).toString();
+  } catch {
+    return false;
+  }
+}
+
+export async function validateEndpointUrl(endpoint: string, options: { allowConfiguredFuseki?: boolean } = {}) {
   let url: URL;
   try {
     url = new URL(String(endpoint || "").trim());
@@ -45,12 +54,13 @@ export async function validateEndpointUrl(endpoint: string) {
   }
 
   const host = (url.hostname || "").toLowerCase();
-  if (!host || BLOCKED_HOSTS.has(host)) {
+  const isManagedFuseki = options.allowConfiguredFuseki === true && isConfiguredFusekiEndpoint(url);
+  if (!host || (BLOCKED_HOSTS.has(host) && !isManagedFuseki)) {
     throw new Error("禁止访问本地或保留地址");
   }
 
   const allowPrivate = String(process.env.ALLOW_PRIVATE_SPARQL_ENDPOINTS || "false").toLowerCase() === "true";
-  if (!allowPrivate) {
+  if (!allowPrivate && !isManagedFuseki) {
     if (net.isIP(host)) {
       if (isPrivateIPv4(host) || isPrivateIPv6(host)) {
         throw new Error("默认禁止访问内网 SPARQL Endpoint");

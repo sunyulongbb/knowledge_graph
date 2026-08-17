@@ -324,11 +324,12 @@ export function formatAttribute(row: any) {
   } catch {}
 
   let propName = row.property_name_snapshot || row.key;
+  let propertyDatatype = "";
   try {
+    let prop = db
+      .query("SELECT name, datatype, valuetype FROM properties WHERE id = ?")
+      .get(row.key) as any;
     if (!row.property_name_snapshot) {
-      let prop = db
-        .query("SELECT name FROM properties WHERE id = ?")
-        .get(row.key) as any;
       if (
         (!prop || !prop.name) &&
         typeof row.key === "string" &&
@@ -336,7 +337,7 @@ export function formatAttribute(row: any) {
       ) {
         const stripped = row.key.substring(1);
         const propStripped = db
-          .query("SELECT name FROM properties WHERE id = ?")
+          .query("SELECT name, datatype, valuetype FROM properties WHERE id = ?")
           .get(stripped) as any;
         if (propStripped && propStripped.name) {
           prop = propStripped;
@@ -346,27 +347,41 @@ export function formatAttribute(row: any) {
         propName = prop.name;
       }
     }
+    propertyDatatype = String(prop?.datatype || prop?.valuetype || "").trim();
   } catch {}
 
+  const datatype = propertyDatatype && propertyDatatype.toLowerCase() !== "string"
+    ? propertyDatatype
+    : (row.datatype || "string");
+
+  // Backward compatibility: older imports stored entity references as plain
+  // strings even when the property definition has since been promoted to item.
+  if (datatype === "wikibase-entityid" && typeof parsedValue === "string") {
+    const rawId = parsedValue.match(/([Qq]\d+)$/)?.[1] || parsedValue.trim();
+    if (rawId) parsedValue = [{ id: rawId.toUpperCase(), label: rawId.toUpperCase(), "entity-type": "item" }];
+  }
+
   if (
-    row.datatype === "wikibase-entityid" &&
+    datatype === "wikibase-entityid" &&
     parsedValue &&
     typeof parsedValue === "object"
   ) {
     try {
-      let entityId =
-        parsedValue.id ??
-        parsedValue.value?.id ??
-        parsedValue["entity-id"] ??
-        parsedValue["entityId"] ??
-        parsedValue["entity_id"] ??
-        null;
+      const values = Array.isArray(parsedValue) ? parsedValue : [parsedValue];
+      for (const value of values) {
+        let entityId =
+          value?.id ??
+          value?.value?.id ??
+          value?.["entity-id"] ??
+          value?.["entityId"] ??
+          value?.["entity_id"] ??
+          null;
 
-      if (!entityId && (parsedValue["numeric-id"] ?? parsedValue.numeric_id)) {
-        entityId = parsedValue["numeric-id"] ?? parsedValue.numeric_id;
-      }
+        if (!entityId && (value?.["numeric-id"] ?? value?.numeric_id)) {
+          entityId = value["numeric-id"] ?? value.numeric_id;
+        }
 
-      if (entityId != null) {
+        if (entityId == null) continue;
         let targetId = String(entityId);
         if (targetId.startsWith("entity/")) {
           targetId = targetId.substring("entity/".length);
@@ -385,9 +400,9 @@ export function formatAttribute(row: any) {
           if (resolvedNode && resolvedNode.name) break;
         }
 
-        if (resolvedNode && resolvedNode.name) {
-          parsedValue.entity_label_zh = resolvedNode.name;
-          parsedValue.label_zh = resolvedNode.name;
+        if (resolvedNode && resolvedNode.name && value && typeof value === "object") {
+          value.entity_label_zh = resolvedNode.name;
+          value.label_zh = resolvedNode.name;
         }
       }
     } catch {}
@@ -398,11 +413,11 @@ export function formatAttribute(row: any) {
     node_id: row.node_id,
     property: row.key,
     property_label_zh: propName,
-    datatype: row.datatype,
+    datatype,
     value: parsedValue,
     datavalue: {
       value: parsedValue,
-      type: row.datatype,
+      type: datatype,
     },
   };
 }

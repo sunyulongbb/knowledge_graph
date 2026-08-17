@@ -230,7 +230,7 @@ export async function handleSparqlRoutes(req: Request, url: URL, method: string)
         endpoint: endpoint.endpoint,
       });
 
-      const importSummary = importPreviewToGraph(preview, {
+      const importSummary = await importPreviewToGraph(preview, {
         ...(body?.importConfig || {}),
         projectId,
       });

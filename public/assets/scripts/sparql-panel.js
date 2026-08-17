@@ -9,6 +9,10 @@
     tasks: [],
     endpointId: "",
     schemaItems: [],
+    resultGrid: null,
+    previewColumnLabels: null,
+    previewValueColumns: null,
+    isStructuredPreview: false,
   };
 
   const byId = (id) => document.getElementById(id);
@@ -85,19 +89,29 @@
 
   function setMode(mode) {
     state.mode = mode;
+    const entryPanel = byId("entryPanel");
     const sparqlView = byId("sparqlImportView");
     const managerView = byId("entryManagerView");
     const editorView = byId("entryEditorView");
+    const fileForm = byId("entryFileForm");
+    const apiForm = byId("entryApiForm");
     const btnSheet = byId("btnEntryModeSheet");
     const btnSparql = byId("btnEntryModeSparql");
 
     if (mode === "sparql") {
+      if (entryPanel) entryPanel.dataset.entryMode = "sparql";
+      if (fileForm) fileForm.style.display = "none";
+      if (apiForm) apiForm.style.display = "none";
       if (managerView) managerView.style.display = "none";
       if (editorView) editorView.style.display = "none";
       if (sparqlView) sparqlView.style.display = "flex";
     } else {
+      if (entryPanel) entryPanel.dataset.entryMode = "sheet";
+      if (fileForm) fileForm.style.display = "none";
+      if (apiForm) apiForm.style.display = "none";
       if (sparqlView) sparqlView.style.display = "none";
       if (managerView && managerView.style.display === "none") managerView.style.display = "flex";
+      if (editorView) editorView.style.display = "flex";
     }
 
     if (btnSheet) btnSheet.classList.toggle("accent", mode === "sheet");
@@ -257,7 +271,7 @@
     }));
   }
 
-  function renderTable(host, columns, rows, formatter) {
+  function renderTable(host, columns, rows, formatter, columnLabels = {}) {
     if (!host) return;
     if (!rows?.length) {
       host.innerHTML = '<div class="muted" style="padding:12px;">暂无数据</div>';
@@ -265,13 +279,47 @@
     }
 
     host.innerHTML = `<table class="sparql-table">
-      <thead><tr>${columns.map((col) => `<th>${escapeHtml(col)}</th>`).join("")}</tr></thead>
+      <thead><tr>${columns.map((col) => `<th>${escapeHtml(columnLabels[col] || col)}</th>`).join("")}</tr></thead>
       <tbody>
         ${rows
           .map((row) => `<tr>${columns.map((col) => `<td>${formatter ? formatter(row, col) : escapeHtml(row?.[col] ?? "")}</td>`).join("")}</tr>`)
           .join("")}
       </tbody>
     </table>`;
+  }
+
+  function renderUnifiedResultGrid(columns, rows, columnLabels = {}) {
+    const host = byId("sparqlResultTable");
+    if (!host) return;
+    const displayValue = (row, column) => {
+      const value = row?.[column]?.value ?? "";
+      const displayColumn = state.previewValueColumns?.[column];
+      if (displayColumn && row?.[displayColumn]?.value) return row[displayColumn].value;
+      return state.previewColumnLabels && column === "entity" ? compactName(value) : value;
+    };
+    if (typeof window.canvasDatagrid !== "function") {
+      renderTable(host, columns, rows, (row, column) => escapeHtml(displayValue(row, column)), columnLabels);
+      return;
+    }
+    if (!state.resultGrid) {
+      host.innerHTML = "";
+      state.resultGrid = window.canvasDatagrid({
+        parentNode: host,
+        data: [],
+        allowColumnReordering: false,
+        allowFreezing: false,
+        allowSorting: false,
+        showPerformanceGraph: false,
+      });
+      state.resultGrid.style.width = "100%";
+      state.resultGrid.style.height = "100%";
+      state.resultGrid.style.position = "absolute";
+      state.resultGrid.style.inset = "0";
+    }
+    state.resultGrid.schema = columns.map((column) => ({ title: columnLabels[column] || column, name: column, width: 180 }));
+    state.resultGrid.data = rows.map((row) => Object.fromEntries(columns.map((column) => [column, displayValue(row, column)])));
+    state.resultGrid.draw?.();
+    state.resultGrid.resize?.();
   }
 
   function recommendRole(column) {
@@ -330,13 +378,19 @@
     });
   }
 
+  function setImportStatus(message) {
+    const status = byId("sparqlImportStatus");
+    if (status) status.textContent = message;
+  }
+
   function renderResult() {
     const result = state.queryResult;
     const host = byId("sparqlResultTable");
     const raw = byId("sparqlRawResponse");
 
     if (!result) {
-      host.innerHTML = "";
+      if (state.resultGrid) { state.resultGrid.data = []; state.resultGrid.draw?.(); }
+      else host.innerHTML = "";
       raw.textContent = "";
       byId("sparqlResultSummary").textContent = "还没有执行查询。";
       return;
@@ -349,18 +403,18 @@
       const keyword = (byId("sparqlResultSearch").value || "").trim().toLowerCase();
       const rows = (result.rows || []).filter((row) => !keyword || JSON.stringify(row).toLowerCase().includes(keyword));
       const pageSize = Number(byId("sparqlPageSize").value || 50);
-      renderTable(host, result.columns || [], rows.slice(0, pageSize), (row, col) => {
-        const value = row?.[col];
-        const text = value?.value ?? "";
-        return `<div title="${escapeHtml(JSON.stringify(value || {}))}">${escapeHtml(text)}</div>`;
-      });
+      const displayColumns = new Set(Object.values(state.previewValueColumns || {}));
+      const columns = (result.columns || []).filter((column) => !displayColumns.has(column));
+      renderUnifiedResultGrid(columns, rows.slice(0, pageSize), state.previewColumnLabels || {});
 
-      state.mappingSuggestions = (result.columns || []).map((column) => ({
-        source: column,
-        role: recommendRole(column),
-        targetField: column,
-      }));
-      renderMappingTable();
+      if (!state.isStructuredPreview) {
+        state.mappingSuggestions = (result.columns || []).map((column) => ({
+          source: column,
+          role: recommendRole(column),
+          targetField: column,
+        }));
+        renderMappingTable();
+      }
       byId("btnSparqlBuildPreview").disabled = false;
       return;
     }
@@ -373,6 +427,157 @@
 
     renderTable(host, ["subject", "predicate", "object"], result.triples || [], (row, col) => escapeHtml(row?.[col]?.value ?? ""));
     byId("btnSparqlBuildPreview").disabled = true;
+  }
+
+  const valueOf = (row, key) => row?.[key]?.value || "";
+  const iri = (value) => `<${String(value || "").replace(/>/g, "%3E")}>`;
+  const compactName = (value) => {
+    const text = String(value || "");
+    return text.split(/[\/#]/).filter(Boolean).pop() || text;
+  };
+
+  async function executeFusekiLookup(query) {
+    const endpointId = byId("sparqlEndpointSelect")?.value || state.endpointId;
+    if (!endpointId) throw new Error("数据服务尚未就绪");
+    return api("/api/sparql/query", {
+      method: "POST",
+      body: JSON.stringify({ endpointId, query, method: "GET", timeout: 30000, pageSize: 500 }),
+    });
+  }
+
+  async function loadFusekiTypes() {
+    const select = byId("sparqlSourceTypeSelect");
+    if (!select) return;
+    select.innerHTML = '<option value="">正在加载类型…</option>';
+    const result = await executeFusekiLookup(`SELECT ?type (SAMPLE(?typeLabelValue) AS ?typeLabel)
+WHERE {
+  { ?entity a ?type } UNION { ?entity <http://www.wikidata.org/prop/direct/P31> ?type }
+  OPTIONAL { ?type <http://www.w3.org/2000/01/rdf-schema#label> ?typeLabelValue . FILTER(LANG(?typeLabelValue) = "zh") }
+}
+GROUP BY ?type
+ORDER BY ?type
+LIMIT 500`);
+    const types = (result.rows || []).map((row) => ({
+      value: valueOf(row, "type"),
+      label: valueOf(row, "typeLabel") || "未命名类型",
+    })).filter((item) => item.value);
+    select.innerHTML = '<option value="">请选择类型</option>';
+    types.forEach((type) => {
+      const option = document.createElement("option");
+      option.value = type.value;
+      option.textContent = type.label;
+      option.title = type.value;
+      select.appendChild(option);
+    });
+    byId("sparqlQueryMeta").textContent = `已加载 ${types.length} 个类型`;
+  }
+
+  async function loadFusekiProperties() {
+    const type = byId("sparqlSourceTypeSelect")?.value || "";
+    const host = byId("sparqlPropertyChecklist");
+    const search = byId("sparqlPropertySearch");
+    const selectAll = byId("sparqlPropertySelectAll");
+    if (!host) return;
+    if (!type) { host.innerHTML = '<span class="muted">请先选择类型</span>'; if (search) search.disabled = true; return; }
+    host.innerHTML = '<span class="muted">正在加载属性…</span>';
+    const result = await executeFusekiLookup(`SELECT DISTINCT ?property WHERE {
+  { ?entity a ${iri(type)} } UNION { ?entity <http://www.wikidata.org/prop/direct/P31> ${iri(type)} }
+  ?entity ?property ?value .
+}
+ORDER BY ?property
+LIMIT 1000`);
+    // 名称由预览的固定中文名称列负责，避免与 rdfs:label 属性重复展示。
+    const propertyUris = (result.rows || [])
+      .map((row) => valueOf(row, "property"))
+      .filter((property) => property && property !== "http://www.w3.org/2000/01/rdf-schema#label");
+    const metadataResource = (property) => property.startsWith("http://www.wikidata.org/prop/direct/")
+      ? `http://www.wikidata.org/entity/${property.split("/").pop()}`
+      : property;
+    const labels = new Map();
+    const resources = [...new Set(propertyUris.map(metadataResource))];
+    for (let index = 0; index < resources.length; index += 80) {
+      const values = resources.slice(index, index + 80).map(iri).join(" ");
+      const labelResult = await executeFusekiLookup(`SELECT ?resource ?name WHERE {
+  VALUES ?resource { ${values} }
+  ?resource <http://www.w3.org/2000/01/rdf-schema#label> ?name .
+  FILTER(LANG(?name) = "zh" || LANG(?name) = "en" || LANG(?name) = "")
+}`);
+      (labelResult.rows || []).forEach((row) => {
+        const resource = valueOf(row, "resource");
+        const name = valueOf(row, "name");
+        const language = String(row?.name?.["xml:lang"] || row?.name?.language || "").toLowerCase();
+        const score = language === "zh" ? 3 : language === "en" ? 2 : 1;
+        const current = labels.get(resource);
+        if (resource && name && (!current || score > current.score)) labels.set(resource, { name, score });
+      });
+    }
+    const properties = propertyUris.map((property) => ({
+      property,
+      label: labels.get(metadataResource(property))?.name || "未命名属性",
+    }));
+    host.innerHTML = properties.length ? properties.map((item, index) => {
+      return `<label title="${escapeHtml(item.property)}"><input type="checkbox" value="${escapeHtml(item.property)}" data-display-name="${escapeHtml(item.label)}" ${index < 8 ? "checked" : ""} /><span>${escapeHtml(item.label)}</span></label>`;
+    }).join("") : '<span class="muted">该类型没有可导入属性</span>';
+    if (search) { search.value = ""; search.disabled = !properties.length; }
+    if (selectAll) { selectAll.checked = properties.length > 0 && properties.length <= 8; selectAll.indeterminate = properties.length > 8; }
+    byId("sparqlQueryMeta").textContent = "请选择要导入的属性";
+  }
+
+  function buildStructuredQuery() {
+    const type = byId("sparqlSourceTypeSelect")?.value || "";
+    const properties = Array.from(byId("sparqlPropertyChecklist")?.querySelectorAll("input:checked") || []).map((input) => ({
+      property: input.value,
+      label: input.dataset.displayName || "未命名属性",
+    })).filter((item) => item.property !== "http://www.w3.org/2000/01/rdf-schema#label");
+    if (!type) throw new Error("请选择类型");
+    if (!properties.length) throw new Error("请至少勾选一个属性");
+    const fields = properties.map((item, index) => ({ source: `field_${index + 1}`, ...item }));
+    const optional = fields.map((field) => `OPTIONAL {
+    ?entity ${iri(field.property)} ?${field.source}Raw .
+    OPTIONAL { ?${field.source}Raw <http://www.w3.org/2000/01/rdf-schema#label> ?${field.source}LabelZh . FILTER(LANG(?${field.source}LabelZh) = "zh") }
+    OPTIONAL { ?${field.source}Raw <http://www.w3.org/2000/01/rdf-schema#label> ?${field.source}LabelEn . FILTER(LANG(?${field.source}LabelEn) = "en") }
+    BIND(COALESCE(?${field.source}LabelZh, ?${field.source}LabelEn, STR(?${field.source}Raw)) AS ?${field.source}Display)
+  }`).join("\n  ");
+    const selectFields = fields.map((field) => `(SAMPLE(?${field.source}Raw) AS ?${field.source}) (SAMPLE(?${field.source}Display) AS ?${field.source}_display)`).join(" ");
+    return {
+      fields,
+      // A single entity can have several labels or values for one property. Aggregate
+      // optional values so each entity remains one preview row instead of a cross-product.
+      query: `SELECT ?entity (SAMPLE(?labelValue) AS ?label) ${selectFields}\nWHERE {\n  { ?entity a ${iri(type)} } UNION { ?entity <http://www.wikidata.org/prop/direct/P31> ${iri(type)} }\n  OPTIONAL { ?entity <http://www.w3.org/2000/01/rdf-schema#label> ?labelValue . FILTER(LANG(?labelValue) = "zh") }\n  ${optional}\n}\nGROUP BY ?entity\nLIMIT 500`,
+    };
+  }
+
+  function selectedStructuredTypeName() {
+    const select = byId("sparqlSourceTypeSelect");
+    return select?.selectedOptions?.[0]?.textContent?.trim() || byId("sparqlDefaultEntityType")?.value || "SPARQL实体";
+  }
+
+  async function previewStructuredImport() {
+    const { fields, query } = buildStructuredQuery();
+    state.preview = null;
+    state.isStructuredPreview = true;
+    state.previewValueColumns = Object.fromEntries(fields.map((field) => [field.source, `${field.source}_display`]));
+    state.previewColumnLabels = {
+      entity: "ID",
+      label: "名称",
+      ...Object.fromEntries(fields.map((field) => [field.source, field.label])),
+    };
+    byId("sparqlQueryEditor").value = query;
+    await runQuery();
+    state.mappingSuggestions = [
+      { source: "entity", role: "entity_id", targetField: "entity" },
+      { source: "label", role: "label", targetField: "名称" },
+      ...fields.map((field) => ({ source: field.source, displaySource: `${field.source}_display`, role: "property", targetField: field.label })),
+    ];
+    renderMappingTable();
+    byId("btnSparqlBuildPreview").disabled = false;
+    byId("btnSparqlImport").disabled = false;
+    if (byId("sparqlPreviewCount")) byId("sparqlPreviewCount").textContent = `共 ${state.queryResult?.total || 0} 条`;
+    if (byId("btnSparqlPreviewImport")) byId("btnSparqlPreviewImport").disabled = false;
+    if (byId("btnSparqlConfirmImport")) byId("btnSparqlConfirmImport").disabled = false;
+    setImportStatus("数据已就绪，可确认导入");
+    byId("sparqlPreviewSummary").textContent = "数据预览已就绪；确认无误后即可同步导入。";
+    byId("sparqlQueryMeta").textContent = "数据预览已生成，可确认导入同步。";
   }
 
   async function runQuery() {
@@ -406,8 +611,8 @@
         endpointId,
         query: byId("sparqlQueryEditor").value,
         mapping: {
-          defaultEntityType: byId("sparqlDefaultEntityType").value || "SPARQL实体",
-          fields: state.mappingSuggestions,
+          defaultEntityType: selectedStructuredTypeName(),
+          fields: state.mappingSuggestions.filter((field) => !String(field.source || "").endsWith("_display")),
         },
       }),
     });
@@ -422,22 +627,40 @@
   async function executeImport() {
     const endpointId = byId("sparqlEndpointSelect").value || state.endpointId;
     const taskName = byId("sparqlTaskName").value.trim() || `SPARQL 导入 ${new Date().toLocaleString("zh-CN")}`;
-    const data = await api("/api/sparql/import", {
-      method: "POST",
-      body: JSON.stringify({
-        endpointId,
-        query: byId("sparqlQueryEditor").value,
-        mapping: {
-          defaultEntityType: byId("sparqlDefaultEntityType").value || "SPARQL实体",
-          fields: state.mappingSuggestions,
-        },
-        schemaId: byId("sparqlSchemaSelect").value || null,
-        name: taskName,
-      }),
-    });
-    byId("sparqlPreviewSummary").textContent =
-      `导入完成：新增节点 ${data.summary.createdNodes} · 更新节点 ${data.summary.updatedNodes} · 新增关系 ${data.summary.createdEdges} · 失败 ${data.summary.failed}`;
-    await loadTasks();
+    const confirmButton = byId("btnSparqlConfirmImport");
+    if (confirmButton) confirmButton.disabled = true;
+    setImportStatus("正在导入...");
+    try {
+      // The confirmation action is self-contained: it generates the import preview
+      // when the user did not explicitly click “预览导入” first.
+      if (!state.preview) await buildPreview();
+      const data = await api("/api/sparql/import", {
+        method: "POST",
+        body: JSON.stringify({
+          endpointId,
+          query: byId("sparqlQueryEditor").value,
+          mapping: {
+            defaultEntityType: selectedStructuredTypeName(),
+          fields: state.mappingSuggestions.filter((field) => !String(field.source || "").endsWith("_display")),
+          },
+          schemaId: byId("sparqlSchemaSelect").value || null,
+          name: taskName,
+        }),
+      });
+      byId("sparqlPreviewSummary").textContent =
+        `导入完成：新增节点 ${data.summary.createdNodes} · 更新节点 ${data.summary.updatedNodes} · 新增关系 ${data.summary.createdEdges} · 失败 ${data.summary.failed}`;
+      const mediaInfo = Number(data.summary.mediaDownloaded || 0) || Number(data.summary.mediaFailed || 0)
+        ? ` · 媒体离线 ${data.summary.mediaDownloaded || 0}，失败 ${data.summary.mediaFailed || 0}`
+        : "";
+      const mediaError = data.summary.mediaErrors?.[0] ? `（${data.summary.mediaErrors[0]}）` : "";
+      setImportStatus(`导入成功：${data.summary.imported || 0} 条${mediaInfo}${mediaError}`);
+      await loadTasks();
+    } catch (error) {
+      setImportStatus(`导入失败：${error?.message || "请重试"}`);
+      throw error;
+    } finally {
+      if (confirmButton) confirmButton.disabled = false;
+    }
   }
 
   async function loadTasks() {
@@ -537,6 +760,7 @@
     const text = error?.message || String(error || "");
     byId("sparqlConnectionStatus").textContent = text;
     byId("sparqlQueryMeta").textContent = text;
+    setImportStatus(`操作失败：${text}`);
   }
 
   async function bootstrap() {
@@ -556,6 +780,20 @@
 
     byId("sparqlEndpointAuthType")?.addEventListener("change", (event) => {
       toggleEndpointAuthFields(event.target.value);
+    });
+
+    byId("btnSparqlLoadTypes")?.addEventListener("click", () => loadFusekiTypes().catch(showError));
+    byId("sparqlSourceTypeSelect")?.addEventListener("change", () => loadFusekiProperties().catch(showError));
+    byId("btnSparqlStructuredPreview")?.addEventListener("click", () => previewStructuredImport().catch(showError));
+    byId("sparqlPropertySearch")?.addEventListener("input", (event) => {
+      const keyword = String(event.target.value || "").trim().toLowerCase();
+      byId("sparqlPropertyChecklist")?.querySelectorAll("label").forEach((label) => {
+        label.style.display = !keyword || label.textContent.toLowerCase().includes(keyword) || label.title.toLowerCase().includes(keyword) ? "flex" : "none";
+      });
+    });
+    byId("sparqlPropertySelectAll")?.addEventListener("change", (event) => {
+      byId("sparqlPropertyChecklist")?.querySelectorAll("input[type=checkbox]").forEach((input) => { input.checked = event.target.checked; });
+      event.target.indeterminate = false;
     });
 
     byId("sparqlTemplateSelect")?.addEventListener("change", (event) => {
@@ -614,6 +852,24 @@
     byId("sparqlPageSize")?.addEventListener("change", renderResult);
     byId("btnSparqlBuildPreview")?.addEventListener("click", () => buildPreview().catch(showError));
     byId("btnSparqlImport")?.addEventListener("click", () => executeImport().catch(showError));
+    byId("btnSparqlPreviewImport")?.addEventListener("click", async () => {
+      try {
+        await buildPreview();
+        if (byId("btnSparqlConfirmImport")) byId("btnSparqlConfirmImport").disabled = false;
+      } catch (error) { showError(error); }
+    });
+    byId("btnSparqlConfirmImport")?.addEventListener("click", () => executeImport().catch(showError));
+    byId("btnSparqlCancelSelection")?.addEventListener("click", () => {
+      state.queryResult = null;
+      state.preview = null;
+      state.isStructuredPreview = false;
+      state.previewValueColumns = null;
+      renderResult();
+      if (byId("sparqlPreviewCount")) byId("sparqlPreviewCount").textContent = "共 0 条";
+      if (byId("btnSparqlPreviewImport")) byId("btnSparqlPreviewImport").disabled = true;
+      if (byId("btnSparqlConfirmImport")) byId("btnSparqlConfirmImport").disabled = true;
+      byId("sparqlQueryMeta").textContent = "已取消当前预览数据。";
+    });
 
     byId("sparqlQueryEditor")?.addEventListener("keydown", (event) => {
       if (event.ctrlKey && event.key === "Enter") {
@@ -627,8 +883,10 @@
     await loadTemplates();
     await loadSchemas();
     await loadTasks();
+    await loadFusekiTypes();
     renderMappingTable();
     refreshTemplateOptions({ keepSelection: true });
+    setMode("sparql");
   }
 
   document.addEventListener("DOMContentLoaded", bootstrap);

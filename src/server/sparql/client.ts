@@ -62,14 +62,14 @@ function buildRequest(targetUrl: URL, query: string, method: string, headers: Re
 
 function resolveTimeout(endpointUrl: URL, requestedTimeout: number) {
   const host = endpointUrl.hostname.toLowerCase();
-  if (host.includes("wikidata.org")) return Math.max(requestedTimeout, 60000);
+  if (host.includes("wikidata.org")) return Math.max(requestedTimeout, 90000);
   if (host.includes("dbpedia.org")) return Math.max(requestedTimeout, 45000);
   return requestedTimeout;
 }
 
 export async function executeSparqlRequest(config: any, query: string, options: any = {}) {
   const queryType = ensureReadOnlyQuery(query);
-  const endpointUrl = await validateEndpointUrl(config.endpoint);
+  const endpointUrl = await validateEndpointUrl(config.endpoint, { allowConfiguredFuseki: true });
   const preferredMethod = String(options?.method || config.method || "POST").toUpperCase();
   const timeout = resolveTimeout(
     endpointUrl,

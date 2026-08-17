@@ -834,7 +834,7 @@ if (btnAttrReset) {
     if (readOnly) {
       console.log("Rendering attribute list with image handling", items);
       const imageItems = items.filter((it) => {
-        return it.property_label_zh === "图像";
+        return String(it?.datatype || "").toLowerCase() === "commonsmedia" || it.property_label_zh === "图像";
       });
 
       if (imageItems.length > 0) {
@@ -857,6 +857,7 @@ if (btnAttrReset) {
             let src = String(v);
             // If it looks like a filename and not a URL, try Wikimedia Commons
             if (
+              !src.startsWith("/static/") &&
               !src.startsWith("http") &&
               !src.startsWith("//") &&
               !src.startsWith("data:")
@@ -1067,7 +1068,7 @@ if (btnAttrReset) {
 
         // Filter out images from the list
         displayItems = items.filter((it) => {
-          return it.property_label_zh !== "图像";
+          return String(it?.datatype || "").toLowerCase() !== "commonsmedia" && it.property_label_zh !== "图像";
         });
       }
     }

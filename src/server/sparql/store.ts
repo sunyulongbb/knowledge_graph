@@ -1,23 +1,24 @@
 import { db, getProjectByIdentifier } from "../db.ts";
 import { decryptSecret, encryptSecret, maskSecret } from "./crypto.ts";
 
+const FUSEKI_ENDPOINT = String(process.env.FUSEKI_SPARQL_ENDPOINT || "http://127.0.0.1:3030/wikidata/sparql").trim();
+
 const BUILTIN_ENDPOINTS = [
   {
-    id: "builtin-wikidata",
-    name: "Wikidata",
-    endpoint: "https://query.wikidata.org/sparql",
+    id: "builtin-fuseki",
+    name: "Apache Jena Fuseki",
+    endpoint: FUSEKI_ENDPOINT,
     method: "GET",
     auth_type: "none",
     username: "",
     headers: {},
-    timeout: 60000,
-    retries: 2,
+    timeout: 30000,
+    retries: 1,
     user_agent: "KnowledgeGraphSPARQL/1.0",
-    description: "Wikidata 公共查询端点",
-    default_query: `SELECT ?item ?itemLabel ?itemDescription
+    description: "项目唯一的 Fuseki SPARQL 服务",
+      default_query: `SELECT ?s ?p ?o
 WHERE {
-  ?item wdt:P31 wd:Q5.
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "zh,en". }
+  ?s ?p ?o
 }
 LIMIT 20`,
   },
@@ -61,10 +62,10 @@ const BUILTIN_TEMPLATES: Array<{
     category: "Wikidata 模板",
     source_type: "wikidata",
     endpoint_id: "builtin-wikidata",
-    query: `SELECT ?item ?itemLabel ?itemDescription
+      query: `SELECT ?item ?itemLabel ?itemDescription
 WHERE {
-  ?item wdt:P31 wd:Q5.
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "zh,en". }
+  VALUES ?item { wd:Q42 wd:Q1 wd:Q2 wd:Q76 wd:Q91 }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
 }
 LIMIT 20`,
     description: "适合测试人物实体导入",
@@ -77,10 +78,10 @@ LIMIT 20`,
     category: "Wikidata 模板",
     source_type: "wikidata",
     endpoint_id: "builtin-wikidata",
-    query: `SELECT ?item ?itemLabel ?itemDescription
+      query: `SELECT ?item ?itemLabel ?itemDescription
 WHERE {
-  ?item wdt:P31 wd:Q6256.
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "zh,en". }
+  VALUES ?item { wd:Q30 wd:Q145 wd:Q142 wd:Q148 wd:Q17 }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
 }
 LIMIT 20`,
     description: "适合测试国家实体导入",
@@ -93,12 +94,17 @@ LIMIT 20`,
     category: "通用模板",
     source_type: "generic",
     endpoint_id: "builtin-wikidata",
-    query: `SELECT ?subject ?subjectLabel ?property ?propertyLabel ?object ?objectLabel
+      query: `SELECT ?subject ?subjectLabel ?property ?propertyLabel ?object ?objectLabel
 WHERE {
+  VALUES (?subject ?property) {
+    (wd:Q42 wdt:P27)
+    (wd:Q76 wdt:P27)
+    (wd:Q91 wdt:P27)
+    (wd:Q937 wdt:P17)
+    (wd:Q64 wdt:P17)
+  }
   ?subject ?property ?object.
-  FILTER(isIRI(?subject))
-  FILTER(isIRI(?object))
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "zh,en". }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
 }
 LIMIT 20`,
     description: "适合测试关系映射与导入",
@@ -111,11 +117,11 @@ LIMIT 20`,
     category: "导入测试",
     source_type: "wikidata",
     endpoint_id: "builtin-wikidata",
-    query: `SELECT ?item ?itemLabel ?itemDescription ?country ?countryLabel
+      query: `SELECT ?item ?itemLabel ?itemDescription ?country ?countryLabel
 WHERE {
-  ?item wdt:P31 wd:Q5.
+  VALUES ?item { wd:Q42 wd:Q1 wd:Q2 wd:Q76 wd:Q91 }
   OPTIONAL { ?item wdt:P27 ?country. }
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "zh,en". }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
 }
 LIMIT 20`,
     description: "同时测试实体与国家关系导入",
@@ -128,11 +134,11 @@ LIMIT 20`,
     category: "导入测试",
     source_type: "wikidata",
     endpoint_id: "builtin-wikidata",
-    query: `SELECT ?item ?itemLabel ?itemDescription ?country ?countryLabel
+      query: `SELECT ?item ?itemLabel ?itemDescription ?country ?countryLabel
 WHERE {
-  ?item wdt:P31/wdt:P279* wd:Q515.
+  VALUES ?item { wd:Q60 wd:Q64 wd:Q90 wd:Q2807 wd:Q1490 }
   OPTIONAL { ?item wdt:P17 ?country. }
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "zh,en". }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
 }
 LIMIT 20`,
     description: "适合测试城市和国家关系导入",
@@ -145,10 +151,10 @@ LIMIT 20`,
     category: "导入测试",
     source_type: "wikidata",
     endpoint_id: "builtin-wikidata",
-    query: `SELECT ?item ?itemLabel ?itemDescription
+      query: `SELECT ?item ?itemLabel ?itemDescription
 WHERE {
-  ?item wdt:P31/wdt:P279* wd:Q43229.
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "zh,en". }
+  VALUES ?item { wd:Q95 wd:Q312 wd:Q4830453 wd:Q2283 wd:Q193701 }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
 }
 LIMIT 20`,
     description: "适合测试组织类实体导入",
@@ -161,11 +167,11 @@ LIMIT 20`,
     category: "导入测试",
     source_type: "wikidata",
     endpoint_id: "builtin-wikidata",
-    query: `SELECT ?item ?itemLabel ?itemDescription ?birthDate
+      query: `SELECT ?item ?itemLabel ?itemDescription ?birthDate
 WHERE {
-  ?item wdt:P31 wd:Q5.
+  VALUES ?item { wd:Q42 wd:Q1 wd:Q2 wd:Q76 wd:Q91 }
   OPTIONAL { ?item wdt:P569 ?birthDate. }
-  SERVICE wikibase:label { bd:serviceParam wikibase:language "zh,en". }
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
 }
 LIMIT 20`,
     description: "适合测试普通属性和日期字段导入",
@@ -341,12 +347,11 @@ export function scopeParams(projectId: number | null) {
 }
 
 export async function listEndpoints(projectId: number | null) {
-  const rows = db
-    .query(`SELECT * FROM sparql_endpoints WHERE ${scopeWhere(projectId)} ORDER BY datetime(updated_at) DESC, rowid DESC`)
-    .all(...scopeParams(projectId)) as any[];
-  const items = [];
-  for (const row of rows) items.push(await mapEndpoint(row));
-  return mergeBuiltinEndpoints(items);
+  // The ingestion workflow uses one managed Fuseki service. Existing endpoint
+  // records remain intact for historical tasks, but are intentionally not exposed
+  // as selectable sources in the current UI.
+  const fuseki = getBuiltinEndpoint("builtin-fuseki");
+  return fuseki ? [fuseki] : [];
 }
 
 export async function getEndpoint(projectId: number | null, id: string) {

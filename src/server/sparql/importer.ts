@@ -1,5 +1,59 @@
 import { db } from "../db.ts";
 import { ensureAttributeRecord, ensurePropertyRecord } from "../utils.ts";
+import { mkdirSync } from "fs";
+import { resolve } from "path";
+
+const IMAGE_FILE_PATTERN = /\.(?:avif|gif|jpe?g|png|svg|webp)(?:$|[?#])/i;
+
+function mediaSourceUrl(value: string, allowCommonsFilename = false) {
+  const source = String(value || "").trim();
+  if (!source) return "";
+  // A Commons File: URL is a description page, not the media binary. Convert it
+  // back to its filename so it goes through Special:FilePath below.
+  const commonsFileMatch = source.match(/^https:\/\/commons\.wikimedia\.org\/wiki\/File:([^?#]+)/i);
+  const commonsFilename = commonsFileMatch
+    ? decodeURIComponent(commonsFileMatch[1] || "")
+    : source.replace(/^File:/i, "");
+  if (/^https:\/\//i.test(commonsFilename)) return commonsFilename;
+  if (!allowCommonsFilename && !IMAGE_FILE_PATTERN.test(commonsFilename)) return "";
+  // Wikidata P18 values are Commons file names; Special:FilePath resolves them to the binary file.
+  // Commons canonicalizes file titles as underscores (e.g. President_Barack_Obama.jpg).
+  const normalizedFilename = commonsFilename.replace(/\s+/g, "_");
+  return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(normalizedFilename)}`;
+}
+
+async function cacheImportedImage(source: string, projectId: number | null, allowCommonsFilename = false) {
+  const target = mediaSourceUrl(source, allowCommonsFilename);
+  if (!target) return { localUrl: "", error: "无法解析媒体源" };
+  let lastError = "下载请求失败";
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch(target, {
+        redirect: "follow",
+        signal: AbortSignal.timeout(60000),
+        headers: {
+          "User-Agent": "KnowledgeGraphSPARQL/1.0 (local media importer)",
+          Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+        },
+      });
+      const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+      if (!response.ok) return { localUrl: "", error: `HTTP ${response.status}` };
+      if (!contentType.startsWith("image/")) return { localUrl: "", error: `响应类型不是图片：${contentType || "未知"}` };
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (!bytes.length || bytes.length > 20 * 1024 * 1024) return { localUrl: "", error: "媒体文件为空或超过 20 MB" };
+      const extension = contentType.includes("png") ? "png" : contentType.includes("webp") ? "webp" : contentType.includes("gif") ? "gif" : contentType.includes("svg") ? "svg" : "jpg";
+      const folder = projectId === null ? "app" : String(projectId);
+      const directory = resolve(import.meta.dir, "..", "..", "..", "uploads", folder, "node-images");
+      mkdirSync(directory, { recursive: true });
+      const filename = `${crypto.randomUUID()}.${extension}`;
+      await Bun.write(resolve(directory, filename), bytes);
+      return { localUrl: `/static/uploads/${folder}/node-images/${filename}`, error: "" };
+    } catch (error) {
+      lastError = String((error as Error)?.message || error || "下载请求失败");
+    }
+  }
+  return { localUrl: "", error: lastError };
+}
 
 function getLanguage(value: any) {
   return value?.["xml:lang"] || value?.language || "";
@@ -15,6 +69,28 @@ function qidFromValue(value: any) {
   const text = rdfValueToText(value);
   const match = text.match(/([QP]\d+)$/i);
   return match?.[1] ? match[1].toUpperCase() : text.split("/").filter(Boolean).pop() || text;
+}
+
+function inferRdfDatatype(value: any) {
+  if (String(value?.type || "").toLowerCase() === "uri") return "wikibase-entityid";
+  const datatype = String(value?.datatype || "").toLowerCase();
+  if (/(boolean)$/.test(datatype)) return "boolean";
+  if (/(integer|decimal|double|float)$/.test(datatype)) return "number";
+  if (/(date|datetime|time)$/.test(datatype)) return "time";
+  return "string";
+}
+
+function updatePropertyDatatype(propertyId: string, datatype: string, projectId: number | null) {
+  if (!propertyId || datatype === "string") return;
+  const scope = projectId !== null ? "project_id = ?" : "project_id IS NULL";
+  const params = projectId !== null ? [datatype, datatype, propertyId, projectId] : [datatype, datatype, propertyId];
+  db.run(
+    `UPDATE properties
+     SET datatype = ?, valuetype = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND ${scope}
+       AND (datatype IS NULL OR trim(datatype) = '' OR lower(datatype) = 'string')`,
+    params,
+  );
 }
 
 function recommendFieldRole(field: string) {
@@ -39,6 +115,59 @@ function scopedNodeParams(projectId: number | null) {
 
 function makeScopedNodeId(sourceId: string, projectId: number | null) {
   return projectId !== null ? `sparql:${projectId}:${sourceId}` : sourceId;
+}
+
+function ensureOntologyRecord(name: string, projectId: number | null) {
+  const normalized = String(name || "").trim();
+  if (!normalized) return null;
+  const existing = projectId !== null
+    ? (db.query("SELECT id FROM ontologies WHERE lower(name) = lower(?) AND project_id = ? LIMIT 1").get(normalized, projectId) as any)
+    : (db.query("SELECT id FROM ontologies WHERE lower(name) = lower(?) AND project_id IS NULL LIMIT 1").get(normalized) as any);
+  if (existing?.id) return String(existing.id);
+
+  const id = `ontology/${crypto.randomUUID()}`;
+  const order = projectId !== null
+    ? (db.query("SELECT COALESCE(MAX(sort_order), 0) AS value FROM ontologies WHERE project_id = ?").get(projectId) as any)
+    : (db.query("SELECT COALESCE(MAX(sort_order), 0) AS value FROM ontologies WHERE project_id IS NULL").get() as any);
+  db.run(
+    "INSERT INTO ontologies (id, name, description, parent_id, project_id, sort_order, status) VALUES (?, ?, '', NULL, ?, ?, 'active')",
+    [id, normalized, projectId, Number(order?.value || 0) + 1],
+  );
+  return id;
+}
+
+function linkOntologyProperty(ontologyId: string | null, propertyId: string | null) {
+  if (!ontologyId || !propertyId) return;
+  db.run("INSERT OR IGNORE INTO ontology_properties (ontology_id, property_id) VALUES (?, ?)", [ontologyId, propertyId]);
+}
+
+function ensureClassRecord(name: string, projectId: number | null) {
+  const normalized = String(name || "").trim();
+  if (!normalized) return null;
+  const existing = projectId !== null
+    ? (db.query("SELECT id FROM classes WHERE lower(name) = lower(?) AND project_id = ? LIMIT 1").get(normalized, projectId) as any)
+    : (db.query("SELECT id FROM classes WHERE lower(name) = lower(?) AND project_id IS NULL LIMIT 1").get(normalized) as any);
+  if (existing?.id) return String(existing.id);
+
+  const id = `class/${crypto.randomUUID()}`;
+  const order = projectId !== null
+    ? (db.query("SELECT COALESCE(MAX(sort_order), 0) AS value FROM classes WHERE project_id = ?").get(projectId) as any)
+    : (db.query("SELECT COALESCE(MAX(sort_order), 0) AS value FROM classes WHERE project_id IS NULL").get() as any);
+  db.run(
+    "INSERT INTO classes (id, name, description, parent_id, project_id, sort_order) VALUES (?, ?, '', NULL, ?, ?)",
+    [id, normalized, projectId, Number(order?.value || 0) + 1],
+  );
+  return id;
+}
+
+function assignNodeClass(nodeId: string, classId: string | null) {
+  if (!nodeId || !classId) return;
+  db.run("INSERT OR IGNORE INTO entity_classes (entity_id, class_id) VALUES (?, ?)", [nodeId, classId]);
+}
+
+function linkClassProperty(classId: string | null, propertyId: string | null) {
+  if (!classId || !propertyId) return;
+  db.run("INSERT OR IGNORE INTO class_properties (class_id, property_id) VALUES (?, ?)", [classId, propertyId]);
 }
 
 function findExistingNode(projectId: number | null, sourceId: string, label: string) {
@@ -94,7 +223,11 @@ export function buildImportPreview(result: any, mapping: any, endpointMeta: any,
       else if (role === "relation_to") relationTo = qidFromValue(value);
       else if (role === "relation_type") relationType = textValue || qidFromValue(value);
       else if (role !== "ignore") {
-        properties[rule.targetField || field] = textValue;
+        properties[rule.targetField || field] = {
+          value: textValue,
+          datatype: inferRdfDatatype(value),
+          label: rule.displaySource ? rdfValueToText((row as any)?.[rule.displaySource]) : textValue,
+        };
       }
     }
 
@@ -192,7 +325,7 @@ export function buildImportPreview(result: any, mapping: any, endpointMeta: any,
   };
 }
 
-export function importPreviewToGraph(preview: any, config: any = {}) {
+export async function importPreviewToGraph(preview: any, config: any = {}) {
   const projectId = typeof config?.projectId === "number" && Number.isFinite(config.projectId) ? config.projectId : null;
   const summary = {
     imported: 0,
@@ -201,6 +334,9 @@ export function importPreviewToGraph(preview: any, config: any = {}) {
     createdEdges: 0,
     skipped: 0,
     failed: 0,
+    mediaDownloaded: 0,
+    mediaFailed: 0,
+    mediaErrors: [] as string[],
   };
   const entityIdMap = new Map<string, string>();
 
@@ -221,6 +357,8 @@ export function importPreviewToGraph(preview: any, config: any = {}) {
   for (const item of preview?.entities || []) {
     try {
       const entity = item.entity;
+      const ontologyId = ensureOntologyRecord(entity.type || "SPARQL实体", projectId);
+      const classId = ensureClassRecord(entity.type || "SPARQL实体", projectId);
       const nodeId = entity.nodeId || makeScopedNodeId(entity.sourceId, projectId);
       const existing = db
         .query(`SELECT id, name FROM nodes WHERE id = ? AND ${scopedNodeWhere(projectId)} LIMIT 1`)
@@ -270,13 +408,57 @@ export function importPreviewToGraph(preview: any, config: any = {}) {
         summary.createdNodes += 1;
         entityIdMap.set(entity.sourceId, nodeId);
       }
+      assignNodeClass(nodeId, classId);
+      const mediaSources: Array<{ propertyId: string; source: string }> = [];
 
-      for (const [key, value] of Object.entries(entity.properties || {})) {
-        const property = ensurePropertyRecord(key, key, undefined, { projectId });
+      for (const [key, rawValue] of Object.entries(entity.properties || {})) {
+        const value = rawValue && typeof rawValue === "object" && "value" in rawValue
+          ? rawValue as { value: string; datatype?: string; label?: string }
+          : { value: String(rawValue ?? ""), datatype: "string", label: String(rawValue ?? "") };
+        const sourceDatatype = value.datatype || "string";
+        const detectedMedia = sourceDatatype === "string" && IMAGE_FILE_PATTERN.test(String(value.value || ""));
+        const property = ensurePropertyRecord(key, key, detectedMedia ? "commonsMedia" : (sourceDatatype === "string" ? undefined : sourceDatatype), { projectId });
         if (!property.id) continue;
-        ensureAttributeRecord(nodeId, property.id, [String(value ?? "")], {
-          datatype: "string",
-        });
+        const propertyDefinition = db.query("SELECT datatype, valuetype FROM properties WHERE id = ? LIMIT 1").get(property.id) as any;
+        const isCommonsMedia = detectedMedia || String(propertyDefinition?.datatype || propertyDefinition?.valuetype || "").toLowerCase() === "commonsmedia";
+        const datatype = isCommonsMedia ? "commonsMedia" : sourceDatatype;
+        updatePropertyDatatype(property.id, datatype, projectId);
+        linkOntologyProperty(ontologyId, property.id);
+        linkClassProperty(classId, property.id);
+        if (datatype === "wikibase-entityid") {
+          const targetSourceId = qidFromValue(value.value);
+          const targetNodeId = ensureNodeExistsById(targetSourceId, value.label || targetSourceId);
+          const attribute = ensureAttributeRecord(nodeId, property.id, [{
+            id: targetNodeId,
+            label: value.label || targetSourceId,
+            label_zh: value.label || targetSourceId,
+            "entity-type": "item",
+          }], { datatype: "wikibase-entityid" });
+          if (attribute.created || attribute.updated) summary.createdEdges += 1;
+        } else {
+          ensureAttributeRecord(nodeId, property.id, [value.value], { datatype });
+          if (isCommonsMedia) mediaSources.push({ propertyId: property.id, source: value.value });
+        }
+      }
+      // Media is intentionally kept online for now. Downloading from Wikimedia can
+      // make a normal entity import take minutes, so do not block the import on it.
+      const onlineMediaByProperty = new Map<string, string[]>();
+      for (const media of mediaSources) {
+        const onlineUrl = mediaSourceUrl(media.source, true);
+        if (!onlineUrl) continue;
+        const list = onlineMediaByProperty.get(media.propertyId) || [];
+        list.push(onlineUrl);
+        onlineMediaByProperty.set(media.propertyId, list);
+      }
+      for (const [propertyId, onlineUrls] of onlineMediaByProperty) {
+        db.run(
+          "UPDATE attributes SET value = ?, datatype = 'commonsMedia' WHERE node_id = ? AND key = ?",
+          [JSON.stringify(onlineUrls), nodeId, propertyId],
+        );
+      }
+      const onlineImages = Array.from(onlineMediaByProperty.values()).flat();
+      if (onlineImages.length) {
+        db.run("UPDATE nodes SET images = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND " + scopedNodeWhere(projectId), [JSON.stringify(onlineImages), nodeId, ...scopedNodeParams(projectId)]);
       }
       summary.imported += 1;
     } catch {
