@@ -151,7 +151,44 @@ export function formatNode(row: any) {
   }
 
   let attrImages: string[] = [];
+  const collectMediaValues = (val: any): string[] => {
+    const result: string[] = [];
+    const visit = (item: any) => {
+      if (item === null || item === undefined) return;
+      if (typeof item === "string") {
+        const trimmed = item.trim();
+        if (!trimmed) return;
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (parsed !== trimmed) {
+            visit(parsed);
+            return;
+          }
+        } catch {}
+        result.push(trimmed);
+        return;
+      }
+      if (Array.isArray(item)) {
+        item.forEach(visit);
+        return;
+      }
+      if (typeof item === "object") {
+        visit(item.url ?? item.src ?? item.href ?? item.value);
+      }
+    };
+    visit(val);
+    return result;
+  };
   try {
+    const commonsMediaAttrs = db
+      .query(
+        "SELECT value FROM attributes WHERE node_id = ? AND datatype = 'commonsMedia'",
+      )
+      .all(row.id) as any[];
+    attrImages.push(
+      ...commonsMediaAttrs.flatMap((attr) => collectMediaValues(attr.value)),
+    );
+
     let imageProp = db
       .query("SELECT id FROM properties WHERE name = ? OR name = ? LIMIT 1")
       .get("图像", "image") as any;
@@ -172,29 +209,16 @@ export function formatNode(row: any) {
         .get(row.id, "image", "图像") as any;
     }
     if (imageAttr && imageAttr.value) {
-      try {
-        const parsed = JSON.parse(imageAttr.value);
-        if (typeof parsed === "string") {
-          attrImages = [parsed.trim()].filter(Boolean);
-        } else if (
-          Array.isArray(parsed) &&
-          parsed.length > 0 &&
-          parsed.some((item) => typeof item === "string")
-        ) {
-          attrImages = parsed
-            .map((item) => String(item || "").trim())
-            .filter(Boolean);
-        }
-      } catch {
-        attrImages = normalizeMediaList(imageAttr.value);
-      }
+      attrImages.push(...collectMediaValues(imageAttr.value));
     }
   } catch {}
 
   const imagesFromRow = normalizeMediaList(row.images);
   const imagesFromExtra = normalizeMediaList(extraData.images);
   const images = Array.from(
-    new Set([...attrImages, ...imagesFromRow, ...imagesFromExtra]),
+    new Set(
+      [...attrImages, ...imagesFromRow, ...imagesFromExtra].filter(Boolean),
+    ),
   );
   const coversFromRow = normalizeMediaList(row.covers, {
     preserveEmptySlots: true,

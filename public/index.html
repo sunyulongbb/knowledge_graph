@@ -11454,6 +11454,57 @@
       return await resp.json();
     }
 
+    function collectGraphImageCandidates(value, target = []) {
+      if (value === null || value === undefined) return target;
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (!trimmed) return target;
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (parsed !== trimmed) {
+            collectGraphImageCandidates(parsed, target);
+            return target;
+          }
+        } catch { }
+        target.push(trimmed);
+        return target;
+      }
+      if (Array.isArray(value)) {
+        value.forEach((item) => collectGraphImageCandidates(item, target));
+        return target;
+      }
+      if (typeof value === "object") {
+        collectGraphImageCandidates(value.url || value.src || value.href || value.value, target);
+      }
+      return target;
+    }
+
+    function getFirstGraphNodeImage(nodeData) {
+      const candidates = [];
+      collectGraphImageCandidates(nodeData?.image, candidates);
+      collectGraphImageCandidates(nodeData?.avatar, candidates);
+      collectGraphImageCandidates(nodeData?.images, candidates);
+      collectGraphImageCandidates(nodeData?._attr_images, candidates);
+      collectGraphImageCandidates(nodeData?.data?.images, candidates);
+      return candidates.find((item) => {
+        const src = String(item || "").trim();
+        return src && !src.startsWith("File:");
+      }) || "";
+    }
+
+    function normalizeGraphNodeData(nodeData) {
+      if (!nodeData) return nodeData;
+      nodeData.image = getFirstGraphNodeImage(nodeData);
+
+      // 名称可为空；为了保证关系图可读性，图上显示 label 回退到节点 id
+      const nodeId = (nodeData.id || nodeData._id || '').toString().trim();
+      const displayLabel = (nodeData.label_zh || nodeData.label || nodeData.name || '').toString().trim();
+      if (!displayLabel && nodeId) {
+        nodeData.label = nodeId;
+      }
+      return nodeData;
+    }
+
     // Load one-hop neighborhood for a specific node from backend and update cytoscape
     async function loadNodeNeighborhood(nodeId, options = {}) {
       if (!nodeId) return;
@@ -11488,6 +11539,7 @@
 
         const nodesRaw = data.nodes || (data.elements && data.elements.nodes) || [];
         const edgesRaw = data.edges || (data.elements && data.elements.edges) || [];
+        nodesRaw.forEach((n) => normalizeGraphNodeData(n.data || n));
 
         nodesRaw.forEach(n => {
           if (n.group || n.data) elements.push(n);
@@ -12998,6 +13050,7 @@
 
         const nodesRaw = data.nodes || (data.elements && data.elements.nodes) || [];
         const edgesRaw = data.edges || (data.elements && data.elements.edges) || [];
+        nodesRaw.forEach((n) => normalizeGraphNodeData(n.data || n));
 
         const arr = [];
         nodesRaw.forEach(n => {
@@ -13014,14 +13067,7 @@
           // 保证每个节点都带有 image 字段，避免 Cytoscape 报错
           nodesRaw.forEach(n => {
             const nodeData = n.data || n;
-            if (!('image' in nodeData)) nodeData.image = '';
-
-            // 名称可为空；为了保证关系图可读性，图上显示 label 回退到节点 id
-            const nodeId = (nodeData.id || nodeData._id || '').toString().trim();
-            const displayLabel = (nodeData.label_zh || nodeData.label || nodeData.name || '').toString().trim();
-            if (!displayLabel && nodeId) {
-              nodeData.label = nodeId;
-            }
+            normalizeGraphNodeData(nodeData);
           });
           window.kbData = {
             nodes: nodesRaw.map((n) => n.data || n),
