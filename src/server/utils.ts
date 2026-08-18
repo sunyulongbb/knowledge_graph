@@ -151,6 +151,23 @@ export function formatNode(row: any) {
   }
 
   let attrImages: string[] = [];
+  const normalizeDisplayMediaUrl = (value: string): string => {
+    const source = String(value || "").trim();
+    if (!source) return "";
+    const commonsFileMatch = source.match(
+      /^https:\/\/commons\.wikimedia\.org\/wiki\/File:([^?#]+)/i,
+    );
+    const filename = commonsFileMatch
+      ? decodeURIComponent(commonsFileMatch[1] || "")
+      : source.replace(/^File:/i, "");
+    if (/^(https?:|data:image\/|\/)/i.test(filename)) return filename;
+    if (/\.(jpe?g|png|gif|webp|avif|bmp|svg|heic)(\?.*)?$/i.test(filename)) {
+      return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(
+        filename.replace(/\s+/g, "_"),
+      )}`;
+    }
+    return source;
+  };
   const collectMediaValues = (val: any): string[] => {
     const result: string[] = [];
     const visit = (item: any) => {
@@ -165,7 +182,8 @@ export function formatNode(row: any) {
             return;
           }
         } catch {}
-        result.push(trimmed);
+        const normalized = normalizeDisplayMediaUrl(trimmed);
+        if (normalized) result.push(normalized);
         return;
       }
       if (Array.isArray(item)) {
