@@ -2283,62 +2283,9 @@
           </button>
         </div>
         <!-- Entry panel -->
-<<<<<<< HEAD
         <div id="entryPanel" class="panel entry-panel entry-workspace" data-entry-mode="sparql" style="padding: 16px; display: none">
           <div class="entry-config">
             <div class="entry-config__heading">
-=======
-        <div id="entryPanel" class="panel entry-panel" style="padding: 12px; display: none">
-          <div class="panel-header">
-            <div class="panel-title">
-              <span>知识录入</span>
-              <span id="entryTemplateHint" class="panel-subtitle">实体属性表（Entity Sheet）· 一行一个实体 · 列为属性</span>
-            </div>
-            <div class="entry-actions" id="entryTopActions">
-              <button id="btnEntryBackToTasks" class="btn sm" type="button" style="display:none;">
-                <i class="fa-solid fa-arrow-left"></i>
-                <span style="margin-left: 4px">任务管理</span>
-              </button>
-           
-              <span style="border-left:1px solid #ddd;margin:0 6px"></span>
-              <button id="btnEntryAddRow" class="btn sm" type="button">
-                <i class="fa-solid fa-plus"></i>
-                <span style="margin-left: 4px">新增行</span>
-              </button>
-              <button id="btnEntryImportExcel" class="btn sm" type="button">
-                <i class="fa-solid fa-file-arrow-up"></i>
-                <span style="margin-left: 4px">文件导入（Excel/JSON）</span>
-              </button>
-              <button id="btnEntryImportApi" class="btn sm" type="button">
-                <i class="fa-solid fa-cloud-arrow-down"></i>
-                <span style="margin-left: 4px">API 导入</span>
-              </button>
-              <button id="btnEntryImportWikidata" class="btn sm" type="button">
-                <i class="fa-solid fa-database"></i>
-                <span style="margin-left: 4px">Wikidata</span>
-              </button>
-              <button id="btnEntryAddColumn" class="btn sm" type="button">
-                <i class="fa-solid fa-table-columns"></i>
-                <span style="margin-left: 4px">新增属性列</span>
-              </button>
-              <button id="btnEntryClear" class="btn sm" type="button">
-                <i class="fa-solid fa-eraser"></i>
-                <span style="margin-left: 4px">清空表格</span>
-              </button>
-              <button id="btnEntrySubmit" class="btn sm accent" type="button">
-                <i class="fa-solid fa-cloud-upload"></i>
-                <span style="margin-left: 4px">导入</span>
-              </button>
-              <input id="entryExcelFileInput" type="file" accept=".xlsx,.xls,.csv,.json" style="display:none" />
-            </div>
-          </div>
-          <div class="sparql-mode-switch" id="entryModeSwitch">
-            <button id="btnEntryModeSheet" class="btn sm accent" type="button">表格录入</button>
-            <button id="btnEntryModeSparql" class="btn sm" type="button">SPARQL 导入</button>
-          </div>
-          <div id="entryApiForm" class="panel" style="display:none; padding: 14px; border: 1px solid var(--border); background: var(--surface-0); margin-top: 12px; gap: 10px;">
-            <div style="display:flex; align-items:center; justify-content:space-between; gap: 12px; flex-wrap:wrap;">
->>>>>>> a3c768b (提交)
               <div>
                 <div class="panel-title"><span>知识录入</span></div>
               </div>
@@ -5511,6 +5458,7 @@
     const btnEntryAddRow = document.getElementById("btnEntryAddRow");
     const btnEntryImportExcel = document.getElementById("btnEntryImportExcel");
     const btnEntryImportApi = document.getElementById("btnEntryImportApi");
+    const btnEntryImportWikidata = document.getElementById("btnEntryImportWikidata");
     const entryFileForm = document.getElementById("entryFileForm");
     const btnEntryFileChoose = document.getElementById("btnEntryFileChoose");
     const btnEntryFileCancel = document.getElementById("btnEntryFileCancel");
@@ -5520,6 +5468,11 @@
     const entryApiMappingInput = document.getElementById("entryApiMappingInput");
     const btnEntryApiSubmit = document.getElementById("btnEntryApiSubmit");
     const btnEntryApiCancel = document.getElementById("btnEntryApiCancel");
+    const entryWikidataForm = document.getElementById("entryWikidataForm");
+    const entryWikidataQueryInput = document.getElementById("entryWikidataQueryInput");
+    const entryWikidataMappingInput = document.getElementById("entryWikidataMappingInput");
+    const btnEntryWikidataSubmit = document.getElementById("btnEntryWikidataSubmit");
+    const btnEntryWikidataCancel = document.getElementById("btnEntryWikidataCancel");
     const entryExcelFileInput = document.getElementById("entryExcelFileInput");
     const btnEntryAddColumn = document.getElementById("btnEntryAddColumn");
     const btnEntryClear = document.getElementById("btnEntryClear");
@@ -6404,6 +6357,46 @@
       }
     }
 
+    function syncActiveEntityEditor(nodeId = "", options = {}) {
+      const requestedId = String(
+        nodeId ||
+        window.kbSelectedNodeId ||
+        window.kbSelectedRowId ||
+        window.kbCurrentNodeId ||
+        window.kbActiveDetailRouteId ||
+        document.getElementById("fId")?.value ||
+        "",
+      ).trim();
+      if (!requestedId || typeof enterEditById !== "function") return;
+
+      const fullId = ensureEntityIdPrefix(requestedId);
+      const currentId = String(document.getElementById("fId")?.value || "").trim();
+      const hasCurrentPayload = Boolean(window.kbCurrentNodePayload);
+      const isCurrentNode =
+        currentId &&
+        ensureEntityIdPrefix(currentId) === fullId;
+      const force = options.force === true;
+
+      // The editor is shared by every view.  If the selected entity is already
+      // present, refresh its dependent panels; otherwise fetch and render it.
+      if (!force && isCurrentNode && hasCurrentPayload) {
+        Promise.allSettled([
+          typeof loadAttributes === "function" ? loadAttributes(fullId) : null,
+          typeof loadRelations === "function" ? loadRelations(fullId) : null,
+          typeof loadEntityClass === "function" ? loadEntityClass(fullId) : null,
+        ]).catch(() => {});
+        return;
+      }
+
+      Promise.resolve(enterEditById(fullId, {
+        skipGraphFocus: options.skipGraphFocus !== false,
+      })).catch((err) => {
+        if (window.console && console.warn) {
+          console.warn("syncActiveEntityEditor failed", err);
+        }
+      });
+    }
+
     function formatCleanTaskDuration(ms) {
       const num = Number(ms);
       if (!Number.isFinite(num) || num <= 0) return "";
@@ -7103,6 +7096,7 @@
           entryScreen: entryActiveScreen,
           entryTaskId: entryActiveScreen === "editor" ? entryCurrentTaskId : "",
         });
+        syncActiveEntityEditor("", { skipGraphFocus: true });
       }
       updateEntryTaskUiState();
     }
@@ -9307,6 +9301,10 @@
         } catch { }
       }
       if (kbViewModeInitialized && previousMode === normalized) {
+        syncActiveEntityEditor(targetNodeIdRaw, {
+          force: hasTargetNode,
+          skipGraphFocus: normalized !== "vis",
+        });
         if (normalized === "detail" && hasTargetNode) {
           try {
             showNodeDetailInline(targetNodeIdRaw, {
@@ -9659,6 +9657,11 @@
       } else if (normalized === "table" && hasTargetNode) {
         applyTableSelectionTarget();
       }
+
+      syncActiveEntityEditor(targetNodeIdRaw, {
+        force: hasTargetNode,
+        skipGraphFocus: !isVis,
+      });
 
       // 新增：所有页面都带选中节点参数
       if (!skipRouteUpdate) {

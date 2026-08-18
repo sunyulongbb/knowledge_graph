@@ -2011,6 +2011,8 @@ if (btnAttrReset) {
   }
 
   async function loadAttributes(nodeId) {
+    const requestSeq = (window.kbAttrLoadRequestSeq || 0) + 1;
+    window.kbAttrLoadRequestSeq = requestSeq;
     if (!nodeId) {
       try {
         resetAttrForm();
@@ -2058,11 +2060,13 @@ if (btnAttrReset) {
     }
     attrUrl.searchParams.set("id", fullId);
     const resp = await fetch(attrUrl.toString());
+    if ((window.kbAttrLoadRequestSeq || 0) !== requestSeq) return;
     if (!resp.ok) {
       attrList.innerHTML = '<div class="muted">加载失败</div>';
       return;
     }
     const data = await resp.json();
+    if ((window.kbAttrLoadRequestSeq || 0) !== requestSeq) return;
     let items = Array.isArray(data.items) ? data.items : [];
     // store in cache
     try {

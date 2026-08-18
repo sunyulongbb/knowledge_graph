@@ -89,6 +89,8 @@ function ensureRelButtonsState() {
 }
 
 async function loadRelations(nodeId) {
+  const requestSeq = (window.kbRelationLoadRequestSeq || 0) + 1;
+  window.kbRelationLoadRequestSeq = requestSeq;
   // 自动加 entity/ 前缀（如果没有）
   const fullId = nodeId.startsWith("entity/")
     ? nodeId
@@ -102,8 +104,10 @@ async function loadRelations(nodeId) {
   }
   url.searchParams.set("id", fullId);
   const resp = await fetch(url.toString());
+  if ((window.kbRelationLoadRequestSeq || 0) !== requestSeq) return;
   if (!resp.ok) return; // silent
   const data = await resp.json();
+  if ((window.kbRelationLoadRequestSeq || 0) !== requestSeq) return;
   const items = Array.isArray(data.items) ? data.items : [];
   // Optionally annotate edges in cy
   try {
