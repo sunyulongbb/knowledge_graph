@@ -11454,6 +11454,20 @@
       return await resp.json();
     }
 
+    function normalizeGraphImageUrl(value) {
+      const source = String(value || "").trim();
+      if (!source) return "";
+      const commonsFileMatch = source.match(/^https:\/\/commons\.wikimedia\.org\/wiki\/File:([^?#]+)/i);
+      const filename = commonsFileMatch
+        ? decodeURIComponent(commonsFileMatch[1] || "")
+        : source.replace(/^File:/i, "");
+      if (/^(https?:|data:image\/|\/)/i.test(filename)) return filename;
+      if (/\.(jpe?g|png|gif|webp|avif|bmp|svg|heic)(\?.*)?$/i.test(filename)) {
+        return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(filename.replace(/\s+/g, "_"))}`;
+      }
+      return source;
+    }
+
     function collectGraphImageCandidates(value, target = []) {
       if (value === null || value === undefined) return target;
       if (typeof value === "string") {
@@ -11466,7 +11480,8 @@
             return target;
           }
         } catch { }
-        target.push(trimmed);
+        const normalized = normalizeGraphImageUrl(trimmed);
+        if (normalized) target.push(normalized);
         return target;
       }
       if (Array.isArray(value)) {
