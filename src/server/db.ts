@@ -636,6 +636,7 @@ function ensureSharedTables() {
       parent_id TEXT,
       project_id INTEGER,
       color TEXT,
+      display_shape TEXT DEFAULT 'rectangle',
       sort_order INTEGER,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -666,6 +667,10 @@ function ensureSharedTables() {
   runSafe("ALTER TABLE ontologies ADD COLUMN parent_id TEXT");
   runSafe("ALTER TABLE ontologies ADD COLUMN project_id INTEGER");
   runSafe("ALTER TABLE ontologies ADD COLUMN color TEXT");
+  runSafe("ALTER TABLE ontologies ADD COLUMN display_shape TEXT DEFAULT 'rectangle'");
+  runSafe(
+    "UPDATE ontologies SET display_shape = 'rectangle' WHERE display_shape IS NULL OR TRIM(display_shape) = ''",
+  );
   runSafe("ALTER TABLE ontologies ADD COLUMN sort_order INTEGER");
   runSafe("UPDATE ontologies SET sort_order = rowid WHERE sort_order IS NULL");
   runSafe(

@@ -42,6 +42,9 @@ export async function serveStaticRoute(req: Request, pathname: string) {
     const contentType = contentTypes[ext] || "application/octet-stream";
     headers.set("Content-Type", contentType);
     headers.set("Accept-Ranges", "bytes");
+    if (pathname.startsWith("/static/uploads/")) {
+      headers.set("Cache-Control", "public, max-age=31536000, immutable");
+    }
     return new Response(file, { headers });
   };
 

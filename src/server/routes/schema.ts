@@ -71,6 +71,7 @@ export async function handleSchemaRoutes(
     parent: row.parent_id || null,
     project_id: row.project_id ?? null,
     color: row.color || null,
+    display_shape: row.display_shape || "rectangle",
     sort_order: Number.isFinite(Number(row.sort_order))
       ? Number(row.sort_order)
       : null,
@@ -324,6 +325,11 @@ export async function handleSchemaRoutes(
         ? scopedProjectId
         : body.project_id || null;
       const aliases = normalizeAliasList(body.alias || name);
+      const displayShape = ["rectangle", "rounded", "circle", "diamond", "hexagon"].includes(
+        String(body.display_shape || "").trim(),
+      )
+        ? String(body.display_shape).trim()
+        : "rectangle";
       if (!name) return new Response("Missing name", { status: 400 });
 
       const duplicate = findOntologyAliasConflict(aliases, parentId);
@@ -351,7 +357,7 @@ export async function handleSchemaRoutes(
         const sortOrder = Number(orderRow?.max_order || 0) + 1;
         db.run(
           `UPDATE ontologies
-           SET name = ?, alias = ?, description = ?, parent_id = ?, project_id = ?, sort_order = ?
+           SET name = ?, alias = ?, description = ?, parent_id = ?, project_id = ?, display_shape = ?, sort_order = ?
            WHERE id = ?`,
           [
             name,
@@ -359,6 +365,7 @@ export async function handleSchemaRoutes(
             description,
             parentId,
             projectId,
+            displayShape,
             sortOrder,
             existingId,
           ],
@@ -383,7 +390,7 @@ export async function handleSchemaRoutes(
       const sortOrder = Number(orderRow?.max_order || 0) + 1;
 
       db.run(
-        "INSERT INTO ontologies (id, name, alias, description, parent_id, project_id, color, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO ontologies (id, name, alias, description, parent_id, project_id, color, display_shape, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
           id,
           name,
@@ -392,6 +399,7 @@ export async function handleSchemaRoutes(
           parentId,
           projectId,
           body.color || null,
+          displayShape,
           sortOrder,
         ],
       );
@@ -488,6 +496,14 @@ export async function handleSchemaRoutes(
       if (body.color !== undefined) {
         updates.push("color = ?");
         params.push(body.color ? String(body.color).trim() : null);
+      }
+      if (body.display_shape !== undefined) {
+        const displayShape = String(body.display_shape || "").trim();
+        if (!["rectangle", "rounded", "circle", "diamond", "hexagon"].includes(displayShape)) {
+          return new Response("Invalid display shape", { status: 400 });
+        }
+        updates.push("display_shape = ?");
+        params.push(displayShape);
       }
       if (hasProjectScope) {
         updates.push("project_id = COALESCE(project_id, ?)");

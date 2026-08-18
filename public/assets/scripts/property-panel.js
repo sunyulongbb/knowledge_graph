@@ -460,6 +460,7 @@
     const parent = options.parent || null;
     const item = options.item || null;
     const ontologyColorInput = byId("ontologyColor");
+    const ontologyDisplayShape = byId("ontologyDisplayShape");
     title.textContent =
       mode === "edit" ? "编辑本体" : parent ? "新增子本体" : "新增本体";
     form.dataset.mode = mode;
@@ -470,6 +471,9 @@
     ontologyDescriptionInput.value = item?.description || "";
     if (ontologyColorInput) {
       ontologyColorInput.value = item?.color || "#94a3b8";
+    }
+    if (ontologyDisplayShape) {
+      ontologyDisplayShape.value = item?.display_shape || "rectangle";
     }
     ontologyParentNameInput.value =
       mode === "edit"
@@ -760,6 +764,8 @@
 
         try {
           const color = (byId("ontologyColor")?.value || "").trim() || null;
+          const display_shape =
+            (byId("ontologyDisplayShape")?.value || "rectangle").trim();
           const url = appendCurrentDbToUrl(
             new URL(
               mode === "edit"
@@ -770,8 +776,8 @@
           );
           const payload =
             mode === "edit"
-              ? { id, name, description, parent_id: parentId || null, color }
-              : { name, description, parent_id: parentId || null, color };
+              ? { id, name, description, parent_id: parentId || null, color, display_shape }
+              : { name, description, parent_id: parentId || null, color, display_shape };
           const result = await apiJson(url.toString(), {
             method: "POST",
             headers: { "Content-Type": "application/json" },

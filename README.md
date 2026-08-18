@@ -16,6 +16,9 @@ The `deck.gl` browser dependency has also been added to `package.json` and insta
 bun run dev
 ```
 
+The Bun entry point is `src/server/index.ts`; server routes, database access,
+and static-file handling are colocated under `src/server`.
+
 Default address:
 
 ```text

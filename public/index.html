@@ -1691,6 +1691,15 @@
           <button id="btnTblLayoutToggle" class="btn icon" title="切换到网格布局" aria-label="切换布局">
             <i class="fa-solid fa-th-large"></i>
           </button>
+          <div id="tblGridZoomControls" class="table-grid-zoom" style="display:none;" role="group" aria-label="网格缩放">
+            <button id="btnTblGridZoomOut" class="btn icon sm" type="button" title="缩小缩略图" aria-label="缩小缩略图">
+              <i class="fa-solid fa-minus"></i>
+            </button>
+            <input id="tblGridZoom" type="range" min="88" max="280" step="8" value="136" aria-label="网格缩略图大小" />
+            <button id="btnTblGridZoomIn" class="btn icon sm" type="button" title="放大缩略图" aria-label="放大缩略图">
+              <i class="fa-solid fa-plus"></i>
+            </button>
+          </div>
           <button id="btnTableRefresh" class="btn icon" title="刷新列表" aria-label="刷新列表">
             <i class="fa-solid fa-rotate-right"></i>
           </button>
@@ -2274,9 +2283,62 @@
           </button>
         </div>
         <!-- Entry panel -->
+<<<<<<< HEAD
         <div id="entryPanel" class="panel entry-panel entry-workspace" data-entry-mode="sparql" style="padding: 16px; display: none">
           <div class="entry-config">
             <div class="entry-config__heading">
+=======
+        <div id="entryPanel" class="panel entry-panel" style="padding: 12px; display: none">
+          <div class="panel-header">
+            <div class="panel-title">
+              <span>知识录入</span>
+              <span id="entryTemplateHint" class="panel-subtitle">实体属性表（Entity Sheet）· 一行一个实体 · 列为属性</span>
+            </div>
+            <div class="entry-actions" id="entryTopActions">
+              <button id="btnEntryBackToTasks" class="btn sm" type="button" style="display:none;">
+                <i class="fa-solid fa-arrow-left"></i>
+                <span style="margin-left: 4px">任务管理</span>
+              </button>
+           
+              <span style="border-left:1px solid #ddd;margin:0 6px"></span>
+              <button id="btnEntryAddRow" class="btn sm" type="button">
+                <i class="fa-solid fa-plus"></i>
+                <span style="margin-left: 4px">新增行</span>
+              </button>
+              <button id="btnEntryImportExcel" class="btn sm" type="button">
+                <i class="fa-solid fa-file-arrow-up"></i>
+                <span style="margin-left: 4px">文件导入（Excel/JSON）</span>
+              </button>
+              <button id="btnEntryImportApi" class="btn sm" type="button">
+                <i class="fa-solid fa-cloud-arrow-down"></i>
+                <span style="margin-left: 4px">API 导入</span>
+              </button>
+              <button id="btnEntryImportWikidata" class="btn sm" type="button">
+                <i class="fa-solid fa-database"></i>
+                <span style="margin-left: 4px">Wikidata</span>
+              </button>
+              <button id="btnEntryAddColumn" class="btn sm" type="button">
+                <i class="fa-solid fa-table-columns"></i>
+                <span style="margin-left: 4px">新增属性列</span>
+              </button>
+              <button id="btnEntryClear" class="btn sm" type="button">
+                <i class="fa-solid fa-eraser"></i>
+                <span style="margin-left: 4px">清空表格</span>
+              </button>
+              <button id="btnEntrySubmit" class="btn sm accent" type="button">
+                <i class="fa-solid fa-cloud-upload"></i>
+                <span style="margin-left: 4px">导入</span>
+              </button>
+              <input id="entryExcelFileInput" type="file" accept=".xlsx,.xls,.csv,.json" style="display:none" />
+            </div>
+          </div>
+          <div class="sparql-mode-switch" id="entryModeSwitch">
+            <button id="btnEntryModeSheet" class="btn sm accent" type="button">表格录入</button>
+            <button id="btnEntryModeSparql" class="btn sm" type="button">SPARQL 导入</button>
+          </div>
+          <div id="entryApiForm" class="panel" style="display:none; padding: 14px; border: 1px solid var(--border); background: var(--surface-0); margin-top: 12px; gap: 10px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap: 12px; flex-wrap:wrap;">
+>>>>>>> a3c768b (提交)
               <div>
                 <div class="panel-title"><span>知识录入</span></div>
               </div>
@@ -4697,6 +4759,17 @@
           </div>
           <div id="ontologyColorGroups" class="ontology-color-groups"></div>
         </div>
+        <div class="field" style="margin-bottom: 16px;">
+          <label for="ontologyDisplayShape" style="display: block; margin-bottom: 4px; font-size: 12px; color: var(--muted);">展示形状</label>
+          <select id="ontologyDisplayShape" class="kb-select" style="width: 100%;">
+            <option value="rectangle">矩形</option>
+            <option value="rounded">圆角矩形</option>
+            <option value="circle">圆形</option>
+            <option value="diamond">菱形</option>
+            <option value="hexagon">六边形</option>
+          </select>
+          <div class="muted" style="font-size: 12px; margin-top: 5px;">用于知识页面的网格布局展示</div>
+        </div>
         <div style="display: flex; justify-content: flex-end; gap: 8px;">
           <button type="button" class="btn"
             onclick="document.getElementById('ontologyModal').style.display='none'">取消</button>
@@ -5388,6 +5461,9 @@
     const headerTableContextTargets = [
       document.getElementById("tblTypeFilter"),
       document.getElementById("btnTblLayoutToggle"),
+      document.getElementById("tblGridZoom"),
+      document.getElementById("btnTblGridZoomOut"),
+      document.getElementById("btnTblGridZoomIn"),
       document.getElementById("btnTableRefresh"),
       document.getElementById("tblSearch"),
       document.getElementById("btnTableAdd"),
@@ -6998,6 +7074,9 @@
       if (entryApiForm && entryActiveScreen !== "editor") {
         entryApiForm.style.display = "none";
       }
+      if (entryWikidataForm && entryActiveScreen !== "editor") {
+        entryWikidataForm.style.display = "none";
+      }
       if (entryActiveScreen === "editor") {
         if (typeof window.requestAnimationFrame === "function") {
           window.requestAnimationFrame(() => {
@@ -7234,6 +7313,7 @@
       if (btnEntryAddRow) btnEntryAddRow.disabled = !hasTask || entryActiveScreen !== "editor";
       if (btnEntryImportExcel) btnEntryImportExcel.disabled = !hasTask || entryActiveScreen !== "editor";
       if (btnEntryImportApi) btnEntryImportApi.disabled = !hasTask || entryActiveScreen !== "editor";
+      if (btnEntryImportWikidata) btnEntryImportWikidata.disabled = !hasTask || entryActiveScreen !== "editor";
       if (btnEntryAddColumn) btnEntryAddColumn.disabled = !hasTask || entryActiveScreen !== "editor" || getCurrentTaskMode() === ENTRY_TEMPLATE.RELATION_SHEET;
       if (btnEntryClear) btnEntryClear.disabled = !hasTask || entryActiveScreen !== "editor";
       if (btnEntrySubmit) btnEntrySubmit.disabled = !hasTask || entrySubmitInFlight || entryActiveScreen !== "editor";
@@ -8249,7 +8329,10 @@
     function findOrCreateSchemaColumnName(schema, targetLabel) {
       const normalizedTarget = normalizeEntryFieldKey(targetLabel);
       const existing = (Array.isArray(schema) ? schema : []).find((col) => {
-        return normalizeEntryFieldKey(col?.name || col?.title || "") === normalizedTarget;
+        return (
+          normalizeEntryFieldKey(col?.name || "") === normalizedTarget ||
+          normalizeEntryFieldKey(col?.title || "") === normalizedTarget
+        );
       });
       if (existing && existing.name) return existing.name;
       const title = String(targetLabel || "").trim() || "字段";
@@ -8526,6 +8609,63 @@
       const mappingText = String(entryApiMappingInput?.value || "").trim();
       await importJsonFromApi(url, path, mappingText);
       if (entryApiForm) entryApiForm.style.display = "none";
+    }
+
+    function flattenWikidataBindings(result) {
+      const variables = Array.isArray(result?.head?.vars) ? result.head.vars : [];
+      const bindings = Array.isArray(result?.results?.bindings) ? result.results.bindings : [];
+      return bindings.map((binding) => {
+        const row = {};
+        variables.forEach((variable) => {
+          const cell = binding?.[variable];
+          if (!cell || cell.value === undefined || cell.value === null) return;
+          row[variable] = String(cell.value);
+        });
+        return row;
+      });
+    }
+
+    async function importWikidataIntoEntryGrid(query, mappingText) {
+      if (!String(query || "").trim()) throw new Error("请填写 SPARQL 查询");
+      const response = await fetch("/api/kb/wikidata/sparql", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: String(query).trim() }),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(result?.error || `Wikidata 请求失败：HTTP ${response.status}`);
+      }
+      const items = flattenWikidataBindings(result);
+      if (!items.length) throw new Error("查询成功，但没有返回可导入的数据行");
+      const schema = Array.isArray(entryGridInstance?.schema)
+        ? entryGridInstance.schema
+        : getMultiSchema();
+      const mapping = parseJsonFieldMappingInput(mappingText);
+      const { finalSchema, importedRows, mappedColumns } = buildJsonImportRows(items, schema, mapping);
+      if (!importedRows.length) throw new Error("Wikidata 结果中没有可填充的数据");
+      entryMultiState.columns = finalSchema;
+      entryMultiState.rows = materializeTaskRows(importedRows, finalSchema);
+      applyEntryTemplateToGrid();
+      markEntryTaskDirty(true);
+      scheduleEntryTaskSave();
+      const mappedHint = mappedColumns ? `，映射 ${mappedColumns} 个变量` : "";
+      setStatus(false, `已填充 Wikidata 数据：${importedRows.length} 行${mappedHint}`);
+    }
+
+    async function handleEntryWikidataSubmit() {
+      if (!entryWikidataQueryInput) throw new Error("Wikidata 查询面板未初始化");
+      if (btnEntryWikidataSubmit) btnEntryWikidataSubmit.disabled = true;
+      try {
+        setStatus(true, "正在查询 Wikidata…");
+        await importWikidataIntoEntryGrid(
+          entryWikidataQueryInput.value,
+          entryWikidataMappingInput?.value || "",
+        );
+        if (entryWikidataForm) entryWikidataForm.style.display = "none";
+      } finally {
+        if (btnEntryWikidataSubmit) btnEntryWikidataSubmit.disabled = false;
+      }
     }
 
     function splitSimpleList(raw) {
@@ -8916,9 +9056,32 @@
       if (btnEntryImportApi) {
         btnEntryImportApi.addEventListener("click", () => {
           if (!entryApiForm) return;
+          if (entryWikidataForm) entryWikidataForm.style.display = "none";
           entryApiForm.style.display = "flex";
           entryApiForm.scrollIntoView({ behavior: "smooth", block: "start" });
           entryApiUrlInput?.focus();
+        });
+      }
+      if (btnEntryImportWikidata) {
+        btnEntryImportWikidata.addEventListener("click", () => {
+          if (!entryWikidataForm) return;
+          if (entryApiForm) entryApiForm.style.display = "none";
+          entryWikidataForm.style.display = "flex";
+          entryWikidataForm.scrollIntoView({ behavior: "smooth", block: "start" });
+          entryWikidataQueryInput?.focus();
+        });
+      }
+      if (btnEntryWikidataSubmit) {
+        btnEntryWikidataSubmit.addEventListener("click", () => {
+          handleEntryWikidataSubmit().catch((err) => {
+            console.error(err);
+            setStatus(false, `Wikidata 导入失败：${err?.message || err}`);
+          });
+        });
+      }
+      if (btnEntryWikidataCancel) {
+        btnEntryWikidataCancel.addEventListener("click", () => {
+          if (entryWikidataForm) entryWikidataForm.style.display = "none";
         });
       }
       if (btnEntryApiSubmit) {

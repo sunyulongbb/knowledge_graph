@@ -10,4 +10,7 @@ services:
       - ./data:/app/data
     environment:
       - PORT=3000
+      # 当前网络无法直连 query.wikidata.org 时，改成可访问的 WDQS 兼容代理地址。
+      - WIKIDATA_SPARQL_ENDPOINT=${WIKIDATA_SPARQL_ENDPOINT:-https://qlever.dev/api/wikidata}
+      - WIKIDATA_REQUEST_TIMEOUT_MS=${WIKIDATA_REQUEST_TIMEOUT_MS:-20000}
     restart: always

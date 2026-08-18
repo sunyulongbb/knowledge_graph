@@ -1,13 +1,13 @@
-﻿import { switchDatabase } from "./src/server/db.ts";
-import { handleCoreKbRoutes } from "./src/server/routes/core-kb.ts";
-import { handleAuthRoutes } from "./src/server/routes/auth.ts";
-import { handleProjectRoutes } from "./src/server/routes/projects.ts";
-import { handleSchemaRoutes } from "./src/server/routes/schema.ts";
-import { serveStaticRoute } from "./src/server/static.ts";
-import { handleWikiRoutes } from "./src/server/routes/wiki.ts";
-import { handleChatRoutes } from "./src/server/routes/chat.ts";
-import { handleSemanticMapRoutes } from "./src/server/routes/semantic-map.ts";
-import { handleSparqlRoutes } from "./src/server/routes/sparql.ts";
+import { switchDatabase } from "./db.ts";
+import { handleCoreKbRoutes } from "./routes/core-kb.ts";
+import { handleAuthRoutes } from "./routes/auth.ts";
+import { handleProjectRoutes } from "./routes/projects.ts";
+import { handleSchemaRoutes } from "./routes/schema.ts";
+import { serveStaticRoute } from "./static.ts";
+import { handleWikiRoutes } from "./routes/wiki.ts";
+import { handleChatRoutes } from "./routes/chat.ts";
+import { handleSemanticMapRoutes } from "./routes/semantic-map.ts";
+import { handleSparqlRoutes } from "./routes/sparql.ts";
 
 const port = parseInt(process.env.PORT || "8080");
 
