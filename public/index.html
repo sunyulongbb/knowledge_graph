@@ -1275,16 +1275,18 @@
 
     .ontology-workspace {
       display: grid;
-      grid-template-columns: 280px minmax(0, 1fr);
-      gap: 14px;
-      min-height: 560px;
+      grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+      gap: 12px;
+      min-height: 0;
       height: 100%;
+      overflow: hidden;
     }
 
     #attrTablePanel {
       display: flex;
       flex-direction: column;
       min-height: 0;
+      overflow: hidden;
     }
 
     #attrTablePanel>.ontology-workspace {
@@ -1294,7 +1296,7 @@
 
     .ontology-card {
       border: 1px solid color-mix(in srgb, var(--border, #dbe3ea) 88%, white);
-      border-radius: 18px;
+      border-radius: 14px;
       background:
         linear-gradient(180deg, color-mix(in srgb, var(--surface-0, #fff) 92%, white), var(--surface-0, #fff));
       box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
@@ -1312,7 +1314,7 @@
     }
 
     .ontology-sidebar__top {
-      padding: 14px;
+      padding: 12px;
       border-bottom: 1px solid color-mix(in srgb, var(--border, #dbe3ea) 88%, white);
       display: flex;
       flex-direction: column;
@@ -1338,9 +1340,9 @@
     }
 
     .ontology-current-chip {
-      margin: 12px 14px 6px;
-      padding: 10px 12px;
-      border-radius: 14px;
+      margin: 10px 12px 6px;
+      padding: 8px 10px;
+      border-radius: 10px;
       background: color-mix(in srgb, var(--surface-1, #f8fafc) 88%, white);
       color: var(--muted);
       font-size: 12px;
@@ -1349,7 +1351,16 @@
     .ontology-tree-wrap {
       flex: 1;
       overflow: auto;
-      padding: 8px 10px 14px;
+      padding: 6px 8px 10px;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    .ontology-tree-wrap::-webkit-scrollbar,
+    .ontology-table-wrap::-webkit-scrollbar,
+    #attrTablePanel::-webkit-scrollbar {
+      width: 0;
+      height: 0;
     }
 
     .ontology-table-card {
@@ -1359,7 +1370,7 @@
     }
 
     .ontology-toolbar {
-      padding: 14px 16px 12px;
+      padding: 12px 14px 10px;
       border-bottom: 1px solid color-mix(in srgb, var(--border, #dbe3ea) 88%, white);
       display: flex;
       align-items: flex-start;
@@ -1415,7 +1426,37 @@
     .ontology-table-wrap {
       flex: 1;
       min-height: 0;
-      padding: 0 8px 8px;
+      overflow: auto;
+      padding: 0 6px 6px;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    #attrTablePanel {
+      overflow: hidden;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    #propertyTable {
+      table-layout: fixed;
+    }
+
+    #propertyTable th,
+    #propertyTable td {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    #propertyTable th:nth-child(1) { width: 74px; }
+    #propertyTable th:nth-child(3) { width: 120px; }
+    #propertyTable th:nth-child(5) { width: 96px; }
+    #propertyTable th:nth-child(6) { width: 84px; }
+
+    #propertyPagination {
+      padding: 0 4px 2px;
+      flex-wrap: wrap;
     }
 
     .ontology-pill-list {
@@ -1726,7 +1767,7 @@
                 <h3 style="margin:0;">请选择知识库项目</h3>
                 <!-- 当 DB 选择弹窗打开时，顶部加入登录按钮，便于用户直接登录（弹窗会覆盖页面顶部，原导航按钮在弹窗打开时无法被点击） -->
                 <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
-                  <input id="dbProjectSearch" type="search" placeholder="搜索项目"
+                  <input id="dbProjectSearch" type="search" class="app-search-input" placeholder="搜索项目"
                     style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface-0);color:var(--fg);min-width:160px;" />
                 </div>
               </div>
@@ -1759,7 +1800,7 @@
       </div>
       <div class="header-quick-actions">
         <div id="tbTableQuickActions" class="header-table-actions">
-          <input id="tblSearch" type="text" class="table-toolbar-search header-table-search" placeholder="搜索名称…" />
+          <input id="tblSearch" type="text" class="app-search-input table-toolbar-search header-table-search" placeholder="搜索名称…" />
           <button id="btnTableAdd" class="btn icon" title="新增节点" aria-label="新增节点">
             <i class="fa-solid fa-plus"></i>
           </button>
@@ -2216,7 +2257,7 @@
                           <div class="dtype-group wd-dtype-stack" data-dtype="wikibase-entityid"
                             style="display:none; flex-direction:column; gap:8px">
                             <div class="wd-inline-row" style="display:flex; gap:6px; align-items:center">
-                              <input id="attrEntitySearchInput" type="text" class="wd-input" placeholder="输入关键词后回车检索实体"
+                              <input id="attrEntitySearchInput" type="text" class="app-search-input wd-input" placeholder="输入关键词后回车检索实体"
                                 style="flex:1" autocomplete="off" />
                             </div>
                             <div id="attrEntitySearchStatus" class="wd-msg" style="font-size:12px; min-height:20px; color:var(--text-muted)"></div>
@@ -2313,7 +2354,7 @@
             <aside class="entry-mapping-panel">
               <div class="entry-mapping-panel__head"><strong>本体映射</strong><span class="muted">选择目标本体及导入字段</span></div>
               <label class="field entry-mapping-ontology"><span>目标本体</span><select id="entryMappingOntologySelect" class="kb-select"><option value="">请选择本体</option></select></label>
-              <div class="entry-mapping-properties"><div class="entry-mapping-properties__head"><div class="field"><span>导入属性</span><small id="entryMappingPropertyCount" class="field-hint">选择本体后显示可用属性</small></div></div><input id="entryMappingPropertySearch" class="kb-input sm" placeholder="搜索属性" disabled /><div id="entryMappingPropertyChecklist" class="entry-property-checklist"><span class="muted">请先选择本体</span></div></div>
+              <div class="entry-mapping-properties"><div class="entry-mapping-properties__head"><div class="field"><span>导入属性</span><small id="entryMappingPropertyCount" class="field-hint">选择本体后显示可用属性</small></div></div><input id="entryMappingPropertySearch" class="app-search-input kb-input sm" placeholder="搜索属性" disabled /><div id="entryMappingPropertyChecklist" class="entry-property-checklist"><span class="muted">请先选择本体</span></div></div>
             </aside>
             <div class="entry-table-toolbar">
               <div><strong>数据预览</strong><span id="entryEditorTaskCurrent" class="muted">尚未创建录入任务</span></div>
@@ -2394,18 +2435,28 @@
               <section class="panel sparql-card sparql-card-main">
                 <div class="sparql-card-head">
                   <div>
-                    <div class="sparql-card-title">选择导入内容</div>
-                    <div class="muted">选择类型和属性后自动读取数据</div>
+                    <div class="sparql-card-title">知识录入</div>
                   </div>
                   <div class="sparql-actions">
-                    <button id="btnSparqlLoadTypes" class="btn sm" type="button">刷新类型</button>
                     <button id="btnSparqlStructuredPreview" class="btn sm accent" type="button">预览数据</button>
                   </div>
                 </div>
                 <div class="sparql-structured-form">
-                  <label class="field"><span>选择类型</span><select id="sparqlSourceTypeSelect" class="kb-select"><option value="">请选择类型</option></select></label>
-                  <div class="sparql-structured-props"><div class="sparql-property-head"><div class="field"><span>导入属性</span></div><label class="sparql-select-all"><input id="sparqlPropertySelectAll" type="checkbox" /> 全选</label></div><input id="sparqlPropertySearch" class="kb-input sm" placeholder="搜索属性名称或 URI" disabled /><div id="sparqlPropertyChecklist" class="sparql-property-checklist"><span class="muted">请先选择类型</span></div></div>
+                  <section class="sparql-step-card">
+                    <div class="sparql-step-title"><b>1</b><span>选择 Dataset</span><button id="btnSparqlRefreshDatasets" class="btn sm" type="button">刷新</button></div>
+                    <select id="sparqlDatasetSelect" class="kb-select" disabled><option value="">正在读取 Dataset…</option></select>
+                    <small id="sparqlDatasetHint" class="field-hint"></small>
+                    <small id="sparqlDatasetStats" class="field-hint"></small>
+                  </section>
+                  <section class="sparql-step-card">
+                    <div class="sparql-step-title"><b>2</b><span>筛选实体</span><button id="btnSparqlAddFilter" class="btn sm" type="button">添加条件</button></div>
+                    <div id="sparqlFilterList" class="sparql-filter-list"></div>
+                    <label class="field sparql-label-language"><span>名称语言</span><select id="sparqlLabelLanguage" class="kb-select"><option value="zh" selected>中文</option><option value="en">英文</option><option value="">不限</option></select></label>
+                  </section>
+                  <section class="sparql-step-card sparql-return-properties"><div class="sparql-step-title"><b>3</b><span>返回属性</span><button id="btnSparqlLoadReturnProperties" class="btn sm" type="button">读取属性</button></div><input id="sparqlReturnPropertySearch" class="app-search-input kb-input sm" placeholder="搜索属性" disabled /><div id="sparqlReturnPropertyChecklist" class="sparql-property-checklist"><span class="muted">点击“读取属性”</span></div></section>
                 </div>
+                <datalist id="sparqlPredicateSuggestions"><option value="类型"></option><option value="国籍"></option><option value="国家"></option><option value="名称"></option></datalist>
+                <datalist id="sparqlValueSuggestions"><option value="人类"></option><option value="美国"></option></datalist>
                 <textarea id="sparqlQueryEditor" class="sparql-editor" spellcheck="false" style="display:none"></textarea>
                 <select id="sparqlTemplateSelect" style="display:none"></select><button id="btnSparqlTemplateFavorite" type="button" style="display:none"></button><button id="btnSparqlTemplateSave" type="button" style="display:none"></button><button id="btnSparqlRun" type="button" style="display:none"></button><button id="btnSparqlClear" type="button" style="display:none"></button><input id="sparqlAutoLimit" type="checkbox" checked style="display:none" />
                 <div class="sparql-editor-footer"><span id="sparqlQueryMeta" class="muted">系统将根据所选类型和属性自动生成查询。</span></div>
@@ -2426,7 +2477,7 @@
                 </div>
                 <div id="sparqlResultSummary" class="entry-hint">还没有执行查询。</div>
                 <div class="sparql-result-tools">
-                  <input id="sparqlResultSearch" class="kb-input" placeholder="搜索结果..." />
+                  <input id="sparqlResultSearch" class="app-search-input kb-input" placeholder="搜索结果..." />
                 </div>
                 <div class="entry-grid-shell sparql-preview-grid"><div id="sparqlResultTable" class="sparql-result-grid-host"></div></div>
                 <pre id="sparqlRawResponse" class="sparql-raw" style="display:none;"></pre>
@@ -2708,7 +2759,7 @@
                     <i class="fa-solid fa-rotate-right"></i>
                   </button>
                 </div>
-                <input id="ontologySearch" type="text" class="kb-input sm" placeholder="搜索本体名称..." />
+                <input id="ontologySearch" type="text" class="app-search-input kb-input sm" placeholder="搜索本体名称..." />
                 <div class="ontology-action-grid">
                   <button id="btnOntologyAddRoot" class="btn sm primary">
                     <i class="fa-solid fa-plus"></i> 新增本体
@@ -2748,7 +2799,7 @@
                   </button>
                 </div>
                 <div class="ontology-toolbar__group">
-                  <input type="text" id="propertyMgmtSearch" class="kb-input sm" placeholder="搜索属性..."
+                  <input type="text" id="propertyMgmtSearch" class="app-search-input kb-input sm" placeholder="搜索属性..."
                     style="width: 180px;">
                   <button id="btnPropertyMgmtRefresh" class="btn sm icon" title="刷新属性"><i
                       class="fa-solid fa-rotate-right"></i></button>
@@ -3331,7 +3382,7 @@
           <div class="vis-topbar">
             <div class="vis-search-wrap" style="position:relative;">
               <i class="fa-solid fa-magnifying-glass vis-search-icon"></i>
-              <input id="visSearch" type="text" class="vis-search-input" placeholder="搜索节点…" autocomplete="off" />
+              <input id="visSearch" type="text" class="app-search-input vis-search-input" placeholder="搜索节点…" autocomplete="off" />
               <div id="visSearchDropdown" class="vis-search-dropdown" style="display:none;"></div>
             </div>
             <div class="vis-topbar-layout">
@@ -4514,7 +4565,7 @@
             <div class="module-title">分类管理</div>
             <div class="module-body">
               <div class="toolbar">
-                <input id="clsSearch" placeholder="搜索分类…" style="flex: 1" />
+                <input id="clsSearch" class="app-search-input" placeholder="搜索分类…" style="flex: 1" />
                 <button class="btn icon" id="btnClsAdd" type="button" title="新增分类" aria-label="新增分类">
                   <i class="fa-solid fa-plus"></i>
                 </button>
@@ -4763,7 +4814,7 @@
       </div>
       <div class="module-scroll module-scroll--plain stack-8" style="flex: 1; overflow-y: auto; padding-right: 4px;">
         <div class="toolbar" style="margin-bottom: 8px;">
-          <input id="propSearchInput" placeholder="输入关键词后回车搜索属性" style="flex: 1" />
+          <input id="propSearchInput" class="app-search-input" placeholder="输入关键词后回车搜索属性" style="flex: 1" />
         </div>
         <div class="toolbar" id="propSearchResultsWrap" style="display: none; margin-bottom: 12px;">
           <select id="propSearchResults" size="10" style="flex: 1; min-height: 180px"></select>
@@ -6034,7 +6085,7 @@
         ).trim();
         if (
           pinnedNode &&
-          ["table", "detail", "report_detail", "vis"].includes(normalizedMode)
+          ["table", "detail", "report_detail", "vis", "entry"].includes(normalizedMode)
         ) {
           normalizedNode = pinnedNode;
         }
@@ -6050,6 +6101,7 @@
           normalizedMode === "detail" ||
           normalizedMode === "report_detail" ||
           normalizedMode === "vis" ||
+          normalizedMode === "entry" ||
           includeNode === true);
       const shouldIncludeEntryState =
         normalizedMode === "entry" &&
@@ -18928,6 +18980,16 @@
 
   </script>
   <!-- Class Modal -->
+  <div id="entityManageModal" class="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2200;align-items:center;justify-content:center;">
+    <div class="entity-manage-modal">
+      <div class="entity-manage-modal__head"><div><strong>管理表格</strong><small id="entityManageCount">已选 0 项</small></div><button id="btnEntityManageClose" class="btn icon" type="button" aria-label="关闭">×</button></div>
+      <div class="entity-manage-toolbar"><input id="entityManageSearch" class="app-search-input kb-input sm" placeholder="搜索实体" /><button id="btnEntityManageSelectAll" class="btn sm" type="button">全选当前结果</button><button id="btnEntityManageExport" class="btn sm" type="button">导出 CSV</button></div>
+      <div class="entity-manage-bulk"><input id="entityManageType" class="kb-input sm" placeholder="批量设置类型" /><button id="btnEntityManageApplyType" class="btn sm" type="button">应用类型</button><input id="entityManageTag" class="kb-input sm" placeholder="批量添加标签" /><button id="btnEntityManageApplyTag" class="btn sm" type="button">添加标签</button><button id="btnEntityManageDelete" class="btn sm danger" type="button">删除所选</button></div>
+      <div class="entity-manage-table-wrap"><table class="entity-manage-table"><thead><tr><th><input id="entityManageCheckAll" type="checkbox" aria-label="全选" /></th><th>名称</th><th>类型</th><th>标签</th><th>更新时间</th></tr></thead><tbody id="entityManageRows"></tbody></table></div>
+    </div>
+  </div>
+
+  <!-- Class Modal -->
   <div id="classModal" class="modal-overlay"
     style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.45); z-index: 1000; align-items: center; justify-content: center;">
     <div class="modal-content"
@@ -18974,7 +19036,7 @@
         </div>
       </div>
       <div style="margin-bottom: 12px;">
-        <input type="text" id="edgePropertySearch" class="kb-input" placeholder="搜索属性..."
+        <input type="text" id="edgePropertySearch" class="app-search-input kb-input" placeholder="搜索属性..."
           style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 4px;">
       </div>
       <div id="edgePropertyList"
@@ -18992,6 +19054,7 @@
   <script src="/assets/scripts/property-panel.js"></script>
   <script src="/assets/scripts/table-panel.js"></script>
   <script src="/assets/scripts/table-selection.js"></script>
+  <script src="/assets/scripts/entity-manage-table.js"></script>
   <script src="/assets/scripts/attr-panel.js"></script>
   <!-- relation-panel.js 已移除，使用 edgehandles 拖拽创建关系 -->
   <script src="/assets/scripts/schema-panel.js"></script>
@@ -19000,6 +19063,36 @@
   <script src="/assets/scripts/auth-panel.js"></script>
   <script src="/assets/scripts/db-modal.js"></script>
   <script src="/assets/scripts/sparql-panel.js"></script>
+  <script>
+    // The initial hash route is handled before these dependent sidebar scripts
+    // are loaded. Re-hydrate once they are ready so every routed view restores
+    // the selected entity in the shared editor.
+    document.addEventListener("DOMContentLoaded", () => {
+      window.setTimeout(() => {
+        const nodeId = String(
+          window.kbSelectedNodeId ||
+          window.kbSelectedRowId ||
+          window.kbCurrentNodeId ||
+          window.kbActiveDetailRouteId ||
+          document.getElementById("fId")?.value ||
+          "",
+        ).trim();
+        if (!nodeId) return;
+        if (typeof window.syncActiveEntityEditor === "function") {
+          window.syncActiveEntityEditor(nodeId, {
+            force: true,
+            skipGraphFocus: window.kbViewMode !== "vis",
+          });
+          return;
+        }
+        if (typeof window.enterEditById === "function") {
+          window.enterEditById(nodeId, {
+            skipGraphFocus: window.kbViewMode !== "vis",
+          }).catch(() => {});
+        }
+      }, 0);
+    });
+  </script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       const split = document.querySelector('.kb-split');

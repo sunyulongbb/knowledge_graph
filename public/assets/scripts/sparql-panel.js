@@ -8,6 +8,7 @@
     preview: null,
     tasks: [],
     endpointId: "",
+    dataset: "",
     schemaItems: [],
     resultGrid: null,
     previewColumnLabels: null,
@@ -254,6 +255,69 @@
     refreshTemplateOptions({ keepSelection: true });
   }
 
+  async function loadFusekiDatasets() {
+    const select = byId("sparqlDatasetSelect");
+    if (!select) return;
+    const endpointId = byId("sparqlEndpointSelect")?.value || state.endpointId;
+    if (!endpointId) return;
+    const endpointUrl = getSelectedEndpoint()?.endpoint || byId("sparqlEndpointUrl")?.value || "";
+    const pathParts = String(endpointUrl).split("?")[0].split("/").filter(Boolean);
+    const sparqlIndex = pathParts.lastIndexOf("sparql");
+    const fallback = sparqlIndex > 0 ? pathParts[sparqlIndex - 1] : "";
+    const showFallback = () => {
+      if (!fallback) return false;
+      renderOptions(select, [{ id: fallback, label: fallback }], "请选择 Dataset", (item) => ({ value: item.id, label: item.label }));
+      select.value = state.dataset || fallback;
+      state.dataset = select.value;
+      select.disabled = false;
+      return true;
+    };
+    showFallback();
+    byId("sparqlDatasetHint").textContent = fallback ? `当前使用 Endpoint 中的 Dataset：${fallback}；正在读取完整列表…` : "正在读取 Dataset…";
+    try {
+      const data = await api("/api/sparql/fuseki/datasets", { method: "POST", body: JSON.stringify({ endpointId }) });
+      const items = data.items || [];
+      if (items.length) {
+        renderOptions(select, items, "请选择 Dataset", (item) => ({ value: item.id, label: item.label }));
+        select.value = state.dataset || data.current || fallback || items[0]?.id || "";
+        state.dataset = select.value;
+        select.disabled = false;
+        byId("sparqlDatasetHint").textContent = `已读取 ${items.length} 个 Dataset`;
+      } else if (!showFallback()) {
+        select.innerHTML = '<option value="">未读取到 Dataset</option>';
+        select.disabled = true;
+      }
+    } catch (error) {
+      const reason = String(error?.message || error || "");
+      const needsAuth = reason.includes("401") || reason.includes("认证");
+      if (showFallback()) {
+        byId("sparqlDatasetHint").textContent = needsAuth ? `无法读取 Fuseki Dataset 列表，已使用当前 Dataset：${fallback}` : `无法读取 Fuseki 管理列表，已使用 Endpoint 中的 Dataset：${fallback}`;
+      } else {
+        select.innerHTML = '<option value="">无法读取 Dataset</option>';
+        select.disabled = true;
+        byId("sparqlDatasetHint").textContent = needsAuth ? "无法读取 Fuseki Dataset 列表。" : "请检查 Fuseki Endpoint。";
+      }
+    }
+  }
+
+  async function loadDatasetStats() {
+    const dataset = state.dataset || byId("sparqlDatasetSelect")?.value || "";
+    const endpointId = byId("sparqlEndpointSelect")?.value || state.endpointId;
+    const hint = byId("sparqlDatasetStats");
+    if (!hint) return;
+    if (!dataset || !endpointId) { hint.textContent = ""; return; }
+    hint.textContent = "正在统计数据量…";
+    try {
+      const data = await api("/api/sparql/fuseki/datasets/stats", {
+        method: "POST",
+        body: JSON.stringify({ endpointId, dataset }),
+      });
+      hint.textContent = `人物数量：${Number(data.personCount || 0).toLocaleString()}`;
+    } catch {
+      hint.textContent = "数据量暂时无法读取";
+    }
+  }
+
   async function loadTemplates() {
     const data = await api("/api/sparql/templates");
     state.templates = data.items || [];
@@ -436,12 +500,106 @@
     return text.split(/[\/#]/).filter(Boolean).pop() || text;
   };
 
+  const FILTER_OPERATORS = {
+    resource: "等于实体",
+    literal: "等于文本",
+    contains: "包含文本",
+    exists: "属性存在",
+    notExists: "属性不存在",
+  };
+  const SPARQL_DISPLAY_NAMES = {
+    "wdt:P31": "类型",
+    "wdt:P27": "国籍",
+    "wdt:P17": "国家",
+    "rdfs:label": "名称",
+    "wd:Q5": "人类",
+    "wd:Q30": "美国",
+  };
+  const SPARQL_IDENTIFIERS = Object.fromEntries(Object.entries(SPARQL_DISPLAY_NAMES).map(([id, name]) => [name, id]));
+  const displaySparqlTerm = (value) => SPARQL_DISPLAY_NAMES[String(value || "").trim()] || String(value || "");
+  const resolveSparqlTerm = (value) => SPARQL_IDENTIFIERS[String(value || "").trim()] || String(value || "").trim();
+
+  function createFilterRow(filter = {}) {
+    const host = byId("sparqlFilterList");
+    if (!host) return;
+    const row = document.createElement("div");
+    row.className = "sparql-filter-row";
+    row.innerHTML = `
+      <label class="field"><span>属性</span><input class="kb-input sparql-filter-predicate" list="sparqlPredicateSuggestions" placeholder="选择属性" value="${escapeHtml(displaySparqlTerm(filter.predicate))}" /></label>
+      <label class="field"><span>条件</span><select class="kb-select sparql-filter-operator">${Object.entries(FILTER_OPERATORS).map(([value, label]) => `<option value="${value}" ${filter.operator === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>
+      <label class="field sparql-filter-value-field"><span>值</span><input class="kb-input sparql-filter-value" list="sparqlValueSuggestions" placeholder="输入或选择值" value="${escapeHtml(displaySparqlTerm(filter.value))}" /></label>
+      <button class="btn sm icon sparql-remove-filter" type="button" title="删除条件" aria-label="删除条件">×</button>`;
+    const operator = row.querySelector(".sparql-filter-operator");
+    const syncValueState = () => {
+      const needsValue = !["exists", "notExists"].includes(operator.value);
+      row.querySelector(".sparql-filter-value-field").classList.toggle("is-hidden", !needsValue);
+    };
+    operator.addEventListener("change", syncValueState);
+    row.querySelector(".sparql-remove-filter").addEventListener("click", () => {
+      row.remove();
+      if (!host.children.length) createFilterRow();
+    });
+    syncValueState();
+    host.appendChild(row);
+  }
+
+  function getStructuredFilters() {
+    return Array.from(byId("sparqlFilterList")?.querySelectorAll(".sparql-filter-row") || []).map((row) => ({
+      predicate: resolveSparqlTerm(row.querySelector(".sparql-filter-predicate")?.value),
+      operator: row.querySelector(".sparql-filter-operator")?.value || "resource",
+      value: resolveSparqlTerm(row.querySelector(".sparql-filter-value")?.value),
+    })).filter((filter) => filter.predicate);
+  }
+
+  function sparqlTerm(value, kind = "resource") {
+    const text = String(value || "").trim();
+    if (!text) return "";
+    if (kind === "literal") return JSON.stringify(text);
+    if (/^(wd|wdt|rdfs|rdf|xsd):[A-Za-z0-9_.-]+$/.test(text)) return text;
+    if (/^https?:\/\//i.test(text)) return iri(text);
+    return iri(text);
+  }
+
+  async function loadReturnProperties() {
+    if (!state.dataset && !byId("sparqlDatasetSelect")?.value) throw new Error("请先在步骤 1 选择 Fuseki Dataset");
+    const host = byId("sparqlReturnPropertyChecklist");
+    const search = byId("sparqlReturnPropertySearch");
+    if (!host) return;
+    host.innerHTML = '<span class="muted">正在读取可返回属性…</span>';
+    const filters = getStructuredFilters();
+    const entityQuery = filters.length ? buildStructuredQuery().query : "";
+    const selectIndex = entityQuery.indexOf("SELECT");
+    const propertyQuery = filters.length
+      ? `PREFIX wd: <http://www.wikidata.org/entity/>\nPREFIX wdt: <http://www.wikidata.org/prop/direct/>\nPREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\nSELECT DISTINCT ?property WHERE { { ${entityQuery.slice(selectIndex)} } ?entity ?property ?value } ORDER BY ?property LIMIT 1000`
+      : "SELECT DISTINCT ?property WHERE { { ?entity ?property ?value } UNION { GRAPH ?sourceGraph { ?entity ?property ?value } } } ORDER BY ?property LIMIT 1000";
+    const result = await executeFusekiLookup(propertyQuery);
+    const properties = (result.rows || []).map((row) => valueOf(row, "property")).filter((value) => value && value !== "http://www.w3.org/2000/01/rdf-schema#label");
+    const metadataResource = (property) => property.startsWith("http://www.wikidata.org/prop/direct/")
+      ? `http://www.wikidata.org/entity/${property.split("/").pop()}` : property;
+    const labels = new Map();
+    const resources = [...new Set(properties.map(metadataResource))];
+    for (let index = 0; index < resources.length; index += 80) {
+      const values = resources.slice(index, index + 80).map(iri).join(" ");
+      const labelResult = await executeFusekiLookup(`SELECT ?resource ?label WHERE { VALUES ?resource { ${values} } ?resource <http://www.w3.org/2000/01/rdf-schema#label> ?label . FILTER(LANGMATCHES(LANG(?label), "zh")) }`);
+      (labelResult.rows || []).forEach((row) => {
+        const resource = valueOf(row, "resource");
+        const label = valueOf(row, "label");
+        if (resource && label && !labels.has(resource)) labels.set(resource, label);
+      });
+    }
+    host.innerHTML = properties.length ? properties.map((property, index) => {
+      const label = labels.get(metadataResource(property)) || `未命名属性 ${index + 1}`;
+      return `<label title="${escapeHtml(label)}"><input type="checkbox" value="${escapeHtml(property)}" data-display-name="${escapeHtml(label)}" /><span>${escapeHtml(label)}</span></label>`;
+    }).join("") : '<span class="muted">当前 Dataset 没有可返回属性</span>';
+    if (search) { search.value = ""; search.disabled = !properties.length; }
+  }
+
   async function executeFusekiLookup(query) {
     const endpointId = byId("sparqlEndpointSelect")?.value || state.endpointId;
     if (!endpointId) throw new Error("数据服务尚未就绪");
     return api("/api/sparql/query", {
       method: "POST",
-      body: JSON.stringify({ endpointId, query, method: "GET", timeout: 30000, pageSize: 500 }),
+      body: JSON.stringify({ endpointId, dataset: state.dataset || byId("sparqlDatasetSelect")?.value || "", query, method: "GET", timeout: 30000, pageSize: 500 }),
     });
   }
 
@@ -473,6 +631,7 @@ LIMIT 500`);
   }
 
   async function loadFusekiProperties() {
+    return;
     const type = byId("sparqlSourceTypeSelect")?.value || "";
     const host = byId("sparqlPropertyChecklist");
     const search = byId("sparqlPropertySearch");
@@ -524,6 +683,40 @@ LIMIT 1000`);
   }
 
   function buildStructuredQuery() {
+    const filters = getStructuredFilters();
+    const clauses = filters.map((filter, index) => {
+      const predicate = sparqlTerm(filter.predicate);
+      if (!predicate) throw new Error("筛选属性不能为空");
+      if (["exists", "notExists"].includes(filter.operator)) {
+        const pattern = `?entity ${predicate} ?filter_${index + 1} .`;
+        return filter.operator === "notExists" ? `FILTER NOT EXISTS { ${pattern} }` : pattern;
+      }
+      if (!filter.value) throw new Error(`请填写第 ${index + 1} 个筛选条件的值`);
+      if (filter.operator === "contains") return `?entity ${predicate} ?filter_${index + 1} .\n  FILTER(CONTAINS(LCASE(STR(?filter_${index + 1})), LCASE(${sparqlTerm(filter.value, "literal")})))`;
+      return `?entity ${predicate} ${sparqlTerm(filter.value, filter.operator === "literal" ? "literal" : "resource")} .`;
+    }).join("\n  ");
+    const language = byId("sparqlLabelLanguage")?.value || "";
+    const labelClause = language
+      ? `OPTIONAL { ?entity rdfs:label ?name . FILTER(LANGMATCHES(LANG(?name), ${JSON.stringify(language)})) }`
+      : "OPTIONAL { ?entity rdfs:label ?name . }";
+    const fields = Array.from(byId("sparqlReturnPropertyChecklist")?.querySelectorAll("input:checked") || []).map((input, index) => ({
+      source: `field_${index + 1}`,
+      property: input.value,
+      label: input.dataset.displayName || compactName(input.value),
+    }));
+    const optional = fields.map((field) => `OPTIONAL {
+    ?entity ${sparqlTerm(field.property)} ?${field.source}Raw .
+    OPTIONAL { ?${field.source}Raw rdfs:label ?${field.source}Label . FILTER(LANGMATCHES(LANG(?${field.source}Label), "zh")) }
+    BIND(COALESCE(?${field.source}Label, STR(?${field.source}Raw)) AS ?${field.source}Display)
+  }`).join("\n  ");
+    const selectFields = fields.map((field) => `(SAMPLE(?${field.source}Raw) AS ?${field.source}) (SAMPLE(?${field.source}Display) AS ?${field.source}_display)`).join(" ");
+    const entityPattern = clauses || "?entity ?anyProperty ?anyValue .";
+    const whereBody = `${entityPattern}\n  ${labelClause}\n  ${optional}`;
+    return {
+      fields,
+      query: `PREFIX wd: <http://www.wikidata.org/entity/>\nPREFIX wdt: <http://www.wikidata.org/prop/direct/>\nPREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n\nSELECT ?entity (SAMPLE(?name) AS ?label) ${selectFields}\nWHERE {\n  {\n    ${whereBody}\n  }\n  UNION\n  {\n    GRAPH ?sourceGraph {\n      ${whereBody}\n    }\n  }\n}\nGROUP BY ?entity\nLIMIT 500`,
+    };
+
     const type = byId("sparqlSourceTypeSelect")?.value || "";
     const properties = Array.from(byId("sparqlPropertyChecklist")?.querySelectorAll("input:checked") || []).map((input) => ({
       property: input.value,
@@ -531,23 +724,25 @@ LIMIT 1000`);
     })).filter((item) => item.property !== "http://www.w3.org/2000/01/rdf-schema#label");
     if (!type) throw new Error("请选择类型");
     if (!properties.length) throw new Error("请至少勾选一个属性");
-    const fields = properties.map((item, index) => ({ source: `field_${index + 1}`, ...item }));
-    const optional = fields.map((field) => `OPTIONAL {
+    const legacyFields = properties.map((item, index) => ({ source: `field_${index + 1}`, ...item }));
+    const legacyOptional = legacyFields.map((field) => `OPTIONAL {
     ?entity ${iri(field.property)} ?${field.source}Raw .
     OPTIONAL { ?${field.source}Raw <http://www.w3.org/2000/01/rdf-schema#label> ?${field.source}LabelZh . FILTER(LANG(?${field.source}LabelZh) = "zh") }
     OPTIONAL { ?${field.source}Raw <http://www.w3.org/2000/01/rdf-schema#label> ?${field.source}LabelEn . FILTER(LANG(?${field.source}LabelEn) = "en") }
     BIND(COALESCE(?${field.source}LabelZh, ?${field.source}LabelEn, STR(?${field.source}Raw)) AS ?${field.source}Display)
   }`).join("\n  ");
-    const selectFields = fields.map((field) => `(SAMPLE(?${field.source}Raw) AS ?${field.source}) (SAMPLE(?${field.source}Display) AS ?${field.source}_display)`).join(" ");
+    const legacySelectFields = legacyFields.map((field) => `(SAMPLE(?${field.source}Raw) AS ?${field.source}) (SAMPLE(?${field.source}Display) AS ?${field.source}_display)`).join(" ");
     return {
-      fields,
+      fields: legacyFields,
       // A single entity can have several labels or values for one property. Aggregate
       // optional values so each entity remains one preview row instead of a cross-product.
-      query: `SELECT ?entity (SAMPLE(?labelValue) AS ?label) ${selectFields}\nWHERE {\n  { ?entity a ${iri(type)} } UNION { ?entity <http://www.wikidata.org/prop/direct/P31> ${iri(type)} }\n  OPTIONAL { ?entity <http://www.w3.org/2000/01/rdf-schema#label> ?labelValue . FILTER(LANG(?labelValue) = "zh") }\n  ${optional}\n}\nGROUP BY ?entity\nLIMIT 500`,
+      query: `SELECT ?entity (SAMPLE(?labelValue) AS ?label) ${legacySelectFields}\nWHERE {\n  { ?entity a ${iri(type)} } UNION { ?entity <http://www.wikidata.org/prop/direct/P31> ${iri(type)} }\n  OPTIONAL { ?entity <http://www.w3.org/2000/01/rdf-schema#label> ?labelValue . FILTER(LANG(?labelValue) = "zh") }\n  ${legacyOptional}\n}\nGROUP BY ?entity\nLIMIT 500`,
     };
   }
 
   function selectedStructuredTypeName() {
+    return byId("sparqlDefaultEntityType")?.value || "SPARQL实体";
+
     const select = byId("sparqlSourceTypeSelect");
     return select?.selectedOptions?.[0]?.textContent?.trim() || byId("sparqlDefaultEntityType")?.value || "SPARQL实体";
   }
@@ -592,6 +787,7 @@ LIMIT 1000`);
       method: "POST",
       body: JSON.stringify({
         endpointId,
+        dataset: state.dataset || byId("sparqlDatasetSelect")?.value || "",
         query,
         method: byId("sparqlEndpointMethod").value,
         timeout: Number(byId("sparqlEndpointTimeout").value || 30000),
@@ -609,6 +805,7 @@ LIMIT 1000`);
       method: "POST",
       body: JSON.stringify({
         endpointId,
+        dataset: state.dataset || byId("sparqlDatasetSelect")?.value || "",
         query: byId("sparqlQueryEditor").value,
         mapping: {
           defaultEntityType: selectedStructuredTypeName(),
@@ -638,6 +835,7 @@ LIMIT 1000`);
         method: "POST",
         body: JSON.stringify({
           endpointId,
+          dataset: state.dataset || byId("sparqlDatasetSelect")?.value || "",
           query: byId("sparqlQueryEditor").value,
           mapping: {
             defaultEntityType: selectedStructuredTypeName(),
@@ -775,14 +973,30 @@ LIMIT 1000`);
         fillEndpointForm(selected);
         refreshTemplateOptions({ forceTemplateQuery: true });
         byId("sparqlConnectionStatus").textContent = `已载入数据源：${selected.name}`;
+        loadFusekiDatasets().catch(showError);
       }
+    });
+
+    byId("sparqlDatasetSelect")?.addEventListener("change", (event) => {
+      state.dataset = event.target.value;
+      loadDatasetStats();
+      byId("sparqlReturnPropertyChecklist").innerHTML = '<span class="muted">Dataset 已变更，请重新读取可用属性</span>';
+      byId("sparqlReturnPropertySearch").disabled = true;
     });
 
     byId("sparqlEndpointAuthType")?.addEventListener("change", (event) => {
       toggleEndpointAuthFields(event.target.value);
     });
 
-    byId("btnSparqlLoadTypes")?.addEventListener("click", () => loadFusekiTypes().catch(showError));
+    byId("btnSparqlAddFilter")?.addEventListener("click", () => createFilterRow());
+    byId("btnSparqlRefreshDatasets")?.addEventListener("click", () => loadFusekiDatasets().catch(showError));
+    byId("btnSparqlLoadReturnProperties")?.addEventListener("click", () => loadReturnProperties().catch(showError));
+    byId("sparqlReturnPropertySearch")?.addEventListener("input", (event) => {
+      const keyword = String(event.target.value || "").trim().toLowerCase();
+      byId("sparqlReturnPropertyChecklist")?.querySelectorAll("label").forEach((label) => {
+        label.style.display = !keyword || label.textContent.toLowerCase().includes(keyword) || label.title.toLowerCase().includes(keyword) ? "flex" : "none";
+      });
+    });
     byId("sparqlSourceTypeSelect")?.addEventListener("change", () => loadFusekiProperties().catch(showError));
     byId("btnSparqlStructuredPreview")?.addEventListener("click", () => previewStructuredImport().catch(showError));
     byId("sparqlPropertySearch")?.addEventListener("input", (event) => {
@@ -879,11 +1093,14 @@ LIMIT 1000`);
     });
 
     await loadEndpoints();
+    await loadFusekiDatasets();
+    await loadDatasetStats();
     toggleEndpointAuthFields(byId("sparqlEndpointAuthType")?.value || "none");
     await loadTemplates();
     await loadSchemas();
     await loadTasks();
-    await loadFusekiTypes();
+    createFilterRow({ predicate: "wdt:P31", operator: "resource", value: "wd:Q5" });
+    createFilterRow({ predicate: "wdt:P27", operator: "resource", value: "wd:Q30" });
     renderMappingTable();
     refreshTemplateOptions({ keepSelection: true });
     setMode("sparql");

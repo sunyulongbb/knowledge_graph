@@ -42,7 +42,7 @@
   const btnDeleteSelected = document.getElementById("btnDeleteSelected");
   const tblCount = document.getElementById("tblCount");
   const tblPagination = document.getElementById("tblPagination");
-  const TABLE_LAYOUT_MODES = ["list", "grid", "table"];
+  const TABLE_LAYOUT_MODES = ["list", "grid", "table", "manage"];
   const normalizeTableLayoutMode = (mode) =>
     TABLE_LAYOUT_MODES.includes(mode) ? mode : "list";
   const getInitialTableLayoutMode = () => {
@@ -100,20 +100,20 @@
       tblNodes.classList.toggle("grid-layout", normalized === "grid");
       tblNodes.classList.toggle("table-layout", normalized === "table");
     }
+    document.getElementById("tablePanel")?.classList.toggle("manage-layout", normalized === "manage");
     if (btnTblLayoutToggle) {
       const nextMode =
         TABLE_LAYOUT_MODES[
           (TABLE_LAYOUT_MODES.indexOf(normalized) + 1) %
             TABLE_LAYOUT_MODES.length
         ];
-      const nextLabel =
-        nextMode === "grid" ? "网格布局" : nextMode === "table" ? "表格布局" : "列表布局";
+      const nextLabel = nextMode === "grid" ? "网格布局" : nextMode === "table" ? "表格布局" : nextMode === "manage" ? "管理表格" : "列表布局";
       const icon =
         normalized === "grid"
           ? "fa-table-list"
           : normalized === "table"
             ? "fa-list"
-            : "fa-th-large";
+            : normalized === "table" ? "fa-table-columns" : "fa-th-large";
       btnTblLayoutToggle.innerHTML = `<i class="fa-solid ${icon}"></i>`;
       btnTblLayoutToggle.title = `切换到${nextLabel}`;
       btnTblLayoutToggle.setAttribute("aria-label", `切换到${nextLabel}`);
@@ -127,6 +127,8 @@
     if (typeof window.renderTableList === "function") {
       window.renderTableList();
     }
+    if (normalized === "manage") window.openEntityManageTable?.();
+    else window.closeEntityManageTable?.();
     updateGridManualLoadButton();
   };
   window.applyTableLayoutMode = applyTableLayoutMode;
@@ -713,6 +715,9 @@
 
       if (typeof window.renderTableList === "function") {
         window.renderTableList({ append });
+      }
+      if (window.kbTableLayoutMode === "manage") {
+        window.openEntityManageTable?.();
       }
       updateGridManualLoadButton();
       if (isInfiniteTableLayoutMode()) {

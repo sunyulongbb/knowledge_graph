@@ -35,7 +35,12 @@ function isPrivateIPv6(ip: string) {
 function isConfiguredFusekiEndpoint(url: URL) {
   const configured = String(process.env.FUSEKI_SPARQL_ENDPOINT || "http://127.0.0.1:3030/wikidata/sparql").trim();
   try {
-    return url.toString() === new URL(configured).toString();
+    const configuredUrl = new URL(configured);
+    // Dataset selection changes only the path (for example
+    // /wikidata/sparql -> /person/sparql) on the same managed Fuseki server.
+    // Treat those query endpoints as managed too, while keeping all other
+    // hosts blocked by the normal SSRF protection.
+    return url.origin === configuredUrl.origin && /\/(sparql|query)\/?$/.test(url.pathname);
   } catch {
     return false;
   }

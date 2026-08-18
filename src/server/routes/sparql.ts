@@ -24,10 +24,95 @@ import { executeSparqlRequest } from "../sparql/client.ts";
 import { applyTemplateVariables, detectQueryType, ensureReadOnlyQuery } from "../sparql/query.ts";
 import { buildImportPreview, importPreviewToGraph } from "../sparql/importer.ts";
 import { fail, ok } from "../sparql/response.ts";
-import { validateEndpointUrl } from "../sparql/security.ts";
+import { sanitizeHeaders, validateEndpointUrl } from "../sparql/security.ts";
+
+function datasetFromEndpoint(endpoint: string) {
+  try {
+    const parts = new URL(endpoint).pathname.split("/").filter(Boolean);
+    const sparqlIndex = parts.lastIndexOf("sparql");
+    return sparqlIndex > 0 ? parts[sparqlIndex - 1] : "";
+  } catch { return ""; }
+}
+
+function fusekiBasePath(endpoint: string) {
+  try {
+    const parts = new URL(endpoint).pathname.split("/").filter(Boolean);
+    const sparqlIndex = parts.lastIndexOf("sparql");
+    if (sparqlIndex <= 0) return "";
+    return `/${parts.slice(0, sparqlIndex - 1).join("/")}`.replace(/\/$/, "");
+  } catch { return ""; }
+}
+
+function endpointForDataset(endpoint: any, dataset: unknown) {
+  const name = String(dataset || "").trim();
+  if (!name) return endpoint;
+  if (!/^[A-Za-z0-9_.-]+$/.test(name)) throw new Error("Dataset 名称不合法");
+  const url = new URL(String(endpoint.endpoint || ""));
+  url.pathname = `${fusekiBasePath(endpoint.endpoint)}/${name}/sparql`;
+  url.search = "";
+  return { ...endpoint, endpoint: url.toString() };
+}
 
 export async function handleSparqlRoutes(req: Request, url: URL, method: string) {
   const projectId = resolveProjectId(url);
+
+  if (url.pathname === "/api/sparql/fuseki/datasets" && method === "POST") {
+    try {
+      const body = await req.json();
+      const endpoint = await getEndpointSecrets(projectId, String(body?.endpointId || ""));
+      if (!endpoint) return fail("数据源不存在", "SPARQL_ENDPOINT_NOT_FOUND", null, 404);
+      const endpointUrl = new URL(String(endpoint.endpoint || ""));
+      // `/$/server` is the public Fuseki server-status API. Unlike the
+      // management-only `/$/datasets` endpoint, it lists every active dataset
+      // without requiring an administrator session.
+      const datasetUrl = new URL(`${fusekiBasePath(endpoint.endpoint)}/$/server`, endpointUrl.origin);
+      const headers: Record<string, string> = { Accept: "application/json", ...sanitizeHeaders(endpoint.headers) };
+      const adminUsername = String(body?.adminUsername || process.env.FUSEKI_ADMIN_USERNAME || endpoint.username || "").trim();
+      const adminPassword = String(body?.adminPassword || process.env.FUSEKI_ADMIN_PASSWORD || endpoint.password || "");
+      if (adminUsername && adminPassword) {
+        headers.Authorization = `Basic ${Buffer.from(`${adminUsername}:${adminPassword}`).toString("base64")}`;
+      }
+      if (endpoint.auth_type === "bearer" && endpoint.token) headers.Authorization = `Bearer ${endpoint.token}`;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 5000);
+      let response: Response;
+      try {
+        response = await fetch(datasetUrl, { headers, signal: controller.signal });
+      } finally {
+        clearTimeout(timer);
+      }
+      if (!response.ok) throw new Error(`Fuseki 返回 HTTP ${response.status}`);
+      const payload = await response.json() as any;
+      const rawItems = Array.isArray(payload) ? payload : Array.isArray(payload?.datasets) ? payload.datasets : Array.isArray(payload?.data?.datasets) ? payload.data.datasets : [];
+      const items = rawItems.map((item: any) => String(item?.["ds.name"] || item?.name || item || "").replace(/^\//, "").trim())
+        .filter((name: string) => /^[A-Za-z0-9_.-]+$/.test(name))
+        .map((name: string) => ({ id: name, label: name }));
+      const current = datasetFromEndpoint(endpoint.endpoint);
+      if (current && !items.some((item: any) => item.id === current)) items.unshift({ id: current, label: current });
+      return ok("Dataset 加载成功", { items, current });
+    } catch (error) {
+      return fail("读取 Fuseki Dataset 失败", "FUSEKI_DATASETS_FAILED", String((error as Error)?.message || error), 400);
+    }
+  }
+
+  if (url.pathname === "/api/sparql/fuseki/datasets/stats" && method === "POST") {
+    try {
+      const body = await req.json();
+      const endpoint = await getEndpointSecrets(projectId, String(body?.endpointId || ""));
+      if (!endpoint) return fail("数据源不存在", "SPARQL_ENDPOINT_NOT_FOUND", null, 404);
+      const dataset = String(body?.dataset || "").trim();
+      if (!dataset) return fail("缺少 Dataset", "FUSEKI_DATASET_REQUIRED", null, 400);
+      const result = await executeSparqlRequest(
+        endpointForDataset(endpoint, dataset),
+        "SELECT (COUNT(DISTINCT ?person) AS ?personCount) WHERE { { ?person <http://www.w3.org/2000/01/rdf-schema#label> ?name . FILTER(LANGMATCHES(LANG(?name), 'zh')) } UNION { GRAPH ?graph { ?person <http://www.w3.org/2000/01/rdf-schema#label> ?name . FILTER(LANGMATCHES(LANG(?name), 'zh')) } } }",
+        { method: "GET", timeout: Math.min(Number(endpoint.timeout || 30000), 30000) },
+      );
+      const value = result?.rows?.[0]?.personCount?.value || "0";
+      return ok("数据量加载成功", { personCount: Number(value) || 0 });
+    } catch (error) {
+      return fail("读取 Dataset 数据量失败", "FUSEKI_DATASET_STATS_FAILED", String((error as Error)?.message || error), 400);
+    }
+  }
 
   if (url.pathname === "/api/sparql/endpoints" && method === "GET") {
     return ok("加载成功", { items: await listEndpoints(projectId) });
@@ -123,7 +208,7 @@ export async function handleSparqlRoutes(req: Request, url: URL, method: string)
         limit: Number(body?.pageSize || 100),
       });
 
-      const result = await executeSparqlRequest(endpoint, queryText, body);
+      const result = await executeSparqlRequest(endpointForDataset(endpoint, body?.dataset), queryText, body);
       addQueryHistory(projectId, {
         endpoint_id: endpoint.id,
         query: queryText,
@@ -191,7 +276,7 @@ export async function handleSparqlRoutes(req: Request, url: URL, method: string)
       const body = await req.json();
       const endpoint = await getEndpointSecrets(projectId, String(body?.endpointId || ""));
       if (!endpoint) return fail("数据源不存在", "SPARQL_ENDPOINT_NOT_FOUND", null, 404);
-      const result = await executeSparqlRequest(endpoint, String(body?.query || ""), body);
+      const result = await executeSparqlRequest(endpointForDataset(endpoint, body?.dataset), String(body?.query || ""), body);
       if (result.queryType !== "SELECT") {
         return fail("导入预览目前只支持 SELECT 查询结果", "SPARQL_IMPORT_QUERY_TYPE_UNSUPPORTED", result.queryType, 400);
       }
@@ -208,7 +293,7 @@ export async function handleSparqlRoutes(req: Request, url: URL, method: string)
       const endpoint = await getEndpointSecrets(projectId, String(body?.endpointId || ""));
       if (!endpoint) return fail("数据源不存在", "SPARQL_ENDPOINT_NOT_FOUND", null, 404);
 
-      const result = await executeSparqlRequest(endpoint, String(body?.query || ""), body);
+      const result = await executeSparqlRequest(endpointForDataset(endpoint, body?.dataset), String(body?.query || ""), body);
       const preview = buildImportPreview(result, body?.mapping || {}, endpoint, projectId);
       const taskId = createTask(projectId, {
         name: body?.name || `SPARQL 导入 ${new Date().toLocaleString("zh-CN")}`,

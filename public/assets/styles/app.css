@@ -7370,3 +7370,61 @@ body {
   background: white;
   transform: scale(1.2);
 }
+
+/* Shared search-field treatment across table, graph, entry, and model views. */
+.app-search-input {
+  box-sizing: border-box;
+  min-height: 36px;
+  padding: 7px 11px;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: 10px;
+  background: var(--surface-0);
+  color: var(--fg);
+  font: inherit;
+  line-height: 1.35;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.app-search-input::placeholder {
+  color: var(--muted);
+  opacity: 0.78;
+}
+
+.app-search-input:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border-strong, var(--border)));
+}
+
+.app-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--surface-1, var(--surface-0));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.app-search-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  background: var(--surface-1, var(--surface-0));
+}
+
+.vis-search-input.app-search-input {
+  min-height: 36px;
+  padding-left: 34px;
+}
+
+@media (max-width: 700px) {
+  .app-search-input {
+    min-height: 40px;
+  }
+}
+/* Knowledge entity management table */
+.entity-manage-modal { width:min(1120px,96vw); max-height:86vh; display:flex; flex-direction:column; gap:10px; padding:16px; border-radius:12px; background:var(--surface-0); color:var(--fg); box-shadow:0 24px 60px rgba(15,23,42,.3); }
+.entity-manage-modal__head { display:flex; align-items:center; justify-content:space-between; }
+.entity-manage-modal__head > div { display:grid; gap:3px; }.entity-manage-modal__head small { color:var(--muted); font-size:12px; }
+.entity-manage-toolbar,.entity-manage-bulk { display:flex; gap:7px; flex-wrap:wrap; align-items:center; }.entity-manage-toolbar input { flex:1 1 220px; }.entity-manage-bulk input { flex:1 1 150px; }
+.entity-manage-table-wrap { min-height:240px; overflow:auto; border:1px solid var(--border); border-radius:8px; }.entity-manage-table { width:100%; border-collapse:collapse; font-size:13px; }.entity-manage-table th,.entity-manage-table td { padding:9px 10px; text-align:left; border-bottom:1px solid var(--border); }.entity-manage-table th { position:sticky; top:0; background:var(--surface-1); z-index:1; }.entity-manage-table td { max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#tablePanel.manage-layout .tbl-wrap { display:none; }
+#tablePanel.manage-layout .entity-manage-inline { display:block !important; position:static !important; inset:auto !important; width:auto !important; height:auto !important; min-height:0; background:transparent !important; }
+#tablePanel.manage-layout .entity-manage-modal { width:auto; max-height:none; min-height:calc(100vh - 180px); box-shadow:none; border:0; border-radius:0; padding:4px 0; }
+#tablePanel.manage-layout .entity-manage-table-wrap { flex:1 1 auto; max-height:calc(100vh - 320px); }
