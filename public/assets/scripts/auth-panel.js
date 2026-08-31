@@ -27,6 +27,8 @@
   const profileError = document.getElementById("profileError");
   const btnSaveProfile = document.getElementById("btnSaveProfile");
   const btnCancelProfile = document.getElementById("btnCancelProfile");
+  const btnCloseProfile = document.getElementById("btnCloseProfile");
+  const profileAccountMeta = document.getElementById("profileAccountMeta");
   const btnLogout = document.getElementById("btnLogout");
 
   let authUser = null;
@@ -177,6 +179,11 @@
     } catch {}
     profileModal.style.display = "flex";
     if (authUser) {
+      if (profileAccountMeta) {
+        profileAccountMeta.textContent = authUser.username
+          ? `当前账号：${authUser.username}`
+          : "管理你的显示名称和头像";
+      }
       if (inputProfileDisplay) inputProfileDisplay.value = authUser.displayName || "";
       if (inputProfileAvatar) inputProfileAvatar.value = authUser.avatar || "";
       try {
@@ -371,6 +378,7 @@
       } catch {}
     });
   }
+  if (btnCloseProfile) btnCloseProfile.addEventListener("click", closeProfileModal);
   if (btnSubmitLogin) btnSubmitLogin.addEventListener("click", (e) => {
     e.preventDefault();
     submitLogin();
