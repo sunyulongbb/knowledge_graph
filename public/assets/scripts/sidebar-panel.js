@@ -1582,13 +1582,17 @@
     try {
       loadProjectsToSidebar();
     } catch (e) {}
-    // initialize right-side user sidebar
-    try {
-      loadUsersToSidebar();
-    } catch (e) {}
-    try {
-      setupUserSidebarHover();
-    } catch (e) {}
+    // The user sidebar is hidden by default. Avoid fetching users or attaching
+    // hover behavior until another feature explicitly reveals the rail.
+    const userSidebar = document.getElementById("userSidebar");
+    if (userSidebar && !userSidebar.hidden) {
+      try {
+        loadUsersToSidebar();
+      } catch (e) {}
+      try {
+        setupUserSidebarHover();
+      } catch (e) {}
+    }
     const btnRefreshUsers = document.getElementById("btnRefreshUsers");
     if (btnRefreshUsers) {
       btnRefreshUsers.addEventListener("click", (e) => {

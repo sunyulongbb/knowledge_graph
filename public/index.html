@@ -1449,10 +1449,11 @@
       white-space: nowrap;
     }
 
-    #propertyTable th:nth-child(1) { width: 74px; }
-    #propertyTable th:nth-child(3) { width: 120px; }
-    #propertyTable th:nth-child(5) { width: 96px; }
-    #propertyTable th:nth-child(6) { width: 84px; }
+    #propertyTable th:nth-child(1) { width: 42px; }
+    #propertyTable th:nth-child(2) { width: 74px; }
+    #propertyTable th:nth-child(4) { width: 120px; }
+    #propertyTable th:nth-child(6) { width: 96px; }
+    #propertyTable th:nth-child(7) { width: 84px; }
 
     #propertyPagination {
       padding: 0 4px 2px;
@@ -1781,7 +1782,7 @@
               </div>
             </div>
           </div>
-             <a id="btnViewEntry" class="nav-item" role="tab" aria-selected="false" title="录入页面" aria-label="录入页面"
+          <a id="btnViewEntry" class="nav-item" role="tab" aria-selected="false" title="录入页面" aria-label="录入页面"
             href="#"><span class="nav-label">录入</span></a>
           <a id="btnViewClean" class="nav-item" role="tab" aria-selected="false" title="数据清洗" aria-label="数据清洗"
             href="#"><span class="nav-label">清洗</span></a>
@@ -1793,7 +1794,7 @@
             href="#"><span class="nav-label">关联</span></a>
           <a id="btnViewChat" class="nav-item" role="tab" aria-selected="false" title="智能聊天" aria-label="智能聊天"
             href="#"><span class="nav-label">智能体</span></a>
-          <a id="btnViewReportHome" class="nav-item active" role="tab" aria-selected="true" title="报表中心" aria-label="报表中心"
+          <a id="btnViewReportHome" class="nav-item" role="tab" aria-selected="false" title="报表中心" aria-label="报表中心"
             href="#"><span class="nav-label">报表</span></a>
           <div class="nav-underline" aria-hidden="true"></div>
         </nav>
@@ -1805,16 +1806,18 @@
             <i class="fa-solid fa-plus"></i>
           </button>
         </div>
-        <!-- Chat quick link removed; use 顶部导航 智能聊天 菜单进入聊天面板 -->
-        <button id="btnDbSwitch" class="btn icon" title="切换知识库" style="margin-right:4px;">
-          <i class="fa-solid fa-database"></i>
-        </button>
-        <button id="btnTheme" class="btn icon" title="切换主题">
-          <i class="fa-regular fa-moon"></i>
-        </button>
-        <button id="btnAuth" type="button" class="btn icon" title="登录" aria-label="登录/用户">
-          <i class="fa-regular fa-user"></i>
-        </button>
+        <div class="header-global-actions" role="group" aria-label="全局操作">
+          <!-- Chat quick link removed; use 顶部导航 智能聊天 菜单进入聊天面板 -->
+          <button id="btnDbSwitch" class="btn icon" title="切换知识库">
+            <i class="fa-solid fa-database"></i>
+          </button>
+          <button id="btnTheme" class="btn icon" title="切换主题" aria-label="切换主题">
+            <i class="fa-regular fa-moon"></i>
+          </button>
+          <button id="btnAuth" type="button" class="btn icon" title="登录" aria-label="登录/用户">
+            <i class="fa-regular fa-user"></i>
+          </button>
+        </div>
       </div>
       <!-- 创建项目弹窗 -->
       <div id="createProjectModal"
@@ -1851,11 +1854,10 @@
         </div>
 
         <!-- 认证弹窗（登录 / 注册） -->
-        <div id="authModal"
-          style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.3);z-index:2400;align-items:center;justify-content:center;">
-          <div
-            style="background:#fff;padding:24px;border-radius:8px;min-width:360px;max-width:92vw;box-shadow:0 8px 40px rgba(2,6,23,0.3);">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div id="authModal" class="auth-modal"
+          style="display:none;position:fixed;inset:0;width:100vw;height:100vh;z-index:2400;align-items:center;justify-content:center;">
+          <div class="auth-dialog">
+            <div class="auth-dialog-head">
               <h3 id="authModalTitle" style="margin:0;">登录</h3>
               <button id="btnCloseAuthModal" class="btn">×</button>
             </div>
@@ -1868,7 +1870,7 @@
                 <input id="inputAuthLoginPass" type="password" placeholder="密码" autocomplete="current-password"
                   style="padding:8px;margin-bottom:8px;width:100%;" />
                 <div id="authLoginError" class="muted" style="color:#f43f5e;display:none;margin-bottom:8px;"></div>
-                <div style="display:flex;gap:8px;justify-content:flex-end;">
+                <div class="auth-actions">
                   <button id="btnOpenRegister" class="btn" type="button">没有账号？注册</button>
                   <button id="btnSubmitLogin" class="btn btn-primary" type="button">登录</button>
                 </div>
@@ -2010,6 +2012,58 @@
 
         /* .db-edit-btn removed */
         /* Login / Register form styling */
+        #authModal.auth-modal {
+          padding: 16px;
+          box-sizing: border-box;
+          background: rgba(0, 0, 0, 0.56);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+        }
+
+        #authModal .auth-dialog {
+          width: min(400px, calc(100vw - 32px));
+          max-height: min(680px, calc(100vh - 32px));
+          overflow: auto;
+          box-sizing: border-box;
+          padding: 28px;
+          border: 1px solid var(--border);
+          border-radius: 16px;
+          background: var(--surface-0);
+          color: var(--fg);
+          box-shadow: 0 24px 64px rgba(0, 0, 0, 0.38);
+        }
+
+        #authModal .auth-dialog-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          margin-bottom: 22px;
+        }
+
+        #authModal .auth-dialog-head h3 {
+          color: var(--fg);
+          font-size: 20px;
+          letter-spacing: -0.01em;
+        }
+
+        #authModal #btnCloseAuthModal {
+          width: 32px;
+          height: 32px;
+          padding: 0;
+          border-color: transparent;
+          border-radius: 8px;
+          background: transparent;
+          color: var(--muted);
+          font-size: 20px;
+        }
+
+        #authModal #btnCloseAuthModal:hover {
+          border-color: var(--border);
+          background: var(--surface-1);
+          color: var(--fg);
+        }
+
         #authModal label.muted {
           display: block;
           margin-bottom: 6px;
@@ -2021,30 +2075,40 @@
         #authModal input[type="password"],
         #authModal input[type="url"] {
           width: 100%;
-          padding: 10px 12px;
-          border-radius: 8px;
-          border: 1px solid var(--border);
+          height: 42px;
+          padding: 0 12px;
+          border-radius: 10px;
+          border: 1px solid var(--border-strong);
           background: var(--surface-1);
           color: var(--fg);
           box-sizing: border-box;
-          margin-bottom: 8px;
+          margin-bottom: 14px !important;
+          transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
         }
 
         #authModal input:focus {
           outline: none;
           border-color: var(--accent);
-          box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.08);
+          background: var(--surface-0);
+          box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+        }
+
+        #authModal input::placeholder {
+          color: var(--muted-2);
         }
 
         #authModal .auth-actions {
           display: flex;
           gap: 8px;
           justify-content: flex-end;
+          align-items: center;
+          margin-top: 6px;
         }
 
         #authModal .auth-actions .btn {
-          padding: 8px 12px;
-          border-radius: 8px;
+          min-height: 38px;
+          padding: 8px 14px;
+          border-radius: 10px;
         }
 
         #authModal .auth-actions .btn.btn-primary {
@@ -2058,6 +2122,28 @@
           color: #f43f5e;
           margin-bottom: 8px;
           font-size: 13px
+        }
+
+        :root[data-theme="dark"] #authModal .auth-dialog {
+          background: #202023;
+          border-color: #3f3f46;
+          box-shadow: 0 28px 72px rgba(0, 0, 0, 0.62);
+        }
+
+        @media (max-width: 480px) {
+          #authModal .auth-dialog {
+            padding: 22px 18px;
+            border-radius: 14px;
+          }
+
+          #authModal .auth-actions {
+            align-items: stretch;
+            flex-direction: column-reverse;
+          }
+
+          #authModal .auth-actions .btn {
+            width: 100%;
+          }
         }
       </style>
     </div>
@@ -2500,6 +2586,7 @@
         </div>
         <!-- Table panel (default) -->
         <div id="tablePanel" class="panel" style="padding: 8px 10px">
+          <div id="tablePanelToolbar" class="table-panel-toolbar" aria-label="知识页面工具"></div>
           <div class="tbl-wrap">
             <div id="tblNodes" class="entity-list" role="list" aria-label="实体列表"></div>
           </div>
@@ -2794,6 +2881,7 @@
                   <button id="btnPropertyDeleteSelected" class="btn sm danger" disabled>
                     <i class="fa-solid fa-trash"></i> 删除选中
                   </button>
+                  <span id="propertySelectionStatus" class="property-selection-status" aria-live="polite">未选择</span>
                   <button id="btnOntologyBrowseAll" class="btn sm" style="display: none;">
                     浏览全部属性库
                   </button>
@@ -2811,6 +2899,7 @@
                 <table class="tbl" id="propertyTable" style="width: 100%">
                   <thead style="position: sticky; top: 0; background: #fff; z-index: 2">
                     <tr>
+                      <th class="property-select-cell"><input id="propertySelectAll" type="checkbox" aria-label="选择当前页全部属性" /></th>
                       <th style="width: 56px">ID</th>
                       <th>属性</th>
                       <th style="width: 150px">类型</th>
@@ -4654,7 +4743,7 @@
       </div>
       <!-- Right: user sidebar (与左侧 project-sidebar 风格一致，显示用户头像列表) -->
       <aside id="userSidebar" class="project-sidebar collapsed user-sidebar" role="navigation" aria-label="用户列表"
-        aria-expanded="false">
+        aria-expanded="false" aria-hidden="true" hidden>
         <div style="display:flex;flex-direction:column;gap:8px;align-items:center;margin-bottom:8px;"
           aria-hidden="true"></div>
         <div class="project-list user-list" aria-live="polite"></div>
@@ -5362,6 +5451,11 @@
         }
       } catch { }
       try {
+        if (typeof applyGraphCanvasBackground === "function") {
+          applyGraphCanvasBackground();
+        }
+      } catch { }
+      try {
         applyEntryGridScrollbarTheme();
       } catch { }
       const i = elBtnTheme.querySelector("i");
@@ -5435,6 +5529,11 @@
     const btnViewChat = document.getElementById("btnViewChat");
     const tbTableControls = document.getElementById("tbTableControls");
     const tbTableQuickActions = document.getElementById("tbTableQuickActions");
+    const tablePanelToolbar = document.getElementById("tablePanelToolbar");
+    if (tablePanelToolbar) {
+      if (tbTableControls) tablePanelToolbar.appendChild(tbTableControls);
+      if (tbTableQuickActions) tablePanelToolbar.appendChild(tbTableQuickActions);
+    }
     const tbAttrControls = document.getElementById("tbAttrControls");
     const reportHomePanel = document.getElementById("reportHomePanel");
     const reportGeneratePanel = document.getElementById("reportGeneratePanel");
@@ -12478,6 +12577,36 @@
       }
     }
 
+    function getGraphThemePalette(config) {
+      const cfg = config || getGraphStyleConfig();
+      const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+      const rootStyle = getComputedStyle(document.documentElement);
+      const cssColor = (name, fallback) => rootStyle.getPropertyValue(name).trim() || fallback;
+      const usesDefault = (value, defaultValue) =>
+        String(value || "").trim().toLowerCase() === String(defaultValue || "").trim().toLowerCase();
+      return {
+        isDark,
+        canvasColor: usesDefault(cfg.canvasColor, KB_VIS_STYLE_DEFAULTS.canvasColor)
+          ? cssColor("--bg", isDark ? "#18181b" : "#f8fafc")
+          : cfg.canvasColor,
+        canvasAccent: usesDefault(cfg.canvasAccent, KB_VIS_STYLE_DEFAULTS.canvasAccent)
+          ? (isDark ? "rgba(161, 161, 170, 0.10)" : "#dbeafe")
+          : cfg.canvasAccent,
+        nodeBackground: cssColor("--surface-0", isDark ? "#202023" : "#ffffff"),
+        nodeBorder: cssColor("--border-strong", isDark ? "#52525b" : "#cbd5e1"),
+        text: cssColor("--fg", isDark ? "#f4f4f5" : "#0f172a"),
+        muted: cssColor("--muted", isDark ? "#a1a1aa" : "#475569"),
+        border: cssColor("--border", isDark ? "#3f3f46" : "#e2e8f0"),
+        accent: isDark ? "#818cf8" : cssColor("--accent", "#4f46e5"),
+        edgeColor: usesDefault(cfg.edgeColor, KB_VIS_STYLE_DEFAULTS.edgeColor)
+          ? (isDark ? "#52525b" : "#cbd5e1")
+          : cfg.edgeColor,
+        selectedBackground: isDark ? "#312e55" : "#eef2ff",
+        highlightBackground: isDark ? "#3b2f16" : "#fffbeb",
+        shadow: isDark ? "rgba(0, 0, 0, 0.48)" : "rgba(15, 23, 42, 0.16)",
+      };
+    }
+
     function persistGraphStyleConfig(config) {
       try {
         window.localStorage.setItem(
@@ -12490,8 +12619,9 @@
     }
 
     function buildGraphCanvasBackground(cfg) {
-      const baseColor = String(cfg?.canvasColor || KB_VIS_STYLE_DEFAULTS.canvasColor);
-      const accentColor = String(cfg?.canvasAccent || KB_VIS_STYLE_DEFAULTS.canvasAccent);
+      const palette = getGraphThemePalette(cfg);
+      const baseColor = String(palette.canvasColor);
+      const accentColor = String(palette.canvasAccent);
       const mode = String(cfg?.canvasMode || KB_VIS_STYLE_DEFAULTS.canvasMode).trim().toLowerCase();
       if (mode === "plain") {
         return {
@@ -13003,8 +13133,32 @@
       }
     }
 
+    function formatGraphNodeLabel(ele, options = {}) {
+      const raw = String(ele?.data?.("label") || "")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!raw) return "未命名";
+      const chars = Array.from(raw);
+      const selected = Boolean(ele?.selected?.());
+      const compactLimit = Number(options.compactLimit) || 12;
+      const expandedLimit = Number(options.expandedLimit) || 28;
+      const limit = selected ? expandedLimit : compactLimit;
+      if (chars.length <= limit) return raw;
+      const clipped = chars.slice(0, limit).join("") + "…";
+      if (!selected) return clipped;
+      const lineLength = Number(options.lineLength) || 14;
+      return Array.from(clipped)
+        .reduce((lines, char, index) => {
+          const lineIndex = Math.floor(index / lineLength);
+          lines[lineIndex] = (lines[lineIndex] || "") + char;
+          return lines;
+        }, [])
+        .join("\n");
+    }
+
     function buildCyStyle() {
       const cfg = getGraphStyleConfig();
+      const palette = getGraphThemePalette(cfg);
       return [
         // 节点有 image 字段时显示为圆形头像
         {
@@ -13020,19 +13174,23 @@
             'shape': 'ellipse',
             'width': 56,
             'height': 56,
-            'label': 'data(label)',
+            'label': (ele) => formatGraphNodeLabel(ele, {
+              compactLimit: 12,
+              expandedLimit: 24,
+              lineLength: 12,
+            }),
             'text-valign': 'bottom',
             'text-halign': 'center',
             'font-size': `${Math.max(11, Number(cfg.nodeFontSize) + 1 || 13)}px`,
             'font-weight': '600',
-            'color': '#0f172a',
+            'color': palette.text,
             'text-wrap': 'wrap',
-            'text-max-width': '90px',
+            'text-max-width': '112px',
             'text-background-opacity': 0,
             'text-margin-y': 25,
             'padding': '0px',
             'shadow-blur': 12,
-            'shadow-color': '#8884',
+            'shadow-color': palette.shadow,
             'shadow-offset-x': 0,
             'shadow-offset-y': 2,
             'transition-property': 'border-color, shadow-blur, width, height',
@@ -13044,21 +13202,21 @@
         {
           selector: "node",
           style: {
-            "background-color": (ele) => ele.data("color") || "#fff",
+            "background-color": (ele) => ele.data("color") || palette.nodeBackground,
             "border-width": Number(cfg.nodeBorderWidth) || 2,
-            "border-color": (ele) => ele.data("color") || "#94a3b8",
-            label: "data(label)",
+            "border-color": (ele) => ele.data("color") || palette.nodeBorder,
+            label: (ele) => formatGraphNodeLabel(ele),
             "text-valign": "center",
             "text-halign": "center",
             "font-size": `${Number(cfg.nodeFontSize) || 12}px`,
             "font-weight": "500",
-            color: "#0f172a",
+            color: palette.text,
             width: "label",
             height: "label",
             padding: `${Number(cfg.nodePadding) || 8}px`,
             "text-wrap": "ellipsis",
             "text-overflow": "ellipsis",
-            "text-max-width": "90px",
+            "text-max-width": "112px",
             shape: cfg.nodeShape || "round-rectangle",
             "text-background-opacity": 0,
           },
@@ -13066,13 +13224,14 @@
         {
           selector: "node:selected",
           style: {
-            "background-color": (ele) => ele.data("color") || "#eff6ff",
+            label: (ele) => formatGraphNodeLabel(ele),
+            "background-color": (ele) => ele.data("color") || palette.selectedBackground,
             "shadow-blur": 10,
-            "shadow-color": "rgba(59, 130, 246, 0.3)",
+            "shadow-color": palette.isDark ? "rgba(129, 140, 248, 0.38)" : "rgba(79, 70, 229, 0.24)",
             "shadow-opacity": 1,
             "text-wrap": "wrap",
             "text-overflow": "clip",
-            "text-max-width": "260px",
+            "text-max-width": "148px",
           },
         },
         {
@@ -13080,7 +13239,7 @@
           style: {
             "border-color": "#f59e0b",
             "border-width": 3,
-            "background-color": "#fffbeb",
+            "background-color": palette.highlightBackground,
             "shadow-color": "rgba(245, 158, 11, 0.45)",
             "shadow-blur": 18,
             "shadow-opacity": 1,
@@ -13092,8 +13251,8 @@
           selector: "edge",
           style: {
             width: Number(cfg.edgeWidth) || 1,
-            "line-color": cfg.edgeColor || "#cbd5e1",
-            "target-arrow-color": cfg.edgeColor || "#cbd5e1",
+            "line-color": palette.edgeColor,
+            "target-arrow-color": palette.edgeColor,
             "target-arrow-shape": cfg.edgeArrowShape || "triangle",
             "line-style": cfg.edgeLineStyle || "solid",
             "curve-style": "bezier",
@@ -13102,14 +13261,14 @@
             "font-size": `${Number(cfg.edgeFontSize) || 11}px`,
             "text-rotation": "autorotate",
             "text-background-opacity": 1,
-            "text-background-color": "#ffffff",
+            "text-background-color": palette.nodeBackground,
             "text-background-padding": "3px",
             "text-border-opacity": 1,
             "text-border-width": 1,
-            "text-border-color": "#e2e8f0",
+            "text-border-color": palette.border,
             "text-border-style": "solid",
             "text-border-radius": "4px",
-            color: "#475569",
+            color: palette.muted,
             "text-margin-y": -10,
             "arrow-scale": 0.8,
           },
@@ -13157,9 +13316,9 @@
           selector: "edge:selected",
           style: {
             width: 2,
-            "line-color": "#3b82f6",
-            "target-arrow-color": "#3b82f6",
-            color: "#1e293b",
+            "line-color": palette.accent,
+            "target-arrow-color": palette.accent,
+            color: palette.text,
             "font-weight": "bold",
             "z-index": 999,
           },
@@ -13181,7 +13340,7 @@
             'shape': 'ellipse',
             'overlay-opacity': 0,
             'border-width': 2,
-            'border-color': '#ffffff',
+            'border-color': palette.nodeBackground,
             'z-index': 9999,
             'opacity': 1,
           }
@@ -13190,14 +13349,14 @@
         {
           selector: '.eh-hover',
           style: {
-            'background-color': '#dbeafe',
+            'background-color': palette.selectedBackground,
           }
         },
         // edgehandles 来源节点样式
         {
           selector: '.eh-source',
           style: {
-            'border-color': '#3b82f6',
+            'border-color': palette.accent,
             'border-width': 3,
           }
         },
@@ -13213,10 +13372,10 @@
         {
           selector: '.eh-preview, .eh-ghost-edge',
           style: {
-            'background-color': '#3b82f6',
-            'line-color': '#3b82f6',
-            'target-arrow-color': '#3b82f6',
-            'source-arrow-color': '#3b82f6',
+            'background-color': palette.accent,
+            'line-color': palette.accent,
+            'target-arrow-color': palette.accent,
+            'source-arrow-color': palette.accent,
             'line-style': 'dashed',
             'width': 2,
           }
@@ -13234,7 +13393,7 @@
           style: {
             'border-color': '#22c55e',
             'border-width': 4,
-            'background-color': '#dcfce7',
+            'background-color': palette.isDark ? '#163a2b' : '#dcfce7',
             'z-index': 999,
           }
         },
@@ -13242,8 +13401,8 @@
         {
           selector: 'edge:selected',
           style: {
-            'line-color': '#ef4444',
-            'target-arrow-color': '#ef4444',
+            'line-color': palette.accent,
+            'target-arrow-color': palette.accent,
             'width': 3,
             'z-index': 999,
           }

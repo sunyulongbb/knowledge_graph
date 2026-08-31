@@ -295,14 +295,33 @@
 
   function updatePropertySelectedStyles() {
     if (!propertyTable) return;
-    const rows = propertyTable.querySelectorAll("tbody tr[data-id]");
+    const rows = Array.from(propertyTable.querySelectorAll("tbody tr[data-id]"));
     rows.forEach((tr) => {
       const rowId = tr.getAttribute("data-id") || "";
-      tr.classList.toggle("selected", window.propertySelectedIds.has(rowId));
+      const selected = window.propertySelectedIds.has(rowId);
+      tr.classList.toggle("selected", selected);
+      tr.setAttribute("aria-selected", selected ? "true" : "false");
+      const checkbox = tr.querySelector(".property-row-select");
+      if (checkbox) checkbox.checked = selected;
     });
+    const selectedCount = window.propertySelectedIds.size;
     const deleteSelectedButton = byId("btnPropertyDeleteSelected");
     if (deleteSelectedButton) {
-      deleteSelectedButton.disabled = window.propertySelectedIds.size === 0;
+      deleteSelectedButton.disabled = selectedCount === 0;
+      deleteSelectedButton.innerHTML = `<i class="fa-solid fa-trash"></i> 删除选中${selectedCount ? ` (${selectedCount})` : ""}`;
+    }
+    const selectionStatus = byId("propertySelectionStatus");
+    if (selectionStatus) {
+      selectionStatus.textContent = selectedCount ? `已选择 ${selectedCount} 项` : "未选择";
+      selectionStatus.classList.toggle("has-selection", selectedCount > 0);
+    }
+    const selectAll = byId("propertySelectAll");
+    if (selectAll) {
+      const selectedOnPage = rows.filter((row) =>
+        window.propertySelectedIds.has(row.getAttribute("data-id") || ""),
+      ).length;
+      selectAll.checked = rows.length > 0 && selectedOnPage === rows.length;
+      selectAll.indeterminate = selectedOnPage > 0 && selectedOnPage < rows.length;
     }
   }
 
@@ -313,7 +332,7 @@
 
     updateUrlState();
     tbody.innerHTML =
-      '<tr><td colspan="6" class="muted">加载属性中...</td></tr>';
+      '<tr><td colspan="7" class="muted">加载属性中...</td></tr>';
 
     const q = (byId("propertyMgmtSearch")?.value || "").trim();
     try {
@@ -340,7 +359,7 @@
 
       if (!list.length) {
         tbody.innerHTML =
-          '<tr><td colspan="6" class="muted">暂无属性</td></tr>';
+          '<tr><td colspan="7" class="muted">暂无属性</td></tr>';
         updatePropertyPageInfo();
         updatePropertySelectedStyles();
         return;
@@ -358,6 +377,8 @@
 
         const tr = document.createElement("tr");
         tr.setAttribute("data-id", prop.id || "");
+        tr.setAttribute("tabindex", "0");
+        tr.setAttribute("aria-selected", "false");
         tr.dataset.property = JSON.stringify({
           id: prop.id || "",
           name: prop.name || prop.label || "",
@@ -370,6 +391,7 @@
           ontology_names: linkedNames,
         });
         tr.innerHTML = `
+          <td class="property-select-cell"><input class="property-row-select" type="checkbox" aria-label="选择属性 ${escapeHtml(prop.label || prop.name || prop.id || "")}" /></td>
           <td>${escapeHtml(prop.id || "")}</td>
           <td><div style="font-weight:600; color:var(--fg);">${escapeHtml(prop.label || prop.name || "")}</div></td>
           <td>${renderPropertyType(prop)}</td>
@@ -387,7 +409,7 @@
       updatePropertySelectedStyles();
     } catch (err) {
       console.error("loadPropertyList failed", err);
-      tbody.innerHTML = `<tr><td colspan="6" class="muted">加载失败: ${escapeHtml(
+      tbody.innerHTML = `<tr><td colspan="7" class="muted">加载失败: ${escapeHtml(
         err?.message || err,
       )}</td></tr>`;
       updatePropertyPageInfo();
@@ -818,6 +840,17 @@
     if (propertyTable && !propertyTable.dataset.boundOntologyTable) {
       propertyTable.dataset.boundOntologyTable = "1";
       propertyTable.addEventListener("click", async (event) => {
+        const rowCheckbox = event.target.closest(".property-row-select");
+        if (rowCheckbox) {
+          const row = rowCheckbox.closest("tr[data-id]");
+          const id = row?.getAttribute("data-id") || "";
+          if (id) {
+            if (rowCheckbox.checked) window.propertySelectedIds.add(id);
+            else window.propertySelectedIds.delete(id);
+            updatePropertySelectedStyles();
+          }
+          return;
+        }
         const toggleBtn = event.target.closest(".btnPropertyToggleOntology");
         if (toggleBtn) {
           const propertyId = toggleBtn.getAttribute("data-id") || "";
@@ -892,6 +925,38 @@
         }
 
         window.propertySelectedIds = new Set([id]);
+        updatePropertySelectedStyles();
+      });
+      propertyTable.addEventListener("keydown", (event) => {
+        if (event.key !== " " && event.key !== "Enter") return;
+        if (event.target.closest("button, a, input, select, textarea")) return;
+        const tr = event.target.closest("tr[data-id]");
+        const id = tr?.getAttribute("data-id") || "";
+        if (!id) return;
+        event.preventDefault();
+        if (event.ctrlKey || event.metaKey) {
+          if (window.propertySelectedIds.has(id)) window.propertySelectedIds.delete(id);
+          else window.propertySelectedIds.add(id);
+        } else {
+          window.propertySelectedIds = new Set([id]);
+        }
+        updatePropertySelectedStyles();
+      });
+    }
+
+    const propertySelectAll = byId("propertySelectAll");
+    if (propertySelectAll && !propertySelectAll.dataset.bound) {
+      propertySelectAll.dataset.bound = "1";
+      propertySelectAll.addEventListener("change", () => {
+        const rows = propertyTable
+          ? Array.from(propertyTable.querySelectorAll("tbody tr[data-id]"))
+          : [];
+        rows.forEach((row) => {
+          const id = row.getAttribute("data-id") || "";
+          if (!id) return;
+          if (propertySelectAll.checked) window.propertySelectedIds.add(id);
+          else window.propertySelectedIds.delete(id);
+        });
         updatePropertySelectedStyles();
       });
     }

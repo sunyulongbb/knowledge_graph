@@ -417,16 +417,18 @@
   .sparql-preview-grid { min-height: 420px; height: auto; max-height: none; }
 }
 
-.sparql-structured-form { display:grid; gap:10px; }
-.sparql-step-card { display:grid; gap:8px; padding:10px; border:1px solid var(--border); border-radius:8px; background:var(--surface-1); }
+.sparql-structured-form { display:grid; gap:0; }
+.sparql-step-card { display:grid; gap:8px; padding:12px 2px; border:0; border-bottom:1px solid var(--border); border-radius:0; background:transparent; }
+.sparql-step-card:first-child { padding-top:2px; }
+.sparql-step-card:last-child { border-bottom:0; padding-bottom:2px; }
 .sparql-step-title { display:flex; align-items:center; gap:7px; min-width:0; font-size:13px; font-weight:650; }
 .sparql-step-title b { display:grid; place-items:center; flex:0 0 20px; width:20px; height:20px; border-radius:50%; background:var(--accent); color:#fff; font-size:11px; }
 .sparql-step-title .btn { margin-left:auto; }
 .sparql-step-card .field-hint { min-height:0; font-size:11px; }
-.sparql-filter-intro { padding:9px 11px; border:1px solid var(--border); border-radius:7px; background:var(--surface-1); color:var(--muted); font-size:12px; line-height:1.55; }
+.sparql-filter-intro { padding:8px 10px; border:0; border-left:2px solid var(--border-strong); border-radius:0; background:transparent; color:var(--muted); font-size:12px; line-height:1.55; }
 .sparql-filter-intro code { color:var(--accent); }
 .sparql-filter-list { display:grid; gap:8px; }
-.sparql-filter-row { display:grid; grid-template-columns:1fr 1fr; gap:7px; align-items:end; padding:8px; border:1px solid var(--border); border-radius:7px; background:var(--surface-0); }
+.sparql-filter-row { display:grid; grid-template-columns:1fr 1fr; gap:7px; align-items:end; padding:8px; border:0; border-radius:6px; background:var(--surface-1); }
 .sparql-filter-row .sparql-filter-value-field { grid-column:1 / -1; }
 .sparql-filter-row .field { min-width:0; }
 .sparql-filter-row .btn { min-width:30px; height:32px; padding:0 8px; }
@@ -435,13 +437,13 @@
 .sparql-return-properties .sparql-property-head { align-items:end; }
 .sparql-filter-row .btn { grid-column:2; justify-self:end; }
 @media (max-width: 760px) { .sparql-filter-row { grid-template-columns:1fr 1fr; } .sparql-filter-row .sparql-filter-value-field { grid-column:1 / -1; } .sparql-filter-row .btn { grid-column:2; justify-self:end; } }
-.sparql-structured-form > .field { padding:10px; border:1px solid var(--border); border-radius:7px; background:var(--surface-1); }
+.sparql-structured-form > .field { padding:10px 2px; border:0; border-bottom:1px solid var(--border); border-radius:0; background:transparent; }
 .sparql-structured-props { display:grid; gap:8px; padding-top:2px; }
 .sparql-property-head { display:grid; grid-template-columns:minmax(0, 1fr) auto; align-items:center; gap:8px; }
 .sparql-property-head .field { flex:1 1 auto; min-width:0; width:auto !important; }
 .sparql-select-all { display:inline-flex !important; flex:0 0 auto; align-items:center; gap:5px; min-height:28px; margin:0; font-size:12px; color:var(--muted); white-space:nowrap; }
 .sparql-select-all input { width:14px !important; height:14px !important; min-width:14px; margin:0 !important; accent-color:var(--accent); }
-.sparql-property-checklist { display:grid; grid-template-columns:1fr; gap:7px; max-height:330px; overflow:auto; padding:8px; border:1px solid var(--border); border-radius:7px; background:var(--surface-1); }
+.sparql-property-checklist { display:grid; grid-template-columns:1fr; gap:4px; max-height:330px; overflow:auto; padding:4px 0; border:0; border-radius:0; background:transparent; }
 .sparql-property-count { display:inline-flex; width:fit-content; align-items:center; padding:3px 7px; border-radius:999px; background:color-mix(in srgb, var(--accent) 10%, var(--surface-1)); color:var(--accent); font-weight:600; }
 .sparql-property-count:empty { display:none; }
 .sparql-property-checklist label { display:grid !important; grid-template-columns:16px minmax(0,1fr); align-items:center; justify-content:initial !important; gap:8px; min-width:0; min-height:30px; padding:5px 7px; border:1px solid transparent; border-radius:6px; font-size:12px; cursor:pointer; transition:background .15s ease,border-color .15s ease; }
