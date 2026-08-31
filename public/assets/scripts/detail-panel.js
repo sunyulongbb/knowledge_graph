@@ -816,7 +816,11 @@
       const tagList = document.getElementById("detail_tagList");
       if (tagList) tagList.innerHTML = "";
       const title =
-        (doc && (doc.label_zh || doc.label || doc._key)) || "未知实体";
+        pickLabelValue(
+          doc && (doc.label_zh || doc.label || doc.name || doc.title),
+        ) ||
+        (doc && doc._key) ||
+        "未知实体";
       const wikiTopTitleEl = document.getElementById("wikiTopTitle");
       if (wikiTopTitleEl) {
         setText(wikiTopTitleEl, title);
@@ -848,14 +852,45 @@
       const wikiClasses = document.getElementById("wikiClasses");
       if (wikiClasses) {
         wikiClasses.innerHTML = "";
-        const classes = Array.isArray(doc.classes) ? doc.classes : [];
+        const normalizeClassValues = (input) => {
+          let value = input;
+          if (typeof value === "string") {
+            const trimmed = value.trim();
+            if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+              try {
+                value = JSON.parse(trimmed);
+              } catch {}
+            }
+          }
+          const flattened = Array.isArray(value) ? value.flat(Infinity) : [value];
+          return flattened
+            .map((item, index) => {
+              if (item == null || item === "") return null;
+              if (typeof item === "object") {
+                const name = pickLabelValue(
+                  item.name || item.label_zh || item.label || item.title || item.value,
+                );
+                if (!name) return null;
+                return {
+                  ...item,
+                  id: item.id || item._id || item._key || "",
+                  name,
+                };
+              }
+              return { id: "", name: String(item).trim(), color: "", index };
+            })
+            .filter((item) => item && item.name);
+        };
+        const classes = normalizeClassValues(doc.classes);
         // Fallback to single classLabel if classes array is empty but classLabel exists
         if (classes.length === 0 && doc.classLabel) {
-          classes.push({
-            id: doc.classId,
-            name: doc.classLabel,
-            color: doc.color,
-          });
+          normalizeClassValues(doc.classLabel).forEach((item) =>
+            classes.push({
+              ...item,
+              id: item.id || doc.classId,
+              color: item.color || doc.color,
+            }),
+          );
         }
 
         classes.forEach((cls) => {
@@ -875,21 +910,23 @@
           label.textContent = cls.name || "未命名分类";
           tag.appendChild(label);
 
-          const delBtn = document.createElement("i");
-          delBtn.className = "fa-solid fa-xmark";
-          delBtn.style.cursor = "pointer";
-          delBtn.style.opacity = "0.6";
-          delBtn.title = "移除分类";
-          delBtn.onmouseover = () => (delBtn.style.opacity = "1");
-          delBtn.onmouseout = () => (delBtn.style.opacity = "0.6");
-          delBtn.onclick = async (e) => {
-            e.stopPropagation();
-            if (confirm(`确认移除分类“${cls.name}”吗？`)) {
-              await removeEntityClass(fullId, cls.id);
-              showNodeDetailInline(fullId); // Refresh
-            }
-          };
-          tag.appendChild(delBtn);
+          if (cls.id) {
+            const delBtn = document.createElement("i");
+            delBtn.className = "fa-solid fa-xmark";
+            delBtn.style.cursor = "pointer";
+            delBtn.style.opacity = "0.6";
+            delBtn.title = "移除分类";
+            delBtn.onmouseover = () => (delBtn.style.opacity = "1");
+            delBtn.onmouseout = () => (delBtn.style.opacity = "0.6");
+            delBtn.onclick = async (e) => {
+              e.stopPropagation();
+              if (confirm(`确认移除分类“${cls.name}”吗？`)) {
+                await removeEntityClass(fullId, cls.id);
+                showNodeDetailInline(fullId); // Refresh
+              }
+            };
+            tag.appendChild(delBtn);
+          }
 
           wikiClasses.appendChild(tag);
         });
@@ -897,13 +934,17 @@
 
       const wikiHtmlPresent = Boolean(data.page?.html || (doc && doc.html));
       const wikiTopDescEl = document.getElementById("wikiTopDesc");
-      const topDescText = (doc && (doc.desc_zh || doc.description)) || "";
+      const topDescText =
+        pickLabelValue(
+          doc &&
+            (doc.desc_zh || doc.description || doc.summary || doc.desc),
+        ) || "";
       const wikiTopMedia = document.getElementById("wikiTopMedia");
       const hasTopMedia = Boolean(
         wikiTopMedia && wikiTopMedia.querySelector("img,video,iframe,object"),
       );
       if (wikiTopDescEl) {
-        if (!wikiHtmlPresent && !hasTopMedia && topDescText) {
+        if (topDescText) {
           wikiTopDescEl.textContent = topDescText;
           wikiTopDescEl.style.display = "";
         } else {
@@ -1424,7 +1465,7 @@
         const stage = document.getElementById("detailTopMediaStage");
         const hasMediaStage =
           stage instanceof HTMLElement && stage.style.display !== "none";
-        if (!wikiHtmlPresent && !hasMediaStage && topDescText) {
+        if (topDescText) {
           wikiTopDescEl.textContent = topDescText;
           wikiTopDescEl.style.display = "";
         } else {

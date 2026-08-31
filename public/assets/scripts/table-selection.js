@@ -2553,6 +2553,21 @@ function __kbInitTableSelection() {
         return;
       }
 
+      const titleLink = target.closest(".table-feed-title-link");
+      if (titleLink && row.contains(titleLink)) {
+        e.preventDefault();
+        e.stopPropagation();
+        rememberTableListScrollPosition();
+        setTableSelection(rid, false, {
+          skipDetailRefresh: true,
+          skipSidebarSync: true,
+        });
+        if (typeof setViewMode === "function") {
+          setViewMode("detail", { targetNodeId: rid });
+        }
+        return;
+      }
+
       if (target.closest("a") || target.closest("button")) {
         return;
       }
@@ -2876,9 +2891,11 @@ function __kbInitTableSelection() {
       const meta = document.createElement("div");
       meta.className = "table-feed-meta";
 
-      const nameLink = document.createElement("span");
+      const nameLink = document.createElement("button");
+      nameLink.type = "button";
       nameLink.textContent = label;
-      nameLink.className = "table-feed-name";
+      nameLink.className = "table-feed-name table-feed-title-link";
+      nameLink.setAttribute("aria-label", `查看 ${label || "知识"} 的详情`);
 
       const metaTop = document.createElement("div");
       metaTop.className = "table-feed-meta-top";
@@ -2886,29 +2903,26 @@ function __kbInitTableSelection() {
 
       meta.appendChild(metaTop);
 
-      const metaSub = document.createElement("div");
-      metaSub.className = "table-feed-subline";
-
       if (!isGridLayout) {
+        const metaSub = document.createElement("div");
+        metaSub.className = "table-feed-subline";
         const typeChip = document.createElement("span");
         typeChip.className = "table-feed-type-chip";
         typeChip.textContent = typeLabel || "未分类";
         metaSub.appendChild(typeChip);
+        if (aliases.length) {
+          const aliasText = document.createElement("span");
+          aliasText.className = "table-feed-aliases";
+          aliasText.textContent = aliases
+            .slice(0, 2)
+            .map((item) => `@${item}`)
+            .join(" ");
+          metaSub.appendChild(aliasText);
+        }
+        meta.appendChild(metaSub);
       }
 
-      if (aliases.length) {
-        const aliasText = document.createElement("span");
-        aliasText.className = "table-feed-aliases";
-        aliasText.textContent = aliases
-          .slice(0, 2)
-          .map((item) => `@${item}`)
-          .join(" ");
-        metaSub.appendChild(aliasText);
-      }
-
-      meta.appendChild(metaSub);
-
-      if (desc) {
+      if (!isGridLayout && desc) {
         const collapsedInfo = document.createElement("div");
         collapsedInfo.className = "table-feed-collapsed-info";
         collapsedInfo.textContent = desc;
@@ -2920,7 +2934,7 @@ function __kbInitTableSelection() {
       const headerAside = document.createElement("div");
       headerAside.className = "table-feed-header-aside";
 
-      if (relativeTime) {
+      if (!isGridLayout && relativeTime) {
         const timeText = document.createElement("span");
         timeText.className = "table-feed-time";
         timeText.textContent = relativeTime;
@@ -2929,7 +2943,7 @@ function __kbInitTableSelection() {
 
       const actions = document.createElement("div");
       actions.className = "table-feed-top-actions";
-      if (n.link) {
+      if (!isGridLayout && n.link) {
         try {
           const externalLink = document.createElement("a");
           externalLink.className = "table-feed-external-link";
@@ -2953,7 +2967,7 @@ function __kbInitTableSelection() {
       }
       card.appendChild(header);
 
-      if (tags.length) {
+      if (!isGridLayout && tags.length) {
         const tagList = document.createElement("div");
         tagList.className = "table-feed-tag-list";
         tags.slice(0, 5).forEach((tag) => {
@@ -2973,17 +2987,19 @@ function __kbInitTableSelection() {
         card.appendChild(mediaSlot);
       }
 
-      const engagement = getNodeEngagementState(n);
-      const footer = document.createElement("div");
-      footer.className = "table-feed-footer";
-      footer.innerHTML = `
-        <button type="button" class="table-feed-action-btn" data-action="like"><i class="fa-regular fa-heart"></i><span>${engagement.likes}</span></button>
-        <button type="button" class="table-feed-action-btn" data-action="comment"><i class="fa-regular fa-comment"></i><span>${engagement.comments}</span></button>
-        <button type="button" class="table-feed-action-btn" data-action="share"><i class="fa-solid fa-retweet"></i><span>${engagement.shares}</span></button>
-        <button type="button" class="table-feed-action-btn table-feed-action-danger" data-action="delete" title="删除实体"><i class="fa-regular fa-trash-can"></i></button>
-        <button type="button" class="table-feed-action-btn table-feed-action-primary" data-action="view"><i class="fa-regular fa-paper-plane"></i><span>查看</span></button>
-      `;
-      card.appendChild(footer);
+      if (!isGridLayout) {
+        const engagement = getNodeEngagementState(n);
+        const footer = document.createElement("div");
+        footer.className = "table-feed-footer";
+        footer.innerHTML = `
+          <button type="button" class="table-feed-action-btn" data-action="like"><i class="fa-regular fa-heart"></i><span>${engagement.likes}</span></button>
+          <button type="button" class="table-feed-action-btn" data-action="comment"><i class="fa-regular fa-comment"></i><span>${engagement.comments}</span></button>
+          <button type="button" class="table-feed-action-btn" data-action="share"><i class="fa-solid fa-retweet"></i><span>${engagement.shares}</span></button>
+          <button type="button" class="table-feed-action-btn table-feed-action-danger" data-action="delete" title="删除实体"><i class="fa-regular fa-trash-can"></i></button>
+          <button type="button" class="table-feed-action-btn table-feed-action-primary" data-action="view"><i class="fa-regular fa-paper-plane"></i><span>查看</span></button>
+        `;
+        card.appendChild(footer);
+      }
 
       tdName.appendChild(card);
       itemLayout.appendChild(tdName);

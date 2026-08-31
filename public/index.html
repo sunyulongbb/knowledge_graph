@@ -2592,7 +2592,7 @@
           </div>
           <div id="tblPagination" style="
                 margin: 12px auto 0;
-                display: flex;
+                display: none;
                 align-items: center;
                 gap: 8px;
                 justify-content: center;
@@ -2600,11 +2600,12 @@
                 max-width: 100%;
                 flex: 0 0 auto;
               ">
-            <button id="btnPrevPage" class="btn" type="button">
+            <button id="btnPrevPage" class="btn" type="button" aria-label="上一页" title="上一页">
               上一页
             </button>
             <span id="tblPageInfo" style="font-size: 12px"></span>
-            <button id="btnNextPage" class="btn" type="button">
+            <div id="tblPageNumbers" class="table-page-numbers" aria-label="页码"></div>
+            <button id="btnNextPage" class="btn" type="button" aria-label="下一页" title="下一页">
               下一页
             </button>
             <label for="tblSort" class="muted" style="font-size: 12px">排序：</label>
@@ -2619,6 +2620,8 @@
               <option value="50">50条/页</option>
               <option value="100">100条/页</option>
             </select>
+            <label class="table-page-jump" for="tblPageJump">前往 <input id="tblPageJump" type="number" min="1" step="1" aria-label="输入页码" /> 页</label>
+            <button id="btnTablePageJump" class="btn sm table-page-jump-btn" type="button">确定</button>
           </div>
         </div>
         <div id="reportHomePanel" class="panel" style="display:none; padding: 12px;">
@@ -3682,6 +3685,12 @@
         <!-- Inline detail panel: will render node detail HTML here when requested -->
         <div id="detailPanel" class="panel detail-panel-shell" style="padding: 0; display: none; overflow: auto; min-height: 0">
           <div id="detailInner" class="detail-inner" style="font-size: 14px; color: var(--fg)">
+            <div class="detail-navigation">
+              <button id="btnDetailBack" class="detail-back-btn" type="button" aria-label="返回上一页面">
+                <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+                <span>返回</span>
+              </button>
+            </div>
             <div id="wikiTop" class="detail-hero" style="display: none; margin-bottom: 8px">
               <div id="detailTopMediaStage" class="detail-top-media-stage" style="display:none;">
                 <div id="wikiTopPdf" style="display:none;"></div>
@@ -5658,6 +5667,7 @@
     const relPanel = document.getElementById("relPanel");
     const cywrap = document.getElementById("cywrap");
     const detailPanel = document.getElementById("detailPanel");
+    const btnDetailBack = document.getElementById("btnDetailBack");
     const tblSearch = document.getElementById("tblSearch");
     const btnTableAdd = document.getElementById("btnTableAdd");
     const btnTableRefresh = document.getElementById("btnTableRefresh");
@@ -9417,6 +9427,12 @@
           ? ""
           : String(options.targetNodeId).trim();
       const previousMode = window.kbViewMode;
+      if (normalized === "detail" && previousMode && previousMode !== "detail") {
+        window.kbDetailReturnState = {
+          view: previousMode,
+          scrollTop: Number(window.kbTableListScrollTop || 0),
+        };
+      }
       const hasTargetNode = Boolean(targetNodeIdRaw);
       const resolvedVisNodeId =
         normalized === "vis"
@@ -9866,6 +9882,23 @@
       btnViewAttr.addEventListener("click", (e) => { e.preventDefault(); setViewMode("attr"); });
     if (btnViewClean)
       btnViewClean.addEventListener("click", (e) => { e.preventDefault(); setViewMode("clean"); });
+
+    if (btnDetailBack)
+      btnDetailBack.addEventListener("click", (e) => {
+        e.preventDefault();
+        const returnState = window.kbDetailReturnState || {};
+        const returnView = returnState.view && returnState.view !== "detail"
+          ? returnState.view
+          : "table";
+        setViewMode(returnView);
+        if (returnView === "table") {
+          const scrollTop = Number(returnState.scrollTop || window.kbTableListScrollTop || 0);
+          requestAnimationFrame(() => {
+            const scrollHost = document.querySelector("#tablePanel .tbl-wrap");
+            if (scrollHost) scrollHost.scrollTop = scrollTop;
+          });
+        }
+      });
 
     if (btnViewReportHome)
       btnViewReportHome.addEventListener("click", (e) => { e.preventDefault(); setViewMode("report_home"); });
@@ -19142,7 +19175,7 @@
   <div id="entityManageModal" class="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2200;align-items:center;justify-content:center;">
     <div class="entity-manage-modal">
       <div class="entity-manage-modal__head"><div><strong>管理表格</strong><small id="entityManageCount">已选 0 项</small></div><button id="btnEntityManageClose" class="btn icon" type="button" aria-label="关闭">×</button></div>
-      <div class="entity-manage-toolbar"><input id="entityManageSearch" class="app-search-input kb-input sm" placeholder="搜索实体" /><button id="btnEntityManageSelectAll" class="btn sm" type="button">全选当前结果</button><button id="btnEntityManageExport" class="btn sm" type="button">导出 CSV</button></div>
+      <div class="entity-manage-toolbar"><input id="entityManageSearch" class="app-search-input kb-input sm" placeholder="搜索知识" /><span class="entity-manage-hint">单击选中，双击查看详情</span><button id="btnEntityManageExport" class="btn sm" type="button">导出</button></div>
       <div class="entity-manage-bulk"><input id="entityManageType" class="kb-input sm" placeholder="批量设置类型" /><button id="btnEntityManageApplyType" class="btn sm" type="button">应用类型</button><input id="entityManageTag" class="kb-input sm" placeholder="批量添加标签" /><button id="btnEntityManageApplyTag" class="btn sm" type="button">添加标签</button><button id="btnEntityManageDelete" class="btn sm danger" type="button">删除所选</button></div>
       <div class="entity-manage-table-wrap"><table class="entity-manage-table"><thead><tr><th><input id="entityManageCheckAll" type="checkbox" aria-label="全选" /></th><th>名称</th><th>类型</th><th>标签</th><th>更新时间</th></tr></thead><tbody id="entityManageRows"></tbody></table></div>
     </div>

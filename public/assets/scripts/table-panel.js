@@ -17,6 +17,9 @@
   const btnPrevPage = document.getElementById("btnPrevPage");
   const btnNextPage = document.getElementById("btnNextPage");
   const tblPageInfo = document.getElementById("tblPageInfo");
+  const tblPageNumbers = document.getElementById("tblPageNumbers");
+  const tblPageJump = document.getElementById("tblPageJump");
+  const btnTablePageJump = document.getElementById("btnTablePageJump");
   const tblSortSelect = document.getElementById("tblSort");
   const tblPageSizeSelect = document.getElementById("tblPageSize");
   const tblSearch = document.getElementById("tblSearch");
@@ -122,7 +125,8 @@
       tblGridZoomControls.style.display = normalized === "grid" ? "flex" : "none";
     }
     if (tblPagination) {
-      tblPagination.style.display = normalized === "table" ? "" : "none";
+      tblPagination.style.display =
+        normalized === "table" || normalized === "manage" ? "flex" : "none";
     }
     if (typeof window.renderTableList === "function") {
       window.renderTableList();
@@ -422,7 +426,50 @@
   function updateTblPageInfo() {
     const maxPage = Math.max(1, Math.ceil(tblTotalNodes / tblPageSize));
     if (tblPageInfo) {
-      tblPageInfo.textContent = `第 ${tblPage} / ${maxPage} 页 · 共 ${tblTotalNodes} 条`;
+      tblPageInfo.textContent =
+        window.kbTableLayoutMode === "manage"
+          ? `共 ${tblTotalNodes} 条`
+          : `第 ${tblPage} / ${maxPage} 页 · 共 ${tblTotalNodes} 条`;
+    }
+    if (tblPageNumbers) {
+      const candidates = [
+        1,
+        maxPage,
+        tblPage - 1,
+        tblPage,
+        tblPage + 1,
+      ];
+      const pages = [...new Set(candidates)]
+        .filter((page) => page >= 1 && page <= maxPage)
+        .sort((a, b) => a - b);
+      let previous = 0;
+      tblPageNumbers.replaceChildren();
+      pages.forEach((page) => {
+        if (previous && page - previous > 1) {
+          const ellipsis = document.createElement("span");
+          ellipsis.className = "table-page-ellipsis";
+          ellipsis.textContent = "…";
+          tblPageNumbers.appendChild(ellipsis);
+        }
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className =
+          "table-page-number" + (page === tblPage ? " active" : "");
+        button.textContent = String(page);
+        button.setAttribute("aria-label", `第 ${page} 页`);
+        if (page === tblPage) button.setAttribute("aria-current", "page");
+        button.addEventListener("click", () => {
+          if (page === tblPage) return;
+          tblPage = page;
+          loadTablePage({ scrollToTop: true });
+        });
+        tblPageNumbers.appendChild(button);
+        previous = page;
+      });
+    }
+    if (tblPageJump) {
+      tblPageJump.max = String(maxPage);
+      tblPageJump.placeholder = String(tblPage);
     }
     if (btnPrevPage) btnPrevPage.disabled = tblPage <= 1;
     if (btnNextPage) btnNextPage.disabled = tblPage >= maxPage;
@@ -685,7 +732,10 @@
       updateTblPageInfo();
       if (tblPagination) {
         tblPagination.style.display =
-          window.kbTableLayoutMode === "table" ? "" : "none";
+          window.kbTableLayoutMode === "table" ||
+          window.kbTableLayoutMode === "manage"
+            ? "flex"
+            : "none";
       }
 
       if (tblCount) {
@@ -795,6 +845,23 @@
         }
       });
     }
+
+    const jumpToTablePage = () => {
+      const maxPage = Math.max(1, Math.ceil(tblTotalNodes / tblPageSize));
+      const requested = Math.trunc(Number(tblPageJump?.value));
+      if (!Number.isFinite(requested) || requested < 1) return;
+      const nextPage = Math.min(maxPage, requested);
+      if (tblPageJump) tblPageJump.value = "";
+      if (nextPage === tblPage) return;
+      tblPage = nextPage;
+      loadTablePage({ scrollToTop: true });
+    };
+    btnTablePageJump?.addEventListener("click", jumpToTablePage);
+    tblPageJump?.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      jumpToTablePage();
+    });
 
     if (tblPageSizeSelect) {
       tblPageSizeSelect.addEventListener("change", () => {
