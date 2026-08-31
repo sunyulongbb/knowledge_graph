@@ -4287,6 +4287,7 @@ body {
   min-width: 220px;
   max-width: min(360px, calc(100vw - 24px));
   max-height: min(360px, calc(100vh - 24px));
+  z-index: 22050;
 }
 
 .ontology-dropdown-item {

@@ -240,6 +240,7 @@
     if (tblTypeFilterTreeDropdown) {
       tblTypeFilterTreeDropdown.style.display = "none";
     }
+    btnTblTypeFilterTree?.setAttribute("aria-expanded", "false");
   }
 
   function renderTableTypeTreeNodes(items, depth = 0) {
@@ -936,11 +937,44 @@
     }
 
     if (btnTblTypeFilterTree && tblTypeFilterTreeDropdown) {
+      const positionTableTypeDropdown = () => {
+        const rect = btnTblTypeFilterTree.getBoundingClientRect();
+        const dropdownWidth = Math.min(360, Math.max(240, rect.width));
+        const viewportPadding = 12;
+        const left = Math.min(
+          Math.max(viewportPadding, rect.left),
+          Math.max(viewportPadding, window.innerWidth - dropdownWidth - viewportPadding),
+        );
+        const availableBelow = window.innerHeight - rect.bottom - viewportPadding;
+        const openAbove = availableBelow < 220 && rect.top > availableBelow;
+        tblTypeFilterTreeDropdown.style.width = `${dropdownWidth}px`;
+        tblTypeFilterTreeDropdown.style.left = `${left}px`;
+        tblTypeFilterTreeDropdown.style.right = "auto";
+        if (openAbove) {
+          tblTypeFilterTreeDropdown.style.top = "auto";
+          tblTypeFilterTreeDropdown.style.bottom = `${window.innerHeight - rect.top + 6}px`;
+        } else {
+          tblTypeFilterTreeDropdown.style.top = `${rect.bottom + 6}px`;
+          tblTypeFilterTreeDropdown.style.bottom = "auto";
+        }
+      };
+
       btnTblTypeFilterTree.addEventListener("click", async (event) => {
         event.stopPropagation();
         await buildTableTypeTreeDropdown();
         const isVisible = tblTypeFilterTreeDropdown.style.display !== "none";
-        tblTypeFilterTreeDropdown.style.display = isVisible ? "none" : "block";
+        if (isVisible) {
+          tblTypeFilterTreeDropdown.style.display = "none";
+          btnTblTypeFilterTree.setAttribute("aria-expanded", "false");
+          return;
+        }
+        if (tblTypeFilterTreeDropdown.parentElement !== document.body) {
+          document.body.appendChild(tblTypeFilterTreeDropdown);
+        }
+        tblTypeFilterTreeDropdown.classList.add("is-portal");
+        positionTableTypeDropdown();
+        tblTypeFilterTreeDropdown.style.display = "block";
+        btnTblTypeFilterTree.setAttribute("aria-expanded", "true");
       });
 
       document.addEventListener("click", (event) => {
@@ -952,6 +986,13 @@
           !btnTblTypeFilterTree.contains(target)
         ) {
           tblTypeFilterTreeDropdown.style.display = "none";
+          btnTblTypeFilterTree.setAttribute("aria-expanded", "false");
+        }
+      });
+
+      window.addEventListener("resize", () => {
+        if (tblTypeFilterTreeDropdown.style.display !== "none") {
+          positionTableTypeDropdown();
         }
       });
     }
