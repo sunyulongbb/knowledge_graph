@@ -2660,8 +2660,8 @@ body {
 }
 
 .detail-inner {
-  width: min(100%, 960px);
-  margin: 0 auto;
+  width: 100%;
+  margin: 0;
   padding: 0 20px 48px;
   position: relative;
   box-sizing: border-box;
@@ -2677,9 +2677,9 @@ body {
   z-index: 40;
   display: flex;
   align-items: center;
-  min-height: 48px;
-  margin: 0 0 28px;
-  padding: 6px 4px;
+  min-height: 40px;
+  margin: 0 0 16px;
+  padding: 3px 0;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
   background: color-mix(in srgb, var(--bg) 86%, transparent);
   backdrop-filter: blur(14px);
@@ -2689,9 +2689,9 @@ body {
 .detail-back-btn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  height: 34px;
-  padding: 0 10px;
+  gap: 6px;
+  height: 30px;
+  padding: 0 8px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -2749,11 +2749,11 @@ body {
 }
 
 .detail-top-media-stage {
-  order: 4;
+  order: 1;
   display: grid;
   gap: 10px;
   width: 100%;
-  margin: 24px 0 0;
+  margin: 0 0 28px;
   --detail-media-card-height: min(62vh, 620px);
 }
 
@@ -2762,13 +2762,13 @@ body {
 }
 
 .detail-topbar {
-  order: 1;
+  order: 2;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  width: min(100%, 760px);
-  margin-inline: auto;
+  width: 100%;
+  margin-inline: 0;
 }
 
 #wikiTopTitle {
@@ -2776,12 +2776,12 @@ body {
   align-items: flex-start;
   flex-wrap: nowrap;
   gap: 12px;
-  font-size: clamp(26px, 3.2vw, 36px) !important;
-  line-height: 1.2;
-  letter-spacing: -0.025em;
+  font-size: clamp(21px, 2.4vw, 28px) !important;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
   margin: 0;
   flex: 1 1 auto;
-  font-weight: 750 !important;
+  font-weight: 650 !important;
   text-wrap: balance;
 }
 
@@ -2801,9 +2801,9 @@ body {
 }
 
 #wikiClasses {
-  order: 2;
-  width: min(100%, 760px);
-  margin: 12px auto 0 !important;
+  order: 6;
+  width: 100%;
+  margin: 12px 0 0 !important;
   gap: 8px !important;
 }
 
@@ -2821,13 +2821,58 @@ body {
 
 #wikiTopDesc {
   order: 3;
-  width: min(100%, 760px);
-  margin: 14px auto 0;
+  width: 100%;
+  margin: 14px 0 0;
   font-size: 15px;
   line-height: 1.7;
   max-width: none;
   color: color-mix(in srgb, var(--fg) 78%, var(--muted));
   text-wrap: pretty;
+}
+
+.detail-meta-row {
+  width: 100%;
+  margin: 14px 0 0;
+}
+
+.detail-tags {
+  order: 4;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.detail-tags .detail-meta-label,
+.detail-aliases .detail-meta-label {
+  color: var(--muted);
+  font-size: 13px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.detail-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: color-mix(in srgb, var(--fg) 88%, var(--accent));
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.detail-aliases {
+  order: 5;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.detail-aliases .detail-meta-values {
+  color: color-mix(in srgb, var(--fg) 78%, var(--muted));
 }
 
 #wikiTopMedia,
@@ -3194,8 +3239,8 @@ body {
 
 .detail-article {
   min-width: 0;
-  width: min(100%, 760px);
-  margin: 0 auto;
+  width: 100%;
+  margin: 0;
 }
 
 .detail-attr-section {
@@ -3206,6 +3251,12 @@ body {
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+}
+
+.detail-knowledge-section {
+  margin-top: 42px;
+  padding: 26px 0 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
 }
 
 .detail-attr-title {
@@ -3395,7 +3446,7 @@ body {
 
   #wikiTopTitle {
     flex-wrap: wrap;
-    font-size: clamp(24px, 7vw, 30px) !important;
+    font-size: clamp(20px, 6vw, 26px) !important;
   }
 
   .detail-topbar {

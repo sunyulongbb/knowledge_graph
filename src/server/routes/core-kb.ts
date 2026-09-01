@@ -2060,6 +2060,9 @@ export async function handleCoreKbRoutes(
     const propertyId = (url.searchParams.get("property_id") || "").trim();
     const propertyValue = (url.searchParams.get("property_value") || "").trim();
     const hideEntity = (url.searchParams.get("hide_entity") || "").trim();
+    const hasImage = ["1", "true"].includes(
+      (url.searchParams.get("has_image") || "").trim().toLowerCase(),
+    );
 
     const likeParam = `%${q}%`;
     const params: any[] = [
@@ -2154,6 +2157,33 @@ export async function handleCoreKbRoutes(
 
     if (hideEntity === "1" || hideEntity.toLowerCase() === "true") {
       whereClause += " AND (n.type IS NULL OR lower(trim(n.type)) <> 'entity')";
+    }
+
+    // The grid view only renders knowledge with images. Filter at the database
+    // layer so pagination and totals are based on displayable cards, rather
+    // than fetching an unfiltered page for the browser to discard.
+    if (hasImage) {
+      whereClause += `
+        AND (
+          TRIM(COALESCE(CASE WHEN json_valid(n.images) THEN json_extract(n.images, '$[0]') ELSE '' END, '')) <> ''
+          OR TRIM(COALESCE(CASE WHEN json_valid(n.data) THEN json_extract(n.data, '$.images[0]') ELSE '' END, '')) <> ''
+          OR EXISTS (
+            SELECT 1
+            FROM attributes image_attr
+            WHERE (image_attr.node_id = n.id OR REPLACE(image_attr.node_id, 'entity/', '') = n.id)
+              AND TRIM(COALESCE(image_attr.value, '')) <> ''
+              AND (
+                image_attr.datatype = 'commonsMedia'
+                OR lower(image_attr.key) IN ('image', '图像', '鍥惧儚')
+                OR EXISTS (
+                  SELECT 1
+                  FROM properties image_property
+                  WHERE image_property.id = image_attr.key
+                    AND lower(image_property.name) IN ('image', '图像', '鍥惧儚')
+                )
+              )
+          )
+        )`;
     }
 
     const EMPTY_TYPE_FILTER = "__EMPTY_NODE_TYPE__";

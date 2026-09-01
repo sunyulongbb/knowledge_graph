@@ -580,6 +580,12 @@
       }
       const tagList = document.getElementById("detail_tagList");
       if (tagList) tagList.innerHTML = "";
+      ["wikiTags", "wikiAliases"].forEach((id) => {
+        const element = document.getElementById(id);
+        if (!element) return;
+        element.replaceChildren();
+        element.style.display = "none";
+      });
       // Do not modify btnViewDetail active state here; view mode
       // (setViewMode) is responsible for updating the toggle button.
       try {
@@ -717,6 +723,7 @@
       dp.dataset.entityId = fullId;
       window.kbActiveDetailNodeId = fullId;
       window.kbActiveDetailRouteId = routeId || fullId;
+      window.kbPinnedKnowledgeDetailRouteId = routeId || fullId;
       if (!preserveSidebarState) {
         window.kbSelectedRowId = routeId || fullId;
         window.kbSelectedRowIds = new Set([window.kbSelectedRowId]);
@@ -950,6 +957,61 @@
         } else {
           wikiTopDescEl.textContent = "";
           wikiTopDescEl.style.display = "none";
+        }
+      }
+      const normalizeDetailMetaValues = (value) => {
+        let source = value;
+        if (typeof source === "string") {
+          const trimmed = source.trim();
+          if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+            try {
+              source = JSON.parse(trimmed);
+            } catch {}
+          }
+        }
+        const values = (Array.isArray(source) ? source.flat(Infinity) : [source])
+          .map((item) => pickLabelValue(item))
+          .map((item) => String(item || "").trim())
+          .filter(Boolean);
+        return Array.from(new Set(values));
+      };
+      const tagValues = normalizeDetailMetaValues(doc && doc.tags);
+      const wikiTags = document.getElementById("wikiTags");
+      if (wikiTags) {
+        wikiTags.replaceChildren();
+        if (tagValues.length) {
+          const label = document.createElement("span");
+          label.className = "detail-meta-label";
+          label.textContent = "标签";
+          wikiTags.appendChild(label);
+          tagValues.forEach((tagValue) => {
+            const chip = document.createElement("span");
+            chip.className = "detail-tag-chip";
+            chip.textContent = tagValue;
+            wikiTags.appendChild(chip);
+          });
+          wikiTags.style.display = "flex";
+        } else {
+          wikiTags.style.display = "none";
+        }
+      }
+      const aliasValues = normalizeDetailMetaValues(
+        doc && (doc.aliases_zh || doc.aliases || doc.alias),
+      );
+      const wikiAliases = document.getElementById("wikiAliases");
+      if (wikiAliases) {
+        wikiAliases.replaceChildren();
+        if (aliasValues.length) {
+          const label = document.createElement("span");
+          label.className = "detail-meta-label";
+          label.textContent = "别名：";
+          const values = document.createElement("span");
+          values.className = "detail-meta-values";
+          values.textContent = aliasValues.join("、");
+          wikiAliases.append(label, values);
+          wikiAliases.style.display = "block";
+        } else {
+          wikiAliases.style.display = "none";
         }
       }
       let hasPriorityMedia = false;

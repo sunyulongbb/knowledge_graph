@@ -3695,7 +3695,7 @@
         <div id="detailPanel" class="panel detail-panel-shell" style="padding: 0; display: none; overflow: auto; min-height: 0">
           <div id="detailInner" class="detail-inner" style="font-size: 14px; color: var(--fg)">
             <div class="detail-navigation">
-              <button id="btnDetailBack" class="detail-back-btn" type="button" aria-label="返回上一页面">
+              <button id="btnDetailBack" class="detail-back-btn" type="button" aria-label="返回知识列表">
                 <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
                 <span>返回</span>
               </button>
@@ -3722,8 +3722,10 @@
                   <div id="tocPopup" class="toc-popup" style="display: none;"></div>
                 </div>
               </div>
-              <div id="wikiClasses" style="display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0;"></div>
               <div id="wikiTopDesc" class="desc" style="color: var(--muted)"></div>
+              <div id="wikiTags" class="detail-meta-row detail-tags" style="display:none;"></div>
+              <div id="wikiAliases" class="detail-meta-row detail-aliases" style="display:none;"></div>
+              <div id="wikiClasses" style="display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0;"></div>
             </div>
             <div class="detail-content-layout" style="display: flex; gap: 12px; align-items: flex-start">
               <article id="wikiContent" class="detail-article" style="flex: 1; min-width: 0">
@@ -3733,13 +3735,16 @@
                       display: none;
                       margin-bottom: 12px;
                     "></nav>
-                <div id="wikiView" style="font-size: 14px; line-height: 1.6">
-                  加载详情中…
-                </div>
                 <section id="detailAttrSection" class="detail-attr-section" style="display: none;">
                   <div class="detail-attr-title">属性信息</div>
                   <div id="detailAttrList" style="font-size: 13px">
                     <!-- populated by renderAttrList in read-only mode -->
+                  </div>
+                </section>
+                <section class="detail-knowledge-section">
+                  <div class="detail-attr-title">知识信息</div>
+                  <div id="wikiView" style="font-size: 14px; line-height: 1.6">
+                    加载详情中…
                   </div>
                 </section>
                 <div id="wikiMediaGrid" class="wiki-media-grid" style="display: none; margin-top: 12px"></div>
@@ -9425,6 +9430,9 @@
       const skipRouteUpdate = options.skipRouteUpdate === true;
       const replaceRoute = options.replaceRoute === true;
       const focusDetailOnly = options.focusDetailOnly === true;
+      const detailReturnView = normalizeViewModeInput(
+        options.detailReturnView || "",
+      );
       const entryTaskIdRaw =
         options.entryTaskId === undefined || options.entryTaskId === null
           ? ""
@@ -9438,7 +9446,7 @@
       const previousMode = window.kbViewMode;
       if (normalized === "detail" && previousMode && previousMode !== "detail") {
         window.kbDetailReturnState = {
-          view: previousMode,
+          view: detailReturnView || previousMode,
           scrollTop: Number(window.kbTableListScrollTop || 0),
         };
       }
@@ -9451,6 +9459,33 @@
           (document.getElementById("fId")?.value || "").trim()
           : "";
       const hasResolvedVisNode = Boolean(resolvedVisNodeId);
+      if (normalized === "vis" && hasResolvedVisNode) {
+        const routeCenterNodeId = ensureEntityIdPrefix(resolvedVisNodeId);
+        window.kbVisRouteNodeId = routeCenterNodeId;
+        try {
+          armRouteNodeCenterLock(routeCenterNodeId, {
+            reason: "view-route",
+            durationMs: 4200,
+          });
+          schedulePersistentRouteNodeCenter(routeCenterNodeId, {
+            reason: "view-route",
+          });
+        } catch {}
+      } else if (normalized !== "vis") {
+        window.kbVisRouteNodeId = "";
+      }
+      if (normalized === "vis" && previousMode === "detail") {
+        const detailRouteId = String(
+          targetNodeIdRaw ||
+            window.kbActiveDetailRouteId ||
+            window.kbSelectedNodeId ||
+            window.kbSelectedRowId ||
+            "",
+        ).trim();
+        if (detailRouteId) {
+          window.kbDetailRouteBeforeVis = detailRouteId;
+        }
+      }
       const applyTableSelectionTarget = () => {
         if (!hasTargetNode) return;
         if (normalized !== "table") return;
@@ -9598,8 +9633,9 @@
         btnViewEntry.setAttribute("aria-selected", String(isEntry));
       }
       if (btnViewTable) {
-        btnViewTable.classList.toggle("active", isTable);
-        btnViewTable.setAttribute("aria-selected", String(isTable));
+        const isKnowledgeView = isTable || isDetail;
+        btnViewTable.classList.toggle("active", isKnowledgeView);
+        btnViewTable.setAttribute("aria-selected", String(isKnowledgeView));
       }
       if (btnViewVis) {
         btnViewVis.classList.toggle("active", isVis);
@@ -9872,8 +9908,48 @@
 
     if (btnViewEntry)
       btnViewEntry.addEventListener("click", (e) => { e.preventDefault(); setViewMode("entry"); });
+    function restoreDetailRouteFromKnowledgeMenu() {
+      const hashRoute = getRouteStateFromHash();
+      const queryRoute = getUrlParams();
+      const routeNode =
+        hashRoute.view === "detail"
+          ? hashRoute.node
+          : normalizeViewModeInput(queryRoute.view) === "detail"
+            ? queryRoute.node
+            : "";
+      const activeDetailNode =
+        window.kbViewMode === "detail"
+          ? String(
+              window.kbActiveDetailRouteId ||
+                window.kbSelectedNodeId ||
+                window.kbSelectedRowId ||
+                "",
+            ).trim()
+          : "";
+      const pinnedDetailNode = String(
+        window.kbPinnedKnowledgeDetailRouteId ||
+          window.kbDetailRouteBeforeVis ||
+          "",
+      ).trim();
+      const nodeId = String(
+        routeNode || activeDetailNode || pinnedDetailNode || "",
+      ).trim();
+      if (!nodeId) return false;
+      setViewMode("detail", {
+        targetNodeId: nodeId,
+        skipRouteUpdate: hashRoute.view === "detail",
+        replaceRoute: true,
+        detailReturnView: "table",
+      });
+      return true;
+    }
+
     if (btnViewTable)
-      btnViewTable.addEventListener("click", (e) => { e.preventDefault(); setViewMode("table"); });
+      btnViewTable.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (restoreDetailRouteFromKnowledgeMenu()) return;
+        setViewMode("table");
+      });
     if (btnViewVis)
       btnViewVis.addEventListener("click", (e) => {
         e.preventDefault();
@@ -9896,17 +9972,16 @@
       btnDetailBack.addEventListener("click", (e) => {
         e.preventDefault();
         const returnState = window.kbDetailReturnState || {};
-        const returnView = returnState.view && returnState.view !== "detail"
-          ? returnState.view
-          : "table";
-        setViewMode(returnView);
-        if (returnView === "table") {
-          const scrollTop = Number(returnState.scrollTop || window.kbTableListScrollTop || 0);
-          requestAnimationFrame(() => {
-            const scrollHost = document.querySelector("#tablePanel .tbl-wrap");
-            if (scrollHost) scrollHost.scrollTop = scrollTop;
-          });
-        }
+        window.kbPinnedKnowledgeDetailRouteId = "";
+        window.kbDetailRouteBeforeVis = "";
+        setViewMode("table");
+        const scrollTop = Number(
+          returnState.scrollTop || window.kbTableListScrollTop || 0,
+        );
+        requestAnimationFrame(() => {
+          const scrollHost = document.querySelector("#tablePanel .tbl-wrap");
+          if (scrollHost) scrollHost.scrollTop = scrollTop;
+        });
       });
 
     if (btnViewReportHome)
@@ -11968,7 +12043,12 @@
 
         // If cytoscape instance doesn't exist yet, initialize it with neighborhood data
         if (!window.kbCy) {
-          await loadGraph({ nodes: nodesRaw, edges: edgesRaw, counts: data.counts || {} });
+          window.kbDeferGraphLoadingOverlay = true;
+          try {
+            await loadGraph({ nodes: nodesRaw, edges: edgesRaw, counts: data.counts || {} });
+          } finally {
+            window.kbDeferGraphLoadingOverlay = false;
+          }
           if (!preserveSnapshotOwner) {
             await restoreExpandedOutgoingState(snapshotScopeId);
           }
@@ -11992,14 +12072,26 @@
             const willRestoreSnapshot = restoreGraphSnapshotAfterNextLayout(snapshotScopeId, {
               restoreViewport: restoreSnapshotViewport,
             });
-            window.kbCy
-              .layout(
-                getSelectedGraphLayoutOpts({
-                  animate: true,
-                  randomize: false,
-                })
-              )
-              .run();
+            const layout = window.kbCy.layout(
+              getSelectedGraphLayoutOpts({
+                animate: false,
+                randomize: false,
+              }),
+            );
+            await new Promise((resolve) => {
+              let settled = false;
+              const done = () => {
+                if (settled) return;
+                settled = true;
+                window.clearTimeout(timeoutId);
+                resolve();
+              };
+              const timeoutId = window.setTimeout(done, 1600);
+              try {
+                layout.one("layoutstop", done);
+              } catch {}
+              layout.run();
+            });
             if (!preserveSnapshotOwner) {
               void restoreExpandedOutgoingState(snapshotScopeId);
             }
@@ -12011,6 +12103,9 @@
             try {
               window.kbCy.resize();
             } catch { }
+            await new Promise((resolve) => {
+              requestAnimationFrame(() => requestAnimationFrame(resolve));
+            });
           } catch (e) {
             console.error("replace neighborhood failed", e);
           }
@@ -12866,6 +12961,10 @@
 
     function shouldPreferRouteNodeViewport() {
       try {
+        const pinnedNode = String(window.kbVisRouteNodeId || "").trim();
+        if ((window.kbViewMode || "table") === "vis" && pinnedNode) {
+          return true;
+        }
         const route =
           typeof getRouteStateFromHash === "function"
             ? getRouteStateFromHash()
@@ -12883,6 +12982,8 @@
     function getPreferredRouteViewportNodeId() {
       try {
         if (!shouldPreferRouteNodeViewport()) return "";
+        const pinnedNode = String(window.kbVisRouteNodeId || "").trim();
+        if (pinnedNode) return ensureEntityIdPrefix(pinnedNode);
         const route =
           typeof getRouteStateFromHash === "function"
             ? getRouteStateFromHash()
@@ -12898,10 +12999,12 @@
         if (!window.kbCy) return false;
         const fullId = ensureEntityIdPrefix(nodeId);
         const rawId = stripEntityIdPrefix(nodeId) || String(nodeId || "").trim();
-        const ele =
-          window.kbCy.getElementById(fullId) ||
-          window.kbCy.getElementById(rawId) ||
-          null;
+        let ele = window.kbCy.getElementById(fullId);
+        // Cytoscape returns an empty (but truthy) collection for a missing id,
+        // so an `||` fallback would never reach raw node ids.
+        if (!ele || ele.empty()) {
+          ele = window.kbCy.getElementById(rawId);
+        }
         if (!ele || ele.empty()) return false;
         const activeId = ele.id();
         try {
@@ -12948,7 +13051,7 @@
         if (clearOnly) return true;
         window.kbPendingRouteCenterNodeId = routeNodeId;
         window.kbPendingRouteCenterReason = reason;
-        const steps = [0, 80, 180, 320, 520, 820, 1200];
+        const steps = [0, 80, 180, 320, 520, 820, 1200, 1800, 2600, 3400, 4200];
         const timers = [];
         const recenter = () => {
           try {
@@ -13459,7 +13562,7 @@
         const txt = el.querySelector('.vis-loading-text');
         if (txt) txt.textContent = text || '加载图谱数据…';
         el.style.display = '';
-      } else {
+      } else if (!window.kbDeferGraphLoadingOverlay) {
         el.style.display = 'none';
       }
     }
