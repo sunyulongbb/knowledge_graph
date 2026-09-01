@@ -90,6 +90,12 @@
       </div>
     `;
     document.body.appendChild(modal);
+    // Logo 是应用最直观的标识，置于设置表单顶部方便先预览和替换。
+    const settingsForm = modal.querySelector('#appSettingsForm');
+    const logoGroup = modal.querySelector('#appLogo')?.closest('.form-group');
+    if (settingsForm && logoGroup) {
+      settingsForm.insertBefore(logoGroup, settingsForm.firstElementChild);
+    }
     const closeBtn = modal.querySelector('#closeAppSettingsModal');
     if (closeBtn) closeBtn.onclick = () => {
       restoreSavedThemeColor(modal);
