@@ -2225,6 +2225,10 @@
                   发布
                 </button>
               </div>
+              <div id="entityDraftImagePreview" style="display:none;flex-direction:column;gap:8px;margin-top:10px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface-1, rgba(0,0,0,.02));">
+                <span id="entityDraftImagePreviewLabel" style="font-size:12px;color:var(--muted);">待发布图片</span>
+                <div id="entityDraftImagePreviewList" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+              </div>
               <div id="videoUploadProgress" class="video-upload-progress" style="display:none; margin-top:6px;">
                 <div class="clean-task-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
                   <div class="clean-task-progress-bar">
@@ -5251,7 +5255,7 @@
             'background-position-y': '50%',
             'background-opacity': 1,
             'border-width': 3,
-            'border-color': (ele) => ele.data("color") || "#4f46e5",
+            'border-color': (ele) => ele.data("color") || nodeColor,
             'shape': 'ellipse',
             'width': 88,
             'height': 88,
@@ -5464,10 +5468,7 @@
         },
       ];
     }
-    function applyTheme(theme) {
-      const t = theme === "dark" ? "dark" : "light";
-      document.documentElement.setAttribute("data-theme", t);
-      localStorage.setItem("theme", t);
+    function refreshThemeDependentViews() {
       try {
         if (window.kbCy) {
           window.kbCy.style(buildCyStyle()).update();
@@ -5481,6 +5482,14 @@
       try {
         applyEntryGridScrollbarTheme();
       } catch { }
+    }
+    window.addEventListener("kb-app-theme-change", refreshThemeDependentViews);
+
+    function applyTheme(theme) {
+      const t = theme === "dark" ? "dark" : "light";
+      document.documentElement.setAttribute("data-theme", t);
+      localStorage.setItem("theme", t);
+      refreshThemeDependentViews();
       const i = elBtnTheme.querySelector("i");
       if (i)
         i.className = t === "dark" ? "fa-solid fa-sun" : "fa-regular fa-moon";
@@ -12734,7 +12743,7 @@
         text: cssColor("--fg", isDark ? "#f4f4f5" : "#0f172a"),
         muted: cssColor("--muted", isDark ? "#a1a1aa" : "#475569"),
         border: cssColor("--border", isDark ? "#3f3f46" : "#e2e8f0"),
-        accent: isDark ? "#818cf8" : cssColor("--accent", "#4f46e5"),
+        accent: cssColor("--accent", isDark ? "#818cf8" : "#4f46e5"),
         edgeColor: usesDefault(cfg.edgeColor, KB_VIS_STYLE_DEFAULTS.edgeColor)
           ? (isDark ? "#52525b" : "#cbd5e1")
           : cfg.edgeColor,
@@ -13315,7 +13324,7 @@
             'background-position-y': '50%',
             'background-opacity': 1,
             'border-width': Math.max(2, Number(cfg.nodeBorderWidth) + 1 || 3),
-            'border-color': (ele) => ele.data("color") || "#4f46e5",
+            'border-color': (ele) => ele.data("color") || palette.accent,
             'shape': 'ellipse',
             'width': 56,
             'height': 56,
@@ -14974,9 +14983,19 @@
             eDelBtn.addEventListener('click', async (e) => {
               e.preventDefault();
               e.stopPropagation();
+              const formId = document.getElementById('fId')?.value?.trim() || '';
+              if (!formId && window.kbIsAddingNewNode) {
+                window.kbPendingEntityImageDataUrl = '';
+                window.kbPendingEntityImages = [];
+                updateEntityHeaderImage('');
+                const draftPreview = document.getElementById('entityDraftImagePreview');
+                const draftPreviewList = document.getElementById('entityDraftImagePreviewList');
+                if (draftPreview) draftPreview.style.display = 'none';
+                if (draftPreviewList) draftPreviewList.innerHTML = '';
+                return;
+              }
               const selectedId = (
-                window.kbSelectedNodeId || window.kbCurrentNodeId ||
-                document.getElementById('fId')?.value || ''
+                formId || window.kbSelectedNodeId || window.kbCurrentNodeId || ''
               ).trim();
               if (!selectedId) {
                 updateEntityHeaderImage('');
@@ -15177,7 +15196,14 @@
 
           const entityDisplayImageWrap = document.getElementById('entityDisplayImageWrap');
           if (entityDisplayImageWrap) {
-            entityDisplayImageWrap.addEventListener('dblclick', () => {
+            entityDisplayImageWrap.addEventListener('dblclick', (event) => {
+              // 新版上传器同时支持新增草稿预览；初始化完成后统一交给它处理。
+              if (typeof window.kbTriggerEntityImageUpload === 'function') {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                window.kbTriggerEntityImageUpload();
+                return;
+              }
               let currentNode = null;
               const selectedId = (
                 window.kbSelectedNodeId ||
@@ -15215,7 +15241,7 @@
               nodeImageUploadInput.value = '';
               nodeImageUploadInput.click();
             });
-            entityDisplayImageWrap.dataset.imageUploadInitialized = 'true';
+            entityDisplayImageWrap.dataset.legacyImageUploadInitialized = 'true';
             entityDisplayImageWrap.style.cursor = 'pointer';
           }
 
@@ -15526,12 +15552,48 @@
     }
 
     // 自动加载图谱（移除了手动加载按钮）
+    function clearKnowledgeNodeContextForCreate() {
+      // 新建知识不应继承详情、关系图或列表中任何已选知识的路由上下文。
+      window.kbPinnedKnowledgeDetailRouteId = "";
+      window.kbDetailRouteBeforeVis = "";
+      window.kbActiveDetailRouteId = "";
+      window.kbActiveDetailNodeId = "";
+      window.kbActiveVisNodeId = "";
+      window.kbVisRouteNodeId = "";
+      window.kbSelectedRowId = "";
+      window.kbSelectedNodeId = "";
+      window.kbCurrentNodeId = "";
+      window.kbLastAnchorRowId = "";
+      window.kbSelectedRowIds = new Set();
+      window.kbCurrentNodePayload = null;
+      try {
+        clearEntityListSelection();
+      } catch { }
+      try {
+        if (window.kbCy) {
+          window.kbCy.$(":selected").unselect();
+          window.kbCy.nodes(".highlight").removeClass("highlight");
+        }
+      } catch { }
+      try {
+        const detail = document.getElementById("detailPanel");
+        if (detail) detail.dataset.entityId = "";
+      } catch { }
+      // 仅移除 hash 中的 node，保留当前应用 db 等 URL 参数。
+      try {
+        history.replaceState(
+          null,
+          "",
+          `${window.location.pathname}${window.location.search}#table`,
+        );
+      } catch { }
+    }
+
     // Table controls
     if (btnTableAdd) {
       btnTableAdd.addEventListener("click", () => {
+        clearKnowledgeNodeContextForCreate();
         resetFormToAdd();
-        // Clear global selection state
-        window.kbSelectedRowId = null;
         // Focus on name input
         if (fName) fName.focus();
       });
@@ -16146,12 +16208,17 @@
         imageUploadInput = document.createElement('input');
         imageUploadInput.id = 'kb-entity-image-upload-input';
         imageUploadInput.type = 'file';
-        imageUploadInput.accept = 'image/*,.mov,video/quicktime';
+        imageUploadInput.accept = 'image/*';
+        imageUploadInput.multiple = true;
         imageUploadInput.style.display = 'none';
         document.body.appendChild(imageUploadInput);
       }
 
       function getSelectedNodeId() {
+        const formId = document.getElementById('fId')?.value?.toString().trim();
+        if (formId) return formId;
+        // 新增状态下不能复用列表中上一次选中的知识，图片应先作为草稿保留。
+        if (window.kbIsAddingNewNode) return '';
         const selectedNodeId = String(
           window.kbSelectedNodeId ||
           window.kbCurrentNodeId ||
@@ -16170,8 +16237,6 @@
             }
           }
         } catch { }
-        const formId = document.getElementById('fId')?.value?.toString().trim();
-        if (formId) return formId;
         const badgeEl = document.getElementById('entityIdBadge');
         const badgeId = badgeEl && badgeEl.style.display !== 'none'
           ? badgeEl.textContent?.toString().trim()
@@ -16197,21 +16262,75 @@
         return uploadResp.url;
       }
 
-      function setPendingEntityImagePreview(imageUrl) {
+      function getPendingEntityImages() {
+        const images = Array.isArray(window.kbPendingEntityImages)
+          ? window.kbPendingEntityImages
+          : [];
+        return images.map((item) => String(item || '').trim()).filter(Boolean);
+      }
+
+      function renderPendingEntityImagePreviews(images) {
+        const preview = document.getElementById('entityDraftImagePreview');
+        const label = document.getElementById('entityDraftImagePreviewLabel');
+        const list = document.getElementById('entityDraftImagePreviewList');
+        if (!preview || !list) return;
+        list.innerHTML = '';
+        if (!images.length) {
+          preview.style.display = 'none';
+          if (label) label.textContent = '待发布图片';
+          return;
+        }
+        if (label) label.textContent = `待发布图片（${images.length}）`;
+        images.forEach((imageUrl, index) => {
+          const item = document.createElement('div');
+          item.style.cssText = 'position:relative;width:64px;height:64px;';
+          const image = document.createElement('img');
+          image.src = imageUrl;
+          image.alt = `待发布图片 ${index + 1}`;
+          image.style.cssText = 'width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border);display:block;';
+          const remove = document.createElement('button');
+          remove.type = 'button';
+          remove.title = '移除图片';
+          remove.setAttribute('aria-label', `移除第 ${index + 1} 张图片`);
+          remove.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+          remove.style.cssText = 'position:absolute;right:-5px;top:-5px;width:18px;height:18px;padding:0;border:0;border-radius:50%;background:#334155;color:#fff;font-size:10px;line-height:18px;cursor:pointer;';
+          remove.addEventListener('click', () => setPendingEntityImagePreview('', { removeIndex: index }));
+          item.append(image, remove);
+          list.appendChild(item);
+        });
+        preview.style.display = 'flex';
+      }
+
+      function setPendingEntityImagePreview(imageUrl, options = {}) {
+        const { append = false, removeIndex = -1 } = options;
+        let images = getPendingEntityImages();
+        const nextImage = String(imageUrl || '').trim();
+        if (Number.isInteger(removeIndex) && removeIndex >= 0) {
+          images.splice(removeIndex, 1);
+        } else if (nextImage) {
+          images = append ? [...images, nextImage] : [nextImage];
+        } else {
+          images = [];
+        }
+        images = Array.from(new Set(images));
+        window.kbPendingEntityImages = images;
+        window.kbPendingEntityImageDataUrl = images[0] || '';
         const eImage = document.getElementById('entityDisplayImage');
         const eImageWrap = document.getElementById('entityDisplayImageWrap');
+        const eDelBtn = document.getElementById('entityDisplayImageDeleteBtn');
         if (!eImage || !eImageWrap) return;
-        if (imageUrl) {
-          eImage.src = imageUrl;
+        if (images.length) {
+          eImage.src = images[0];
           eImage.style.display = '';
           eImageWrap.classList.remove('empty');
-          window.kbPendingEntityImageDataUrl = imageUrl;
+          if (eDelBtn) eDelBtn.style.display = '';
         } else {
           eImage.src = '';
           eImage.style.display = 'none';
           eImageWrap.classList.add('empty');
-          window.kbPendingEntityImageDataUrl = '';
+          if (eDelBtn) eDelBtn.style.display = 'none';
         }
+        renderPendingEntityImagePreviews(images);
       }
 
       function mergeNodeImages(nodeId, imageUrl) {
@@ -16386,14 +16505,14 @@
       }
 
       imageUploadInput.addEventListener('change', async () => {
-        const file = imageUploadInput.files && imageUploadInput.files[0];
-        if (!file) return;
+        const files = imageUploadInput.files ? Array.from(imageUploadInput.files) : [];
+        if (!files.length) return;
         const nodeId = getSelectedNodeId();
         if (!nodeId) {
           try {
-            const dataUrl = await readFileAsDataUrl(file);
-            setPendingEntityImagePreview((dataUrl || '').toString());
-            if (addMsg) addMsg.textContent = '图片已添加，发布后将自动保存。';
+            const images = await Promise.all(files.map((file) => readFileAsDataUrl(file)));
+            images.forEach((dataUrl) => setPendingEntityImagePreview((dataUrl || '').toString(), { append: true }));
+            if (addMsg) addMsg.textContent = `已添加 ${images.length} 张图片，发布后将自动保存。`;
           } catch (err) {
             console.error('读取本地图片失败:', err);
             if (addMsg) addMsg.textContent = '图片读取失败';
@@ -16401,8 +16520,10 @@
           return;
         }
         try {
-          const imageUrl = await uploadNodeImageFile(file);
-          await saveEntityImage(nodeId, imageUrl);
+          for (const file of files) {
+            const imageUrl = await uploadNodeImageFile(file);
+            await saveEntityImage(nodeId, imageUrl);
+          }
           window.kbPendingEntityImageDataUrl = '';
         } catch (err) {
           console.error('节点图像上传失败:', err);
@@ -16475,7 +16596,7 @@
           if (!selectedId) {
             try {
               const dataUrl = await readFileAsDataUrl(imageFile);
-              setPendingEntityImagePreview((dataUrl || '').toString());
+              setPendingEntityImagePreview((dataUrl || '').toString(), { append: true });
               if (addMsg) addMsg.textContent = '';
             } catch (err) {
               console.error('粘贴图片读取失败', err);
@@ -16504,7 +16625,7 @@
           const imageUrl = imageUrlFromClipboard;
           const selectedId = getSelectedNodeId();
           if (!selectedId) {
-            setPendingEntityImagePreview(imageUrl);
+            setPendingEntityImagePreview(imageUrl, { append: true });
             if (addMsg) addMsg.textContent = '';
             return;
           }
@@ -16518,6 +16639,14 @@
           }
         }
       };
+      // 编辑器自身会在冒泡阶段拦截粘贴。新增状态在捕获阶段优先处理图片，
+      // 以确保 Ctrl/Cmd+V 的图片能进入待发布图片队列。
+      document.addEventListener('paste', (ev) => {
+        if (!window.kbIsAddingNewNode || ev.defaultPrevented) return;
+        const target = ev.target;
+        if (!(target instanceof Element) || !target.closest('#entityHeader')) return;
+        handlePasteUpload(ev);
+      }, true);
       imageWrap.addEventListener('paste', handlePasteUpload);
       const entityHeader = document.getElementById('entityHeader');
       if (entityHeader) {
@@ -16579,6 +16708,8 @@
     let uploadedVideoPoster = "";
     let uploadedPdfUrl = "";
     window.kbPendingEntityImageDataUrl = "";
+    window.kbPendingEntityImages = [];
+    window.kbIsAddingNewNode = !(fId?.value || "").trim();
 
     function updateEntityVideoUploadStatus(text) {
       // text notifications removed, progress bar only
@@ -17446,6 +17577,7 @@
       return filtered;
     }
     function resetFormToAdd() {
+      window.kbIsAddingNewNode = true;
       fId.value = "";
       fName.value = "";
       fDesc.value = "";
@@ -17456,7 +17588,12 @@
       uploadedVideoPoster = "";
       uploadedPdfUrl = "";
       window.kbPendingEntityImageDataUrl = "";
+      window.kbPendingEntityImages = [];
       window.kbComposerMentionEntityMap = Object.create(null);
+      const draftPreview = document.getElementById('entityDraftImagePreview');
+      const draftPreviewList = document.getElementById('entityDraftImagePreviewList');
+      if (draftPreview) draftPreview.style.display = 'none';
+      if (draftPreviewList) draftPreviewList.innerHTML = '';
       fAliases.value = "";
       fTags.value = "";
       if (fType) fType.value = "";
@@ -17475,6 +17612,7 @@
         const eAliases = document.getElementById('entityDisplayAliases');
         const eImageWrap = document.getElementById('entityDisplayImageWrap');
         const eImage = document.getElementById('entityDisplayImage');
+        const eImageDeleteBtn = document.getElementById('entityDisplayImageDeleteBtn');
         if (eName) updateEntityDisplayName(eName, '');
         if (eDesc) {
           eDesc.textContent = '';
@@ -17495,6 +17633,7 @@
           eImageWrap.style.display = '';
           eImageWrap.classList.add('empty');
         }
+        if (eImageDeleteBtn) eImageDeleteBtn.style.display = 'none';
       } catch { }
       // remove highlight
       try {
@@ -17603,6 +17742,11 @@
       } catch { }
     }
     function setFormToEdit(node) {
+      window.kbIsAddingNewNode = false;
+      const draftPreview = document.getElementById('entityDraftImagePreview');
+      const draftPreviewList = document.getElementById('entityDraftImagePreviewList');
+      if (draftPreview) draftPreview.style.display = 'none';
+      if (draftPreviewList) draftPreviewList.innerHTML = '';
       try {
         window.kbCurrentNodePayload =
           node && typeof node === "object"
@@ -17634,6 +17778,7 @@
       uploadedVideoPoster = "";
       uploadedPdfUrl = (node?.pdf || "").toString().trim();
       window.kbPendingEntityImageDataUrl = "";
+      window.kbPendingEntityImages = [];
       const nodeTypeValue = (node?.type || "").toString().trim();
       if (fType) fType.value = nodeTypeValue;
       if (composerTypeSelect) composerTypeSelect.value = nodeTypeValue;
@@ -17822,7 +17967,9 @@
             videoData = uploadResp.url;
           }
         }
-        const pendingHeaderImage = (window.kbPendingEntityImageDataUrl || "").toString().trim();
+        const pendingHeaderImages = Array.isArray(window.kbPendingEntityImages)
+          ? window.kbPendingEntityImages.map((item) => String(item || "").trim()).filter(Boolean)
+          : [(window.kbPendingEntityImageDataUrl || "").toString().trim()].filter(Boolean);
         const baseBody = {
           name,
           description,
@@ -17831,7 +17978,7 @@
           tags,
           mentions: mentionMap,
           type: nodeType || null,
-          ...(pendingHeaderImage ? { images: [pendingHeaderImage] } : {}),
+          ...(pendingHeaderImages.length ? { images: pendingHeaderImages } : {}),
           ...(posterData
             ? {
                 covers: [posterData],
@@ -17995,6 +18142,7 @@
           } catch { }
           addMsg.textContent = savedStatusText;
           window.kbPendingEntityImageDataUrl = "";
+          window.kbPendingEntityImages = [];
           try {
             if (typeof window.registerNodeTagsToTagManager === "function") {
               window.registerNodeTagsToTagManager(tags || []);

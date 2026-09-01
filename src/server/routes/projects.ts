@@ -53,11 +53,14 @@ function normalizeProjectRecord(row: any) {
 }
 
 function toProjectPayload(body: any, fallbackName: string) {
+  const requestedThemeColor = (body.theme_color || "#ff7a2b").toString().trim();
   return {
     title: (body.title || fallbackName).toString().trim() || fallbackName,
     description: (body.description || "").toString().trim(),
     image: (body.image || body.logo || "").toString().trim(),
-    theme_color: (body.theme_color || "#ff7a2b").toString().trim() || "#ff7a2b",
+    theme_color: /^#[0-9a-fA-F]{6}$/.test(requestedThemeColor)
+      ? requestedThemeColor.toLowerCase()
+      : "#ff7a2b",
     tags: JSON.stringify(normalizeTags(body.tags)),
     link: (body.link || "").toString().trim(),
   };
