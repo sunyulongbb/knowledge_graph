@@ -3805,6 +3805,34 @@ body {
   background: rgba(79, 70, 229, 0.12);
 }
 
+/* Keep the tree disclosure control above the label and give it a stable hit area. */
+#clsTree .cls-tree-toggle {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 20px;
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  line-height: 20px;
+  text-align: center;
+  cursor: pointer;
+}
+
+#clsTree .cls-tree-toggle:hover:not(:disabled) {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+#clsTree .cls-tree-toggle:disabled {
+  cursor: default;
+}
+
 #clsTree .cls-item.dragging {
   opacity: 0.45;
 }

@@ -330,6 +330,8 @@ function __kbInitTableSelection() {
       window.kbActiveVisNodeId = "";
       window.kbActiveDetailRouteId = "";
       window.kbActiveDetailNodeId = "";
+      window.kbPinnedKnowledgeDetailRouteId = "";
+      window.kbDetailRouteBeforeVis = "";
     }
     if (!id) {
       window.kbSelectionHydrated = false;
@@ -347,7 +349,16 @@ function __kbInitTableSelection() {
         console.warn("reset form after deselect failed", e);
       }
     }
-    if ((window.kbViewMode || "table") === "table") {
+    if (!id && (window.kbViewMode || "table") === "table") {
+      // syncHashForView 会回退读取旧 hash 的 node；取消选中时直接清除它。
+      try {
+        history.replaceState(
+          null,
+          "",
+          `${window.location.pathname}${window.location.search}#table`,
+        );
+      } catch {}
+    } else if ((window.kbViewMode || "table") === "table") {
       try {
         if (typeof syncHashForView === "function") {
           syncHashForView("table", {
@@ -419,6 +430,10 @@ function __kbInitTableSelection() {
           primaryId;
         window.kbActiveDetailRouteId = primaryId;
       }
+    }
+    if (window.kbSelectedRowIds.size === 0) {
+      setTableSelection("", true);
+      return;
     }
     updateSelectedRowStyles();
     syncCheckboxStates();
@@ -2887,6 +2902,8 @@ function __kbInitTableSelection() {
       const header = document.createElement("div");
       header.className = "table-feed-header";
 
+      // 列表布局以文本信息为主，不渲染头像占位。
+      if (isGridLayout || isTableLayout) {
       const avatar = document.createElement("div");
       avatar.className = "table-feed-avatar";
       avatar.title = label || nodeId || "实体";
@@ -2903,6 +2920,7 @@ function __kbInitTableSelection() {
         avatar.textContent = (label || nodeId || "?").trim().charAt(0) || "?";
       }
       header.appendChild(avatar);
+      }
 
       const meta = document.createElement("div");
       meta.className = "table-feed-meta";

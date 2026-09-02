@@ -559,13 +559,18 @@
       const indent = document.createElement("span");
       indent.style.display = "inline-block";
       indent.style.width = depth * 14 + "px";
-      const toggle = document.createElement("span");
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "cls-tree-toggle";
       const hasChildren = Array.isArray(n.children) && n.children.length > 0;
       const collapsed = hasChildren && window.kbCollapsedClassIds.has(n.id);
       toggle.textContent = hasChildren ? (collapsed ? "▶" : "▼") : "·";
       toggle.title = hasChildren ? (collapsed ? "展开" : "收起") : "";
-      toggle.style.width = "14px";
-      toggle.style.display = "inline-block";
+      toggle.setAttribute(
+        "aria-label",
+        hasChildren ? (collapsed ? "展开分类" : "收起分类") : "无子分类",
+      );
+      toggle.disabled = !hasChildren;
       toggle.style.color = "var(--muted)";
       toggle.style.cursor = hasChildren ? "pointer" : "default";
       toggle.addEventListener("click", (e) => {
