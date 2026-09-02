@@ -1745,15 +1745,6 @@
           <button id="btnTableRefresh" class="btn icon" title="刷新列表" aria-label="刷新列表">
             <i class="fa-solid fa-rotate-right"></i>
           </button>
-          <a
-            id="btnSemanticMapEntry"
-            class="btn icon"
-            title="打开语义地图"
-            aria-label="打开语义地图"
-            href="/semantic-map.html"
-          >
-            <i class="fa-solid fa-star-of-life"></i>
-          </a>
         </div>
       </div>
       <div class="header-nav">
@@ -1805,12 +1796,17 @@
           <button id="btnTableAdd" class="btn icon" title="新增节点" aria-label="新增节点">
             <i class="fa-solid fa-plus"></i>
           </button>
+          <button id="btnDeleteSelected" class="btn icon" type="button" title="删除选中知识" aria-label="删除选中知识" disabled>
+            <i class="fa-regular fa-trash-can"></i>
+          </button>
         </div>
         <div class="header-global-actions" role="group" aria-label="全局操作">
           <!-- Chat quick link removed; use 顶部导航 智能聊天 菜单进入聊天面板 -->
           <button id="btnDbSwitch" class="btn icon" title="切换知识库">
             <i class="fa-solid fa-database"></i>
           </button>
+          <a id="btnSemanticMapEntry" class="btn icon" title="打开语义地图" aria-label="打开语义地图"
+            href="/semantic-map.html"><i class="fa-solid fa-star-of-life"></i></a>
           <button id="btnTheme" class="btn icon" title="切换主题" aria-label="切换主题">
             <i class="fa-regular fa-moon"></i>
           </button>
@@ -2226,7 +2222,6 @@
                 </button>
               </div>
               <div id="entityDraftImagePreview" style="display:none;flex-direction:column;gap:8px;margin-top:10px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface-1, rgba(0,0,0,.02));">
-                <span id="entityDraftImagePreviewLabel" style="font-size:12px;color:var(--muted);">待发布图片</span>
                 <div id="entityDraftImagePreviewList" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
               </div>
               <div id="videoUploadProgress" class="video-upload-progress" style="display:none; margin-top:6px;">
@@ -16271,16 +16266,13 @@
 
       function renderPendingEntityImagePreviews(images) {
         const preview = document.getElementById('entityDraftImagePreview');
-        const label = document.getElementById('entityDraftImagePreviewLabel');
         const list = document.getElementById('entityDraftImagePreviewList');
         if (!preview || !list) return;
         list.innerHTML = '';
         if (!images.length) {
           preview.style.display = 'none';
-          if (label) label.textContent = '待发布图片';
           return;
         }
-        if (label) label.textContent = `待发布图片（${images.length}）`;
         images.forEach((imageUrl, index) => {
           const item = document.createElement('div');
           item.style.cssText = 'position:relative;width:64px;height:64px;';
@@ -16555,25 +16547,17 @@
           const normalize = (raw) => {
             const text = String(raw || '').trim();
             if (!text) return '';
-            if (/^data:(image|video)\//i.test(text)) return text;
-            if (/^https?:\/\//i.test(text)) return text;
+            if (/^data:image\//i.test(text)) return text;
             return '';
           };
-
-          const direct = normalize(clipboard.getData && clipboard.getData('text/plain'));
-          if (direct) return direct;
 
           const html = String((clipboard.getData && clipboard.getData('text/html')) || '');
           if (html) {
             const imgMatch = html.match(/<img[^>]+src=["']([^"']+)["']/i);
             if (imgMatch && imgMatch[1]) {
-              const fromImg = normalize(imgMatch[1]);
+              const src = String(imgMatch[1]).trim();
+              const fromImg = normalize(src) || (/^https?:\/\//i.test(src) ? src : '');
               if (fromImg) return fromImg;
-            }
-            const linkMatch = html.match(/https?:\/\/[^\s"'<>)]+/i);
-            if (linkMatch && linkMatch[0]) {
-              const fromHtml = normalize(linkMatch[0]);
-              if (fromHtml) return fromHtml;
             }
           }
           return '';

@@ -2323,10 +2323,26 @@ function __kbInitTableSelection() {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "table-feed-grid-image-btn";
-        button.title = "查看图片";
+        button.title = "单击选中，双击预览图片";
+        let selectTimer = null;
         button.addEventListener("click", (e) => {
           e.preventDefault();
           e.stopPropagation();
+          if (selectTimer) return;
+          selectTimer = setTimeout(() => {
+            selectTimer = null;
+            const row = button.closest(".entity-list-item.table-feed-row");
+            const rid = String(row?.getAttribute("data-id") || "").trim();
+            if (row && rid) performTableRowSelection(row, rid, e);
+          }, 220);
+        });
+        button.addEventListener("dblclick", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (selectTimer) {
+            clearTimeout(selectTimer);
+            selectTimer = null;
+          }
           openImageLightbox(imageSources, item.index);
         });
         const img = document.createElement("img");
@@ -2895,6 +2911,34 @@ function __kbInitTableSelection() {
       nameLink.type = "button";
       nameLink.textContent = label;
       nameLink.className = "table-feed-name table-feed-title-link";
+      if (isGridLayout) {
+        let selectTimer = null;
+        nameLink.title = "单击选中，双击预览知识";
+        nameLink.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (selectTimer) return;
+          selectTimer = setTimeout(() => {
+            selectTimer = null;
+            performTableRowSelection(tr, nodeId, event);
+          }, 220);
+        });
+        nameLink.addEventListener("dblclick", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (selectTimer) {
+            clearTimeout(selectTimer);
+            selectTimer = null;
+          }
+          setTableSelection(nodeId, false, {
+            skipDetailRefresh: true,
+            skipSidebarSync: true,
+          });
+          if (typeof setViewMode === "function") {
+            setViewMode("detail", { targetNodeId: nodeId });
+          }
+        });
+      }
       nameLink.setAttribute("aria-label", `查看 ${label || "知识"} 的详情`);
 
       const metaTop = document.createElement("div");
@@ -5927,7 +5971,11 @@ function __kbInitTableSelection() {
     let okCount = 0;
     for (const id of ids) {
       try {
-        const resp = await fetch("/api/kb/nodes?id=" + encodeURIComponent(id), {
+        const deleteUrl = appendCurrentDbToUrl(
+          new URL("/api/kb/nodes", window.location.origin),
+        );
+        deleteUrl.searchParams.set("id", id);
+        const resp = await fetch(deleteUrl.toString(), {
           method: "DELETE",
         });
         if (!resp.ok) throw new Error("HTTP " + resp.status);
