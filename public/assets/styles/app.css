@@ -5874,6 +5874,19 @@ body {
   border-bottom: none;
 }
 
+/* The plain entity-list layout is text-first; avatars are redundant here. */
+#tblNodes:not(.grid-layout):not(.table-layout) .table-feed-avatar {
+  display: none;
+}
+
+#tblNodes:not(.grid-layout):not(.table-layout) .table-feed-header {
+  gap: 0;
+}
+
+#tblNodes:not(.grid-layout):not(.table-layout) .table-feed-meta {
+  width: 100%;
+}
+
 #tblNodes .entity-list-item.selected .table-feed-card {
   box-shadow:
     inset 3px 0 0 color-mix(in srgb, var(--accent) 78%, #2563eb),

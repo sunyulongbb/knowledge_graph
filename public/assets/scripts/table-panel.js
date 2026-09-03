@@ -685,7 +685,7 @@
       if (propertyId) url.searchParams.set("property_id", propertyId);
       if (propertyValue) url.searchParams.set("property_value", propertyValue);
       if (window.kbTableLayoutMode === "grid") {
-        url.searchParams.set("has_image", "1");
+        url.searchParams.set("has_media", "1");
       }
       url.searchParams.set("hide_entity", "1");
 

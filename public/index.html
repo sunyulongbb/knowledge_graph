@@ -6189,6 +6189,7 @@
         replace = false,
         nodeId = "",
         includeNode = false,
+        clearNode = false,
         entryTaskId = "",
         entryScreen = "manager",
       } = {}
@@ -6200,7 +6201,7 @@
           ? getRouteStateFromHash()
           : { node: "" };
       const currentRouteNode = String(currentRoute?.node || "").trim();
-      if (!normalizedNode) {
+      if (!normalizedNode && !clearNode) {
         const pinnedNode = String(
           currentRouteNode ||
           window.kbActiveDetailRouteId ||
@@ -9428,6 +9429,38 @@
       if (cywrap) cywrap.setAttribute("tabindex", "0");
     } catch { }
 
+    function stopDetailMediaPlayback() {
+      const roots = [
+        document.getElementById("detailPanel"),
+        ...document.querySelectorAll(".kb-video-lightbox"),
+      ].filter(Boolean);
+      roots.forEach((root) => {
+        root.querySelectorAll("video, audio, media-player").forEach((player) => {
+          try {
+            player.removeAttribute?.("autoplay");
+            if ("autoplay" in player) player.autoplay = false;
+            if (typeof player.pause === "function") player.pause();
+            if (Number.isFinite(Number(player.currentTime))) player.currentTime = 0;
+          } catch {}
+        });
+        root.querySelectorAll("iframe").forEach((frame) => {
+          try {
+            frame.contentWindow?.postMessage(
+              JSON.stringify({ event: "command", func: "pauseVideo", args: [] }),
+              "*",
+            );
+            frame.contentWindow?.postMessage({ method: "pause" }, "*");
+          } catch {}
+        });
+      });
+      document
+        .querySelectorAll(".kb-video-lightbox .kb-lightbox-close")
+        .forEach((button) => {
+          try { button.click(); } catch {}
+        });
+      window.kbVideoLightboxOpen = false;
+    }
+
     function setViewMode(mode, options = {}) {
       const normalized = normalizeViewModeInput(mode) || "table";
       const preservedEditorNode = captureCurrentEditorNodeState();
@@ -9448,6 +9481,9 @@
           ? ""
           : String(options.targetNodeId).trim();
       const previousMode = window.kbViewMode;
+      if (previousMode === "detail" && normalized !== "detail") {
+        stopDetailMediaPlayback();
+      }
       if (normalized === "detail" && previousMode && previousMode !== "detail") {
         window.kbDetailReturnState = {
           view: detailReturnView || previousMode,
@@ -9975,6 +10011,7 @@
     if (btnDetailBack)
       btnDetailBack.addEventListener("click", (e) => {
         e.preventDefault();
+        stopDetailMediaPlayback();
         const returnState = window.kbDetailReturnState || {};
         window.kbPinnedKnowledgeDetailRouteId = "";
         window.kbDetailRouteBeforeVis = "";

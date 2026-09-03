@@ -352,8 +352,12 @@ function __kbInitTableSelection() {
         if (typeof syncHashForView === "function") {
           syncHashForView("table", {
             nodeId: id || "",
-            includeNode: true,
+            includeNode: Boolean(id),
+            clearNode: !id,
           });
+          if (!id && typeof window.updateUrlParam === "function") {
+            window.updateUrlParam("node", "");
+          }
         }
       } catch (err) {
         if (window.console && console.warn) {
@@ -814,6 +818,7 @@ function __kbInitTableSelection() {
 
   function collectNodeVideos(node) {
     const merged = [
+      ...normalizeStringList(node?._attr_videos),
       ...normalizeStringList(node?.videos),
       ...normalizeStringList(node?.video),
     ]
