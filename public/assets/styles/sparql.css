@@ -200,30 +200,6 @@
   max-height: 240px;
 }
 
-.sparql-table {
-  width: 100%;
-  min-width: 0;
-  border-collapse: collapse;
-  font-size: 12px;
-  table-layout: fixed;
-}
-
-.sparql-table th,
-.sparql-table td {
-  border-bottom: 1px solid var(--border);
-  padding: 8px 10px;
-  text-align: left;
-  vertical-align: top;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-.sparql-table th {
-  position: sticky;
-  top: 0;
-  background: var(--surface-0);
-  z-index: 1;
-}
 
 .sparql-raw {
   margin: 0;
@@ -454,7 +430,6 @@
 .sparql-property-checklist label span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .sparql-preview-grid { position:relative; min-height:0; height:auto; max-height:none; border-radius:8px; box-shadow:none; }
 .sparql-result-grid-host { position:absolute; inset:0; }
-.sparql-result-grid-host canvas-datagrid { width:100% !important; height:100% !important; }
 .sparql-auto-import-config, .sparql-secondary-control { display:none !important; }
 .sparql-import-legacy { display:none; }
 .sparql-task-legacy { display:none; }

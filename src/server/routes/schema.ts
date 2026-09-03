@@ -441,6 +441,9 @@ export async function handleSchemaRoutes(
       const params: any[] = [];
       const name =
         body.name !== undefined ? String(body.name || "").trim() : undefined;
+      if (name !== undefined && !name) {
+        return new Response("Missing name", { status: 400 });
+      }
       const aliasTokens = normalizeAliasList(body.alias || name);
       if (name !== undefined) {
         updates.push("name = ?");
@@ -535,6 +538,71 @@ export async function handleSchemaRoutes(
     } catch (e) {
       console.error(e);
       return new Response("Error updating ontology", { status: 500 });
+    }
+  }
+
+  if (url.pathname === "/api/kb/ontologies/move" && method === "POST") {
+    try {
+      const body = (await req.json()) as any;
+      const moves = Array.isArray(body.items) ? body.items : [];
+      if (!moves.length) return new Response("Missing move items", { status: 400 });
+
+      const allOntologies = getScopedOntologies("");
+      const byId = new Map(allOntologies.map((item) => [item.id, item]));
+      const movedId = String(body.moved_id || "").trim();
+      const newParentId = moves[0]?.parent_id
+        ? String(moves[0].parent_id).trim()
+        : null;
+      if (!movedId || !byId.has(movedId)) {
+        return new Response("Ontology not found", { status: 404 });
+      }
+      if (newParentId && !byId.has(newParentId)) {
+        return new Response("Parent ontology not found", { status: 400 });
+      }
+      if (movedId === newParentId) {
+        return new Response("Cannot move ontology below itself", { status: 409 });
+      }
+      const subtreeIds = new Set(collectOntologySubtreeIds(allOntologies, movedId));
+      if (newParentId && subtreeIds.has(newParentId)) {
+        return new Response("Cannot move ontology below its descendant", { status: 409 });
+      }
+
+      const seen = new Set<string>();
+      const normalized = moves.map((move: any, index: number) => {
+        const id = String(move?.id || "").trim();
+        const parentId = move?.parent_id ? String(move.parent_id).trim() : null;
+        const sortOrder = Number(move?.sort_order);
+        if (!id || seen.has(id) || !byId.has(id)) throw new Error("Invalid ontology move item");
+        if (parentId !== newParentId) throw new Error("Move items must share one parent");
+        const currentParentId = byId.get(id)?.parent_id || null;
+        if (id !== movedId && currentParentId !== newParentId) {
+          throw new Error("Move payload contains a non-sibling ontology");
+        }
+        seen.add(id);
+        return { id, parentId, sortOrder: Number.isFinite(sortOrder) ? sortOrder : index + 1 };
+      });
+      if (!seen.has(movedId)) return new Response("Moved ontology is missing", { status: 400 });
+
+      const moveTxn = db.transaction((items: typeof normalized) => {
+        for (const item of items) {
+          if (hasProjectScope) {
+            db.run(
+              "UPDATE ontologies SET parent_id = ?, sort_order = ? WHERE id = ? AND project_id = ?",
+              [item.parentId, item.sortOrder, item.id, scopedProjectId],
+            );
+          } else {
+            db.run(
+              "UPDATE ontologies SET parent_id = ?, sort_order = ? WHERE id = ? AND project_id IS NULL",
+              [item.parentId, item.sortOrder, item.id],
+            );
+          }
+        }
+      });
+      moveTxn(normalized);
+      return Response.json({ ok: true });
+    } catch (e) {
+      console.error(e);
+      return new Response(e instanceof Error ? e.message : "Error moving ontology", { status: 400 });
     }
   }
 

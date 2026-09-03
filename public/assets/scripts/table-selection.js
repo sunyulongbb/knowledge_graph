@@ -1891,16 +1891,77 @@ function __kbInitTableSelection() {
     const grid = document.createElement("div");
     grid.className = "table-feed-media-collage";
     grid.dataset.count = String(Math.min(mediaItems.length, 4));
+    grid.dataset.totalCount = String(mediaItems.length);
     if (mediaItems.some((item) => item.type === "video")) {
       grid.classList.add("has-video");
     }
-    if (mediaItems.length > 1) {
+    if (mediaItems.length > 4) {
       grid.classList.add("is-scroll-strip");
     }
     if (mediaItems.length === 1 && mediaItems[0]?.type === "video") {
       grid.classList.add("single-video");
     }
     if (!mediaItems.length) return grid;
+
+    const sizeSingleMedia = (width, height) => {
+      if (mediaItems.length !== 1 || !width || !height) return;
+      const ratio = Math.min(3.2, Math.max(0.4, width / height));
+      const isVideo = mediaItems[0]?.type === "video";
+      if (isVideo) {
+        grid.style.width = "100%";
+        grid.style.maxWidth = "960px";
+        grid.style.aspectRatio = ratio < 1 ? "4 / 3" : `${width} / ${height}`;
+        return;
+      }
+      const targetHeight = 420;
+      const targetWidth = Math.min(720, Math.round(targetHeight * ratio));
+      grid.style.width = `${targetWidth}px`;
+      grid.style.maxWidth = "100%";
+    };
+
+    const clampMediaRatio = (value) =>
+      Math.min(2.2, Math.max(0.55, Number(value) || 1));
+    const updateRatioAwareLayout = () => {
+      if (mediaItems.length < 2 || mediaItems.length > 4) return;
+      const cells = Array.from(grid.children);
+      const ratios = cells.map((item) =>
+        clampMediaRatio(item.dataset.mediaRatio || 1),
+      );
+      const setLayoutRatio = (value) => {
+        const containsVideo = cells.some((item) => item.classList.contains("is-video"));
+        grid.style.aspectRatio = `${containsVideo ? value * 0.82 : value}`;
+      };
+      if (ratios.length === 2) {
+        grid.style.gridTemplateColumns = `${ratios[0]}fr ${ratios[1]}fr`;
+        setLayoutRatio(Math.min(3.4, Math.max(1.35, ratios[0] + ratios[1])));
+      } else if (ratios.length === 3) {
+        const sideRatio = Math.max(ratios[1], ratios[2]) / 2;
+        grid.style.gridTemplateColumns = `${ratios[0]}fr ${sideRatio}fr`;
+        setLayoutRatio(Math.min(3.2, Math.max(1.3, ratios[0] + sideRatio)));
+      } else if (ratios.length === 4) {
+        const leftRatio = Math.max(ratios[0], ratios[2]) / 2;
+        const rightRatio = Math.max(ratios[1], ratios[3]) / 2;
+        grid.style.gridTemplateColumns = `${leftRatio}fr ${rightRatio}fr`;
+        setLayoutRatio(Math.min(2.8, Math.max(1.25, leftRatio + rightRatio)));
+      }
+    };
+    const applyMediaRatio = (cell, width, height) => {
+      if (!width || !height) return;
+      const ratio = width / height;
+      cell.dataset.mediaRatio = String(ratio);
+      cell.classList.toggle("is-portrait", ratio < 0.82);
+      cell.classList.toggle("is-square", ratio >= 0.82 && ratio <= 1.22);
+      cell.classList.toggle("is-landscape", ratio > 1.22);
+      cell.classList.toggle("is-panoramic", ratio > 2.2);
+      if (mediaItems.length === 1) {
+        cell.style.aspectRatio = `${width} / ${height}`;
+        grid.style.aspectRatio = `${width} / ${height}`;
+        sizeSingleMedia(width, height);
+      } else {
+        updateRatioAwareLayout();
+        requestAnimationFrame(updateRatioAwareLayout);
+      }
+    };
 
     const visibleItems = mediaItems.length > 1 ? mediaItems : mediaItems.slice(0, 4);
     const hiddenCount =
@@ -1927,11 +1988,7 @@ function __kbInitTableSelection() {
           const width = Number(video.videoWidth || 0);
           const height = Number(video.videoHeight || 0);
           if (!width || !height) return;
-          if (mediaItems.length === 1) {
-            cell.style.aspectRatio = `${width} / ${height}`;
-            grid.style.aspectRatio = `${width} / ${height}`;
-            cell.style.width = "fit-content";
-          }
+          applyMediaRatio(cell, width, height);
         };
         video.addEventListener("loadedmetadata", applyVideoRatio, {
           once: true,
@@ -2091,13 +2148,7 @@ function __kbInitTableSelection() {
           const width = Number(img.naturalWidth || 0);
           const height = Number(img.naturalHeight || 0);
           if (!width || !height) return;
-          const ratio = width / height;
-          if (ratio > 0.34 && ratio < 3.2) {
-            cell.style.aspectRatio = `${width} / ${height}`;
-            if (mediaItems.length === 1) {
-              grid.style.aspectRatio = `${width} / ${height}`;
-            }
-          }
+          applyMediaRatio(cell, width, height);
         };
         img.addEventListener("load", applyImageRatio, { once: true });
         if (img.complete) applyImageRatio();
@@ -2652,7 +2703,6 @@ function __kbInitTableSelection() {
 
   function hydrateTableMediaSlot(slot) {
     if (!slot || slot.dataset.hydrated === "1") return;
-    if (window.kbTableLayoutMode === "table") return;
     const nodeId = String(slot.dataset.nodeId || "").trim();
     if (!nodeId) {
       slot.dataset.hydrated = "1";
@@ -2755,17 +2805,13 @@ function __kbInitTableSelection() {
     hideTableListTooltip();
 
     const isGridLayout = window.kbTableLayoutMode === "grid";
-    const isTableLayout = window.kbTableLayoutMode === "table";
-    const appendInfinite =
-      options && options.append === true && (isGridLayout || !isTableLayout);
+    const appendInfinite = options && options.append === true;
 
     if (isGridLayout) {
       tblNodes.classList.add("grid-layout");
     } else {
       tblNodes.classList.remove("grid-layout");
     }
-    tblNodes.classList.toggle("table-layout", isTableLayout);
-
     ensureTableListScrollTracking();
     rememberTableListScrollPosition();
 
@@ -2788,13 +2834,6 @@ function __kbInitTableSelection() {
 
     const filteredList = rawList.filter((n) => {
       if (!n || typeof n !== "object") return false;
-
-      if (isTableLayout) {
-        const displayName = String(
-          n.label_zh || n.label || n.name || "",
-        ).trim();
-        if (!displayName) return false;
-      }
 
       if (keyword) {
         const text = [
@@ -3012,7 +3051,8 @@ function __kbInitTableSelection() {
       }
 
       if (headerAside.childElementCount > 0) {
-        header.appendChild(headerAside);
+        if (isGridLayout) header.appendChild(headerAside);
+        else metaTop.appendChild(headerAside);
       }
       card.appendChild(header);
 
@@ -3028,7 +3068,7 @@ function __kbInitTableSelection() {
         card.appendChild(tagList);
       }
 
-      if (!isTableLayout && (hasVideo || hasImage)) {
+      if (hasVideo || hasImage) {
         const mediaSlot = document.createElement("div");
         mediaSlot.className = "table-feed-media-slot";
         mediaSlot.dataset.nodeId = nodeId;

@@ -12,6 +12,10 @@
   let propertyViewMode = selectedOntologyId ? "linked" : "all";
   let ontologyItems = [];
   let ontologySearchTimer = null;
+  let ontologyTreeController = null;
+  let ontologyMutationBusy = false;
+  let propertyGrid = null;
+  let propertyGridRows = [];
   let initPromise = null;
   let propertyOntologyModalState = {
     propertyId: "",
@@ -47,7 +51,10 @@
 
   async function apiJson(input, init) {
     const response = await fetch(input, init);
-    if (!response.ok) throw new Error("HTTP " + response.status);
+    if (!response.ok) {
+      const message = (await response.text()).trim();
+      throw new Error(message || "HTTP " + response.status);
+    }
     return await response.json();
   }
 
@@ -101,9 +108,9 @@
     const btnAddChild = byId("btnOntologyAddChild");
     const btnEdit = byId("btnOntologyEdit");
     const btnDelete = byId("btnOntologyDelete");
-    if (btnAddChild) btnAddChild.disabled = !hasSelection;
-    if (btnEdit) btnEdit.disabled = !hasSelection;
-    if (btnDelete) btnDelete.disabled = !hasSelection;
+    if (btnAddChild) btnAddChild.disabled = !hasSelection || ontologyMutationBusy;
+    if (btnEdit) btnEdit.disabled = !hasSelection || ontologyMutationBusy;
+    if (btnDelete) btnDelete.disabled = !hasSelection || ontologyMutationBusy;
   }
 
   function updateOntologySummary() {
@@ -145,6 +152,10 @@
   }
 
   function renderOntologyTree(nodes) {
+    if (ontologyTreeController) {
+      ontologyTreeController.update(nodes, selectedOntologyId);
+      return;
+    }
     if (!ontologyTree) return;
     if (!Array.isArray(nodes) || !nodes.length) {
       ontologyTree.innerHTML =
@@ -243,17 +254,19 @@
   }
 
   async function loadOntologyTree() {
-    if (ontologyTree) {
+    if (ontologyTreeController) {
+      ontologyTreeController.setLoading();
+    } else if (ontologyTree) {
       ontologyTree.innerHTML =
         '<div class="muted" style="padding: 10px 8px;">加载本体中...</div>';
     }
     const searchValue = (byId("ontologySearch")?.value || "").trim();
     try {
-      const url = appendCurrentDbToUrl(
-        new URL("/api/kb/ontology/tree", window.location.origin),
-      );
-      if (searchValue) url.searchParams.set("q", searchValue);
-      const data = await apiJson(url.toString());
+      const data = ontologyTreeController && window.kbOntologyTreeModuleReady
+        ? await (await window.kbOntologyTreeModuleReady).loadOntologyTree()
+        : await apiJson(appendCurrentDbToUrl(
+            new URL("/api/kb/ontology/tree", window.location.origin),
+          ).toString());
       const treeItems = Array.isArray(data?.items) ? data.items : [];
       ontologyItems = flattenOntologyTree(treeItems, []);
       window.kbOntologies = ontologyItems.slice();
@@ -271,10 +284,15 @@
         selectedOntologyId = "";
       }
       renderOntologyTree(treeItems);
+      if (searchValue && ontologyTreeController) ontologyTreeController.filter(searchValue);
       updateOntologySummary();
     } catch (err) {
       console.error("loadOntologyTree failed", err);
-      if (ontologyTree) {
+      if (ontologyTreeController) {
+        ontologyTreeController.setError(
+          "本体加载失败：" + (err?.message || err),
+        );
+      } else if (ontologyTree) {
         ontologyTree.innerHTML =
           '<div class="muted" style="padding: 10px 8px;">本体加载失败</div>';
       }
@@ -295,15 +313,7 @@
 
   function updatePropertySelectedStyles() {
     if (!propertyTable) return;
-    const rows = Array.from(propertyTable.querySelectorAll("tbody tr[data-id]"));
-    rows.forEach((tr) => {
-      const rowId = tr.getAttribute("data-id") || "";
-      const selected = window.propertySelectedIds.has(rowId);
-      tr.classList.toggle("selected", selected);
-      tr.setAttribute("aria-selected", selected ? "true" : "false");
-      const checkbox = tr.querySelector(".property-row-select");
-      if (checkbox) checkbox.checked = selected;
-    });
+    propertyGrid?.setSelectedRows(window.propertySelectedIds);
     const selectedCount = window.propertySelectedIds.size;
     const deleteSelectedButton = byId("btnPropertyDeleteSelected");
     if (deleteSelectedButton) {
@@ -315,24 +325,64 @@
       selectionStatus.textContent = selectedCount ? `已选择 ${selectedCount} 项` : "未选择";
       selectionStatus.classList.toggle("has-selection", selectedCount > 0);
     }
-    const selectAll = byId("propertySelectAll");
-    if (selectAll) {
-      const selectedOnPage = rows.filter((row) =>
-        window.propertySelectedIds.has(row.getAttribute("data-id") || ""),
-      ).length;
-      selectAll.checked = rows.length > 0 && selectedOnPage === rows.length;
-      selectAll.indeterminate = selectedOnPage > 0 && selectedOnPage < rows.length;
+  }
+
+  async function renderPropertyGrid(rows) {
+    const module = await window.kbBusinessGridModuleReady;
+    propertyGridRows = rows;
+    if (!propertyGrid) {
+      propertyGrid = module.getBusinessGrid(propertyTable, {
+        columns: [
+          { id: "select", header: [{ text: "选择" }], width: 56, minWidth: 52, maxWidth: 64, sortable: false, htmlEnable: true, template: (_value, row) => `<input class="property-row-select" type="checkbox" aria-label="选择属性" ${window.propertySelectedIds.has(String(row.id)) ? "checked" : ""}>` },
+          { id: "name", header: [{ text: "属性", content: "inputFilter" }], width: 220, minWidth: 120, gravity: 1.5, htmlEnable: true, template: (value) => `<strong class="property-grid-name" title="${escapeHtml(value)}">${escapeHtml(value)}</strong>` },
+          { id: "typeHtml", header: [{ text: "类型" }], width: 160, minWidth: 108, gravity: 0.8, htmlEnable: true, sortable: false },
+          { id: "actions", header: [{ text: "操作" }], width: 190, minWidth: 166, maxWidth: 210, htmlEnable: true, sortable: false },
+        ],
+        multiselection: true,
+        rowHeight: 52,
+        emptyText: "暂无属性",
+        serverFilter: true,
+        onFilterChange: async (filters) => {
+          const input = byId("propertyMgmtSearch");
+          if (input) input.value = String(filters.name || "").trim();
+          propertyPage = 1;
+          await loadPropertyList();
+        },
+        onSelectionChange: (ids) => {
+          window.propertySelectedIds = new Set(ids);
+          updatePropertySelectedStyles();
+        },
+        onCellClick: async (row, column, event) => {
+          const id = String(row.id || "");
+          if (column.id === "select" || event.target.closest(".property-row-select")) {
+            if (window.propertySelectedIds.has(id)) window.propertySelectedIds.delete(id);
+            else window.propertySelectedIds.add(id);
+            propertyGrid.update(propertyGridRows);
+            updatePropertySelectedStyles();
+            return;
+          }
+          const toggle = event.target.closest(".btnPropertyToggleOntology");
+          if (toggle) {
+            try {
+              if (row.linked) await unlinkPropertyFromOntology(id); else await linkPropertyToOntology(id);
+              await Promise.all([loadPropertyList(), loadOntologyTree()]);
+            } catch (err) { alert((row.linked ? "取消关联" : "关联") + "失败: " + (err?.message || err)); }
+            return;
+          }
+          if (event.target.closest(".btnPropertyEdit")) { openPropertyModal("edit", row.source || {}); return; }
+          if (event.target.closest(".btnPropertyAssignOntology")) { openPropertyOntologyModal(row.source || {}); return; }
+          if (event.target.closest(".btnPropertyDelete")) await deleteProperty(id);
+        },
+      });
     }
+    propertyGrid.update(rows);
+    updatePropertySelectedStyles();
   }
 
   async function loadPropertyList() {
     if (!propertyTable) return;
-    const tbody = propertyTable.querySelector("tbody");
-    if (!tbody) return;
-
     updateUrlState();
-    tbody.innerHTML =
-      '<tr><td colspan="7" class="muted">加载属性中...</td></tr>';
+    propertyTable.setAttribute("aria-busy", "true");
 
     const q = (byId("propertyMgmtSearch")?.value || "").trim();
     try {
@@ -358,14 +408,13 @@
       propertyTotal = Number(data?.total || list.length || 0);
 
       if (!list.length) {
-        tbody.innerHTML =
-          '<tr><td colspan="7" class="muted">暂无属性</td></tr>';
+        await renderPropertyGrid([]);
         updatePropertyPageInfo();
         updatePropertySelectedStyles();
         return;
       }
 
-      tbody.innerHTML = "";
+      const gridRows = [];
       for (const prop of list) {
         const linkedNames = Array.isArray(prop.ontology_names)
           ? prop.ontology_names.filter(Boolean)
@@ -375,11 +424,7 @@
           ? `<button class="btn sm ${isLinkedToCurrent ? "" : "primary"} btnPropertyToggleOntology ontology-link-btn" data-id="${escapeHtml(prop.id)}" data-linked="${isLinkedToCurrent ? "1" : "0"}">${isLinkedToCurrent ? "已关联" : "关联"}</button>`
           : `<button class="btn sm btnPropertyAssignOntology" data-id="${escapeHtml(prop.id)}">关联本体</button>`;
 
-        const tr = document.createElement("tr");
-        tr.setAttribute("data-id", prop.id || "");
-        tr.setAttribute("tabindex", "0");
-        tr.setAttribute("aria-selected", "false");
-        tr.dataset.property = JSON.stringify({
+        const source = {
           id: prop.id || "",
           name: prop.name || prop.label || "",
           datatype: prop.datatype || "string",
@@ -389,31 +434,35 @@
             ? prop.ontology_ids
             : [],
           ontology_names: linkedNames,
-        });
-        tr.innerHTML = `
-          <td class="property-select-cell"><input class="property-row-select" type="checkbox" aria-label="选择属性 ${escapeHtml(prop.label || prop.name || prop.id || "")}" /></td>
-          <td>${escapeHtml(prop.id || "")}</td>
-          <td><div style="font-weight:600; color:var(--fg);">${escapeHtml(prop.label || prop.name || "")}</div></td>
-          <td>${renderPropertyType(prop)}</td>
-          <td>${renderOntologyPills(linkedNames)}</td>
-          <td>${actionHtml}</td>
-          <td>
+        };
+        gridRows.push({
+          id: prop.id || "",
+          name: prop.label || prop.name || "",
+          typeHtml: renderPropertyType(prop),
+          linked: isLinkedToCurrent,
+          source,
+          actions: `${actionHtml}
             <button class="btn sm icon btnPropertyEdit" title="编辑"><i class="fa-solid fa-pen"></i></button>
             <button class="btn sm icon danger btnPropertyDelete" data-id="${escapeHtml(prop.id || "")}" title="删除"><i class="fa-solid fa-trash"></i></button>
-          </td>
-        `;
-        tbody.appendChild(tr);
+          `,
+        });
       }
+      await renderPropertyGrid(gridRows);
 
       updatePropertyPageInfo();
       updatePropertySelectedStyles();
     } catch (err) {
       console.error("loadPropertyList failed", err);
-      tbody.innerHTML = `<tr><td colspan="7" class="muted">加载失败: ${escapeHtml(
-        err?.message || err,
-      )}</td></tr>`;
+      if (propertyGrid) {
+        propertyGrid.update([]);
+        propertyTable.dataset.emptyText = `加载失败: ${err?.message || err}`;
+      } else {
+        propertyTable.innerHTML = `<div class="business-grid-state">加载失败: ${escapeHtml(err?.message || err)}</div>`;
+      }
       updatePropertyPageInfo();
       updatePropertySelectedStyles();
+    } finally {
+      propertyTable.removeAttribute("aria-busy");
     }
   }
 
@@ -688,7 +737,7 @@
   }
 
   async function deleteOntology(id) {
-    if (!id) return;
+    if (!id || ontologyMutationBusy) return;
     const current = getSelectedOntology();
     const hasChildren = ontologyItems.some((item) => item.parent_id === id);
     const hasProps = Number(current?.property_count || 0) > 0;
@@ -698,6 +747,8 @@
         : "确定删除该本体吗？";
     if (!confirm(message)) return;
 
+    ontologyMutationBusy = true;
+    updateOntologyActionState();
     try {
       const url = appendCurrentDbToUrl(
         new URL("/api/kb/ontologies", window.location.origin),
@@ -708,6 +759,10 @@
       await Promise.all([loadOntologyTree(), loadPropertyList()]);
     } catch (err) {
       alert("删除本体失败: " + (err?.message || err));
+      await loadOntologyTree();
+    } finally {
+      ontologyMutationBusy = false;
+      updateOntologyActionState();
     }
   }
 
@@ -774,6 +829,7 @@
       ontologyForm.dataset.boundOntologyForm = "1";
       ontologyForm.addEventListener("submit", async (event) => {
         event.preventDefault();
+        if (ontologyForm.dataset.saving === "1") return;
         const mode = ontologyForm.dataset.mode || "create";
         const id = (byId("ontologyId")?.value || "").trim();
         const parentId = (byId("ontologyParentId")?.value || "").trim();
@@ -784,6 +840,9 @@
           return;
         }
 
+        const submitButton = ontologyForm.querySelector('[type="submit"]');
+        ontologyForm.dataset.saving = "1";
+        if (submitButton) submitButton.disabled = true;
         try {
           const color = (byId("ontologyColor")?.value || "").trim() || null;
           const display_shape =
@@ -810,6 +869,10 @@
           await Promise.all([loadOntologyTree(), loadPropertyList()]);
         } catch (err) {
           alert("保存本体失败: " + (err?.message || err));
+          await loadOntologyTree();
+        } finally {
+          delete ontologyForm.dataset.saving;
+          if (submitButton) submitButton.disabled = false;
         }
       });
 
@@ -837,7 +900,7 @@
       }
     }
 
-    if (propertyTable && !propertyTable.dataset.boundOntologyTable) {
+    if (propertyTable?.tagName === "TABLE" && !propertyGrid && !propertyTable.dataset.boundOntologyTable) {
       propertyTable.dataset.boundOntologyTable = "1";
       propertyTable.addEventListener("click", async (event) => {
         const rowCheckbox = event.target.closest(".property-row-select");
@@ -961,7 +1024,7 @@
       });
     }
 
-    if (ontologyTree && !ontologyTree.dataset.boundOntologyTree) {
+    if (ontologyTree && !ontologyTreeController && !ontologyTree.dataset.boundOntologyTree) {
       ontologyTree.dataset.boundOntologyTree = "1";
       ontologyTree.addEventListener("click", async (event) => {
         const target = event.target.closest(".ontology-tree-item");
@@ -981,7 +1044,8 @@
       ontologySearch.addEventListener("input", () => {
         if (ontologySearchTimer) clearTimeout(ontologySearchTimer);
         ontologySearchTimer = setTimeout(() => {
-          loadOntologyTree();
+          if (ontologyTreeController) ontologyTreeController.filter(ontologySearch.value);
+          else loadOntologyTree();
         }, 180);
       });
     }
@@ -1208,9 +1272,40 @@
   window.openPropertyModal = openPropertyModal;
   window.closePropertyModal = closePropertyModal;
 
+  async function initializeOntologyTree() {
+    if (!ontologyTree || ontologyTreeController) return;
+    const module = await window.kbOntologyTreeModuleReady;
+    ontologyTreeController = new module.OntologyTreeController(ontologyTree, {
+      onSelect: async (id) => {
+        selectedOntologyId = String(id || "").trim();
+        propertyViewMode = selectedOntologyId ? "linked" : "all";
+        propertyPage = 1;
+        updateOntologySummary();
+        await loadPropertyList();
+      },
+      onEdit: (id) => {
+        selectedOntologyId = id;
+        const item = getSelectedOntology();
+        if (item) openOntologyModal("edit", { item });
+      },
+      onAddChild: (id) => {
+        selectedOntologyId = id;
+        const parent = getSelectedOntology();
+        if (parent) openOntologyModal("create", { parent });
+      },
+      onDelete: (id) => {
+        selectedOntologyId = id;
+        void deleteOntology(id);
+      },
+      onReload: loadOntologyTree,
+      onError: (message) => alert(message),
+    });
+  }
+
   async function initOntologyPanel() {
     if (initPromise) return initPromise;
     initPromise = (async () => {
+      await initializeOntologyTree();
       bindEvents();
       updateOntologySummary();
       if (typeof window.fetchKbStats === "function") {

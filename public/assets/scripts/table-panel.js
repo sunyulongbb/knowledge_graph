@@ -45,9 +45,9 @@
   const btnDeleteSelected = document.getElementById("btnDeleteSelected");
   const tblCount = document.getElementById("tblCount");
   const tblPagination = document.getElementById("tblPagination");
-  const TABLE_LAYOUT_MODES = ["list", "grid", "table", "manage"];
+  const TABLE_LAYOUT_MODES = ["list", "grid", "manage"];
   const normalizeTableLayoutMode = (mode) =>
-    TABLE_LAYOUT_MODES.includes(mode) ? mode : "list";
+    mode === "table" ? "list" : TABLE_LAYOUT_MODES.includes(mode) ? mode : "list";
   const getInitialTableLayoutMode = () => {
     let mode = "list";
     try {
@@ -101,7 +101,6 @@
     const tblNodes = document.getElementById("tblNodes");
     if (tblNodes) {
       tblNodes.classList.toggle("grid-layout", normalized === "grid");
-      tblNodes.classList.toggle("table-layout", normalized === "table");
     }
     document.getElementById("tablePanel")?.classList.toggle("manage-layout", normalized === "manage");
     if (btnTblLayoutToggle) {
@@ -110,13 +109,13 @@
           (TABLE_LAYOUT_MODES.indexOf(normalized) + 1) %
             TABLE_LAYOUT_MODES.length
         ];
-      const nextLabel = nextMode === "grid" ? "网格布局" : nextMode === "table" ? "表格布局" : nextMode === "manage" ? "管理表格" : "列表布局";
+      const nextLabel = nextMode === "grid" ? "网格布局" : nextMode === "manage" ? "管理表格" : "列表布局";
       const icon =
         normalized === "grid"
-          ? "fa-table-list"
-          : normalized === "table"
+          ? "fa-table-columns"
+          : normalized === "manage"
             ? "fa-list"
-            : normalized === "table" ? "fa-table-columns" : "fa-th-large";
+            : "fa-th-large";
       btnTblLayoutToggle.innerHTML = `<i class="fa-solid ${icon}"></i>`;
       btnTblLayoutToggle.title = `切换到${nextLabel}`;
       btnTblLayoutToggle.setAttribute("aria-label", `切换到${nextLabel}`);
@@ -125,8 +124,7 @@
       tblGridZoomControls.style.display = normalized === "grid" ? "flex" : "none";
     }
     if (tblPagination) {
-      tblPagination.style.display =
-        normalized === "table" || normalized === "manage" ? "flex" : "none";
+      tblPagination.style.display = normalized === "manage" ? "flex" : "none";
     }
     if (typeof window.renderTableList === "function") {
       window.renderTableList();
@@ -736,10 +734,7 @@
       updateTblPageInfo();
       if (tblPagination) {
         tblPagination.style.display =
-          window.kbTableLayoutMode === "table" ||
-          window.kbTableLayoutMode === "manage"
-            ? "flex"
-            : "none";
+          window.kbTableLayoutMode === "manage" ? "flex" : "none";
       }
 
       if (tblCount) {

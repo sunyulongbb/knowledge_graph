@@ -13,7 +13,6 @@
   <link rel="stylesheet" href="/node_modules/vidstack/player/styles/default/layouts/video.css" />
   <link rel="stylesheet" href="/css/easymde.min.css">
   <script src="/js/easymde.min.js"></script>
-  <script src="/js/canvas-datagrid.js"></script>
   <script src="/js/xlsx.full.min.js"></script>
   <script src="/js/lodash.min.js"></script>
   <script type="module">
@@ -37,6 +36,14 @@
       window["@tiptap/starter-kit"] || window.TiptapStarterKit;
   </script>
   <link rel="stylesheet" href="/assets/styles/app.css" />
+  <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
+  <link rel="stylesheet" href="/assets/generated/business-grid.css" />
+  <script>
+    window.kbBusinessGridModuleReady = import("/assets/generated/business-grid.js").then((module) => {
+      window.kbBusinessGrid = module;
+      return module;
+    });
+  </script>
   <link rel="stylesheet" href="/assets/styles/sparql.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
   <script src="https://unpkg.com/cytoscape-edgehandles@4.0.1/cytoscape-edgehandles.js"></script>
@@ -1356,6 +1363,187 @@
       -ms-overflow-style: none;
     }
 
+    #ontologyTree {
+      min-width: 0;
+      min-height: 0;
+      position: relative;
+      color-scheme: inherit;
+      --dhx-background-primary: var(--surface-0);
+      --dhx-background-secondary: color-mix(in srgb, var(--accent) 12%, var(--surface-0));
+      --dhx-background-additional: var(--surface-1);
+      --dhx-font-color-primary: var(--fg);
+      --dhx-font-color-secondary: var(--muted);
+      --dhx-font-color-additional: var(--muted-2, var(--muted));
+      --dhx-font-color-disabled: color-mix(in srgb, var(--muted) 58%, transparent);
+      --dhx-border-color: var(--border);
+      --dhx-border-color-focused: var(--border-strong);
+      --dhx-color-primary: var(--accent);
+      --dhx-color-focused: var(--accent);
+      --dhx-font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    #ontologyTree .ontology-dhtmlx-host {
+      width: 100%;
+      min-width: 0;
+      min-height: 120px;
+    }
+
+    #ontologyTree .dhx_tree-list-item {
+      min-width: 0;
+    }
+
+    #ontologyTree .dhx_tree-list-item__text {
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    #ontologyTree .dhx_tree-list-item__content {
+      min-width: 0;
+      width: 100%;
+      color: var(--fg);
+      border-radius: 8px;
+    }
+
+    #ontologyTree .dhx_tree {
+      background: var(--surface-0);
+      color: var(--fg);
+    }
+
+    #ontologyTree .dhx_tree-folder:hover::before,
+    #ontologyTree .dhx_tree-list-item:hover::before,
+    #ontologyTree .dhx_tree-folder--focused::before,
+    #ontologyTree .dhx_tree-list-item--focused::before {
+      background: var(--surface-1);
+    }
+
+    #ontologyTree .dhx_tree-folder--selected::before,
+    #ontologyTree .dhx_tree-list-item--selected::before {
+      background: color-mix(in srgb, var(--accent) 12%, var(--surface-0));
+      box-shadow: inset 2px 0 0 var(--accent);
+    }
+
+    #ontologyTree .dhx_tree-list-item__text,
+    #ontologyTree .dhx_tree-toggle-button {
+      color: var(--fg);
+    }
+
+    #ontologyTree .dhx_tree-list-item--selected .dhx_tree-list-item__content {
+      background: color-mix(in srgb, var(--accent, #2563eb) 13%, transparent);
+      color: var(--accent, #2563eb);
+    }
+
+    #ontologyTree .ontology-node-dot {
+      flex: 0 0 10px;
+      width: 10px;
+      height: 10px;
+      margin-right: 7px;
+      border-radius: 50%;
+      background: var(--ontology-node-color, #94a3b8);
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08);
+    }
+
+    #ontologyTree .ontology-node-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    #ontologyTree .ontology-node-count {
+      flex: 0 0 auto;
+      margin-left: auto;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--surface-1, #f1f5f9) 88%, transparent);
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    #ontologyTree .ontology-tree-all {
+      width: 100%;
+      margin: 0 0 4px;
+      padding: 8px 10px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--fg);
+      text-align: left;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    #ontologyTree .ontology-tree-all:hover,
+    #ontologyTree .ontology-tree-all:focus-visible,
+    #ontologyTree .ontology-tree-all.is-selected {
+      outline: none;
+      background: color-mix(in srgb, var(--accent, #2563eb) 13%, transparent);
+      color: var(--accent, #2563eb);
+    }
+
+    #ontologyTree .ontology-tree-state {
+      display: flex;
+      min-height: 96px;
+      padding: 16px 8px;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 10px;
+      color: var(--muted);
+      text-align: center;
+      font-size: 12px;
+    }
+
+    #ontologyTree .ontology-tree-spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent, #2563eb);
+      border-radius: 50%;
+      animation: ontology-tree-spin .7s linear infinite;
+    }
+
+    #ontologyTree[aria-busy="true"] {
+      pointer-events: none;
+      opacity: .72;
+    }
+
+    .ontology-tree-context-menu {
+      position: fixed;
+      z-index: 5000;
+      display: flex;
+      width: 160px;
+      padding: 6px;
+      flex-direction: column;
+      gap: 2px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface-0, #fff);
+      box-shadow: 0 12px 30px rgba(15, 23, 42, .18);
+    }
+
+    .ontology-tree-context-menu button {
+      padding: 7px 9px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--fg);
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .ontology-tree-context-menu button:hover:not(:disabled),
+    .ontology-tree-context-menu button:focus-visible {
+      outline: none;
+      background: var(--surface-1, #f8fafc);
+    }
+
+    .ontology-tree-context-menu button:disabled {
+      opacity: .45;
+      cursor: not-allowed;
+    }
+
+    @keyframes ontology-tree-spin { to { transform: rotate(360deg); } }
+
     .ontology-tree-wrap::-webkit-scrollbar,
     .ontology-table-wrap::-webkit-scrollbar,
     #attrTablePanel::-webkit-scrollbar {
@@ -1439,21 +1627,10 @@
     }
 
     #propertyTable {
-      table-layout: fixed;
+      width: 100%;
+      height: 100%;
+      min-width: 0;
     }
-
-    #propertyTable th,
-    #propertyTable td {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    #propertyTable th:nth-child(1) { width: 42px; }
-    #propertyTable th:nth-child(2) { width: 74px; }
-    #propertyTable th:nth-child(4) { width: 120px; }
-    #propertyTable th:nth-child(6) { width: 96px; }
-    #propertyTable th:nth-child(7) { width: 84px; }
 
     #propertyPagination {
       padding: 0 4px 2px;
@@ -1752,9 +1929,9 @@
           <!-- Database/project switcher moved to modal -->
           <!-- 选择知识库弹窗（数据库/项目选择器） -->
           <div id="dbSelectModal"
-            style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.3);z-index:2100;align-items:center;justify-content:center;">
+            style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:var(--modal-overlay-bg);z-index:2100;align-items:center;justify-content:center;">
             <div id="dbSelectModalContent"
-              style="background:#fff;padding:28px;border-radius:12px;width:min(1600px,96vw);min-width:min(900px,96vw);box-shadow:0 4px 36px rgba(0,0,0,0.18);display:flex;flex-direction:column;gap:14px;align-items:stretch;max-height:92vh;overflow:auto;">
+              style="background:var(--surface-0);color:var(--fg);border:1px solid var(--border);padding:28px;border-radius:12px;width:min(1600px,96vw);min-width:min(900px,96vw);box-shadow:var(--modal-shadow);display:flex;flex-direction:column;gap:14px;align-items:stretch;max-height:92vh;overflow:auto;">
               <div style="display:flex;gap:12px;align-items:center;">
                 <h3 style="margin:0;">请选择知识库项目</h3>
                 <!-- 当 DB 选择弹窗打开时，顶部加入登录按钮，便于用户直接登录（弹窗会覆盖页面顶部，原导航按钮在弹窗打开时无法被点击） -->
@@ -1817,24 +1994,24 @@
       </div>
       <!-- 创建项目弹窗 -->
       <div id="createProjectModal"
-        style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.3);z-index:2000;align-items:center;justify-content:center;">
+        style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:var(--modal-overlay-bg);z-index:2000;align-items:center;justify-content:center;">
         <div
-          style="background:#fff;padding:32px 24px;border-radius:8px;min-width:360px;box-shadow:0 2px 16px #0002;display:flex;flex-direction:column;gap:12px;align-items:stretch;">
+          style="background:var(--surface-0);color:var(--fg);border:1px solid var(--border);padding:32px 24px;border-radius:8px;min-width:360px;box-shadow:var(--modal-shadow);display:flex;flex-direction:column;gap:12px;align-items:stretch;">
           <h3 style="margin:0 0 8px 0;">新建知识库项目</h3>
           <!-- 项目短名/数据库名自动生成，用户无需填写 -->
           <input id="inputProjectName" type="hidden" />
-          <label style="font-size:13px;color:#374151;margin-bottom:4px">项目展示名称（可读名称）</label>
+          <label style="font-size:13px;color:var(--muted);margin-bottom:4px">项目展示名称（可读名称）</label>
           <input id="inputProjectTitle" type="text" placeholder="例如：我的知识库" style="padding:8px;font-size:14px;" />
-          <label style="font-size:13px;color:#374151;margin-bottom:4px">项目描述（可选）</label>
+          <label style="font-size:13px;color:var(--muted);margin-bottom:4px">项目描述（可选）</label>
           <textarea id="inputProjectDesc" placeholder="简短描述"
             style="padding:8px;font-size:14px;min-height:64px;resize:vertical;"></textarea>
-          <label style="font-size:13px;color:#374151;margin-bottom:4px">项目图标（可选，支持上传图片）</label>
+          <label style="font-size:13px;color:var(--muted);margin-bottom:4px">项目图标（可选，支持上传图片）</label>
           <input id="inputProjectCreateImageFile" type="file" accept="image/*" style="padding:8px;font-size:14px;" />
           <div id="createProjectImagePreview" style="margin:6px 0 10px 0;display:none;align-items:center;gap:8px;">
             <img id="createProjectImagePreviewImg" src="" alt="预览" style="width:48px;height:48px;border-radius:8px;background:#f1f5f9;background-size:cover;background-position:center;border:1px solid var(--border);object-fit:cover;" />
             <button type="button" id="createProjectImageClearBtn" class="btn" style="padding:2px 8px;font-size:13px;">移除</button>
           </div>
-          <label style="font-size:13px;color:#374151;margin-bottom:4px">外部链接（可选）</label>
+          <label style="font-size:13px;color:var(--muted);margin-bottom:4px">外部链接（可选）</label>
           <input id="inputProjectCreateLink" type="text" placeholder="https://..." style="padding:8px;font-size:14px;" />
           <div id="createProjectPreview" style="margin-top:8px;display:none;align-items:center;gap:8px;">
             <div id="createProjectPreviewImg"
@@ -1934,9 +2111,9 @@
 
       <!-- 编辑项目弹窗（用于修改图标URL） -->
       <div id="editProjectModal"
-        style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.3);z-index:2100;align-items:center;justify-content:center;">
+        style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:var(--modal-overlay-bg);z-index:2100;align-items:center;justify-content:center;">
         <div
-          style="background:#fff;padding:20px;border-radius:8px;min-width:320px;max-width:90vw;box-shadow:0 6px 30px rgba(2,6,23,0.2);">
+          style="background:var(--surface-0);color:var(--fg);border:1px solid var(--border);padding:20px;border-radius:8px;min-width:320px;max-width:90vw;box-shadow:var(--modal-shadow);">
           <h3 style="margin:0 0 12px 0;">编辑项目图标</h3>
           <div style="display:flex;flex-direction:column;gap:8px;">
             <div>
@@ -2907,20 +3084,7 @@
                 </div>
               </div>
               <div class="tbl-wrap ontology-table-wrap">
-                <table class="tbl" id="propertyTable" style="width: 100%">
-                  <thead style="position: sticky; top: 0; background: #fff; z-index: 2">
-                    <tr>
-                      <th class="property-select-cell"><input id="propertySelectAll" type="checkbox" aria-label="选择当前页全部属性" /></th>
-                      <th style="width: 56px">ID</th>
-                      <th>属性</th>
-                      <th style="width: 150px">类型</th>
-                      <th>所属本体</th>
-                      <th style="width: 110px">关联</th>
-                      <th style="width: 100px">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody></tbody>
-                </table>
+                <div id="propertyTable" class="business-grid-host" aria-label="属性管理表格"></div>
               </div>
               <div id="propertyPagination" class="table-toolbar" style="margin-top: 8px; justify-content: center">
                 <button id="btnPropertyPrevPage" class="btn" type="button">
@@ -3790,25 +3954,7 @@
                 </div>
                 <div id="wikiRevsInline" style="display: none; margin-top: 12px">
                   <div class="muted" style="margin-bottom: 6px">历史版本</div>
-                  <table style="
-                        width: 100%;
-                        border-collapse: collapse;
-                        font-size: 12px;
-                      ">
-                    <thead>
-                      <tr style="
-                            text-align: left;
-                            border-bottom: 1px solid var(--border);
-                          ">
-                        <th style="padding: 4px 6px">Rev</th>
-                        <th style="padding: 4px 6px">时间</th>
-                        <th style="padding: 4px 6px">用户</th>
-                        <th style="padding: 4px 6px">说明</th>
-                        <th style="padding: 4px 6px">操作</th>
-                      </tr>
-                    </thead>
-                    <tbody id="wikiRevBodyInline"></tbody>
-                  </table>
+                  <div id="wikiRevBodyInline" class="business-grid-host wiki-revision-grid" aria-label="百科历史版本"></div>
                 </div>
                 <div id="wikiRevPreviewInline" style="
                       display: none;
@@ -4780,9 +4926,9 @@
 
   <!-- Property Modal -->
   <div id="propertyModal" class="modal-overlay"
-    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; align-items: center; justify-content: center;">
     <div class="modal-content"
-      style="background: #fff; padding: 20px; border-radius: 8px; width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+      style="padding: 20px; border-radius: 8px; width: 400px;">
       <h3 id="propertyModalTitle" style="margin-top: 0; margin-bottom: 16px;">新增属性</h3>
       <form id="propertyForm">
         <input type="hidden" id="propId">
@@ -4838,9 +4984,9 @@
   </div>
 
   <div id="ontologyModal" class="modal-overlay"
-    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; align-items: center; justify-content: center;">
     <div class="modal-content"
-      style="background: #fff; padding: 20px; border-radius: 8px; width: 420px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+      style="padding: 20px; border-radius: 8px; width: 420px;">
       <h3 id="ontologyModalTitle" style="margin-top: 0; margin-bottom: 16px;">新增本体</h3>
       <form id="ontologyForm">
         <input type="hidden" id="ontologyId">
@@ -4889,9 +5035,9 @@
   </div>
 
   <div id="propertyOntologyModal" class="modal-overlay"
-    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; align-items: center; justify-content: center;">
     <div class="modal-content"
-      style="background: #fff; padding: 20px; border-radius: 8px; width: 440px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+      style="padding: 20px; border-radius: 8px; width: 440px;">
       <h3 id="propertyOntologyModalTitle" style="margin-top: 0; margin-bottom: 10px;">关联本体</h3>
       <div id="propertyOntologyModalSummary" class="muted" style="margin-bottom: 14px; font-size: 13px;">选择要关联的本体</div>
       <form id="propertyOntologyForm">
@@ -4912,7 +5058,7 @@
     </div>
   </div>
   <div id="propPanelModal" class="modal-overlay"
-    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 1000; align-items: center; justify-content: center;"
+    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; align-items: center; justify-content: center;"
     aria-hidden="true">
     <div class="modal-content"
       style="background: var(--surface-0, #fff); color: var(--fg, #0f172a); padding: 20px; border-radius: 12px; width: min(520px, 92vw); max-height: 90vh; box-shadow: 0 12px 30px rgba(15, 23, 42, 0.25); display: flex; flex-direction: column; gap: 12px;">
@@ -5823,6 +5969,7 @@
 
     let entryTemplateType = ENTRY_TEMPLATE.ENTITY_SHEET;
     let entryGridInstance = null;
+    let entryGridInitQueued = false;
     let entryGridResizeRaf = null;
     let entryMultiState = {
       columns: [],
@@ -7759,24 +7906,18 @@
 
     function ensureEntryGrid() {
       if (entryGridInstance || !entryGridHost) return entryGridInstance;
-      if (typeof window.canvasDatagrid !== "function") {
-        console.warn("canvas-datagrid 未加载，录入表格不可用");
+      if (!window.kbBusinessGrid?.createEditableBusinessGrid) {
+        console.warn("DHTMLX Grid 尚未加载，录入表格将在组件就绪后初始化");
+        if (!entryGridInitQueued) {
+          entryGridInitQueued = true;
+          window.kbBusinessGridModuleReady?.then(() => {
+            entryGridInitQueued = false;
+            applyEntryTemplateToGrid();
+          });
+        }
         return null;
       }
-      entryGridInstance = window.canvasDatagrid({
-        parentNode: entryGridHost,
-        data: [],
-        allowColumnReordering: false,
-        allowFreezing: false,
-        allowSorting: false,
-        showPerformanceGraph: false,
-      });
-      try {
-        entryGridInstance.style.width = "100%";
-        entryGridInstance.style.height = "100%";
-        entryGridInstance.style.position = "absolute";
-        entryGridInstance.style.inset = "0";
-      } catch { }
+      entryGridInstance = window.kbBusinessGrid.createEditableBusinessGrid(entryGridHost);
       entryGridInstance.addEventListener("click", (event) => {
         const cell = event?.cell;
         const rowIndex = Number(cell?.rowIndex);
@@ -19453,18 +19594,18 @@
 
   </script>
   <!-- Class Modal -->
-  <div id="entityManageModal" class="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:2200;align-items:center;justify-content:center;">
+  <div id="entityManageModal" class="modal-overlay" style="display:none;position:fixed;inset:0;z-index:2200;align-items:center;justify-content:center;">
     <div class="entity-manage-modal">
       <div class="entity-manage-modal__head"><div><strong>管理表格</strong><small id="entityManageCount">已选 0 项</small></div><button id="btnEntityManageClose" class="btn icon" type="button" aria-label="关闭">×</button></div>
       <div class="entity-manage-toolbar"><input id="entityManageSearch" class="app-search-input kb-input sm" placeholder="搜索知识" /><span class="entity-manage-hint">单击选中，双击查看详情</span><button id="btnEntityManageExport" class="btn sm" type="button">导出</button></div>
       <div class="entity-manage-bulk"><input id="entityManageType" class="kb-input sm" placeholder="批量设置类型" /><button id="btnEntityManageApplyType" class="btn sm" type="button">应用类型</button><input id="entityManageTag" class="kb-input sm" placeholder="批量添加标签" /><button id="btnEntityManageApplyTag" class="btn sm" type="button">添加标签</button><button id="btnEntityManageDelete" class="btn sm danger" type="button">删除所选</button></div>
-      <div class="entity-manage-table-wrap"><table class="entity-manage-table"><thead><tr><th><input id="entityManageCheckAll" type="checkbox" aria-label="全选" /></th><th>名称</th><th>类型</th><th>标签</th><th>更新时间</th></tr></thead><tbody id="entityManageRows"></tbody></table></div>
+      <div class="entity-manage-table-wrap"><div id="entityManageRows" class="business-grid-host" aria-label="实体批量管理表格"></div></div>
     </div>
   </div>
 
   <!-- Class Modal -->
   <div id="classModal" class="modal-overlay"
-    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.45); z-index: 1000; align-items: center; justify-content: center;">
+    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; align-items: center; justify-content: center;">
     <div class="modal-content"
       style="background: var(--surface-0, #fff); color: var(--fg, #0f172a); padding: 20px; border-radius: 16px; width: min(440px, 94vw); box-shadow: 0 25px 60px rgba(15, 23, 42, 0.35); display: flex; flex-direction: column; gap: 16px;">
       <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -19496,9 +19637,9 @@
 
   <!-- 边属性选择模态框 -->
   <div id="edgePropertyModal" class="modal-overlay"
-    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; align-items: center; justify-content: center;">
+    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 2000; align-items: center; justify-content: center;">
     <div class="modal-content"
-      style="background: var(--surface-1, #fff); padding: 20px; border-radius: 8px; width: 420px; max-height: 520px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: flex; flex-direction: column;">
+      style="padding: 20px; border-radius: 8px; width: 420px; max-height: 520px; display: flex; flex-direction: column;">
       <h3 id="edgeModalTitle" style="margin-top: 0; margin-bottom: 8px; color: var(--fg);">选择关系类型</h3>
       <div id="edgeNodeInfo"
         style="margin-bottom: 12px; padding: 10px; background: var(--surface-2, #f8fafc); border-radius: 6px; font-size: 13px;">
@@ -19524,6 +19665,9 @@
   </div>
 
   <script src="/assets/scripts/app-shared.js"></script>
+  <script>
+    window.kbOntologyTreeModuleReady = import("/assets/generated/ontology-tree.js");
+  </script>
   <script src="/assets/scripts/property-panel.js"></script>
   <script src="/assets/scripts/table-panel.js"></script>
   <script src="/assets/scripts/table-selection.js"></script>

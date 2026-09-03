@@ -1,6 +1,8 @@
 (function () {
   const byId = (id) => document.getElementById(id);
   const selected = new Set();
+  let entityGrid = null;
+  let renderedRows = [];
   const normalizeId = (node) => String(node?._id || node?.id || "").replace(/^entity\//, "").trim();
   const labelOf = (node) => String(node?.label_zh || node?.label || node?.name || "未命名实体").trim();
   const escapeHtml = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -50,39 +52,56 @@
     byId("entityManageModal")?.classList.toggle("has-selection", selected.size > 0);
   }
 
-  function render() {
+  async function render() {
     const host = byId("entityManageRows");
     if (!host) return;
     const list = filteredNodes();
-    host.innerHTML = list.length ? list.map((node) => {
+    renderedRows = list.map((node) => {
       const id = normalizeId(node); const tags = Array.isArray(node.tags) ? node.tags.join("、") : String(node.tags || "");
-      return `<tr data-id="${escapeHtml(id)}" class="${selected.has(id) ? "selected" : ""}" tabindex="0"><td><input class="entity-manage-check" data-id="${escapeHtml(id)}" type="checkbox" ${selected.has(id) ? "checked" : ""}></td><td title="${escapeHtml(labelOf(node))}">${escapeHtml(labelOf(node))}</td><td>${escapeHtml(node.typeLabel || node.classLabel || node.type || "—")}</td><td>${escapeHtml(tags || "—")}</td><td>${escapeHtml(node.updated_at || node.created_at || "—")}</td></tr>`;
-    }).join("") : '<tr><td colspan="5" class="muted">没有可管理的实体</td></tr>';
-    host.querySelectorAll(".entity-manage-check").forEach((input) => input.addEventListener("change", () => {
-      input.checked ? selected.add(input.dataset.id) : selected.delete(input.dataset.id);
-      input.closest("tr")?.classList.toggle("selected", input.checked);
-      syncGlobalSelection(input.checked ? input.dataset.id : "");
-      updateCount();
-    }));
-    host.querySelectorAll("tr[data-id]").forEach((row) => {
-      row.addEventListener("click", (event) => {
-        if (event.target.closest("input, button, a")) return;
-        const id = row.dataset.id;
-        if (!id) return;
-        if (event.ctrlKey || event.metaKey) {
-          selected.has(id) ? selected.delete(id) : selected.add(id);
-        } else {
-          const keepOnlyCurrent = selected.size === 1 && selected.has(id);
-          selected.clear();
-          if (!keepOnlyCurrent) selected.add(id);
-        }
-        syncGlobalSelection(selected.has(id) ? id : "");
-        render();
-      });
-      row.addEventListener("dblclick", (event) => {
-        if (event.target.closest("input, button, a")) return;
-        const id = row.dataset.id;
-        if (!id) return;
+      return { id, select: "", name: labelOf(node), type: node.typeLabel || node.classLabel || node.type || "—", tags: tags || "—", updated: node.updated_at || node.created_at || "—" };
+    });
+    const module = await window.kbBusinessGridModuleReady;
+    if (!entityGrid) {
+      entityGrid = module.getBusinessGrid(host, {
+        columns: [
+          { id: "select", header: [{ text: "选择" }], width: 64, sortable: false, htmlEnable: true, template: (_value, row) => `<input class="entity-manage-check" type="checkbox" ${selected.has(String(row.id)) ? "checked" : ""}>` },
+          { id: "name", header: [{ text: "名称", content: "inputFilter" }], minWidth: 180, gravity: 1.2 },
+          { id: "type", header: [{ text: "类型", content: "selectFilter" }], width: 170 },
+          { id: "tags", header: [{ text: "标签" }], minWidth: 160, gravity: 1 },
+          { id: "updated", header: [{ text: "更新时间" }], width: 180 },
+        ],
+        multiselection: true,
+        emptyText: "没有可管理的实体",
+        serverFilter: true,
+        onFilterChange: async (filters) => {
+          const search = String(filters.name || "").trim();
+          const type = String(filters.type || "").trim();
+          const manageSearch = byId("entityManageSearch");
+          const tableSearch = byId("tblSearch");
+          if (manageSearch) manageSearch.value = search;
+          if (tableSearch) tableSearch.value = search;
+          const typeSelect = byId("tblTypeFilter");
+          if (typeSelect) {
+            const matchingOption = [...typeSelect.options].find((option) => option.value === type || option.textContent?.trim() === type);
+            typeSelect.value = matchingOption?.value || "";
+            typeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+          } else {
+            await window.loadTablePage?.({ resetPage: true, scrollToTop: true });
+          }
+        },
+        onSelectionChange: (ids) => {
+          selected.clear(); ids.forEach((id) => selected.add(id));
+          syncGlobalSelection(ids[0] || ""); updateCount();
+        },
+        onCellClick: (row, column, event) => {
+          const id = String(row.id);
+          if (column.id === "select" || event.target.closest(".entity-manage-check")) {
+            selected.has(id) ? selected.delete(id) : selected.add(id);
+            entityGrid.setSelectedRows(selected); syncGlobalSelection(selected.has(id) ? id : ""); updateCount();
+          }
+        },
+        onCellDblClick: (row) => {
+          const id = String(row.id);
         selected.clear();
         selected.add(id);
         window.setTableSelection?.(id, false, {
@@ -90,13 +109,11 @@
           skipSidebarSync: true,
         });
         window.setViewMode?.("detail", { targetNodeId: id });
+        },
       });
-      row.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter") return;
-        event.preventDefault();
-        window.setViewMode?.("detail", { targetNodeId: row.dataset.id });
-      });
-    });
+    }
+    entityGrid.update(renderedRows);
+    entityGrid.setSelectedRows(selected);
     updateCount();
   }
 
@@ -139,11 +156,11 @@
       }
       modal.classList.add("entity-manage-inline");
       modal.style.display = "block";
-      render();
+      void render();
     };
     window.closeEntityManageTable = () => { if (modal) modal.style.display = "none"; };
-    byId("btnEntityManageClose")?.addEventListener("click", () => window.applyTableLayoutMode?.("table"));
-    byId("entityManageSearch")?.addEventListener("input", render);
+    byId("btnEntityManageClose")?.addEventListener("click", () => window.applyTableLayoutMode?.("list"));
+    byId("entityManageSearch")?.addEventListener("input", () => void render());
     byId("btnEntityManageSelectAll")?.addEventListener("click", () => { filteredNodes().forEach((node) => selected.add(normalizeId(node))); syncGlobalSelection([...selected][0] || ""); render(); });
     byId("entityManageCheckAll")?.addEventListener("change", (event) => { filteredNodes().forEach((node) => event.target.checked ? selected.add(normalizeId(node)) : selected.delete(normalizeId(node))); syncGlobalSelection(event.target.checked ? [...selected][0] || "" : ""); render(); });
     byId("btnEntityManageExport")?.addEventListener("click", exportSelected);

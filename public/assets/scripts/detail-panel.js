@@ -2112,30 +2112,30 @@
       if (!resp.ok) return;
       const data = await resp.json();
       const body = document.getElementById("wikiRevBodyInline");
-      body.innerHTML = "";
-      for (const r of data.items || []) {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `<td style="padding:4px 6px;">${
-          r.revNo
-        }</td><td style="padding:4px 6px;">${new Date(
-          (r.createdAt || 0) * 1000,
-        ).toLocaleString()}</td><td style="padding:4px 6px;">${
-          r.user || ""
-        }</td><td style="padding:4px 6px;">${
-          r.summary || ""
-        }</td><td style="padding:4px 6px;"><button class="btn" data-rev="${
-          r.revNo
-        }" data-key="${key}" type="button">预览</button></td>`;
-        body.appendChild(tr);
-      }
-      // attach preview handlers
-      body.querySelectorAll("button[data-rev]").forEach((btn) =>
-        btn.addEventListener("click", (ev) => {
-          const rev = btn.getAttribute("data-rev");
-          const key = btn.getAttribute("data-key");
-          previewRevisionInline(key, rev);
-        }),
-      );
+      const module = await window.kbBusinessGridModuleReady;
+      window.wikiRevisionGrid?.destroy?.();
+      window.wikiRevisionGrid = module.getBusinessGrid(body, {
+        columns: [
+          { id: "revNo", header: [{ text: "Rev" }], width: 80 },
+          { id: "createdAtText", header: [{ text: "时间" }], width: 180 },
+          { id: "user", header: [{ text: "用户" }], width: 140 },
+          { id: "summary", header: [{ text: "说明" }], minWidth: 180, gravity: 1 },
+          { id: "action", header: [{ text: "操作" }], width: 90, sortable: false, htmlEnable: true },
+        ],
+        height: "auto",
+        emptyText: "暂无历史版本",
+        onCellClick: (row, _column, event) => {
+          if (event.target.closest(".wiki-revision-preview")) previewRevisionInline(key, String(row.revNo));
+        },
+      });
+      window.wikiRevisionGrid.update((data.items || []).map((revision) => ({
+        id: String(revision.revNo),
+        revNo: revision.revNo,
+        createdAtText: new Date((revision.createdAt || 0) * 1000).toLocaleString(),
+        user: revision.user || "",
+        summary: revision.summary || "",
+        action: '<button class="btn wiki-revision-preview" type="button">预览</button>',
+      })));
     } catch (e) {
       console.error("loadRevisionsInline error", e);
     }
