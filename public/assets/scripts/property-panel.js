@@ -108,7 +108,8 @@
     const btnAddChild = byId("btnOntologyAddChild");
     const btnEdit = byId("btnOntologyEdit");
     const btnDelete = byId("btnOntologyDelete");
-    if (btnAddChild) btnAddChild.disabled = !hasSelection || ontologyMutationBusy;
+    if (btnAddChild)
+      btnAddChild.disabled = !hasSelection || ontologyMutationBusy;
     if (btnEdit) btnEdit.disabled = !hasSelection || ontologyMutationBusy;
     if (btnDelete) btnDelete.disabled = !hasSelection || ontologyMutationBusy;
   }
@@ -262,11 +263,14 @@
     }
     const searchValue = (byId("ontologySearch")?.value || "").trim();
     try {
-      const data = ontologyTreeController && window.kbOntologyTreeModuleReady
-        ? await (await window.kbOntologyTreeModuleReady).loadOntologyTree()
-        : await apiJson(appendCurrentDbToUrl(
-            new URL("/api/kb/ontology/tree", window.location.origin),
-          ).toString());
+      const data =
+        ontologyTreeController && window.kbOntologyTreeModuleReady
+          ? await (await window.kbOntologyTreeModuleReady).loadOntologyTree()
+          : await apiJson(
+              appendCurrentDbToUrl(
+                new URL("/api/kb/ontology/tree", window.location.origin),
+              ).toString(),
+            );
       const treeItems = Array.isArray(data?.items) ? data.items : [];
       ontologyItems = flattenOntologyTree(treeItems, []);
       window.kbOntologies = ontologyItems.slice();
@@ -284,7 +288,8 @@
         selectedOntologyId = "";
       }
       renderOntologyTree(treeItems);
-      if (searchValue && ontologyTreeController) ontologyTreeController.filter(searchValue);
+      if (searchValue && ontologyTreeController)
+        ontologyTreeController.filter(searchValue);
       updateOntologySummary();
     } catch (err) {
       console.error("loadOntologyTree failed", err);
@@ -322,7 +327,9 @@
     }
     const selectionStatus = byId("propertySelectionStatus");
     if (selectionStatus) {
-      selectionStatus.textContent = selectedCount ? `已选择 ${selectedCount} 项` : "未选择";
+      selectionStatus.textContent = selectedCount
+        ? `已选择 ${selectedCount} 项`
+        : "未选择";
       selectionStatus.classList.toggle("has-selection", selectedCount > 0);
     }
   }
@@ -333,10 +340,45 @@
     if (!propertyGrid) {
       propertyGrid = module.getBusinessGrid(propertyTable, {
         columns: [
-          { id: "select", header: [{ text: "选择" }], width: 56, minWidth: 52, maxWidth: 64, sortable: false, htmlEnable: true, template: (_value, row) => `<input class="property-row-select" type="checkbox" aria-label="选择属性" ${window.propertySelectedIds.has(String(row.id)) ? "checked" : ""}>` },
-          { id: "name", header: [{ text: "属性", content: "inputFilter" }], width: 220, minWidth: 120, gravity: 1.5, htmlEnable: true, template: (value) => `<strong class="property-grid-name" title="${escapeHtml(value)}">${escapeHtml(value)}</strong>` },
-          { id: "typeHtml", header: [{ text: "类型" }], width: 160, minWidth: 108, gravity: 0.8, htmlEnable: true, sortable: false },
-          { id: "actions", header: [{ text: "操作" }], width: 190, minWidth: 166, maxWidth: 210, htmlEnable: true, sortable: false },
+          {
+            id: "select",
+            header: [{ text: "选择" }],
+            width: 56,
+            minWidth: 52,
+            maxWidth: 64,
+            sortable: false,
+            htmlEnable: true,
+            template: (_value, row) =>
+              `<input class="property-row-select" type="checkbox" aria-label="选择属性" ${window.propertySelectedIds.has(String(row.id)) ? "checked" : ""}>`,
+          },
+          {
+            id: "name",
+            header: [{ text: "属性", content: "inputFilter" }],
+            width: 220,
+            minWidth: 120,
+            gravity: 1.5,
+            htmlEnable: true,
+            template: (value) =>
+              `<strong class="property-grid-name" title="${escapeHtml(value)}">${escapeHtml(value)}</strong>`,
+          },
+          {
+            id: "typeHtml",
+            header: [{ text: "类型" }],
+            width: 160,
+            minWidth: 108,
+            gravity: 0.8,
+            htmlEnable: true,
+            sortable: false,
+          },
+          {
+            id: "actions",
+            header: [{ text: "操作" }],
+            width: 190,
+            minWidth: 166,
+            maxWidth: 210,
+            htmlEnable: true,
+            sortable: false,
+          },
         ],
         multiselection: true,
         rowHeight: 52,
@@ -354,8 +396,12 @@
         },
         onCellClick: async (row, column, event) => {
           const id = String(row.id || "");
-          if (column.id === "select" || event.target.closest(".property-row-select")) {
-            if (window.propertySelectedIds.has(id)) window.propertySelectedIds.delete(id);
+          if (
+            column.id === "select" ||
+            event.target.closest(".property-row-select")
+          ) {
+            if (window.propertySelectedIds.has(id))
+              window.propertySelectedIds.delete(id);
             else window.propertySelectedIds.add(id);
             propertyGrid.update(propertyGridRows);
             updatePropertySelectedStyles();
@@ -364,14 +410,28 @@
           const toggle = event.target.closest(".btnPropertyToggleOntology");
           if (toggle) {
             try {
-              if (row.linked) await unlinkPropertyFromOntology(id); else await linkPropertyToOntology(id);
+              if (row.linked) await unlinkPropertyFromOntology(id);
+              else await linkPropertyToOntology(id);
               await Promise.all([loadPropertyList(), loadOntologyTree()]);
-            } catch (err) { alert((row.linked ? "取消关联" : "关联") + "失败: " + (err?.message || err)); }
+            } catch (err) {
+              alert(
+                (row.linked ? "取消关联" : "关联") +
+                  "失败: " +
+                  (err?.message || err),
+              );
+            }
             return;
           }
-          if (event.target.closest(".btnPropertyEdit")) { openPropertyModal("edit", row.source || {}); return; }
-          if (event.target.closest(".btnPropertyAssignOntology")) { openPropertyOntologyModal(row.source || {}); return; }
-          if (event.target.closest(".btnPropertyDelete")) await deleteProperty(id);
+          if (event.target.closest(".btnPropertyEdit")) {
+            openPropertyModal("edit", row.source || {});
+            return;
+          }
+          if (event.target.closest(".btnPropertyAssignOntology")) {
+            openPropertyOntologyModal(row.source || {});
+            return;
+          }
+          if (event.target.closest(".btnPropertyDelete"))
+            await deleteProperty(id);
         },
       });
     }
@@ -845,8 +905,9 @@
         if (submitButton) submitButton.disabled = true;
         try {
           const color = (byId("ontologyColor")?.value || "").trim() || null;
-          const display_shape =
-            (byId("ontologyDisplayShape")?.value || "rectangle").trim();
+          const display_shape = (
+            byId("ontologyDisplayShape")?.value || "rectangle"
+          ).trim();
           const url = appendCurrentDbToUrl(
             new URL(
               mode === "edit"
@@ -857,8 +918,21 @@
           );
           const payload =
             mode === "edit"
-              ? { id, name, description, parent_id: parentId || null, color, display_shape }
-              : { name, description, parent_id: parentId || null, color, display_shape };
+              ? {
+                  id,
+                  name,
+                  description,
+                  parent_id: parentId || null,
+                  color,
+                  display_shape,
+                }
+              : {
+                  name,
+                  description,
+                  parent_id: parentId || null,
+                  color,
+                  display_shape,
+                };
           const result = await apiJson(url.toString(), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -900,7 +974,11 @@
       }
     }
 
-    if (propertyTable?.tagName === "TABLE" && !propertyGrid && !propertyTable.dataset.boundOntologyTable) {
+    if (
+      propertyTable?.tagName === "TABLE" &&
+      !propertyGrid &&
+      !propertyTable.dataset.boundOntologyTable
+    ) {
       propertyTable.dataset.boundOntologyTable = "1";
       propertyTable.addEventListener("click", async (event) => {
         const rowCheckbox = event.target.closest(".property-row-select");
@@ -998,7 +1076,8 @@
         if (!id) return;
         event.preventDefault();
         if (event.ctrlKey || event.metaKey) {
-          if (window.propertySelectedIds.has(id)) window.propertySelectedIds.delete(id);
+          if (window.propertySelectedIds.has(id))
+            window.propertySelectedIds.delete(id);
           else window.propertySelectedIds.add(id);
         } else {
           window.propertySelectedIds = new Set([id]);
@@ -1024,7 +1103,11 @@
       });
     }
 
-    if (ontologyTree && !ontologyTreeController && !ontologyTree.dataset.boundOntologyTree) {
+    if (
+      ontologyTree &&
+      !ontologyTreeController &&
+      !ontologyTree.dataset.boundOntologyTree
+    ) {
       ontologyTree.dataset.boundOntologyTree = "1";
       ontologyTree.addEventListener("click", async (event) => {
         const target = event.target.closest(".ontology-tree-item");
@@ -1044,7 +1127,8 @@
       ontologySearch.addEventListener("input", () => {
         if (ontologySearchTimer) clearTimeout(ontologySearchTimer);
         ontologySearchTimer = setTimeout(() => {
-          if (ontologyTreeController) ontologyTreeController.filter(ontologySearch.value);
+          if (ontologyTreeController)
+            ontologyTreeController.filter(ontologySearch.value);
           else loadOntologyTree();
         }, 180);
       });

@@ -42,6 +42,9 @@
     window.kbBusinessGridModuleReady = import("/assets/generated/business-grid.js").then((module) => {
       window.kbBusinessGrid = module;
       return module;
+    }).catch((error) => {
+      console.error("DHTMLX Grid 模块加载失败", error);
+      throw error;
     });
   </script>
   <link rel="stylesheet" href="/assets/styles/sparql.css" />
@@ -7907,13 +7910,22 @@
     function ensureEntryGrid() {
       if (entryGridInstance || !entryGridHost) return entryGridInstance;
       if (!window.kbBusinessGrid?.createEditableBusinessGrid) {
-        console.warn("DHTMLX Grid 尚未加载，录入表格将在组件就绪后初始化");
         if (!entryGridInitQueued) {
           entryGridInitQueued = true;
-          window.kbBusinessGridModuleReady?.then(() => {
+          const moduleReady = window.kbBusinessGridModuleReady;
+          if (!moduleReady) {
             entryGridInitQueued = false;
-            applyEntryTemplateToGrid();
-          });
+            console.error("DHTMLX Grid 模块加载 Promise 不存在");
+          } else {
+            moduleReady.then((module) => {
+              window.kbBusinessGrid = module;
+              entryGridInitQueued = false;
+              applyEntryTemplateToGrid();
+            }).catch((error) => {
+              entryGridInitQueued = false;
+              console.error("录入表格初始化失败", error);
+            });
+          }
         }
         return null;
       }

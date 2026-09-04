@@ -1345,7 +1345,10 @@ function __kbInitTableSelection() {
           if (typeof mediaEl.pause === "function") mediaEl.pause();
         } catch {}
         try {
-          if (mediaPlayer && typeof window.kbDestroyVideoPlayer === "function") {
+          if (
+            mediaPlayer &&
+            typeof window.kbDestroyVideoPlayer === "function"
+          ) {
             window.kbDestroyVideoPlayer(mediaEl);
           }
         } catch {}
@@ -1419,7 +1422,11 @@ function __kbInitTableSelection() {
         if (mediaEl && typeof mediaEl.pause === "function") mediaEl.pause();
       } catch {}
       try {
-        if (mediaEl && mediaPlayer && typeof window.kbDestroyVideoPlayer === "function") {
+        if (
+          mediaEl &&
+          mediaPlayer &&
+          typeof window.kbDestroyVideoPlayer === "function"
+        ) {
           window.kbDestroyVideoPlayer(mediaEl);
         }
       } catch {}
@@ -1943,7 +1950,9 @@ function __kbInitTableSelection() {
         clampMediaRatio(item.dataset.mediaRatio || 1),
       );
       const setLayoutRatio = (value) => {
-        const containsVideo = cells.some((item) => item.classList.contains("is-video"));
+        const containsVideo = cells.some((item) =>
+          item.classList.contains("is-video"),
+        );
         grid.style.aspectRatio = `${containsVideo ? value * 0.82 : value}`;
       };
       if (ratios.length === 2) {
@@ -1978,9 +1987,12 @@ function __kbInitTableSelection() {
       }
     };
 
-    const visibleItems = mediaItems.length > 1 ? mediaItems : mediaItems.slice(0, 4);
+    const visibleItems =
+      mediaItems.length > 1 ? mediaItems : mediaItems.slice(0, 4);
     const hiddenCount =
-      mediaItems.length > 1 ? 0 : Math.max(0, mediaItems.length - visibleItems.length);
+      mediaItems.length > 1
+        ? 0
+        : Math.max(0, mediaItems.length - visibleItems.length);
 
     visibleItems.forEach((item, visibleIndex) => {
       const cell = document.createElement("div");
@@ -2059,7 +2071,10 @@ function __kbInitTableSelection() {
         const syncPlayBadge = () => {
           const isPaused = video.paused || video.ended;
           playBadge.title = isPaused ? "播放视频" : "暂停视频";
-          playBadge.setAttribute("aria-label", isPaused ? "播放视频" : "暂停视频");
+          playBadge.setAttribute(
+            "aria-label",
+            isPaused ? "播放视频" : "暂停视频",
+          );
           playBadge.innerHTML = isPaused
             ? '<i class="fa-solid fa-play"></i>'
             : '<i class="fa-solid fa-pause"></i>';
@@ -2155,7 +2170,10 @@ function __kbInitTableSelection() {
         const img = document.createElement("img");
         const imageUrl = resolveMediaUrl(item.src);
         img.alt =
-          node?.label_zh || node?.label || node?.name || `图片 ${item.index + 1}`;
+          node?.label_zh ||
+          node?.label ||
+          node?.name ||
+          `图片 ${item.index + 1}`;
         img.loading = "lazy";
         img.decoding = "async";
         img.src = imageUrl;
@@ -2820,6 +2838,7 @@ function __kbInitTableSelection() {
     hideTableListTooltip();
 
     const isGridLayout = window.kbTableLayoutMode === "grid";
+    const isTableLayout = window.kbTableLayoutMode === "list";
     const appendInfinite = options && options.append === true;
 
     if (isGridLayout) {
@@ -2920,13 +2939,16 @@ function __kbInitTableSelection() {
       const tr = document.createElement("article");
       tr.className = "entity-list-item table-feed-row";
       const ontologyShapeMap = window.kbOntologyDisplayShapes;
-      const rawTypeIds = normalizeStringList(n.type || n.types || n.ontology_id);
+      const rawTypeIds = normalizeStringList(
+        n.type || n.types || n.ontology_id,
+      );
       const primaryTypeId = rawTypeIds[0] || String(n.type || "").trim();
-      const displayShape = ontologyShapeMap instanceof Map
-        ? ontologyShapeMap.get(primaryTypeId) ||
-          ontologyShapeMap.get(primaryTypeId.toLowerCase()) ||
-          "rectangle"
-        : "rectangle";
+      const displayShape =
+        ontologyShapeMap instanceof Map
+          ? ontologyShapeMap.get(primaryTypeId) ||
+            ontologyShapeMap.get(primaryTypeId.toLowerCase()) ||
+            "rectangle"
+          : "rectangle";
       tr.dataset.displayShape = displayShape;
       tr.classList.add(hasImage || hasVideo ? "has-media" : "no-media");
       tr.tabIndex = -1;
@@ -2948,22 +2970,22 @@ function __kbInitTableSelection() {
 
       // 列表布局以文本信息为主，不渲染头像占位。
       if (isGridLayout || isTableLayout) {
-      const avatar = document.createElement("div");
-      avatar.className = "table-feed-avatar";
-      avatar.title = label || nodeId || "实体";
-      avatar.setAttribute("aria-label", "选中实体");
-      const avatarImage = imageList[0] ? resolveMediaUrl(imageList[0]) : "";
-      if (avatarImage && !isAnimatedImageVideoUrl(avatarImage)) {
-        const avatarImg = document.createElement("img");
-        avatarImg.src = avatarImage;
-        avatarImg.alt = label || "实体";
-        avatarImg.loading = "lazy";
-        avatarImg.decoding = "async";
-        avatar.appendChild(avatarImg);
-      } else {
-        avatar.textContent = (label || nodeId || "?").trim().charAt(0) || "?";
-      }
-      header.appendChild(avatar);
+        const avatar = document.createElement("div");
+        avatar.className = "table-feed-avatar";
+        avatar.title = label || nodeId || "实体";
+        avatar.setAttribute("aria-label", "选中实体");
+        const avatarImage = imageList[0] ? resolveMediaUrl(imageList[0]) : "";
+        if (avatarImage && !isAnimatedImageVideoUrl(avatarImage)) {
+          const avatarImg = document.createElement("img");
+          avatarImg.src = avatarImage;
+          avatarImg.alt = label || "实体";
+          avatarImg.loading = "lazy";
+          avatarImg.decoding = "async";
+          avatar.appendChild(avatarImg);
+        } else {
+          avatar.textContent = (label || nodeId || "?").trim().charAt(0) || "?";
+        }
+        header.appendChild(avatar);
       }
 
       const meta = document.createElement("div");
@@ -4103,8 +4125,7 @@ function __kbInitTableSelection() {
           video: item.video || "",
           cover: String(item.cover || "").trim(),
           image: item.image || "",
-          replayKey:
-            item.__shortsReplayKey || item.__videoEntryKey || "",
+          replayKey: item.__shortsReplayKey || item.__videoEntryKey || "",
         };
         videoItems.push(addedItem);
         createShortsCard(addedItem, nextIndex);
