@@ -2797,6 +2797,32 @@
     window.kbProjectNodeTags = [];
   }
 
+  function getCustomTagStorageKey() {
+    const db = new URLSearchParams(window.location.search).get("db") || "default";
+    return `kb:custom-tags:${db}`;
+  }
+
+  function loadCustomTags() {
+    try {
+      return normalizeTagArray(JSON.parse(localStorage.getItem(getCustomTagStorageKey()) || "[]"));
+    } catch {
+      return [];
+    }
+  }
+
+  function saveCustomTags(tags) {
+    const normalized = normalizeTagArray(tags);
+    try {
+      localStorage.setItem(getCustomTagStorageKey(), JSON.stringify(normalized));
+    } catch {}
+    window.kbProjectNodeTags = normalizeTagArray([
+      ...(window.kbProjectNodeTags || []),
+      ...normalized,
+    ]);
+  }
+
+  saveCustomTags(loadCustomTags());
+
   function normalizeTagArray(values) {
     const list = Array.isArray(values)
       ? values
@@ -3021,9 +3047,28 @@
   }
 
   async function addClassTagFromInput() {
-    if (!currentTagClassId || !tagInput) return;
+    if (!tagInput) return;
     const val = (tagInput.value || "").trim();
     if (!val) return;
+    if (!currentTagClassId) {
+      const tags = getAllClassTags();
+      if (tags.some((tag) => tag.toLowerCase() === val.toLowerCase())) {
+        if (tagMsg) tagMsg.textContent = "标签已存在";
+        return;
+      }
+      saveCustomTags([...loadCustomTags(), val]);
+      currentTagClassTags = getAllClassTags();
+      tagInput.value = "";
+      renderTagList(currentTagClassTags);
+      if (tagMgrDesc) tagMgrDesc.textContent = `全部标签（${currentTagClassTags.length}）`;
+      if (tagMsg) {
+        tagMsg.textContent = "已新增标签";
+        setTimeout(() => {
+          if (tagMsg) tagMsg.textContent = "";
+        }, 1500);
+      }
+      return;
+    }
     const tags = currentTagClassTags.slice();
     if (tags.some((t) => t.toLowerCase() === val.toLowerCase())) {
       if (tagMsg) tagMsg.textContent = "标签已存在";
@@ -3053,7 +3098,8 @@
       currentTagClassTags = getAllClassTags();
       if (tagMgrDesc)
         tagMgrDesc.textContent = `全部标签（${currentTagClassTags.length}）`;
-      if (tagAddBar) tagAddBar.style.display = "none";
+      if (tagAddBar) tagAddBar.style.display = "flex";
+      if (tagInput) tagInput.placeholder = "输入新标签…";
       renderTagList(currentTagClassTags);
       return;
     }
@@ -3062,6 +3108,7 @@
     if (tagMgrDesc)
       tagMgrDesc.textContent = `当前分类：${cls.label || cls.name}（${currentTagClassTags.length}）`;
     if (tagAddBar) tagAddBar.style.display = "flex";
+    if (tagInput) tagInput.placeholder = "为当前分类新增标签…";
     renderTagList(currentTagClassTags);
     if (tagMsg) tagMsg.textContent = "";
   }
