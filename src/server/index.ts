@@ -8,6 +8,8 @@ import { handleWikiRoutes } from "./routes/wiki.ts";
 import { handleChatRoutes } from "./routes/chat.ts";
 import { handleSemanticMapRoutes } from "./routes/semantic-map.ts";
 import { handleSparqlRoutes } from "./routes/sparql.ts";
+import { handleInteractionRoutes } from "./routes/interactions.ts";
+import { handleSystemAdminRoutes } from "./routes/system-admin.ts";
 
 const port = parseInt(process.env.PORT || "8080");
 
@@ -45,6 +47,11 @@ const server = Bun.serve({
 
       const authRes = await handleAuthRoutes(req, url, method);
       if (authRes) return authRes;
+
+      const interactionRes = await handleInteractionRoutes(req, url, method);
+      if (interactionRes) return interactionRes;
+      const systemAdminRes = await handleSystemAdminRoutes(req, url, method);
+      if (systemAdminRes) return systemAdminRes;
 
       const chatRes = await handleChatRoutes(req, url, method);
       if (chatRes) return chatRes;

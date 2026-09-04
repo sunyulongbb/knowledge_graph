@@ -865,7 +865,7 @@
     try {
       const be = document.getElementById("btnEditWiki");
       if (be) {
-        be.style.display = "inline-flex";
+        be.style.display = window.authUser?.role === "admin" ? "inline-flex" : "none";
         // click behavior wired separately to open inline editor
       }
     } catch (e) {}
@@ -1669,7 +1669,7 @@
         try {
           const be = document.getElementById("btnEditWiki");
           if (be) {
-            be.style.display = "inline-flex";
+            be.style.display = window.authUser?.role === "admin" ? "inline-flex" : "none";
             // inline edit click is handled by wired listener
           }
         } catch (e) {}
@@ -1685,6 +1685,7 @@
           // best-effort: do not block detail rendering on wiki fetch failures
           console.error("loadWikiInline failed", e);
         }
+        window.dispatchEvent(new CustomEvent("kb-detail-loaded"));
       } catch {}
     } catch (e) {
       console.error("load node detail failed", e);
@@ -1904,6 +1905,13 @@
       if (btnSave) btnSave.style.display = "none";
     }
   }
+  window.addEventListener("kb-auth-change", (event) => {
+    const editButton = document.getElementById("btnEditWiki");
+    const detailPanel = document.getElementById("detailPanel");
+    if (editButton && detailPanel?.style.display !== "none") {
+      editButton.style.display = event.detail?.user?.role === "admin" ? "inline-flex" : "none";
+    }
+  });
 
   function looksLikeMarkdownTable(md) {
     try {

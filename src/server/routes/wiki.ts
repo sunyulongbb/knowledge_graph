@@ -1,4 +1,5 @@
 import { db } from "../db.ts";
+import { getCurrentUser, isAdmin } from "../auth-context.ts";
 import { marked } from "marked";
 
 marked.setOptions({
@@ -62,6 +63,9 @@ function normalizeMarkdownTables(md: string) {
 
 export async function handleWikiRoutes(req: Request, url: URL, method: string) {
   if (url.pathname === "/api/wiki/page/save" && method === "POST") {
+    if (!isAdmin(getCurrentUser(req))) {
+      return Response.json({ error: "需要管理员权限" }, { status: 403 });
+    }
     try {
       const body = (await req.json()) as any;
       const entityId = body.entityId || body.entity_id;

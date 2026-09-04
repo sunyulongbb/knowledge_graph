@@ -35,7 +35,7 @@
     window["@tiptap/starter-kit"] =
       window["@tiptap/starter-kit"] || window.TiptapStarterKit;
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20260904-19" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20260904-21" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <link rel="stylesheet" href="/node_modules/vis-timeline/styles/vis-timeline-graph2d.min.css?v=20260904-2" />
@@ -1979,6 +1979,8 @@
             href="#"><span class="nav-label">智能体</span></a>
           <a id="btnViewReportHome" class="nav-item" role="tab" aria-selected="false" title="报表中心" aria-label="报表中心"
             href="#"><span class="nav-label">报表</span></a>
+          <a id="btnViewUsers" class="nav-item" role="tab" aria-selected="false" title="用户权限管理" aria-label="用户权限管理"
+            href="#" style="display:none;"><span class="nav-label">用户</span></a>
           <div class="nav-underline" aria-hidden="true"></div>
         </nav>
       </div>
@@ -2110,6 +2112,10 @@
               <div class="profile-avatar-input-row">
                 <input id="inputProfileAvatar" type="text" placeholder="https://..." autocomplete="off" />
                 <button id="btnClearProfileAvatar" class="btn" type="button" title="清除头像">清除</button>
+              </div>
+              <div class="profile-emoji-avatar-picker" aria-label="选择内置 Emoji 头像">
+                <span class="muted">内置头像</span>
+                <button type="button" data-emoji-avatar="😀" title="😀">😀</button><button type="button" data-emoji-avatar="😎" title="😎">😎</button><button type="button" data-emoji-avatar="🤓" title="🤓">🤓</button><button type="button" data-emoji-avatar="😊" title="😊">😊</button><button type="button" data-emoji-avatar="🤖" title="🤖">🤖</button><button type="button" data-emoji-avatar="🐼" title="🐼">🐼</button><button type="button" data-emoji-avatar="🦊" title="🦊">🦊</button><button type="button" data-emoji-avatar="🐱" title="🐱">🐱</button><button type="button" data-emoji-avatar="🌟" title="🌟">🌟</button><button type="button" data-emoji-avatar="🚀" title="🚀">🚀</button>
               </div>
             </div>
             <div id="profileError" class="profile-error" style="display:none;"></div>
@@ -3843,6 +3849,11 @@
                 <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
                 <span>返回</span>
               </button>
+              <div id="knowledgeInteractionBar" class="knowledge-interaction-bar" aria-label="知识互动">
+                <button id="btnKnowledgeLike" class="knowledge-interaction-btn" type="button"><i class="fa-regular fa-thumbs-up"></i><span>点赞</span><b id="knowledgeLikeCount">0</b></button>
+                <button id="btnKnowledgeComment" class="knowledge-interaction-btn" type="button"><i class="fa-regular fa-comment"></i><span>评论</span><b id="knowledgeCommentCount">0</b></button>
+                <button id="btnKnowledgeShare" class="knowledge-interaction-btn" type="button"><i class="fa-solid fa-share-nodes"></i><span>转发</span><b id="knowledgeShareCount">0</b></button>
+              </div>
             </div>
             <div id="wikiTop" class="detail-hero" style="display: none; margin-bottom: 8px">
               <div id="detailTopMediaStage" class="detail-top-media-stage" style="display:none;">
@@ -3890,6 +3901,15 @@
                   <div id="wikiView" style="font-size: 14px; line-height: 1.6">
                     加载详情中…
                   </div>
+                </section>
+                <section id="knowledgeComments" class="knowledge-comments" aria-label="评论区">
+                  <div class="detail-attr-title">评论</div>
+                  <div class="knowledge-comment-compose">
+                    <textarea id="knowledgeCommentInput" rows="3" maxlength="2000" placeholder="登录后发表评论…"></textarea>
+                    <button id="btnKnowledgeCommentSubmit" class="btn primary" type="button">发表评论</button>
+                  </div>
+                  <div id="knowledgeCommentMessage" class="muted knowledge-comment-message"></div>
+                  <div id="knowledgeCommentList" class="knowledge-comment-list"></div>
                 </section>
                 <div id="wikiMediaGrid" class="wiki-media-grid" style="display: none; margin-top: 12px"></div>
                 <!-- Inline wiki edit area (copied/adapted from kb_detail.html) -->
@@ -3993,6 +4013,16 @@
             </div>
           </div>
         </div>
+        <section id="userManagementPanel" class="panel user-management-page" style="display:none; padding:20px; overflow:auto; min-height:0;">
+          <div class="user-management-page__header">
+            <div><h2>用户权限管理</h2><p class="muted">管理用户角色与账号状态。</p></div>
+            <button id="btnUserManagementRefresh" class="btn icon" type="button" title="刷新用户" aria-label="刷新用户"><i class="fa-solid fa-rotate"></i></button>
+          </div>
+          <div id="systemManagementTabs" class="system-management-tabs"><button data-system-tab="users" class="active" type="button">用户管理</button><button data-system-tab="roles" type="button">角色管理</button><button data-system-tab="permissions" type="button">权限管理</button><button data-system-tab="login-logs" type="button">登录日志</button><button data-system-tab="operation-logs" type="button">操作日志</button></div>
+          <div class="system-management-toolbar"><input id="systemManagementSearch" type="search" placeholder="搜索用户名、昵称或邮箱…" /><button id="btnSystemManagementSearch" class="btn" type="button"><i class="fa-solid fa-magnifying-glass"></i><span>查询</span></button><button id="btnSystemManagementReset" class="btn" type="button">重置</button></div>
+          <div id="userManagementMessage" class="muted"></div>
+          <div id="userManagementList" class="user-management-page__list"></div>
+        </section>
         <!-- Chat panel (embedded demo/chat.html) -->
         <div id="chatPanel" class="panel" style="padding:12px; display: none; min-height: 0; box-sizing: border-box;">
           <!-- Embedded chat app (lazy-initialized). Code copied from demo/chat.html and scoped to #chatRoot -->
@@ -5687,6 +5717,7 @@
     const btnViewReportTemplate = document.getElementById("btnViewReportTemplate");
     const btnViewDetail = document.getElementById("btnViewDetail");
     const btnViewChat = document.getElementById("btnViewChat");
+    const btnViewUsers = document.getElementById("btnViewUsers");
     const tbTableControls = document.getElementById("tbTableControls");
     const tbTableQuickActions = document.getElementById("tbTableQuickActions");
     const tablePanelToolbar = document.getElementById("tablePanelToolbar");
@@ -5727,6 +5758,7 @@
     ];
     const entryPanel = document.getElementById("entryPanel");
     const chatPanel = document.getElementById("chatPanel");
+    const userManagementPanel = document.getElementById("userManagementPanel");
     const entryTemplateButtons = [];
     const entryMultiTips = document.getElementById("entryMultiTips");
     const entryGridHost = document.getElementById("entryGridHost");
@@ -5993,6 +6025,7 @@
       "report_detail",
       "shorts",
       "gallery",
+      "user_management",
     ]);
 
     function normalizeViewModeInput(value) {
@@ -9799,6 +9832,7 @@
       const isReportDetail = normalized === "report_detail";
       const isShorts = normalized === "shorts";
       const isGallery = normalized === "gallery";
+      const isUserManagement = normalized === "user_management";
       if (isClean) {
         startCleanTaskPolling();
       } else {
@@ -9842,6 +9876,10 @@
         btnViewClean.classList.toggle("active", isClean);
         btnViewClean.setAttribute("aria-selected", String(isClean));
       }
+      if (btnViewUsers) {
+        btnViewUsers.classList.toggle("active", isUserManagement);
+        btnViewUsers.setAttribute("aria-selected", String(isUserManagement));
+      }
       if (btnViewDetail) {
         btnViewDetail.classList.toggle("active", isDetail);
         btnViewDetail.setAttribute("aria-selected", String(isDetail));
@@ -9871,6 +9909,8 @@
       if (reportTemplatePanel) reportTemplatePanel.style.display = isReportTemplate ? "" : "none";
       if (detailPanel) detailPanel.style.display = isDetail ? "" : "none";
       if (chatPanel) chatPanel.style.display = isChat ? "" : "none";
+      if (userManagementPanel) userManagementPanel.style.display = isUserManagement ? "" : "none";
+      if (isUserManagement) window.loadUserManagement?.();
       // 渲染视图
       if (isEntry) {
         if (entryScreen === "editor" && entryTaskIdRaw) {
@@ -10295,10 +10335,13 @@
 
     if (btnViewChat)
       btnViewChat.addEventListener("click", (e) => { e.preventDefault(); setViewMode("chat"); });
+    if (btnViewUsers)
+      btnViewUsers.addEventListener("click", (e) => { e.preventDefault(); setViewMode("user_management"); });
     attachNavKeyActivation(btnViewReportHome, () => setViewMode('report_home'));
     attachNavKeyActivation(btnViewReportGenerate, () => setViewMode('report_generate'));
     attachNavKeyActivation(btnViewReportTemplate, () => setViewMode('report_template'));
     attachNavKeyActivation(btnViewChat, () => { setViewMode('chat'); });
+    attachNavKeyActivation(btnViewUsers, () => { setViewMode('user_management'); });
 
     // Initialize embedded chat app on demand (scoped, uses demo/chat.html as reference)
     function initEmbeddedChat() {
@@ -19669,9 +19712,11 @@
   <script src="/assets/scripts/attr-panel.js"></script>
   <!-- relation-panel.js 已移除，使用 edgehandles 拖拽创建关系 -->
   <script src="/assets/scripts/schema-panel.js?v=20260904-1"></script>
-  <script src="/assets/scripts/detail-panel.js?v=20260904-4"></script>
+  <script src="/assets/scripts/detail-panel.js?v=20260904-5"></script>
+  <script src="/assets/scripts/knowledge-interactions.js?v=20260904-1"></script>
+  <script src="/assets/scripts/user-management.js?v=20260904-2"></script>
   <script src="/assets/scripts/sidebar-panel.js"></script>
-  <script src="/assets/scripts/auth-panel.js"></script>
+  <script src="/assets/scripts/auth-panel.js?v=20260904-2"></script>
   <script src="/assets/scripts/db-modal.js"></script>
   <script src="/assets/scripts/sparql-panel.js"></script>
   <script>

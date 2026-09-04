@@ -194,6 +194,13 @@ function ensureSharedTables() {
   runSafe("ALTER TABLE users ADD COLUMN avatar TEXT");
   runSafe("ALTER TABLE users ADD COLUMN panel_state TEXT");
   runSafe("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0");
+  runSafe("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'");
+  runSafe("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'");
+  runSafe("ALTER TABLE users ADD COLUMN email TEXT");
+  runSafe("ALTER TABLE users ADD COLUMN phone TEXT");
+  runSafe("ALTER TABLE users ADD COLUMN last_login_at DATETIME");
+  runSafe("UPDATE users SET role = CASE WHEN is_admin = 1 THEN 'admin' ELSE 'user' END WHERE role IS NULL OR role = ''");
+  runSafe("UPDATE users SET status = 'active' WHERE status IS NULL OR status = ''");
   runSafe(
     "ALTER TABLE users ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
   );
@@ -284,6 +291,52 @@ function ensureSharedTables() {
       PRIMARY KEY (comment_id, user_id)
     )
   `);
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS knowledge_likes (
+      user_id INTEGER NOT NULL,
+      knowledge_id TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, knowledge_id)
+    )
+  `);
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS knowledge_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      knowledge_id TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS knowledge_shares (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      knowledge_id TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  appDb.run("CREATE INDEX IF NOT EXISTS idx_knowledge_comments_knowledge ON knowledge_comments(knowledge_id, created_at DESC)");
+  appDb.run("CREATE INDEX IF NOT EXISTS idx_knowledge_shares_knowledge ON knowledge_shares(knowledge_id)");
+
+  appDb.run(`CREATE TABLE IF NOT EXISTS roles (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL, status TEXT DEFAULT 'active', data_scope TEXT DEFAULT 'all', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+  appDb.run(`CREATE TABLE IF NOT EXISTS permissions (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL, module TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+  appDb.run(`CREATE TABLE IF NOT EXISTS user_roles (user_id INTEGER NOT NULL, role_id INTEGER NOT NULL, PRIMARY KEY (user_id, role_id))`);
+  appDb.run(`CREATE TABLE IF NOT EXISTS role_permissions (role_id INTEGER NOT NULL, permission_id INTEGER NOT NULL, PRIMARY KEY (role_id, permission_id))`);
+  appDb.run(`CREATE TABLE IF NOT EXISTS menus (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL, path TEXT, permission_code TEXT, sort_order INTEGER DEFAULT 0, status TEXT DEFAULT 'active')`);
+  appDb.run(`CREATE TABLE IF NOT EXISTS role_menus (role_id INTEGER NOT NULL, menu_id INTEGER NOT NULL, PRIMARY KEY (role_id, menu_id))`);
+  appDb.run(`CREATE TABLE IF NOT EXISTS login_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, username TEXT, login_at DATETIME DEFAULT CURRENT_TIMESTAMP, ip TEXT, user_agent TEXT, success INTEGER NOT NULL, failure_reason TEXT)`);
+  appDb.run(`CREATE TABLE IF NOT EXISTS operation_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, username TEXT, module TEXT NOT NULL, action TEXT NOT NULL, target TEXT, path TEXT, success INTEGER NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+  appDb.run(`CREATE TABLE IF NOT EXISTS knowledge_favorites (user_id INTEGER NOT NULL, knowledge_id TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, knowledge_id))`);
+  runSafe("ALTER TABLE nodes ADD COLUMN created_by INTEGER");
+  const defaultPermissions = ["user:view","user:create","user:update","user:delete","role:view","role:create","role:update","role:delete","permission:view","permission:update","knowledge:view","knowledge:create","knowledge:update","knowledge:delete","knowledge:audit","knowledge:like","knowledge:comment","knowledge:share","knowledge:favorite","system:config","system:log"];
+  defaultPermissions.forEach((code) => appDb.run("INSERT OR IGNORE INTO permissions (code, name, module) VALUES (?, ?, ?)", [code, code, code.split(":")[0]]));
+  appDb.run("INSERT OR IGNORE INTO roles (code, name, data_scope) VALUES ('super_admin', '超级管理员', 'all')");
+  appDb.run("INSERT OR IGNORE INTO roles (code, name, data_scope) VALUES ('user', '普通用户', 'own')");
+  const superRole = appDb.query("SELECT id FROM roles WHERE code = 'super_admin'").get() as any;
+  if (superRole) appDb.run("INSERT OR IGNORE INTO role_permissions (role_id, permission_id) SELECT ?, id FROM permissions", [superRole.id]);
+  appDb.run("INSERT OR IGNORE INTO user_roles (user_id, role_id) SELECT id, ? FROM users WHERE role = 'admin' OR is_admin = 1", [superRole?.id || 0]);
 
   appDb.run(`
     CREATE TABLE IF NOT EXISTS settings (

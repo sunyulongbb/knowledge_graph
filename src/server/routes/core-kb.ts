@@ -1,4 +1,5 @@
 import { db, getProjectByIdentifier } from "../db.ts";
+import { getCurrentUser, isAdmin } from "../auth-context.ts";
 import { mkdirSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import {
@@ -3542,6 +3543,9 @@ export async function handleCoreKbRoutes(
   }
 
   if (url.pathname === "/api/kb/nodes" && method === "POST") {
+    if (!isAdmin(getCurrentUser(req))) {
+      return Response.json({ error: "需要管理员权限" }, { status: 403 });
+    }
     try {
       const body = (await req.json()) as any;
       let id = body.id;
@@ -3627,6 +3631,9 @@ export async function handleCoreKbRoutes(
   }
 
   if (url.pathname === "/api/kb/nodes/update" && method === "POST") {
+    if (!isAdmin(getCurrentUser(req))) {
+      return Response.json({ error: "需要管理员权限" }, { status: 403 });
+    }
     try {
       const body = (await req.json()) as any;
       let id = body.id;
@@ -3997,6 +4004,9 @@ export async function handleCoreKbRoutes(
   }
 
   if (url.pathname === "/api/kb/nodes" && method === "DELETE") {
+    if (!isAdmin(getCurrentUser(req))) {
+      return Response.json({ error: "需要管理员权限" }, { status: 403 });
+    }
     let idParam = url.searchParams.get("id");
     if (!idParam) return new Response("Missing id", { status: 400 });
     idParam = idParam.trim();

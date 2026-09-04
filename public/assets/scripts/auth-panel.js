@@ -30,15 +30,30 @@
   const btnCloseProfile = document.getElementById("btnCloseProfile");
   const profileAccountMeta = document.getElementById("profileAccountMeta");
   const btnLogout = document.getElementById("btnLogout");
+  const adminUserManager = document.getElementById("adminUserManager");
+  const userManagerList = document.getElementById("userManagerList");
+  const btnUserManagerRefresh = document.getElementById("btnUserManagerRefresh");
 
   let authUser = null;
+  const isEmojiAvatar = (value) => Boolean(String(value || "").trim()) && !/^https?:\/\//i.test(String(value || "").trim());
+
+  function syncEmojiAvatarSelection(value) {
+    document.querySelectorAll("[data-emoji-avatar]").forEach((button) => {
+      button.classList.toggle("is-selected", button.dataset.emojiAvatar === String(value || "").trim());
+    });
+  }
 
   function setAuthUser(user) {
     authUser = user || null;
     window.authUser = authUser;
+    window.dispatchEvent(new CustomEvent("kb-auth-change", { detail: { user: authUser } }));
+    if (adminUserManager) adminUserManager.style.display = authUser?.role === "admin" ? "" : "none";
     if (btnAuth) {
       try {
-        if (authUser && authUser.avatar) {
+        if (authUser && authUser.avatar && isEmojiAvatar(authUser.avatar)) {
+          btnAuth.innerHTML = `<span style="width:24px;height:24px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;background:var(--surface-1);border:1px solid var(--border);font-size:16px;line-height:1;">${authUser.avatar}</span>`;
+          btnAuth.title = authUser.displayName || authUser.username || "用户";
+        } else if (authUser && authUser.avatar) {
           btnAuth.innerHTML = `<span style="width:24px;height:24px;border-radius:6px;display:inline-block;background-image:url(${authUser.avatar});background-position:center;background-size:cover;border:1px solid var(--border);"></span>`;
           btnAuth.title = authUser.displayName || authUser.username || "用户";
         } else if (authUser) {
@@ -62,6 +77,25 @@
     try {
       if (typeof loadUsersToSidebar === "function") loadUsersToSidebar();
     } catch {}
+  }
+
+  async function loadUserManager() {
+    if (authUser?.role !== "admin" || !userManagerList) return;
+    userManagerList.innerHTML = '<div class="muted" style="font-size:12px;">加载用户中…</div>';
+    try {
+      const response = await fetch("/api/auth/users", { credentials: "include" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "加载失败");
+      userManagerList.innerHTML = (data.users || []).map((user) => `
+        <div class="user-manager-row" data-user-id="${user.id}">
+          <div class="user-manager-name">${String(user.display_name || user.username || "用户").replace(/[&<>]/g, "")}</div>
+          <select data-user-role aria-label="用户角色"><option value="user" ${user.role === "user" ? "selected" : ""}>普通用户</option><option value="admin" ${user.role === "admin" ? "selected" : ""}>管理员</option></select>
+          <select data-user-status aria-label="账号状态"><option value="active" ${user.status !== "disabled" ? "selected" : ""}>正常</option><option value="disabled" ${user.status === "disabled" ? "selected" : ""}>停用</option></select>
+          <button class="btn sm" data-user-save type="button">保存</button>
+        </div>`).join("") || '<div class="muted" style="font-size:12px;">暂无用户</div>';
+    } catch (error) {
+      userManagerList.innerHTML = `<div class="muted" style="font-size:12px;">${error.message || "加载失败"}</div>`;
+    }
   }
 
   async function whoami() {
@@ -149,12 +183,26 @@
     if (!trimmed) {
       profilePreview.style.display = "none";
       profilePreviewImg.style.backgroundImage = "";
+      profilePreviewImg.textContent = "";
       profilePreviewStatus.textContent = "";
       return;
     }
+    if (isEmojiAvatar(trimmed)) {
+      profilePreview.style.display = "flex";
+      profilePreviewImg.style.backgroundImage = "";
+      profilePreviewImg.textContent = trimmed;
+      profilePreviewImg.style.display = "inline-flex";
+      profilePreviewImg.style.alignItems = "center";
+      profilePreviewImg.style.justifyContent = "center";
+      profilePreviewImg.style.fontSize = "36px";
+      profilePreviewStatus.textContent = "Emoji 头像预览";
+      return;
+    }
+    profilePreviewImg.textContent = "";
     profilePreview.style.display = "flex";
     profilePreviewStatus.textContent = "加载中…";
     profilePreviewImg.style.backgroundImage = "";
+    profilePreviewImg.style.fontSize = "";
     const img = new Image();
     img.onload = () => {
       profilePreviewImg.style.backgroundImage = `url(${trimmed})`;
@@ -178,6 +226,7 @@
       profileModal.style.zIndex = "99999";
     } catch {}
     profileModal.style.display = "flex";
+    if (authUser?.role === "admin") loadUserManager();
     if (authUser) {
       if (profileAccountMeta) {
         profileAccountMeta.textContent = authUser.username
@@ -186,6 +235,7 @@
       }
       if (inputProfileDisplay) inputProfileDisplay.value = authUser.displayName || "";
       if (inputProfileAvatar) inputProfileAvatar.value = authUser.avatar || "";
+      syncEmojiAvatarSelection(authUser.avatar || "");
       try {
         updateProfilePreview(authUser.avatar || "");
       } catch {}
@@ -364,6 +414,7 @@
     inputProfileAvatar.addEventListener("input", (e) => {
       try {
         updateProfilePreview(e.target.value || "");
+        syncEmojiAvatarSelection(e.target.value || "");
       } catch {}
     });
   }
@@ -374,6 +425,7 @@
         if (inputProfileAvatar) {
           inputProfileAvatar.value = "";
           updateProfilePreview("");
+          syncEmojiAvatarSelection("");
         }
       } catch {}
     });
@@ -417,7 +469,7 @@
         const displayName = inputProfileDisplay ? inputProfileDisplay.value.trim() : "";
         const avatar = inputProfileAvatar ? inputProfileAvatar.value.trim() : "";
         try {
-          if (avatar) new URL(avatar);
+          if (avatar && !isEmojiAvatar(avatar)) new URL(avatar);
         } catch {
           if (profileError) {
             profileError.textContent = "头像 URL 格式不正确";
@@ -477,6 +529,27 @@
       logout();
     });
   }
+  document.querySelectorAll("[data-emoji-avatar]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (!inputProfileAvatar) return;
+      inputProfileAvatar.value = button.dataset.emojiAvatar || "";
+      updateProfilePreview(inputProfileAvatar.value);
+      syncEmojiAvatarSelection(inputProfileAvatar.value);
+    });
+  });
+  if (btnUserManagerRefresh) btnUserManagerRefresh.addEventListener("click", loadUserManager);
+  if (userManagerList) userManagerList.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-user-save]");
+    if (!button) return;
+    const row = button.closest("[data-user-id]");
+    try {
+      button.disabled = true;
+      const response = await fetch(`/api/auth/users/${row.dataset.userId}`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role: row.querySelector("[data-user-role]").value, status: row.querySelector("[data-user-status]").value }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "保存失败");
+      await loadUserManager();
+    } catch (error) { alert(error.message || "保存失败"); } finally { button.disabled = false; }
+  });
   if (profileModal) {
     profileModal.addEventListener("click", (e) => {
       if (e.target === profileModal) closeProfileModal();
