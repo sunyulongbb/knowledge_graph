@@ -335,24 +335,21 @@
     }));
   }
 
-  function renderTable(host, columns, rows, formatter, columnLabels = {}) {
+  async function renderTable(host, columns, rows, formatter, columnLabels = {}) {
     if (!host) return;
-    if (!rows?.length) {
-      host.innerHTML = '<div class="muted" style="padding:12px;">暂无数据</div>';
-      return;
-    }
-
-    host.innerHTML = `<table class="sparql-table">
-      <thead><tr>${columns.map((col) => `<th>${escapeHtml(columnLabels[col] || col)}</th>`).join("")}</tr></thead>
-      <tbody>
-        ${rows
-          .map((row) => `<tr>${columns.map((col) => `<td>${formatter ? formatter(row, col) : escapeHtml(row?.[col] ?? "")}</td>`).join("")}</tr>`)
-          .join("")}
-      </tbody>
-    </table>`;
+    const module = await window.kbBusinessGridModuleReady;
+    const grid = module.getBusinessGrid(host, {
+      columns: columns.map((column) => ({ id: column, header: [{ text: columnLabels[column] || column }], minWidth: 140, gravity: 1, htmlEnable: Boolean(formatter) })),
+      emptyText: "暂无数据",
+      selection: "row",
+    });
+    grid.update((rows || []).map((row, index) => ({
+      id: `sparql-${index}`,
+      ...Object.fromEntries(columns.map((column) => [column, formatter ? formatter(row, column) : String(row?.[column] ?? "")])),
+    })));
   }
 
-  function renderUnifiedResultGrid(columns, rows, columnLabels = {}) {
+  async function renderUnifiedResultGrid(columns, rows, columnLabels = {}) {
     const host = byId("sparqlResultTable");
     if (!host) return;
     const displayValue = (row, column) => {
@@ -361,29 +358,13 @@
       if (displayColumn && row?.[displayColumn]?.value) return row[displayColumn].value;
       return state.previewColumnLabels && column === "entity" ? compactName(value) : value;
     };
-    if (typeof window.canvasDatagrid !== "function") {
-      renderTable(host, columns, rows, (row, column) => escapeHtml(displayValue(row, column)), columnLabels);
-      return;
-    }
-    if (!state.resultGrid) {
-      host.innerHTML = "";
-      state.resultGrid = window.canvasDatagrid({
-        parentNode: host,
-        data: [],
-        allowColumnReordering: false,
-        allowFreezing: false,
-        allowSorting: false,
-        showPerformanceGraph: false,
-      });
-      state.resultGrid.style.width = "100%";
-      state.resultGrid.style.height = "100%";
-      state.resultGrid.style.position = "absolute";
-      state.resultGrid.style.inset = "0";
-    }
-    state.resultGrid.schema = columns.map((column) => ({ title: columnLabels[column] || column, name: column, width: 180 }));
-    state.resultGrid.data = rows.map((row) => Object.fromEntries(columns.map((column) => [column, displayValue(row, column)])));
-    state.resultGrid.draw?.();
-    state.resultGrid.resize?.();
+    const module = await window.kbBusinessGridModuleReady;
+    state.resultGrid = module.getBusinessGrid(host, {
+      columns: columns.map((column) => ({ id: column, header: [{ text: columnLabels[column] || column }], width: 180, minWidth: 120 })),
+      emptyText: "暂无查询结果",
+      selection: "row",
+    });
+    state.resultGrid.update(rows.map((row, index) => ({ id: `result-${index}`, ...Object.fromEntries(columns.map((column) => [column, displayValue(row, column)])) })));
   }
 
   function recommendRole(column) {
@@ -398,48 +379,33 @@
     return "property";
   }
 
-  function renderMappingTable() {
+  async function renderMappingTable() {
     const host = byId("sparqlMappingTable");
     const rows = state.mappingSuggestions || [];
     if (!rows.length) {
-      host.innerHTML = '<div class="muted" style="padding:12px;">执行 SELECT 查询后生成字段映射。</div>';
+      const module = await window.kbBusinessGridModuleReady;
+      state.mappingGrid = module.getBusinessGrid(host, { columns: [{ id: "source", header: [{ text: "源字段" }], gravity: 1 }], emptyText: "执行 SELECT 查询后生成字段映射。" });
+      state.mappingGrid.update([]);
       return;
     }
-
-    host.innerHTML = `<table class="sparql-table">
-      <thead><tr><th>源字段</th><th>映射角色</th><th>目标字段</th></tr></thead>
-      <tbody>
-      ${rows
-        .map(
-          (row, index) => `<tr>
-            <td>${escapeHtml(row.source)}</td>
-            <td>
-              <select data-index="${index}" class="kb-select sparql-map-role">
-                ${["entity_id", "label", "description", "type", "property", "relation_from", "relation_to", "relation_type", "ignore"]
-                  .map((role) => `<option value="${role}" ${role === row.role ? "selected" : ""}>${role}</option>`)
-                  .join("")}
-              </select>
-            </td>
-            <td><input data-index="${index}" class="kb-input sparql-map-target" value="${escapeHtml(row.targetField || row.source)}" /></td>
-          </tr>`,
-        )
-        .join("")}
-      </tbody>
-    </table>`;
-
-    host.querySelectorAll(".sparql-map-role").forEach((select) => {
-      select.addEventListener("change", (event) => {
-        const index = Number(event.target.dataset.index);
-        state.mappingSuggestions[index].role = event.target.value;
-      });
+    const module = await window.kbBusinessGridModuleReady;
+    const roles = ["entity_id", "label", "description", "type", "property", "relation_from", "relation_to", "relation_type", "ignore"];
+    state.mappingGrid = module.getBusinessGrid(host, {
+      columns: [
+        { id: "source", header: [{ text: "源字段" }], minWidth: 150, gravity: 1 },
+        { id: "role", header: [{ text: "映射角色" }], width: 190, editable: true, editorType: "select", options: roles },
+        { id: "targetField", header: [{ text: "目标字段" }], minWidth: 180, gravity: 1, editable: true, editorType: "input" },
+      ],
+      editable: true,
+      emptyText: "暂无字段映射",
+      onAfterEdit: (value, row, column) => {
+        const index = Number(row.mappingIndex);
+        if (!state.mappingSuggestions[index]) return;
+        if (column.id === "role") state.mappingSuggestions[index].role = String(value);
+        if (column.id === "targetField") state.mappingSuggestions[index].targetField = String(value);
+      },
     });
-
-    host.querySelectorAll(".sparql-map-target").forEach((input) => {
-      input.addEventListener("input", (event) => {
-        const index = Number(event.target.dataset.index);
-        state.mappingSuggestions[index].targetField = event.target.value;
-      });
-    });
+    state.mappingGrid.update(rows.map((row, index) => ({ id: `mapping-${index}`, mappingIndex: index, source: row.source, role: row.role, targetField: row.targetField || row.source })));
   }
 
   function setImportStatus(message) {
@@ -453,7 +419,7 @@
     const raw = byId("sparqlRawResponse");
 
     if (!result) {
-      if (state.resultGrid) { state.resultGrid.data = []; state.resultGrid.draw?.(); }
+      if (state.resultGrid) state.resultGrid.update([]);
       else host.innerHTML = "";
       raw.textContent = "";
       byId("sparqlResultSummary").textContent = "还没有执行查询。";

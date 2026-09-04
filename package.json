@@ -4,6 +4,11 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "build:widgets": "bun build public/assets/scripts/ontology-tree.ts public/assets/scripts/business-grid.ts --outdir public/assets/generated --target browser --format esm --minify",
+    "build:ontology-tree": "bun run build:widgets",
+    "build": "bun run build:widgets",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
     "dev": "bun run src/server/index.ts",
     "seed:semantic": "bun run scripts/seed-semantic-nodes.ts"
   },
@@ -15,6 +20,8 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@dhtmlx/grid": "^9.3.10",
+    "@dhtmlx/tree": "^9.3.10",
     "cytoscape-dagre": "^4.0.0",
     "dagre": "^0.8.5",
     "deck.gl": "^9.3.6",

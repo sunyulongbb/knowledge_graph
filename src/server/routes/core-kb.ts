@@ -2063,6 +2063,9 @@ export async function handleCoreKbRoutes(
     const hasImage = ["1", "true"].includes(
       (url.searchParams.get("has_image") || "").trim().toLowerCase(),
     );
+    const hasMedia = ["1", "true"].includes(
+      (url.searchParams.get("has_media") || "").trim().toLowerCase(),
+    );
 
     const likeParam = `%${q}%`;
     const params: any[] = [
@@ -2159,14 +2162,16 @@ export async function handleCoreKbRoutes(
       whereClause += " AND (n.type IS NULL OR lower(trim(n.type)) <> 'entity')";
     }
 
-    // The grid view only renders knowledge with images. Filter at the database
-    // layer so pagination and totals are based on displayable cards, rather
-    // than fetching an unfiltered page for the browser to discard.
-    if (hasImage) {
+    // Grid cards require visual media. Keep the legacy image-only filter while
+    // allowing the grid to request either images or videos via has_media.
+    if (hasImage || hasMedia) {
       whereClause += `
         AND (
           TRIM(COALESCE(CASE WHEN json_valid(n.images) THEN json_extract(n.images, '$[0]') ELSE '' END, '')) <> ''
           OR TRIM(COALESCE(CASE WHEN json_valid(n.data) THEN json_extract(n.data, '$.images[0]') ELSE '' END, '')) <> ''
+          ${hasMedia ? `OR TRIM(COALESCE(CASE WHEN json_valid(n.videos) THEN json_extract(n.videos, '$[0]') ELSE n.videos END, '')) <> ''
+          OR TRIM(COALESCE(CASE WHEN json_valid(n.data) THEN json_extract(n.data, '$.videos[0]') ELSE '' END, '')) <> ''
+          OR TRIM(COALESCE(CASE WHEN json_valid(n.data) THEN json_extract(n.data, '$.video') ELSE '' END, '')) <> ''` : ""}
           OR EXISTS (
             SELECT 1
             FROM attributes image_attr
@@ -2183,6 +2188,19 @@ export async function handleCoreKbRoutes(
                 )
               )
           )
+          ${hasMedia ? `OR EXISTS (
+            SELECT 1
+            FROM attributes video_attr
+            WHERE (video_attr.node_id = n.id OR REPLACE(video_attr.node_id, 'entity/', '') = n.id)
+              AND TRIM(COALESCE(video_attr.value, '')) <> ''
+              AND (
+                lower(video_attr.key) IN ('video', 'videos', '视频')
+                OR lower(video_attr.value) GLOB '*.mp4*'
+                OR lower(video_attr.value) GLOB '*.webm*'
+                OR lower(video_attr.value) GLOB '*.mov*'
+                OR lower(video_attr.value) LIKE '%/node-videos/%'
+              )
+          )` : ""}
         )`;
     }
 
@@ -2261,15 +2279,19 @@ export async function handleCoreKbRoutes(
         .all(...nodeIds) as any[];
 
       const isImageUrl = (v: string) =>
-        /\.(jpe?g|png|gif|webp|avif|bmp|svg|heic|mov)(\?.*)?$/i.test(v) ||
+        /\.(jpe?g|png|gif|webp|avif|bmp|svg|heic)(\?.*)?$/i.test(v) ||
         /^data:image\//i.test(v) ||
-        /\/node-images\//i.test(v) ||
-        /\/static\/uploads\//i.test(v);
+        /\/node-images\//i.test(v);
+      const isVideoUrl = (v: string) =>
+        /\.(mp4|webm|ogg|m4v|mov)(\?.*)?$/i.test(v) ||
+        /^data:video\//i.test(v) ||
+        /\/node-videos\//i.test(v);
 
       const attrImagesByNodeId: Record<string, string[]> = {};
+      const attrVideosByNodeId: Record<string, string[]> = {};
       for (const attr of imageAttrs) {
         if (!attr.value) continue;
-        const urls: string[] = [];
+        const values: string[] = [];
         const raw = String(attr.value).trim();
         if (raw.startsWith("[")) {
           try {
@@ -2280,17 +2302,23 @@ export async function handleCoreKbRoutes(
                   typeof item === "string"
                     ? item.trim()
                     : item?.url || item?.src || "";
-                if (s && isImageUrl(s)) urls.push(s);
+                if (s) values.push(s);
               });
             }
           } catch {}
-        } else if (isImageUrl(raw)) {
-          urls.push(raw);
+        } else {
+          values.push(raw);
         }
-        if (urls.length > 0) {
-          const nid = attr.node_id;
+        const nid = attr.node_id;
+        const imageUrls = values.filter(isImageUrl);
+        const videoUrls = values.filter(isVideoUrl);
+        if (imageUrls.length > 0) {
           if (!attrImagesByNodeId[nid]) attrImagesByNodeId[nid] = [];
-          attrImagesByNodeId[nid].push(...urls);
+          attrImagesByNodeId[nid].push(...imageUrls);
+        }
+        if (videoUrls.length > 0) {
+          if (!attrVideosByNodeId[nid]) attrVideosByNodeId[nid] = [];
+          attrVideosByNodeId[nid].push(...videoUrls);
         }
       }
 
@@ -2300,6 +2328,10 @@ export async function handleCoreKbRoutes(
         if (imgs && imgs.length > 0) {
           // deduplicate
           node._attr_images = Array.from(new Set(imgs));
+        }
+        const videos = attrVideosByNodeId[nid];
+        if (videos && videos.length > 0) {
+          node._attr_videos = Array.from(new Set(videos));
         }
       }
     }
