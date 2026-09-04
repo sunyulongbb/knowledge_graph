@@ -9,11 +9,12 @@
   const searchButton = document.getElementById("btnSystemManagementSearch");
   const resetButton = document.getElementById("btnSystemManagementReset");
   let activeTab = "users";
+  let authResolved = false;
   const isAdmin = () => window.authUser?.role === "admin";
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[char]));
   function updateEntry() {
     if (nav) nav.style.display = isAdmin() ? "" : "none";
-    if (!isAdmin() && window.kbViewMode === "user_management") window.setViewMode?.("table", { replaceRoute: true });
+    if (authResolved && !isAdmin() && window.kbViewMode === "user_management") window.setViewMode?.("table", { replaceRoute: true });
   }
   async function loadUsers() {
     if (!isAdmin() || !list) return;
@@ -48,7 +49,7 @@
       await loadUsers();
     } catch (error) { if (message) message.textContent = error.message || "保存失败"; } finally { button.disabled = false; }
   });
-  window.addEventListener("kb-auth-change", updateEntry);
+  window.addEventListener("kb-auth-change", () => { authResolved = true; updateEntry(); });
   window.loadUserManagement = loadUsers;
   updateEntry();
 })();
