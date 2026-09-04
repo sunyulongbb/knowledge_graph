@@ -47,16 +47,32 @@
   }
 
   function resolveImage(node) {
-    const value = Array.isArray(node?.images)
-      ? node.images[0]
-      : node?.image || node?.images;
-    const source = String(value || "").trim();
-    if (!source) return "";
-    try {
-      return new URL(source, window.location.origin).toString();
-    } catch {
-      return source;
+    const candidates = [
+      node?.image,
+      node?.images,
+      node?.data?.image,
+      node?.data?.images,
+    ];
+    for (const candidate of candidates) {
+      let value = Array.isArray(candidate) ? candidate[0] : candidate;
+      if (typeof value === "string") {
+        const text = value.trim();
+        if (text.startsWith("[")) {
+          try {
+            const parsed = JSON.parse(text);
+            value = Array.isArray(parsed) ? parsed[0] : value;
+          } catch {}
+        }
+      }
+      const source = String(value || "").trim();
+      if (!source) continue;
+      try {
+        return new URL(source, window.location.origin).toString();
+      } catch {
+        return source;
+      }
     }
+    return "";
   }
 
   function formatChineseDate(value) {
@@ -134,19 +150,20 @@
           "-",
         );
         const imageHtml = image
-          ? `<span class="timeline-card-image-frame"><img class="timeline-card-image" src="${escapeHtml(image)}" alt="" loading="lazy"></span>`
+          ? `<span class="timeline-card-image-frame"><img class="timeline-card-image" src="${escapeHtml(image)}" alt="" width="36" height="36" loading="lazy"></span>`
           : '<span class="timeline-card-image timeline-card-image--empty"><i class="fa-solid fa-cube" aria-hidden="true"></i></span>';
-        const dateText = `${formatChineseDate(event.start)}${event.end ? ` 至 ${formatChineseDate(event.end)}` : ""}`;
         result.push({
           id,
           entityId,
-          content: `<span class="timeline-card">${imageHtml}<strong class="timeline-card-name">${escapeHtml(name)}</strong></span>`,
+          content: `<article class="timeline-card">${imageHtml}<span class="timeline-card-body"><strong class="timeline-card-name" title="${escapeHtml(name)}">${escapeHtml(name)}</strong></span></article>`,
           start: event.start,
           end: event.end || undefined,
-          type: event.end ? "range" : "box",
+          // Ranges are shown as event cards as well: vis range items set an
+          // inline duration width, which makes content cards stretch.
+          type: "box",
           group,
-          className: `timeline-card-item ${event.end ? "timeline-card-item--range" : "timeline-card-item--point"}`,
-          title: `${escapeHtml(name)} · ${escapeHtml(event.key || "时间")}<br>${escapeHtml(dateText)}`,
+          className: "timeline-card-item timeline-card-item--point",
+          title: escapeHtml(name),
         });
       });
     });
