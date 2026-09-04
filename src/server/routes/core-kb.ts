@@ -2169,9 +2169,13 @@ export async function handleCoreKbRoutes(
         AND (
           TRIM(COALESCE(CASE WHEN json_valid(n.images) THEN json_extract(n.images, '$[0]') ELSE '' END, '')) <> ''
           OR TRIM(COALESCE(CASE WHEN json_valid(n.data) THEN json_extract(n.data, '$.images[0]') ELSE '' END, '')) <> ''
-          ${hasMedia ? `OR TRIM(COALESCE(CASE WHEN json_valid(n.videos) THEN json_extract(n.videos, '$[0]') ELSE n.videos END, '')) <> ''
+          ${
+            hasMedia
+              ? `OR TRIM(COALESCE(CASE WHEN json_valid(n.videos) THEN json_extract(n.videos, '$[0]') ELSE n.videos END, '')) <> ''
           OR TRIM(COALESCE(CASE WHEN json_valid(n.data) THEN json_extract(n.data, '$.videos[0]') ELSE '' END, '')) <> ''
-          OR TRIM(COALESCE(CASE WHEN json_valid(n.data) THEN json_extract(n.data, '$.video') ELSE '' END, '')) <> ''` : ""}
+          OR TRIM(COALESCE(CASE WHEN json_valid(n.data) THEN json_extract(n.data, '$.video') ELSE '' END, '')) <> ''`
+              : ""
+          }
           OR EXISTS (
             SELECT 1
             FROM attributes image_attr
@@ -2188,7 +2192,9 @@ export async function handleCoreKbRoutes(
                 )
               )
           )
-          ${hasMedia ? `OR EXISTS (
+          ${
+            hasMedia
+              ? `OR EXISTS (
             SELECT 1
             FROM attributes video_attr
             WHERE (video_attr.node_id = n.id OR REPLACE(video_attr.node_id, 'entity/', '') = n.id)
@@ -2200,7 +2206,9 @@ export async function handleCoreKbRoutes(
                 OR lower(video_attr.value) GLOB '*.mov*'
                 OR lower(video_attr.value) LIKE '%/node-videos/%'
               )
-          )` : ""}
+          )`
+              : ""
+          }
         )`;
     }
 
@@ -2324,6 +2332,13 @@ export async function handleCoreKbRoutes(
 
       for (const node of nodes as any[]) {
         const nid = node.id || node._id;
+        node._timeline_attributes = imageAttrs
+          .filter((attr) => attr.node_id === nid)
+          .map((attr) => ({
+            key: attr.key,
+            value: attr.value,
+            property_name_snapshot: attr.property_name_snapshot || attr.key,
+          }));
         const imgs = attrImagesByNodeId[nid];
         if (imgs && imgs.length > 0) {
           // deduplicate
@@ -3255,20 +3270,27 @@ export async function handleCoreKbRoutes(
       const body = (await req.json()) as any;
       const query = String(body?.query || "").trim();
       if (!query) {
-        return Response.json({ error: "Missing SPARQL query" }, { status: 400 });
+        return Response.json(
+          { error: "Missing SPARQL query" },
+          { status: 400 },
+        );
       }
       if (query.length > 100_000) {
-        return Response.json({ error: "SPARQL query is too large" }, { status: 413 });
+        return Response.json(
+          { error: "SPARQL query is too large" },
+          { status: 413 },
+        );
       }
       const queryWithoutComments = query
         .split(/\r?\n/)
         .filter((line) => !/^\s*#/.test(line))
         .join("\n");
-      if (!/^\s*(?:(?:PREFIX|BASE)\s+[^\r\n]+\s*)*SELECT\b/i.test(queryWithoutComments)) {
-        return Response.json(
-          { error: "仅支持 SELECT 查询" },
-          { status: 400 },
-        );
+      if (
+        !/^\s*(?:(?:PREFIX|BASE)\s+[^\r\n]+\s*)*SELECT\b/i.test(
+          queryWithoutComments,
+        )
+      ) {
+        return Response.json({ error: "仅支持 SELECT 查询" }, { status: 400 });
       }
       const cacheKey = `${WIKIDATA_SPARQL_ENDPOINT}\n${query}`;
       const cached = wikidataQueryCache.get(cacheKey);
@@ -3302,7 +3324,9 @@ export async function handleCoreKbRoutes(
         const responseText = await resp.text();
         if (!resp.ok) {
           return Response.json(
-            { error: `Wikidata 查询失败（HTTP ${resp.status}）：${responseText.slice(0, 500)}` },
+            {
+              error: `Wikidata 查询失败（HTTP ${resp.status}）：${responseText.slice(0, 500)}`,
+            },
             { status: resp.status },
           );
         }

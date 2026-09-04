@@ -6139,6 +6139,240 @@ body {
   scrollbar-width: none;
 }
 
+.timeline-controls {
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.timeline-controls input[type="date"] {
+  width: 132px;
+}
+
+.timeline-view {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-0);
+}
+
+.timeline-view--empty::after {
+  content: "当前筛选结果没有可用时间信息";
+  display: block;
+  padding: 28px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.timeline-view .vis-timeline {
+  border: 0;
+  color: var(--fg);
+  font-family: inherit;
+  background-image: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--border) 25%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 120px 100%;
+}
+
+.timeline-view .vis-time-axis .vis-text,
+.timeline-view .vis-labelset .vis-label {
+  color: var(--muted);
+}
+
+.timeline-view .vis-item {
+  border-color: var(--border-strong);
+  background: var(--surface-0);
+  color: var(--fg);
+}
+
+.timeline-view .vis-timeline .vis-item.timeline-card-item {
+  width: max-content;
+  max-width: 168px;
+  border-radius: 10px;
+  padding: 0;
+  overflow: hidden;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08);
+}
+
+.timeline-view .vis-timeline .vis-item.timeline-card-item .vis-item-content {
+  padding: 0;
+}
+
+.timeline-view .vis-item.timeline-card-item--point {
+  border-radius: 11px;
+  border-left: 3px solid var(--border-strong);
+}
+
+.timeline-view .vis-timeline .vis-item.timeline-card-item--point .vis-dot,
+.timeline-view .vis-timeline .vis-item.timeline-card-item--point .vis-line {
+  display: none !important;
+}
+
+.timeline-view .vis-timeline .vis-item.timeline-card-item--range {
+  width: max-content;
+  max-width: 208px;
+  border-left-width: 4px;
+}
+
+.timeline-view .vis-timeline .vis-item.timeline-card-item--range {
+  border-left-color: var(--border-strong);
+}
+
+.timeline-view .vis-labelset .vis-label {
+  min-height: 52px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-1) 78%, transparent);
+}
+
+.timeline-group-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.timeline-view .vis-timeline .vis-item.timeline-card-item.vis-selected {
+  border-width: 2px;
+  border-color: var(--fg);
+  box-shadow: 0 5px 15px rgba(15, 23, 42, 0.14);
+}
+
+.timeline-card {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 5px 6px;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+
+.timeline-card-image {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain !important;
+  object-position: center center;
+  box-sizing: border-box;
+  padding: 2px;
+  border-radius: 6px;
+}
+
+.timeline-card-image-frame {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  overflow: hidden;
+  border-radius: 7px;
+  background: var(--surface-1);
+}
+
+.timeline-card-image-frame > .timeline-card-image {
+  object-fit: contain !important;
+  object-position: center center;
+}
+
+.timeline-card-image--empty {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+}
+
+.timeline-card-image--empty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.timeline-card-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.timeline-card-name,
+.timeline-card-event,
+.timeline-card-date {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeline-card-name {
+  color: var(--fg);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeline-card-event,
+.timeline-card-date {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.timeline-card-type {
+  align-self: flex-start;
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.timeline-card-body,
+.timeline-card-event,
+.timeline-card-date,
+.timeline-card-type {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .timeline-controls {
+    flex-wrap: wrap;
+  }
+
+  .timeline-controls input[type="date"] {
+    width: 118px;
+  }
+
+  .timeline-view .vis-item.timeline-card-item {
+    max-width: 148px;
+  }
+
+  .timeline-card {
+    min-height: 40px;
+    padding: 4px 5px;
+  }
+
+  .timeline-card-image {
+    padding: 1px;
+  }
+
+  .timeline-card-image-frame,
+  .timeline-card-image--empty {
+    width: 28px;
+    height: 28px;
+    flex-basis: 28px;
+  }
+}
+
 #tblNodes.entity-list::-webkit-scrollbar {
   width: 0;
   height: 0;

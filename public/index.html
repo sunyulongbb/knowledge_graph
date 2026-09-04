@@ -35,9 +35,11 @@
     window["@tiptap/starter-kit"] =
       window["@tiptap/starter-kit"] || window.TiptapStarterKit;
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20260904-6" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
+  <link rel="stylesheet" href="/node_modules/vis-timeline/styles/vis-timeline-graph2d.min.css?v=20260904-2" />
+  <script src="/node_modules/vis-timeline/standalone/umd/vis-timeline-graph2d.min.js?v=20260904-2"></script>
   <script>
     window.kbBusinessGridModuleReady = import("/assets/generated/business-grid.js").then((module) => {
       window.kbBusinessGrid = module;
@@ -59,6 +61,7 @@
   </script>
   <script src="/assets/scripts/app-settings.js"></script>
   <script src="/assets/scripts/pagination.js"></script>
+  <script src="/assets/scripts/timeline-panel.js?v=20260904-3"></script>
   <script type="module">
     import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.1.200/build/pdf.min.mjs";
 
@@ -1923,6 +1926,14 @@
               <i class="fa-solid fa-plus"></i>
             </button>
           </div>
+          <div id="timelineControls" class="timeline-controls" style="display:none;" role="group" aria-label="时间轴筛选">
+            <input id="timelineFrom" type="date" class="kb-input sm" aria-label="时间轴开始日期" title="开始日期" />
+            <span class="muted">至</span>
+            <input id="timelineTo" type="date" class="kb-input sm" aria-label="时间轴结束日期" title="结束日期" />
+            <select id="timelineTypeFilter" class="kb-select sm" aria-label="时间轴实体类型">
+              <option value="">全部类型</option>
+            </select>
+          </div>
           <button id="btnTableRefresh" class="btn icon" title="刷新列表" aria-label="刷新列表">
             <i class="fa-solid fa-rotate-right"></i>
           </button>
@@ -2779,6 +2790,7 @@
           <div class="tbl-wrap">
             <div id="tblNodes" class="entity-list" role="list" aria-label="实体列表"></div>
           </div>
+          <div id="timelineView" class="timeline-view" aria-label="知识时间轴" style="display:none;"></div>
           <div id="tblPagination" style="
                 margin: 12px auto 0;
                 display: none;
@@ -9921,9 +9933,7 @@
               stripEntityIdPrefix(preservedNodeId) || preservedNodeId;
           }
         }
-        try {
-          renderTableList();
-        } catch { }
+        try { renderTableList(); } catch { }
       } else if (isShorts) {
         try {
           renderShortsList();

@@ -42,7 +42,7 @@
   const btnDeleteSelected = document.getElementById("btnDeleteSelected");
   const tblCount = document.getElementById("tblCount");
   const tblPagination = document.getElementById("tblPagination");
-  const TABLE_LAYOUT_MODES = ["list", "grid", "manage"];
+  const TABLE_LAYOUT_MODES = ["list", "grid", "timeline", "manage"];
   const normalizeTableLayoutMode = (mode) =>
     mode === "table"
       ? "list"
@@ -116,15 +116,19 @@
       const nextLabel =
         nextMode === "grid"
           ? "网格布局"
-          : nextMode === "manage"
-            ? "管理表格"
-            : "列表布局";
+          : nextMode === "timeline"
+            ? "时间轴布局"
+            : nextMode === "manage"
+              ? "管理表格"
+              : "列表布局";
       const icon =
         normalized === "grid"
           ? "fa-table-columns"
-          : normalized === "manage"
-            ? "fa-list"
-            : "fa-th-large";
+          : normalized === "timeline"
+            ? "fa-clock"
+            : normalized === "manage"
+              ? "fa-list"
+              : "fa-th-large";
       btnTblLayoutToggle.innerHTML = `<i class="fa-solid ${icon}"></i>`;
       btnTblLayoutToggle.title = `切换到${nextLabel}`;
       btnTblLayoutToggle.setAttribute("aria-label", `切换到${nextLabel}`);
@@ -133,6 +137,16 @@
       tblGridZoomControls.style.display =
         normalized === "grid" ? "flex" : "none";
     }
+    const timelineControls = document.getElementById("timelineControls");
+    const timelineView = document.getElementById("timelineView");
+    const tableWrap = document.querySelector("#tablePanel > .tbl-wrap");
+    if (timelineControls)
+      timelineControls.style.display =
+        normalized === "timeline" ? "flex" : "none";
+    if (timelineView)
+      timelineView.style.display = normalized === "timeline" ? "block" : "none";
+    if (tableWrap)
+      tableWrap.style.display = normalized === "timeline" ? "none" : "";
     if (tblPagination) {
       tblPagination.style.display = normalized === "manage" ? "flex" : "none";
     }
@@ -142,6 +156,7 @@
     if (normalized === "manage") window.openEntityManageTable?.();
     else window.closeEntityManageTable?.();
     updateGridManualLoadButton();
+    if (normalized === "timeline") loadTablePage({ resetPage: true });
   };
   window.applyTableLayoutMode = applyTableLayoutMode;
   applyGridSize(getInitialGridSize(), false);
@@ -622,7 +637,10 @@
           url.search = scopedUrl.search;
         }
       }
-      url.searchParams.set("limit", tblPageSize);
+      url.searchParams.set(
+        "limit",
+        window.kbTableLayoutMode === "timeline" ? "300" : tblPageSize,
+      );
       url.searchParams.set("offset", offset);
 
       const sortOrder = tblSortSelect ? tblSortSelect.value : "";
@@ -690,6 +708,9 @@
       window.kbTablePage = tblPage;
       window.kbTablePageSize = tblPageSize;
       window.kbTableTotalNodes = data.total || nodes.length;
+      if (window.kbTableLayoutMode === "timeline") {
+        window.kbTimeline?.update(window.kbTableNodes);
+      }
       try {
         if (!tblCacheStorageDisabled && window.localStorage) {
           localStorage.setItem("kbTableNodesCache", JSON.stringify(nodes));
