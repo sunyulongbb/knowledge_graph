@@ -611,14 +611,12 @@
       fallback.appendChild(text);
     }
 
-    const frame = document.createElement("iframe");
-    frame.className = "detail-pdf-frame";
-    frame.src = `${resolvedUrl}#page=1&view=FitH`;
-    frame.loading = "lazy";
-    frame.setAttribute("title", "PDF 预览");
-    syncDetailPdfFrameHeight(frame, root, fallback);
-
-    fallback.appendChild(frame);
+    const link = document.createElement("a");
+    link.href = resolvedUrl;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = "在新窗口打开 PDF";
+    fallback.appendChild(link);
     root.appendChild(fallback);
   }
 
@@ -691,9 +689,130 @@
 
   function mountPdfSpreadViewer(root, resolvedUrl, title) {
     if (!root) return;
-    detailPdfViewerState.renderSeq += 1;
+    if (
+      detailPdfViewerState.doc &&
+      typeof detailPdfViewerState.doc.destroy === "function"
+    ) {
+      try {
+        detailPdfViewerState.doc.destroy();
+      } catch {}
+    }
+    detailPdfViewerState.doc = null;
+    const renderSeq = detailPdfViewerState.renderSeq + 1;
+    detailPdfViewerState.renderSeq = renderSeq;
     detailPdfViewerState.url = resolvedUrl;
-    renderNativePdfFallback(root, resolvedUrl);
+    root.innerHTML = "";
+
+    const viewer = document.createElement("div");
+    viewer.className = "detail-pdf-viewer";
+    viewer.setAttribute("role", "region");
+    viewer.setAttribute("aria-label", `${title || "PDF"} 在线预览`);
+    const status = document.createElement("div");
+    status.className = "detail-pdf-status";
+    status.textContent = "正在加载 PDF…";
+    const toolbar = document.createElement("div");
+    toolbar.className = "detail-pdf-toolbar";
+    const prevButton = document.createElement("button");
+    prevButton.type = "button";
+    prevButton.className = "btn sm";
+    prevButton.textContent = "上一页";
+    prevButton.disabled = true;
+    const pageIndicator = document.createElement("span");
+    pageIndicator.className = "detail-pdf-page-indicator";
+    pageIndicator.textContent = "加载中";
+    const nextButton = document.createElement("button");
+    nextButton.type = "button";
+    nextButton.className = "btn sm";
+    nextButton.textContent = "下一页";
+    nextButton.disabled = true;
+    toolbar.append(prevButton, pageIndicator, nextButton);
+    const pages = document.createElement("div");
+    pages.className = "detail-pdf-pages";
+    viewer.append(toolbar, pages);
+    pages.appendChild(status);
+    root.appendChild(viewer);
+    syncDetailPdfFrameHeight(viewer, root, viewer);
+
+    void (async () => {
+      try {
+        const pdfjsLib = await window.kbPdfJsReady;
+        if (!pdfjsLib || typeof pdfjsLib.getDocument !== "function") {
+          throw new Error("PDF.js 未就绪");
+        }
+        const loadingTask = pdfjsLib.getDocument({
+          url: resolvedUrl,
+          withCredentials: true,
+        });
+        const pdfDocument = await loadingTask.promise;
+        if (detailPdfViewerState.renderSeq !== renderSeq) {
+          pdfDocument.destroy?.();
+          return;
+        }
+        detailPdfViewerState.doc = pdfDocument;
+        let currentPage = 1;
+        let rendering = false;
+        const renderPage = async (requestedPage) => {
+          if (rendering || detailPdfViewerState.renderSeq !== renderSeq) return;
+          rendering = true;
+          currentPage = Math.max(
+            1,
+            Math.min(pdfDocument.numPages, Number(requestedPage) || 1),
+          );
+          prevButton.disabled = currentPage <= 1;
+          nextButton.disabled = currentPage >= pdfDocument.numPages;
+          pageIndicator.textContent = `第 ${currentPage} / ${pdfDocument.numPages} 页`;
+          pages.replaceChildren(status);
+          status.style.display = "block";
+          status.textContent = "正在渲染当前页…";
+          const page = await pdfDocument.getPage(currentPage);
+          if (detailPdfViewerState.renderSeq !== renderSeq) return;
+          const baseViewport = page.getViewport({ scale: 1 });
+          const availableWidth = Math.max(280, pages.clientWidth - 28);
+          const availableHeight = Math.max(240, pages.clientHeight - 28);
+          const displayScale = Math.max(
+            0.1,
+            Math.min(
+              2,
+              availableWidth / baseViewport.width,
+              availableHeight / baseViewport.height,
+            ),
+          );
+          const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+          const renderViewport = page.getViewport({
+            scale: displayScale * pixelRatio,
+          });
+          const pageEl = document.createElement("section");
+          pageEl.className = "detail-pdf-page";
+          pageEl.setAttribute("aria-label", `第 ${currentPage} 页`);
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.ceil(renderViewport.width);
+          canvas.height = Math.ceil(renderViewport.height);
+          canvas.style.width = `${Math.ceil(renderViewport.width / pixelRatio)}px`;
+          canvas.style.height = `${Math.ceil(renderViewport.height / pixelRatio)}px`;
+          pageEl.appendChild(canvas);
+          pages.replaceChildren(pageEl);
+          await page.render({
+            canvasContext: canvas.getContext("2d", { alpha: false }),
+            viewport: renderViewport,
+          }).promise;
+          if (detailPdfViewerState.renderSeq === renderSeq) {
+            pages.scrollTop = 0;
+          }
+          rendering = false;
+        };
+        prevButton.addEventListener("click", () => void renderPage(currentPage - 1));
+        nextButton.addEventListener("click", () => void renderPage(currentPage + 1));
+        await renderPage(currentPage);
+      } catch (error) {
+        if (detailPdfViewerState.renderSeq !== renderSeq) return;
+        console.warn("PDF.js preview failed; falling back to native viewer", error);
+        renderNativePdfFallback(
+          root,
+          resolvedUrl,
+          "在线预览加载失败，请在新窗口打开 PDF。",
+        );
+      }
+    })();
   }
 
   function normalizeEntityIdForApi(id) {

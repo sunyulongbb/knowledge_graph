@@ -3367,6 +3367,97 @@ body {
 
 .detail-pdf-viewer {
   width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden !important;
+  padding: 14px;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--border) 84%, white);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-1) 72%, transparent);
+}
+
+.detail-pdf-status {
+  padding: 12px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.detail-pdf-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 0 10px;
+}
+
+.detail-pdf-page-indicator {
+  min-width: 96px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.detail-pdf-pages {
+  display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 14px;
+  align-items: center;
+  justify-items: center;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.detail-pdf-page {
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 84%, white);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--fg) 12%, transparent);
+  background: #fff;
+}
+
+.detail-pdf-page canvas {
+  display: block;
+  max-width: 100%;
+}
+
+/* Property management toolbar: compact controls without consuming table width. */
+.ontology-toolbar {
+  align-items: center;
+  padding: 10px 12px;
+  gap: 10px;
+}
+
+.ontology-toolbar__controls {
+  margin-left: auto;
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+  min-width: min(100%, 360px);
+}
+
+.ontology-toolbar__controls #propertyMgmtSearch {
+  width: auto;
+  min-width: 0;
+  flex: 1 1 180px;
+}
+
+@media (max-width: 760px) {
+  .ontology-toolbar__title,
+  .ontology-toolbar__controls {
+    flex: 1 1 100%;
+  }
+
+  .ontology-toolbar__controls {
+    margin-left: 0;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
 }
 
 .detail-pdf-fallback {
@@ -3989,6 +4080,30 @@ body {
   background: color-mix(in srgb, var(--surface-1) 72%, transparent);
   border: 1px solid var(--border);
   border-radius: 10px;
+  /* Bridge the embedded DHTMLX tree palette to the active app theme. */
+  --dhx-background-primary: var(--surface-0);
+  --dhx-background-secondary: var(--surface-1);
+  --dhx-background-additional: color-mix(
+    in srgb,
+    var(--accent) 10%,
+    var(--surface-1)
+  );
+  --dhx-font-color-primary: var(--fg);
+  --dhx-font-color-secondary: var(--muted);
+  --dhx-font-color-additional: var(--muted);
+  --dhx-border-color: var(--border);
+  --dhx-color-primary: var(--accent);
+  --dhx-color-primary-hover: var(--accent);
+  --dhx-color-primary-light-hover: color-mix(
+    in srgb,
+    var(--accent) 10%,
+    transparent
+  );
+  --dhx-color-primary-light-active: color-mix(
+    in srgb,
+    var(--accent) 18%,
+    transparent
+  );
 }
 
 #clsTree .ontology-dhtmlx-host {
@@ -4010,6 +4125,16 @@ body {
   transition:
     background-color 0.16s ease,
     color 0.16s ease;
+  color: var(--fg);
+}
+
+#clsTree .dhx_tree-list-item,
+#clsTree .dhx_tree-folder,
+#clsTree .dhx_tree-list-item__content,
+#clsTree .dhx_tree-folder__content,
+#clsTree .dhx_tree-list-item__text,
+#clsTree .dhx_tree-folder__text {
+  color: var(--fg);
 }
 
 #clsTree .dhx_tree-list-item:hover::before,
@@ -4019,13 +4144,25 @@ body {
 
 #clsTree .dhx_tree-list-item--selected::before,
 #clsTree .dhx_tree-folder--selected::before {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 #clsTree .ontology-node-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+#clsTree .ontology-node-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  margin-right: 6px;
+  border: 1px solid color-mix(in srgb, var(--fg) 20%, transparent);
+  border-radius: 50%;
+  background: var(--ontology-node-color, var(--accent));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--surface-0) 72%, transparent);
 }
 
 #clsTree .ontology-node-count {
@@ -6437,6 +6574,102 @@ body {
   border-left: 3px solid var(--accent);
   border-radius: 10px;
   background: var(--surface-0);
+}
+
+.semantic-map-view {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-0);
+}
+
+.semantic-map-view #deck-root {
+  position: absolute;
+  inset: 0;
+}
+
+.semantic-map-hidden {
+  display: none;
+}
+
+.semantic-map-legend {
+  position: absolute;
+  z-index: 2;
+  bottom: 14px;
+  left: 14px;
+  max-width: min(240px, calc(100% - 28px));
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-0) 88%, transparent);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--fg) 12%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.semantic-map-legend__title {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.semantic-map-legend__list {
+  display: grid;
+  gap: 4px;
+  max-height: 140px;
+  overflow: auto;
+  color: var(--fg);
+  font-size: 12px;
+}
+
+.semantic-map-legend__list .legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.semantic-map-legend__list .legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.semantic-map-tooltip {
+  position: absolute;
+  z-index: 3;
+  display: none;
+  max-width: 260px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-0) 94%, transparent);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--fg) 14%, transparent);
+  color: var(--fg);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.semantic-map-tooltip .tooltip-title {
+  margin-bottom: 3px;
+  font-weight: 650;
+}
+
+.semantic-map-tooltip .tooltip-meta {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+:root[data-theme="dark"] #clsTree {
+  background: color-mix(in srgb, var(--surface-1) 82%, transparent);
+  border-color: color-mix(in srgb, var(--border) 84%, transparent);
+}
+
+:root[data-theme="dark"] #clsTree .ontology-node-count {
+  background: color-mix(in srgb, var(--surface-0) 88%, transparent);
+  border-color: color-mix(in srgb, var(--border) 82%, transparent);
 }
 
 .timeline-view .vis-timeline .vis-item.timeline-card-item .vis-item-content {

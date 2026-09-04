@@ -293,7 +293,7 @@ export class OntologyTreeController {
     const actions = [
       ["新增子本体", () => this.options.onAddChild(id), false],
       [
-        "重命名",
+        "编辑",
         () => this.options.onEdit(id),
         Boolean(record?.readonly || record?.system),
       ],

@@ -8,11 +8,14 @@
   let propertyPage = parseInt(urlParams.get("prop_page") || "1", 10);
   let propertyPageSize = parseInt(urlParams.get("prop_limit") || "20", 10);
   let propertyTotal = 0;
-  let selectedOntologyId = (urlParams.get("ontology_id") || "").trim();
-  let propertyViewMode = selectedOntologyId ? "linked" : "all";
+  // The ontology panel always opens in the unselected, full-property view.
+  // Selecting a tree node is an explicit, local filter action.
+  let selectedOntologyId = "";
+  let propertyViewMode = "all";
   let ontologyItems = [];
   let ontologySearchTimer = null;
   let ontologyTreeController = null;
+  let pendingOntologyToggleId = "";
   let ontologyMutationBusy = false;
   let propertyGrid = null;
   let propertyGridRows = [];
@@ -244,11 +247,15 @@
       )}${names.length > 3 ? `<span class="ontology-pill">+${names.length - 3}</span>` : ""}</div>`;
   }
 
-  function renderPropertyType(prop) {
-    return `<div style="display:flex; flex-wrap:wrap; gap:6px;">
-      <span class="ontology-type-chip">${escapeHtml(prop.datatype || "string")}</span>
-      ${prop.valuetype ? `<span class="ontology-pill">${escapeHtml(prop.valuetype)}</span>` : ""}
-    </div>`;
+  function renderPropertyDataType(prop) {
+    return `<span class="ontology-type-chip">${escapeHtml(prop.datatype || "string")}</span>`;
+  }
+
+  function renderPropertyValueType(prop) {
+    const valueType = String(prop.valuetype || "").trim();
+    return valueType
+      ? `<span class="ontology-pill">${escapeHtml(valueType)}</span>`
+      : '<span class="muted">—</span>';
   }
 
   async function loadOntologyTree() {
@@ -318,7 +325,10 @@
     const deleteSelectedButton = byId("btnPropertyDeleteSelected");
     if (deleteSelectedButton) {
       deleteSelectedButton.disabled = selectedCount === 0;
-      deleteSelectedButton.innerHTML = `<i class="fa-solid fa-trash"></i> 删除选中${selectedCount ? ` (${selectedCount})` : ""}`;
+      const label = `删除选中${selectedCount ? `（${selectedCount}）` : ""}`;
+      deleteSelectedButton.title = label;
+      deleteSelectedButton.setAttribute("aria-label", label);
+      deleteSelectedButton.innerHTML = '<i class="fa-solid fa-trash"></i>';
     }
     const selectionStatus = byId("propertySelectionStatus");
     if (selectionStatus) {
@@ -338,9 +348,8 @@
           {
             id: "select",
             header: [{ text: "选择" }],
-            width: 56,
             minWidth: 52,
-            maxWidth: 64,
+            gravity: 0.35,
             sortable: false,
             htmlEnable: true,
             template: (_value, row) =>
@@ -349,28 +358,33 @@
           {
             id: "name",
             header: [{ text: "属性", content: "inputFilter" }],
-            width: 220,
-            minWidth: 120,
-            gravity: 1.5,
+            minWidth: 160,
+            gravity: 2,
             htmlEnable: true,
             template: (value) =>
               `<strong class="property-grid-name" title="${escapeHtml(value)}">${escapeHtml(value)}</strong>`,
           },
           {
-            id: "typeHtml",
-            header: [{ text: "类型" }],
-            width: 160,
-            minWidth: 108,
-            gravity: 0.8,
+            id: "dataTypeHtml",
+            header: [{ text: "数据类型" }],
+            minWidth: 112,
+            gravity: 0.9,
+            htmlEnable: true,
+            sortable: false,
+          },
+          {
+            id: "valueTypeHtml",
+            header: [{ text: "数值类型" }],
+            minWidth: 112,
+            gravity: 0.9,
             htmlEnable: true,
             sortable: false,
           },
           {
             id: "actions",
             header: [{ text: "操作" }],
-            width: 190,
             minWidth: 166,
-            maxWidth: 210,
+            gravity: 1.3,
             htmlEnable: true,
             sortable: false,
           },
@@ -476,8 +490,10 @@
           : [];
         const isLinkedToCurrent = Boolean(prop.linked_to_ontology);
         const actionHtml = selectedOntologyId
-          ? `<button class="btn sm ${isLinkedToCurrent ? "" : "primary"} btnPropertyToggleOntology ontology-link-btn" data-id="${escapeHtml(prop.id)}" data-linked="${isLinkedToCurrent ? "1" : "0"}">${isLinkedToCurrent ? "已关联" : "关联"}</button>`
-          : `<button class="btn sm btnPropertyAssignOntology" data-id="${escapeHtml(prop.id)}">关联本体</button>`;
+          ? isLinkedToCurrent
+            ? ""
+            : `<button class="btn sm primary btnPropertyToggleOntology ontology-link-btn" data-id="${escapeHtml(prop.id)}" data-linked="0">关联</button>`
+          : `<button class="btn sm icon btnPropertyAssignOntology" data-id="${escapeHtml(prop.id)}" title="关联本体" aria-label="关联本体"><i class="fa-solid fa-diagram-project"></i></button>`;
 
         const source = {
           id: prop.id || "",
@@ -493,7 +509,8 @@
         gridRows.push({
           id: prop.id || "",
           name: prop.label || prop.name || "",
-          typeHtml: renderPropertyType(prop),
+          dataTypeHtml: renderPropertyDataType(prop),
+          valueTypeHtml: renderPropertyValueType(prop),
           linked: isLinkedToCurrent,
           source,
           actions: `${actionHtml}
@@ -1343,6 +1360,7 @@
     if (!ontologyTree || ontologyTreeController) return;
     const module = await window.kbOntologyTreeModuleReady;
     ontologyTreeController = new module.OntologyTreeController(ontologyTree, {
+      showAllButton: false,
       onSelect: async (id) => {
         selectedOntologyId = String(id || "").trim();
         propertyViewMode = selectedOntologyId ? "linked" : "all";
@@ -1364,9 +1382,45 @@
         selectedOntologyId = id;
         void deleteOntology(id);
       },
+      onDoubleClick: () => {},
       onReload: loadOntologyTree,
       onError: (message) => alert(message),
     });
+    if (!ontologyTree.dataset.boundOntologySelectionToggle) {
+      ontologyTree.dataset.boundOntologySelectionToggle = "1";
+      ontologyTree.addEventListener(
+        "pointerdown",
+        (event) => {
+          if (event.target.closest(".dhx_tree-toggle-button")) {
+            pendingOntologyToggleId = "";
+            return;
+          }
+          const treeItem = event.target.closest("[data-dhx-id]");
+          const clickedId = String(treeItem?.getAttribute("data-dhx-id") || "");
+          pendingOntologyToggleId =
+            clickedId && clickedId === selectedOntologyId ? clickedId : "";
+        },
+        true,
+      );
+      ontologyTree.addEventListener(
+        "click",
+        (event) => {
+          if (event.target.closest(".dhx_tree-toggle-button")) return;
+          const treeItem = event.target.closest("[data-dhx-id]");
+          const clickedId = String(treeItem?.getAttribute("data-dhx-id") || "");
+          const shouldClear = clickedId && clickedId === pendingOntologyToggleId;
+          pendingOntologyToggleId = "";
+          if (!shouldClear) return;
+          // DHTMLX may select on pointerdown; clear only nodes that were
+          // already selected before this pointer interaction began.
+          setTimeout(() => {
+            if (selectedOntologyId === clickedId)
+              ontologyTreeController?.clearSelection();
+          }, 0);
+        },
+        true,
+      );
+    }
   }
 
   async function initOntologyPanel() {

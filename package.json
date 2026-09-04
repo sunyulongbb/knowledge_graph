@@ -26,6 +26,7 @@
     "dagre": "^0.8.5",
     "deck.gl": "^9.3.6",
     "marked": "^17.0.1",
+    "pdfjs-dist": "^6.3.289",
     "vidstack": "^1.15.6",
     "vis-timeline": "^8.5.4"
   }

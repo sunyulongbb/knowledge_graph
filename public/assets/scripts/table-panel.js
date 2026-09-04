@@ -42,7 +42,7 @@
   const btnDeleteSelected = document.getElementById("btnDeleteSelected");
   const tblCount = document.getElementById("tblCount");
   const tblPagination = document.getElementById("tblPagination");
-  const TABLE_LAYOUT_MODES = ["list", "grid", "timeline", "manage"];
+  const TABLE_LAYOUT_MODES = ["list", "grid", "timeline", "semantic", "manage"];
   const normalizeTableLayoutMode = (mode) =>
     mode === "table"
       ? "list"
@@ -63,6 +63,57 @@
   };
   const isInfiniteTableLayoutMode = (mode = window.kbTableLayoutMode) =>
     mode === "list" || mode === "grid";
+
+  let semanticMapRuntimePromise = null;
+  const applySemanticMapSelection = (nodeId) => {
+    if (typeof window.setTableSelection !== "function") return;
+    window.setTableSelection(nodeId, false, { skipGraphFocus: true });
+  };
+  window.addEventListener("kb-semantic-map-selection", (event) => {
+    applySemanticMapSelection(String(event.detail?.nodeId || "").trim());
+  });
+  const loadSemanticMapScript = (src, id) =>
+    new Promise((resolve, reject) => {
+      const existing = document.getElementById(id);
+      if (existing) {
+        if (existing.dataset.ready === "1") resolve();
+        else existing.addEventListener("load", () => resolve(), { once: true });
+        return;
+      }
+      const script = document.createElement("script");
+      script.id = id;
+      script.src = src;
+      script.async = true;
+      script.addEventListener("load", () => {
+        script.dataset.ready = "1";
+        resolve();
+      });
+      script.addEventListener("error", () => reject(new Error(`加载失败：${src}`)));
+      document.head.appendChild(script);
+    });
+  const ensureSemanticMapRuntime = () => {
+    if (window.__kbSemanticMapRuntimeLoaded) return Promise.resolve();
+    if (!semanticMapRuntimePromise) {
+      semanticMapRuntimePromise = loadSemanticMapScript(
+        "/node_modules/deck.gl/dist.min.js",
+        "kbDeckGlRuntime",
+      )
+        .then(() =>
+          loadSemanticMapScript(
+            "/assets/scripts/semantic-map.js?v=20260904-4",
+            "kbSemanticMapRuntime",
+          ),
+        )
+        .then(() => {
+          window.__kbSemanticMapRuntimeLoaded = true;
+        })
+        .catch((error) => {
+          semanticMapRuntimePromise = null;
+          console.error("加载语义地图失败", error);
+        });
+    }
+    return semanticMapRuntimePromise;
+  };
 
   const clampGridSize = (value) =>
     Math.min(280, Math.max(88, Number(value) || 136));
@@ -118,6 +169,8 @@
           ? "网格布局"
           : nextMode === "timeline"
             ? "时间轴布局"
+            : nextMode === "semantic"
+              ? "语义地图布局"
             : nextMode === "manage"
               ? "管理表格"
               : "列表布局";
@@ -126,6 +179,8 @@
           ? "fa-table-columns"
           : normalized === "timeline"
             ? "fa-clock"
+            : normalized === "semantic"
+              ? "fa-star-of-life"
             : normalized === "manage"
               ? "fa-list"
               : "fa-th-large";
@@ -139,14 +194,18 @@
     }
     const timelineControls = document.getElementById("timelineControls");
     const timelineView = document.getElementById("timelineView");
+    const semanticMapView = document.getElementById("semanticMapView");
     const tableWrap = document.querySelector("#tablePanel > .tbl-wrap");
     if (timelineControls)
       timelineControls.style.display =
         normalized === "timeline" ? "flex" : "none";
     if (timelineView)
       timelineView.style.display = normalized === "timeline" ? "block" : "none";
+    if (semanticMapView)
+      semanticMapView.style.display = normalized === "semantic" ? "block" : "none";
     if (tableWrap)
-      tableWrap.style.display = normalized === "timeline" ? "none" : "";
+      tableWrap.style.display =
+        normalized === "timeline" || normalized === "semantic" ? "none" : "";
     if (tblPagination) {
       tblPagination.style.display = normalized === "manage" ? "flex" : "none";
     }
@@ -157,6 +216,13 @@
     else window.closeEntityManageTable?.();
     updateGridManualLoadButton();
     if (normalized === "timeline") loadTablePage({ resetPage: true });
+    if (normalized === "semantic") {
+      void ensureSemanticMapRuntime().then(() => {
+        requestAnimationFrame(() => {
+          window.dispatchEvent(new Event("resize"));
+        });
+      });
+    }
   };
   window.applyTableLayoutMode = applyTableLayoutMode;
   applyGridSize(getInitialGridSize(), false);

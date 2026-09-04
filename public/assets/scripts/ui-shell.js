@@ -10,24 +10,6 @@
     }
   }
 
-  function bindSemanticMapEntry() {
-    const entry = document.getElementById("btnSemanticMapEntry");
-    if (!entry) return;
-
-    function updateSemanticMapHref() {
-      try {
-        const nextUrl = appendCurrentDbParam("/semantic-map.html");
-        entry.href =
-          nextUrl instanceof URL ? nextUrl.toString() : String(nextUrl);
-      } catch {
-        entry.href = "/semantic-map.html";
-      }
-    }
-
-    updateSemanticMapHref();
-    window.addEventListener("kb:url-param-changed", updateSemanticMapHref);
-  }
-
   function updateUrlParam(key, value) {
     if (!window || !window.location || !window.history) {
       return;
@@ -428,7 +410,6 @@
   window.appendCurrentDbParam = appendCurrentDbParam;
 
   bindDbSwitchButton();
-  bindSemanticMapEntry();
   initDetailPanelHeight();
   initKbStats();
   initStatusTextOverflow();

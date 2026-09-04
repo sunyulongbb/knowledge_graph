@@ -35,7 +35,7 @@
     window["@tiptap/starter-kit"] =
       window["@tiptap/starter-kit"] || window.TiptapStarterKit;
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20260904-11" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20260904-19" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <link rel="stylesheet" href="/node_modules/vis-timeline/styles/vis-timeline-graph2d.min.css?v=20260904-2" />
@@ -63,10 +63,10 @@
   <script src="/assets/scripts/pagination.js"></script>
   <script src="/assets/scripts/timeline-panel.js?v=20260904-8"></script>
   <script type="module">
-    import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.1.200/build/pdf.min.mjs";
+    import * as pdfjsLib from "/node_modules/pdfjs-dist/build/pdf.min.mjs?v=6.3.289";
 
     pdfjsLib.GlobalWorkerOptions.workerSrc =
-      "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.1.200/build/pdf.worker.min.mjs";
+      "/node_modules/pdfjs-dist/build/pdf.worker.min.mjs?v=6.3.289";
 
     window.pdfjsLib = pdfjsLib;
     window.kbPdfJsReady = Promise.resolve(pdfjsLib);
@@ -1997,8 +1997,6 @@
           <button id="btnDbSwitch" class="btn icon" title="切换知识库">
             <i class="fa-solid fa-database"></i>
           </button>
-          <a id="btnSemanticMapEntry" class="btn icon" title="打开语义地图" aria-label="打开语义地图"
-            href="/semantic-map.html"><i class="fa-solid fa-star-of-life"></i></a>
           <button id="btnTheme" class="btn icon" title="切换主题" aria-label="切换主题">
             <i class="fa-regular fa-moon"></i>
           </button>
@@ -2791,6 +2789,22 @@
             <div id="tblNodes" class="entity-list" role="list" aria-label="实体列表"></div>
           </div>
           <div id="timelineView" class="timeline-view" aria-label="知识时间轴" style="display:none;"></div>
+          <div id="semanticMapView" class="semantic-map-view" aria-label="知识语义地图" style="display:none;">
+            <div id="deck-root" data-embed="1"></div>
+            <div class="semantic-map-hidden" aria-hidden="true">
+              <input id="semanticSearchInput" type="search" />
+              <button id="semanticSearchButton" type="button"></button>
+              <div id="semanticSearchResults"></div>
+              <div id="semanticDetailHot"></div>
+              <div id="semanticDetailBody"></div>
+              <div id="semanticStats"></div>
+            </div>
+            <div class="semantic-map-legend">
+              <div class="semantic-map-legend__title">图例</div>
+              <div id="semanticLegend" class="semantic-map-legend__list"></div>
+            </div>
+            <div id="semanticTooltip" class="semantic-map-tooltip"></div>
+          </div>
           <div id="tblPagination" style="
                 margin: 12px auto 0;
                 display: none;
@@ -3037,57 +3051,29 @@
               <div class="ontology-sidebar__top">
                 <div class="ontology-title-row">
                   <strong>本体树</strong>
-                  <button id="btnOntologyRefresh" class="btn sm icon" title="刷新本体">
-                    <i class="fa-solid fa-rotate-right"></i>
+                  <button id="btnOntologyAddRoot" class="btn sm primary" type="button" title="新增本体">
+                    <i class="fa-solid fa-plus"></i> 新增
                   </button>
                 </div>
                 <input id="ontologySearch" type="text" class="app-search-input kb-input sm" placeholder="搜索本体名称..." />
-                <div class="ontology-action-grid">
-                  <button id="btnOntologyAddRoot" class="btn sm primary">
-                    <i class="fa-solid fa-plus"></i> 新增本体
-                  </button>
-                  <button id="btnOntologyAddChild" class="btn sm" disabled>
-                    <i class="fa-solid fa-code-branch"></i> 新增子本体
-                  </button>
-                  <button id="btnOntologyEdit" class="btn sm" disabled>
-                    <i class="fa-solid fa-pen"></i> 编辑
-                  </button>
-                  <button id="btnOntologyDelete" class="btn sm danger" disabled>
-                    <i class="fa-solid fa-trash"></i> 删除
-                  </button>
-                  <button id="btnOntologyClearAll" class="btn sm danger">
-                    <i class="fa-solid fa-broom"></i> 清空本体
-                  </button>
-                </div>
               </div>
-              <div id="ontologyCurrentInfo" class="ontology-current-chip">当前本体：全部属性</div>
               <div id="ontologyTree" class="ontology-tree-wrap"></div>
             </aside>
 
             <section class="ontology-card ontology-table-card">
               <div class="ontology-toolbar">
-                <div class="ontology-toolbar__group">
-                  <div class="ontology-toolbar__title">
-                    <strong>属性管理</strong>
-                  </div>
-                  <button id="btnPropertyAdd" class="btn sm primary">
-                    <i class="fa-solid fa-plus"></i> 新增属性
-                  </button>
-                  <button id="btnPropertyDeleteSelected" class="btn sm danger" disabled>
-                    <i class="fa-solid fa-trash"></i> 删除选中
-                  </button>
-                  <span id="propertySelectionStatus" class="property-selection-status" aria-live="polite">未选择</span>
-                  <button id="btnOntologyBrowseAll" class="btn sm" style="display: none;">
-                    浏览全部属性库
-                  </button>
+                <div class="ontology-toolbar__title">
+                  <strong>属性管理</strong>
                 </div>
-                <div class="ontology-toolbar__group">
-                  <input type="text" id="propertyMgmtSearch" class="app-search-input kb-input sm" placeholder="搜索属性..."
-                    style="width: 180px;">
-                  <button id="btnPropertyMgmtRefresh" class="btn sm icon" title="刷新属性"><i
-                      class="fa-solid fa-rotate-right"></i></button>
-                  <button id="btnPropertyClearSearch" class="btn sm icon" title="清空搜索"><i
-                      class="fa-solid fa-eraser"></i></button>
+                <div class="ontology-toolbar__group ontology-toolbar__controls">
+                  <button id="btnPropertyAdd" class="btn sm icon primary" type="button" title="新增属性" aria-label="新增属性">
+                    <i class="fa-solid fa-plus"></i>
+                  </button>
+                  <button id="btnPropertyDeleteSelected" class="btn sm icon danger" type="button" title="删除选中" aria-label="删除选中" disabled>
+                    <i class="fa-solid fa-trash"></i>
+                  </button>
+                  <input type="search" id="propertyMgmtSearch" class="app-search-input kb-input sm" placeholder="搜索属性名称..."
+                    aria-label="搜索属性">
                 </div>
               </div>
               <div class="tbl-wrap ontology-table-wrap">
@@ -19674,16 +19660,16 @@
 
   <script src="/assets/scripts/app-shared.js"></script>
   <script>
-    window.kbOntologyTreeModuleReady = import("/assets/generated/ontology-tree.js");
+      window.kbOntologyTreeModuleReady = import("/assets/generated/ontology-tree.js?v=20260904-1");
   </script>
-  <script src="/assets/scripts/property-panel.js"></script>
-  <script src="/assets/scripts/table-panel.js"></script>
+  <script src="/assets/scripts/property-panel.js?v=20260904-9"></script>
+  <script src="/assets/scripts/table-panel.js?v=20260904-4"></script>
   <script src="/assets/scripts/table-selection.js"></script>
   <script src="/assets/scripts/entity-manage-table.js"></script>
   <script src="/assets/scripts/attr-panel.js"></script>
   <!-- relation-panel.js 已移除，使用 edgehandles 拖拽创建关系 -->
   <script src="/assets/scripts/schema-panel.js"></script>
-  <script src="/assets/scripts/detail-panel.js"></script>
+  <script src="/assets/scripts/detail-panel.js?v=20260904-4"></script>
   <script src="/assets/scripts/sidebar-panel.js"></script>
   <script src="/assets/scripts/auth-panel.js"></script>
   <script src="/assets/scripts/db-modal.js"></script>

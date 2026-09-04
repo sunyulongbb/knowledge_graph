@@ -11,6 +11,9 @@
   }
 
   const rootEl = document.getElementById("deck-root");
+  const isEmbedded =
+    rootEl?.dataset.embed === "1" ||
+    new URL(window.location.href).searchParams.get("embed") === "1";
   const tooltipEl = document.getElementById("semanticTooltip");
   const searchInputEl = document.getElementById("semanticSearchInput");
   const searchButtonEl = document.getElementById("semanticSearchButton");
@@ -55,6 +58,22 @@
   let viewportFetchTimer = 0;
   let lastViewportKey = "";
   let initLoaded = false;
+
+  function notifyParentSelection(nodeId) {
+    if (!isEmbedded) return;
+    if (window.parent === window) {
+      window.dispatchEvent(
+        new CustomEvent("kb-semantic-map-selection", {
+          detail: { nodeId: String(nodeId || "") },
+        }),
+      );
+      return;
+    }
+    window.parent.postMessage(
+      { type: "kb-semantic-map-selection", nodeId: String(nodeId || "") },
+      window.location.origin,
+    );
+  }
 
   const TYPE_COLORS = [
     [76, 201, 240],
@@ -345,6 +364,10 @@
     if (!nodeId) return;
     selectedNodeId = nodeId;
     renderLayer();
+    if (isEmbedded) {
+      notifyParentSelection(nodeId);
+      return;
+    }
     try {
       const data = await api(
         "/api/semantic-map/detail/" + encodeURIComponent(nodeId),
@@ -658,6 +681,7 @@
         selectedNodeId = "";
         renderEmptyDetail();
         renderLayer();
+        notifyParentSelection("");
       },
       layers: [],
     });
@@ -740,6 +764,7 @@
       renderSearchResults();
       renderLayer();
     });
+    window.__kbSemanticMapRuntimeLoaded = true;
   }
 
   init();
