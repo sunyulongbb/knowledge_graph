@@ -2659,9 +2659,10 @@ function __kbInitTableSelection() {
       return;
     }
 
-    const wasSelected = window.kbSelectedRowIds instanceof Set
-      ? window.kbSelectedRowIds.has(rid)
-      : window.kbSelectedRowId === rid;
+    const wasSelected =
+      window.kbSelectedRowIds instanceof Set
+        ? window.kbSelectedRowIds.has(rid)
+        : window.kbSelectedRowId === rid;
     performTableRowSelection(row, rid, event);
     const timer = setTimeout(() => {
       gridCardClickStates.delete(row);
