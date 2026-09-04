@@ -2385,26 +2385,25 @@ function __kbInitTableSelection() {
             video.load();
           } catch {}
         });
-        let openTimer = null;
         wrap.addEventListener("click", (e) => {
           e.preventDefault();
           e.stopPropagation();
-          if (openTimer) clearTimeout(openTimer);
-          openTimer = setTimeout(() => {
-            openTimer = null;
-            const row = wrap.closest(".entity-list-item.table-feed-row");
-            const rid = String(row?.getAttribute("data-id") || "").trim();
-            if (row && rid) performTableRowSelection(row, rid, e);
-          }, 220);
+          const row = wrap.closest(".entity-list-item.table-feed-row");
+          const rid = String(row?.getAttribute("data-id") || "").trim();
+          if (row && rid) handleGridCardClick(row, rid, e);
         });
         wrap.addEventListener("dblclick", (e) => {
           e.preventDefault();
           e.stopPropagation();
-          if (openTimer) {
-            clearTimeout(openTimer);
-            openTimer = null;
+          const row = wrap.closest(".entity-list-item.table-feed-row");
+          const state = row && gridCardClickStates.get(row);
+          const rid = String(row?.getAttribute("data-id") || "").trim();
+          if (row) cancelGridCardClick(row);
+          if (state?.wasSelected) {
+            openVideoLightbox(item.src, 0, false, videoSources, item.index);
+          } else if (rid) {
+            openGridCardDetail(rid);
           }
-          openVideoLightbox(item.src, 0, false, videoSources, item.index);
         });
         slide.appendChild(wrap);
       } else {
@@ -2412,27 +2411,26 @@ function __kbInitTableSelection() {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "table-feed-grid-image-btn";
-        button.title = "单击选中，双击预览图片";
-        let selectTimer = null;
+        button.title = "单击选中，再次单击查看详情，双击预览图片";
         button.addEventListener("click", (e) => {
           e.preventDefault();
           e.stopPropagation();
-          if (selectTimer) return;
-          selectTimer = setTimeout(() => {
-            selectTimer = null;
-            const row = button.closest(".entity-list-item.table-feed-row");
-            const rid = String(row?.getAttribute("data-id") || "").trim();
-            if (row && rid) performTableRowSelection(row, rid, e);
-          }, 220);
+          const row = button.closest(".entity-list-item.table-feed-row");
+          const rid = String(row?.getAttribute("data-id") || "").trim();
+          if (row && rid) handleGridCardClick(row, rid, e);
         });
         button.addEventListener("dblclick", (e) => {
           e.preventDefault();
           e.stopPropagation();
-          if (selectTimer) {
-            clearTimeout(selectTimer);
-            selectTimer = null;
+          const row = button.closest(".entity-list-item.table-feed-row");
+          const state = row && gridCardClickStates.get(row);
+          const rid = String(row?.getAttribute("data-id") || "").trim();
+          if (row) cancelGridCardClick(row);
+          if (state?.wasSelected) {
+            openImageLightbox(imageSources, item.index);
+          } else if (rid) {
+            openGridCardDetail(rid);
           }
-          openImageLightbox(imageSources, item.index);
         });
         const img = document.createElement("img");
         img.dataset.src = imageUrl;
@@ -2619,6 +2617,65 @@ function __kbInitTableSelection() {
     focusRowElement(row);
   }
 
+  const gridCardClickStates = new WeakMap();
+
+  function openGridCardDetail(rid) {
+    setTableSelection(rid, false, {
+      skipDetailRefresh: true,
+      skipSidebarSync: true,
+    });
+    if (typeof setViewMode === "function") {
+      setViewMode("detail", { targetNodeId: rid });
+    }
+  }
+
+  function previewGridCardMedia(node) {
+    const imageList = collectNodeImages(node);
+    const videoList = collectNodeVideos(node);
+    if (videoList.length) {
+      openVideoLightbox(videoList[0], 0, false, videoList, 0);
+      return true;
+    }
+    if (imageList.length) {
+      openImageLightbox(imageList, 0);
+      return true;
+    }
+    return false;
+  }
+
+  function handleGridCardClick(row, rid, event) {
+    const previous = gridCardClickStates.get(row);
+    if (previous?.timer) {
+      clearTimeout(previous.timer);
+      gridCardClickStates.delete(row);
+      const detailTimer = setTimeout(() => {
+        openGridCardDetail(rid);
+        gridCardClickStates.delete(row);
+      }, 260);
+      gridCardClickStates.set(row, {
+        timer: detailTimer,
+        wasSelected: previous.wasSelected,
+      });
+      return;
+    }
+
+    const wasSelected = window.kbSelectedRowIds instanceof Set
+      ? window.kbSelectedRowIds.has(rid)
+      : window.kbSelectedRowId === rid;
+    performTableRowSelection(row, rid, event);
+    const timer = setTimeout(() => {
+      gridCardClickStates.delete(row);
+    }, 500);
+    gridCardClickStates.set(row, { timer, wasSelected });
+  }
+
+  function cancelGridCardClick(row) {
+    const state = gridCardClickStates.get(row);
+    if (!state) return;
+    clearTimeout(state.timer);
+    gridCardClickStates.delete(row);
+  }
+
   function bindTableListDelegatedEvents() {
     if (!tblNodes || tableListDelegatedBound) return;
     tableListDelegatedBound = true;
@@ -2631,6 +2688,17 @@ function __kbInitTableSelection() {
       const rid = String(row.getAttribute("data-id") || "").trim();
       if (!rid) return;
       const node = getTableNodeById(rid);
+
+      if (
+        window.kbTableLayoutMode === "grid" &&
+        (!target.closest("button, a") ||
+          target.closest(".table-feed-title-link"))
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleGridCardClick(row, rid, e);
+        return;
+      }
 
       const mediaTag = target.closest(".node-media-tag[data-node-action]");
       if (mediaTag && row.contains(mediaTag)) {
@@ -2660,6 +2728,7 @@ function __kbInitTableSelection() {
 
       const titleLink = target.closest(".table-feed-title-link");
       if (titleLink && row.contains(titleLink)) {
+        if (window.kbTableLayoutMode === "grid") return;
         e.preventDefault();
         e.stopPropagation();
         rememberTableListScrollPosition();
@@ -2683,11 +2752,28 @@ function __kbInitTableSelection() {
     tblNodes.addEventListener("dblclick", async (e) => {
       const target = e.target;
       if (!(target instanceof Element)) return;
-      if (target.closest("button") || target.closest("a")) return;
+      if (
+        (target.closest("button") || target.closest("a")) &&
+        !target.closest(".table-feed-title-link")
+      )
+        return;
       const row = target.closest(".entity-list-item.table-feed-row");
       if (!row || !tblNodes.contains(row)) return;
       const rid = String(row.getAttribute("data-id") || "").trim();
       if (!rid) return;
+      const node = getTableNodeById(rid);
+      if (window.kbTableLayoutMode === "grid") {
+        e.preventDefault();
+        e.stopPropagation();
+        const state = gridCardClickStates.get(row);
+        cancelGridCardClick(row);
+        if (state?.wasSelected && node && !previewGridCardMedia(node)) {
+          openGridCardDetail(rid);
+        } else if (!state?.wasSelected) {
+          openGridCardDetail(rid);
+        }
+        return;
+      }
       setTableSelection(rid);
       if (typeof setViewMode === "function") {
         setViewMode("detail", { targetNodeId: rid });
@@ -2996,32 +3082,7 @@ function __kbInitTableSelection() {
       nameLink.textContent = label;
       nameLink.className = "table-feed-name table-feed-title-link";
       if (isGridLayout) {
-        let selectTimer = null;
-        nameLink.title = "单击选中，双击预览知识";
-        nameLink.addEventListener("click", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          if (selectTimer) return;
-          selectTimer = setTimeout(() => {
-            selectTimer = null;
-            performTableRowSelection(tr, nodeId, event);
-          }, 220);
-        });
-        nameLink.addEventListener("dblclick", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          if (selectTimer) {
-            clearTimeout(selectTimer);
-            selectTimer = null;
-          }
-          setTableSelection(nodeId, false, {
-            skipDetailRefresh: true,
-            skipSidebarSync: true,
-          });
-          if (typeof setViewMode === "function") {
-            setViewMode("detail", { targetNodeId: nodeId });
-          }
-        });
+        nameLink.title = "单击选中，再次单击查看详情，双击预览媒体";
       }
       nameLink.setAttribute("aria-label", `查看 ${label || "知识"} 的详情`);
 

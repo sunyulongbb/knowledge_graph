@@ -58,6 +58,7 @@
     }
   </script>
   <script src="/assets/scripts/app-settings.js"></script>
+  <script src="/assets/scripts/pagination.js"></script>
   <script type="module">
     import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@6.1.200/build/pdf.min.mjs";
 
@@ -2788,14 +2789,7 @@
                 max-width: 100%;
                 flex: 0 0 auto;
               ">
-            <button id="btnPrevPage" class="btn" type="button" aria-label="上一页" title="上一页">
-              上一页
-            </button>
-            <span id="tblPageInfo" style="font-size: 12px"></span>
-            <div id="tblPageNumbers" class="table-page-numbers" aria-label="页码"></div>
-            <button id="btnNextPage" class="btn" type="button" aria-label="下一页" title="下一页">
-              下一页
-            </button>
+            <div id="tblPaginationControls"></div>
             <label for="tblSort" class="muted" style="font-size: 12px">排序：</label>
             <select id="tblSort" class="kb-select sm">
               <option value="id">按编号</option>
@@ -2808,8 +2802,6 @@
               <option value="50">50条/页</option>
               <option value="100">100条/页</option>
             </select>
-            <label class="table-page-jump" for="tblPageJump">前往 <input id="tblPageJump" type="number" min="1" step="1" aria-label="输入页码" /> 页</label>
-            <button id="btnTablePageJump" class="btn sm table-page-jump-btn" type="button">确定</button>
           </div>
         </div>
         <div id="reportHomePanel" class="panel" style="display:none; padding: 12px;">
@@ -3090,19 +3082,7 @@
                 <div id="propertyTable" class="business-grid-host" aria-label="属性管理表格"></div>
               </div>
               <div id="propertyPagination" class="table-toolbar" style="margin-top: 8px; justify-content: center">
-                <button id="btnPropertyPrevPage" class="btn" type="button">
-                  上一页
-                </button>
-                <span id="propertyPageInfo" style="font-size: 12px"></span>
-                <button id="btnPropertyNextPage" class="btn" type="button">
-                  下一页
-                </button>
-                <select id="propertyPageSize" class="kb-select sm">
-                  <option value="10">10条/页</option>
-                  <option value="20" selected>20条/页</option>
-                  <option value="50">50条/页</option>
-                  <option value="100">100条/页</option>
-                </select>
+                <div id="propertyPaginationControls"></div>
               </div>
             </section>
           </div>
@@ -4822,10 +4802,12 @@
       <div class="panel column-panel class-panel" id="classAttrPanel">
         <div class="class-panel-inner">
           <section class="class-module module-tree">
-            <div class="module-title">分类管理</div>
-            <div class="module-body">
-              <div class="toolbar">
-                <input id="clsSearch" class="app-search-input" placeholder="搜索分类…" style="flex: 1" />
+            <div class="module-title-row class-tree-header">
+              <div>
+                <div class="module-title">分类管理</div>
+                <div class="class-tree-subtitle">选择分类查看属性模型</div>
+              </div>
+              <div class="module-title-actions class-tree-actions">
                 <button class="btn icon" id="btnClsAdd" type="button" title="新增分类" aria-label="新增分类">
                   <i class="fa-solid fa-plus"></i>
                 </button>
@@ -4839,6 +4821,13 @@
                   style="display: none;">
                   <i class="fa-solid fa-image"></i>
                 </button>
+                <button class="btn icon" id="btnClsRefresh" type="button" title="刷新分类" aria-label="刷新分类">
+                  <i class="fa-solid fa-arrow-rotate-right"></i>
+                </button>
+              </div>
+            </div>
+            <div class="module-body">
+              <div class="class-tree-toolbar">
                 <datalist id="clsColorPresets">
                   <option>#ef4444</option>
                   <option>#f97316</option>
@@ -4853,9 +4842,6 @@
                   <option>#f43f5e</option>
                   <option>#64748b</option>
                 </datalist>
-                <button class="btn icon" id="btnClsRefresh" type="button" title="刷新分类" aria-label="刷新分类">
-                  <i class="fa-solid fa-arrow-rotate-right"></i>
-                </button>
               </div>
               <div id="clsTree" class="module-scroll"></div>
               <div class="module-footer">
@@ -19617,7 +19603,7 @@
 
   <!-- Class Modal -->
   <div id="classModal" class="modal-overlay"
-    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; align-items: center; justify-content: center;">
+    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 10000; align-items: center; justify-content: center;">
     <div class="modal-content"
       style="background: var(--surface-0, #fff); color: var(--fg, #0f172a); padding: 20px; border-radius: 16px; width: min(440px, 94vw); box-shadow: 0 25px 60px rgba(15, 23, 42, 0.35); display: flex; flex-direction: column; gap: 16px;">
       <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -19627,7 +19613,7 @@
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
-      <form id="classForm" style="display: flex; flex-direction: column; gap: 14px;">
+      <form id="classForm" autocomplete="off" style="display: flex; flex-direction: column; gap: 14px;">
         <div class="field">
           <label class="muted" style="font-size: 12px;">名称</label>
           <input type="text" id="clsNameInput" class="kb-input" style="width: 100%; border-radius: 10px; height: 38px;"

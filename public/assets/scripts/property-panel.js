@@ -24,7 +24,8 @@
   };
 
   const propertyTable = byId("propertyTable");
-  const propPageSizeSelect = byId("propertyPageSize");
+  const propertyPaginationControls = byId("propertyPaginationControls");
+  let propertyPaginationController = null;
   const ontologyTree = byId("ontologyTree");
 
   if (typeof state.bindAlias === "function") {
@@ -37,10 +38,6 @@
   if (!(window.propertySelectedIds instanceof Set)) {
     window.propertySelectedIds = new Set();
   }
-  if (propPageSizeSelect) {
-    propPageSizeSelect.value = String(propertyPageSize);
-  }
-
   function appendCurrentDbToUrl(url) {
     if (typeof window.appendCurrentDbParam === "function") {
       const scopedUrl = window.appendCurrentDbParam(url);
@@ -305,15 +302,13 @@
   }
 
   function updatePropertyPageInfo() {
-    const maxPage = Math.max(1, Math.ceil(propertyTotal / propertyPageSize));
-    const info = byId("propertyPageInfo");
-    if (info) {
-      info.textContent = `第 ${propertyPage} / ${maxPage} 页 · 共 ${propertyTotal} 条`;
+    if (propertyPaginationController) {
+      propertyPaginationController.setState({
+        page: propertyPage,
+        pageSize: propertyPageSize,
+        total: propertyTotal,
+      });
     }
-    const prevButton = byId("btnPropertyPrevPage");
-    const nextButton = byId("btnPropertyNextPage");
-    if (prevButton) prevButton.disabled = propertyPage <= 1;
-    if (nextButton) nextButton.disabled = propertyPage >= maxPage;
   }
 
   function updatePropertySelectedStyles() {
@@ -1258,39 +1253,27 @@
       });
     }
 
-    const btnPrevPage = byId("btnPropertyPrevPage");
-    if (btnPrevPage && !btnPrevPage.dataset.bound) {
-      btnPrevPage.dataset.bound = "1";
-      btnPrevPage.addEventListener("click", () => {
-        if (propertyPage > 1) {
-          propertyPage -= 1;
-          loadPropertyList();
-        }
-      });
-    }
-
-    const btnNextPage = byId("btnPropertyNextPage");
-    if (btnNextPage && !btnNextPage.dataset.bound) {
-      btnNextPage.dataset.bound = "1";
-      btnNextPage.addEventListener("click", () => {
-        const maxPage = Math.max(
-          1,
-          Math.ceil(propertyTotal / propertyPageSize),
-        );
-        if (propertyPage < maxPage) {
-          propertyPage += 1;
-          loadPropertyList();
-        }
-      });
-    }
-
-    if (propPageSizeSelect && !propPageSizeSelect.dataset.bound) {
-      propPageSizeSelect.dataset.bound = "1";
-      propPageSizeSelect.addEventListener("change", (event) => {
-        propertyPageSize = parseInt(event.target.value, 10) || 20;
-        propertyPage = 1;
-        loadPropertyList();
-      });
+    if (
+      propertyPaginationControls &&
+      window.KbPaginationController &&
+      !propertyPaginationController
+    ) {
+      propertyPaginationController = new window.KbPaginationController(
+        propertyPaginationControls,
+        {
+          page: propertyPage,
+          pageSize: propertyPageSize,
+          onPageChange: (page) => {
+            propertyPage = page;
+            loadPropertyList();
+          },
+          onPageSizeChange: (pageSize) => {
+            propertyPageSize = pageSize;
+            propertyPage = 1;
+            loadPropertyList();
+          },
+        },
+      );
     }
 
     const propertyModal = byId("propertyModal");

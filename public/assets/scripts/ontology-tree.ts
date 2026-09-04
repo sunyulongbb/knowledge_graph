@@ -18,6 +18,11 @@ export type OntologyTreeControllerOptions = {
   onDelete: (id: string) => void;
   onReload: () => void | Promise<void>;
   onError?: (message: string) => void;
+  allLabel?: string;
+  showAllButton?: boolean;
+  enableDrag?: boolean;
+  toggleSelection?: boolean;
+  onDoubleClick?: (id: string) => void;
 };
 
 const STORAGE_KEY = "kb:ontology-tree-state";
@@ -28,6 +33,8 @@ export class OntologyTreeController {
   private selectedId = "";
   private busy = false;
   private syncing = false;
+  private suppressNextSelect = false;
+  private toggleTimer: ReturnType<typeof setTimeout> | null = null;
   private menu: HTMLElement | null = null;
 
   constructor(
@@ -37,7 +44,8 @@ export class OntologyTreeController {
 
   setLoading(): void {
     this.destroyTree();
-    this.container.innerHTML = '<div class="ontology-tree-state" role="status"><span class="ontology-tree-spinner"></span>加载本体中...</div>';
+    this.container.innerHTML =
+      '<div class="ontology-tree-state" role="status"><span class="ontology-tree-spinner"></span>加载本体中...</div>';
   }
 
   setError(message = "本体加载失败"): void {
@@ -62,13 +70,16 @@ export class OntologyTreeController {
     this.records = flattenOntologyTree(nodes, []);
     this.selectedId = selectedId;
     this.container.innerHTML = "";
-    const allButton = document.createElement("button");
-    allButton.type = "button";
-    allButton.className = `ontology-tree-all${selectedId ? "" : " is-selected"}`;
-    allButton.textContent = "全部属性";
-    allButton.title = "显示全部属性";
-    allButton.addEventListener("click", () => void this.options.onSelect(""));
-    this.container.appendChild(allButton);
+    if (this.options.showAllButton !== false) {
+      const allButton = document.createElement("button");
+      allButton.type = "button";
+      allButton.className = `ontology-tree-all${selectedId ? "" : " is-selected"}`;
+      allButton.textContent = this.options.allLabel || "全部属性";
+      allButton.title =
+        this.options.allLabel === "全部分类" ? "显示全部分类" : "显示全部属性";
+      allButton.addEventListener("click", () => void this.options.onSelect(""));
+      this.container.appendChild(allButton);
+    }
     if (!nodes.length) {
       const empty = document.createElement("div");
       empty.className = "ontology-tree-state";
@@ -80,18 +91,22 @@ export class OntologyTreeController {
     host.className = "ontology-dhtmlx-host";
     this.container.appendChild(host);
     const openedIds = new Set(
-      Object.entries(oldState).filter(([, value]) => value.open).map(([id]) => id),
+      Object.entries(oldState)
+        .filter(([, value]) => value.open)
+        .map(([id]) => id),
     );
     this.tree = new Tree(host, {
-      dragMode: "both",
-      dropBehaviour: "complex",
+      dragMode: this.options.enableDrag === false ? undefined : "both",
+      dropBehaviour: this.options.enableDrag === false ? undefined : "complex",
       keyNavigation: true,
       selection: true,
       tooltip: (item) => String(item.value || ""),
       template: (item) => {
         const source = item.data?.source as OntologyRecord | undefined;
         const color = String(item.data?.color || "#94a3b8");
-        const count = Number(source?.property_count || 0);
+        const count = Number(
+          source?.property_count ?? source?.instance_count ?? 0,
+        );
         return `<span class="ontology-node-dot" style="--ontology-node-color:${this.escape(color)}"></span><span class="ontology-node-label">${this.escape(item.value)}</span><span class="ontology-node-count">${count}</span>`;
       },
     });
@@ -104,10 +119,14 @@ export class OntologyTreeController {
       const restorable = Object.fromEntries(
         Object.entries(oldState)
           .filter(([id]) => this.records.some((item) => item.id === id))
-          .map(([id, value]) => [id, { ...value, selected: id === selectedId ? 1 : 0 }]),
+          .map(([id, value]) => [
+            id,
+            { ...value, selected: id === selectedId ? 1 : 0 },
+          ]),
       );
       if (Object.keys(restorable).length) this.tree.setState(restorable);
-      if (selectedId && this.tree.data.exists(selectedId)) this.tree.selection.add(selectedId);
+      if (selectedId && this.tree.data.exists(selectedId))
+        this.tree.selection.add(selectedId);
     } finally {
       this.syncing = false;
     }
@@ -118,14 +137,52 @@ export class OntologyTreeController {
     if (!this.tree) return;
     const value = query.trim().toLocaleLowerCase();
     this.tree.data.filter(
-      value ? (item) => String(item.value || "").toLocaleLowerCase().includes(value) : undefined,
+      value
+        ? (item) =>
+            String(item.value || "")
+              .toLocaleLowerCase()
+              .includes(value)
+        : undefined,
       { id: "ontology-search" },
     );
     if (value) this.tree.expandAll();
     else this.restoreSavedState();
   }
 
+  select(id: string): void {
+    if (!this.tree || !id || !this.tree.data.exists(id)) return;
+    if (this.toggleTimer) {
+      clearTimeout(this.toggleTimer);
+      this.toggleTimer = null;
+    }
+    this.tree.selection.add(id);
+    this.selectedId = id;
+  }
+
+  clearSelection(): void {
+    if (this.toggleTimer) {
+      clearTimeout(this.toggleTimer);
+      this.toggleTimer = null;
+    }
+    if (
+      this.tree &&
+      this.selectedId &&
+      this.tree.data.exists(this.selectedId)
+    ) {
+      this.suppressNextSelect = true;
+      this.tree.selection.remove(this.selectedId);
+    }
+    this.selectedId = "";
+    this.saveState();
+    void this.options.onSelect("");
+    setTimeout(() => {
+      this.suppressNextSelect = false;
+    }, 0);
+  }
+
   destroy(): void {
+    if (this.toggleTimer) clearTimeout(this.toggleTimer);
+    this.toggleTimer = null;
     this.destroyTree();
     this.menu?.remove();
     this.menu = null;
@@ -134,8 +191,29 @@ export class OntologyTreeController {
 
   private bindTreeEvents(): void {
     const tree = this.tree!;
+    tree.events.on("itemClick", (rawId) => {
+      if (this.syncing || !this.options.toggleSelection) return;
+      const id = String(rawId);
+      if (id !== this.selectedId) return;
+      if (this.toggleTimer) clearTimeout(this.toggleTimer);
+      this.toggleTimer = setTimeout(() => {
+        this.toggleTimer = null;
+        this.suppressNextSelect = true;
+        tree.selection.remove(id);
+        this.selectedId = "";
+        this.saveState();
+        void this.options.onSelect("");
+        setTimeout(() => {
+          this.suppressNextSelect = false;
+        }, 0);
+      }, 260);
+    });
     tree.selection.events.on("afterSelect", (rawId) => {
       if (this.syncing) return;
+      if (this.suppressNextSelect) {
+        this.suppressNextSelect = false;
+        return;
+      }
       const id = String(rawId);
       this.selectedId = id;
       this.saveState();
@@ -143,16 +221,30 @@ export class OntologyTreeController {
     });
     tree.events.on("afterExpand", () => this.saveState());
     tree.events.on("afterCollapse", () => this.saveState());
-    tree.events.on("itemDblClick", (rawId) => this.options.onEdit(String(rawId)));
+    tree.events.on("itemDblClick", (rawId, event) => {
+      (event as MouseEvent | undefined)?.preventDefault();
+      (event as MouseEvent | undefined)?.stopPropagation();
+      if (this.toggleTimer) {
+        clearTimeout(this.toggleTimer);
+        this.toggleTimer = null;
+      }
+      const id = String(rawId);
+      if (this.options.onDoubleClick) this.options.onDoubleClick(id);
+      else this.options.onEdit(id);
+    });
     tree.events.on("itemRightClick", (rawId, event) => {
       event.preventDefault();
       this.showContextMenu(String(rawId), event as MouseEvent);
     });
     tree.events.on("beforeDrag", (data) => {
-      const source = this.records.find((item) => item.id === String(data.start));
+      if (this.options.enableDrag === false) return false;
+      const source = this.records.find(
+        (item) => item.id === String(data.start),
+      );
       return !this.busy && !source?.readonly && !source?.system;
     });
     tree.events.on("beforeDrop", (data) => {
+      if (this.options.enableDrag === false) return false;
       const movedId = String(data.start);
       const targetId = data.target == null ? null : String(data.target);
       if (isIllegalOntologyMove(movedId, targetId, this.records)) {
@@ -161,7 +253,10 @@ export class OntologyTreeController {
       }
       return !this.busy;
     });
-    tree.events.on("afterDrop", (data) => void this.persistDrop(String(data.start)));
+    tree.events.on(
+      "afterDrop",
+      (data) => void this.persistDrop(String(data.start)),
+    );
   }
 
   private async persistDrop(id: string): Promise<void> {
@@ -172,12 +267,16 @@ export class OntologyTreeController {
       const root = String(this.tree.data.getRoot());
       const rawParent = String(this.tree.data.getParent(id));
       const parentId = rawParent === root ? null : rawParent;
-      const siblings = this.tree.data.getItems(parentId ?? root).map((item) => String(item.id));
+      const siblings = this.tree.data
+        .getItems(parentId ?? root)
+        .map((item) => String(item.id));
       const payload = createOntologyMovePayload(id, parentId, siblings);
       await moveOntology(id, payload);
       await this.options.onReload();
     } catch (error) {
-      this.notify(`移动本体失败，已恢复服务器状态：${error instanceof Error ? error.message : String(error)}`);
+      this.notify(
+        `移动本体失败，已恢复服务器状态：${error instanceof Error ? error.message : String(error)}`,
+      );
       await this.options.onReload();
     } finally {
       this.busy = false;
@@ -193,8 +292,16 @@ export class OntologyTreeController {
     menu.setAttribute("role", "menu");
     const actions = [
       ["新增子本体", () => this.options.onAddChild(id), false],
-      ["重命名", () => this.options.onEdit(id), Boolean(record?.readonly || record?.system)],
-      ["删除", () => this.options.onDelete(id), Boolean(record?.readonly || record?.system)],
+      [
+        "重命名",
+        () => this.options.onEdit(id),
+        Boolean(record?.readonly || record?.system),
+      ],
+      [
+        "删除",
+        () => this.options.onDelete(id),
+        Boolean(record?.readonly || record?.system),
+      ],
     ] as const;
     for (const [label, action, disabled] of actions) {
       const button = document.createElement("button");
@@ -202,34 +309,49 @@ export class OntologyTreeController {
       button.textContent = label;
       button.disabled = disabled;
       button.setAttribute("role", "menuitem");
-      button.addEventListener("click", () => { menu.remove(); action(); });
+      button.addEventListener("click", () => {
+        menu.remove();
+        action();
+      });
       menu.appendChild(button);
     }
     menu.style.left = `${Math.min(event.clientX, window.innerWidth - 170)}px`;
     menu.style.top = `${Math.min(event.clientY, window.innerHeight - 130)}px`;
     document.body.appendChild(menu);
     this.menu = menu;
-    const close = () => { menu.remove(); document.removeEventListener("click", close); };
+    const close = () => {
+      menu.remove();
+      document.removeEventListener("click", close);
+    };
     setTimeout(() => document.addEventListener("click", close), 0);
     menu.querySelector<HTMLElement>("button:not(:disabled)")?.focus();
   }
 
   private readState(): TreeState {
     if (this.tree) return this.tree.getState() as TreeState;
-    try { return JSON.parse(sessionStorage.getItem(STORAGE_KEY) || "{}"); } catch { return {}; }
+    try {
+      return JSON.parse(sessionStorage.getItem(STORAGE_KEY) || "{}");
+    } catch {
+      return {};
+    }
   }
 
   private saveState(): void {
     if (!this.tree) return;
-    try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(this.tree.getState())); } catch {}
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(this.tree.getState()));
+    } catch {}
   }
 
   private restoreSavedState(): void {
     if (!this.tree) return;
     const state = this.readState();
-    const valid = Object.fromEntries(Object.entries(state).filter(([id]) => this.tree?.data.exists(id)));
+    const valid = Object.fromEntries(
+      Object.entries(state).filter(([id]) => this.tree?.data.exists(id)),
+    );
     this.tree.setState(valid);
-    if (this.selectedId && this.tree.data.exists(this.selectedId)) this.tree.selection.add(this.selectedId);
+    if (this.selectedId && this.tree.data.exists(this.selectedId))
+      this.tree.selection.add(this.selectedId);
   }
 
   private destroyTree(): void {
@@ -246,7 +368,12 @@ export class OntologyTreeController {
   }
 
   private escape(value: unknown): string {
-    return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 }
 

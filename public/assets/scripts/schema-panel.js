@@ -5,7 +5,6 @@
   const state = shared.state || {};
   const dom = shared.dom || {};
   const byId = dom.byId || ((id) => document.getElementById(id));
-  const clsSearch = byId("clsSearch");
   const btnClsAdd = byId("btnClsAdd");
   const btnClsRefresh = byId("btnClsRefresh");
   const clsTree = byId("clsTree");
@@ -80,6 +79,8 @@
   }
   let propRecommendRequestSeq = 0;
   let propRecommendActiveId = "";
+  let classTreeController = null;
+  let classTreeUpdateQueued = false;
 
   // Local wrapper for pickUiDatatype (defined in attr-panel.js)
   function pickUiDatatype(item) {
@@ -536,10 +537,108 @@
 
   function renderClassTree(items, options = {}) {
     if (!clsTree) return;
+    if (!classTreeController) {
+      if (!window.kbOntologyTreeModuleReady) {
+        clsTree.innerHTML = '<div class="muted">分类树组件加载中...</div>';
+        return;
+      }
+      if (!classTreeUpdateQueued) {
+        classTreeUpdateQueued = true;
+        window.kbOntologyTreeModuleReady
+          .then((module) => {
+            classTreeUpdateQueued = false;
+            classTreeController = new module.OntologyTreeController(clsTree, {
+              allLabel: "全部分类",
+              showAllButton: false,
+              enableDrag: false,
+              toggleSelection: true,
+              onSelect: (id) => {
+                const nextId = id || null;
+                window.kbSelectedClassId = nextId;
+                if (!nextId) {
+                  if (window.kbFilteredClassId) {
+                    window.kbFilteredClassId = null;
+                    void loadTablePage({
+                      classId: "",
+                      classLabel: "",
+                      resetPage: true,
+                    });
+                  }
+                  document.getElementById("schemaList")?.replaceChildren();
+                  document
+                    .getElementById("btnClsDelete")
+                    ?.style.setProperty("display", "none");
+                  document
+                    .getElementById("clsColorPicker")
+                    ?.style.setProperty("display", "none");
+                  document
+                    .getElementById("btnClsImage")
+                    ?.style.setProperty("display", "none");
+                  return;
+                }
+                const selected = window.kbClasses.find(
+                  (item) => item.id === nextId,
+                );
+                if (selected) {
+                  const picker = document.getElementById("clsColorPicker");
+                  if (picker) {
+                    picker.style.display = "inline-block";
+                    picker.value = selected.color || "#000000";
+                  }
+                  document
+                    .getElementById("btnClsDelete")
+                    ?.style.setProperty("display", "inline-flex");
+                  document
+                    .getElementById("btnClsImage")
+                    ?.style.setProperty("display", "inline-flex");
+                  void loadClassSchema(nextId);
+                  void updatePropertyRecommendations();
+                }
+              },
+              onEdit: () => {},
+              onAddChild: () => {},
+              onDelete: () => {},
+              onReload: () => loadClasses(),
+              onDoubleClick: (id) => {
+                const selected = window.kbClasses.find(
+                  (item) => item.id === id,
+                );
+                const label = selected?.label || selected?.name || id;
+                if (window.kbFilteredClassId === id) {
+                  window.kbFilteredClassId = null;
+                  classTreeController.clearSelection();
+                  void loadTablePage({
+                    classId: "",
+                    classLabel: "",
+                    resetPage: true,
+                  });
+                } else {
+                  window.kbFilteredClassId = id;
+                  classTreeController.select(id);
+                  void loadInstancesForClass(id, {
+                    classLabel: label,
+                    resetPage: true,
+                  });
+                }
+                renderClassTree(window.kbClasses || []);
+              },
+            });
+            renderClassTree(items, options);
+          })
+          .catch((error) => {
+            classTreeUpdateQueued = false;
+            console.error("分类树组件加载失败", error);
+            clsTree.innerHTML = '<div class="muted">分类树组件加载失败</div>';
+          });
+      }
+      return;
+    }
+    classTreeController.update(items, window.kbSelectedClassId || "");
+    classTreeController.filter("");
+    return;
+
     const dragEnabled =
-      options.dragEnabled !== undefined
-        ? !!options.dragEnabled
-        : !(clsSearch?.value || "").trim();
+      options.dragEnabled !== undefined ? !!options.dragEnabled : true;
     const roots = buildClassTree(items);
     clsTree.innerHTML = "";
     const frag = document.createDocumentFragment();
@@ -986,8 +1085,7 @@
       if (!resp.ok) throw new Error("HTTP " + resp.status);
       await resp.json();
       setStatus(false, "分类结构已更新");
-      const searchTerm = clsSearch ? (clsSearch.value || "").trim() : "";
-      await loadClasses(searchTerm);
+      await loadClasses();
     } catch (err) {
       console.error("handleClassDrop", err);
       setStatus(false, "分类调整失败");
@@ -1516,12 +1614,7 @@
   }
 
   // Events
-  btnClsRefresh.addEventListener("click", () =>
-    loadClasses((clsSearch.value || "").trim()),
-  );
-  clsSearch.addEventListener("input", () =>
-    loadClasses((clsSearch.value || "").trim()),
-  );
+  btnClsRefresh.addEventListener("click", () => loadClasses());
   btnSchemaRefresh.addEventListener("click", () => {
     if (window.kbSelectedClassId) loadClassSchema(window.kbSelectedClassId);
   });
@@ -1695,7 +1788,7 @@
           body: JSON.stringify({ id: window.kbSelectedClassId, color }),
         });
         if (!resp.ok) throw new Error("HTTP " + resp.status);
-        loadClasses((clsSearch?.value || "").trim());
+        loadClasses();
       } catch (e) {
         console.error(e);
         alert("更新颜色失败");
@@ -1754,7 +1847,7 @@
         });
         if (!updateResp.ok)
           throw new Error("Update failed: " + updateResp.status);
-        loadClasses((clsSearch?.value || "").trim());
+        loadClasses();
       } catch (e) {
         console.error(e);
         alert("上传图片失败");
@@ -1781,7 +1874,7 @@
       if (schemaList)
         schemaList.innerHTML = '<div class="muted">加载分类中...</div>';
       if (clsForEntity) clsForEntity.textContent = "未选择实体";
-      await loadClasses((clsSearch?.value || "").trim());
+      await loadClasses();
       updateSchemaRemoveButtonState();
       try {
         updatePropertyRecommendations({ force: true });
@@ -1831,11 +1924,6 @@
         };
         const created = await createClass(payload);
         closeClassModal();
-        const currentSearch = (clsSearch?.value || "").trim();
-        const shouldResetSearch =
-          currentSearch &&
-          !String(name).toLowerCase().includes(currentSearch.toLowerCase());
-        if (shouldResetSearch && clsSearch) clsSearch.value = "";
         if (created?.id) {
           mergeCreatedClassIntoLocalList(created, payload);
           window.kbSelectedClassId = created.id;
@@ -2185,7 +2273,8 @@
     const ontology = findOntologyByLabel(normalized);
     if (ontology?.id) {
       const existingById = options.find(
-        (opt) => (opt.value || "").trim().toLowerCase() === ontology.id.toLowerCase(),
+        (opt) =>
+          (opt.value || "").trim().toLowerCase() === ontology.id.toLowerCase(),
       );
       if (existingById) {
         fTypeInput.value = existingById.value;
@@ -2254,11 +2343,15 @@
     if (!q) return null;
     const items = Array.isArray(window.kbOntologies) ? window.kbOntologies : [];
     const matchByLabelOrName = (it) => {
-      const labelText = (it.label || it.name || "").toString().trim().toLowerCase();
+      const labelText = (it.label || it.name || "")
+        .toString()
+        .trim()
+        .toLowerCase();
       if (labelText === q) return true;
       if (Array.isArray(it.alias)) {
-        return it.alias.some((aliasItem) =>
-          (aliasItem || "").toString().trim().toLowerCase() === q,
+        return it.alias.some(
+          (aliasItem) =>
+            (aliasItem || "").toString().trim().toLowerCase() === q,
         );
       }
       return false;
