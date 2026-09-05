@@ -221,6 +221,10 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
     if (status) { updates.push("status = ?"); params.push(status); }
     updates.push("updated_at = CURRENT_TIMESTAMP");
     adminDb.run(`UPDATE users SET ${updates.join(", ")} WHERE id = ?`, [...params, targetId]);
+    if (role) {
+      adminDb.run("DELETE FROM user_roles WHERE user_id = ? AND role_id IN (SELECT id FROM roles WHERE code IN ('super_admin','user'))", [targetId]);
+      adminDb.run("INSERT OR IGNORE INTO user_roles (user_id, role_id) SELECT ?, id FROM roles WHERE code = ?", [targetId, role === "admin" ? "super_admin" : "user"]);
+    }
     return Response.json({ success: true });
   }
 

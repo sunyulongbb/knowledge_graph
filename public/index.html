@@ -38,6 +38,7 @@
   <link rel="stylesheet" href="/assets/styles/app.css?v=20260904-21" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
+  <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
   <link rel="stylesheet" href="/node_modules/vis-timeline/styles/vis-timeline-graph2d.min.css?v=20260904-2" />
   <script src="/node_modules/vis-timeline/standalone/umd/vis-timeline-graph2d.min.js?v=20260904-2"></script>
   <script>
@@ -1951,7 +1952,7 @@
                 <h3 style="margin:0;">请选择知识库项目</h3>
                 <!-- 当 DB 选择弹窗打开时，顶部加入登录按钮，便于用户直接登录（弹窗会覆盖页面顶部，原导航按钮在弹窗打开时无法被点击） -->
                 <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
-                  <input id="dbProjectSearch" type="search" class="app-search-input" placeholder="搜索项目"
+                  <input id="dbProjectSearch" type="search" class="app-search-input" placeholder="搜索项目" autocomplete="off"
                     style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface-0);color:var(--fg);min-width:160px;" />
                 </div>
               </div>
@@ -1986,7 +1987,7 @@
       </div>
       <div class="header-quick-actions">
         <div id="tbTableQuickActions" class="header-table-actions">
-          <input id="tblSearch" type="text" class="app-search-input table-toolbar-search header-table-search" placeholder="搜索名称…" />
+          <input id="tblSearch" type="text" class="app-search-input table-toolbar-search header-table-search" placeholder="搜索名称…" autocomplete="off" />
           <button id="btnTableAdd" class="btn icon" title="新增节点" aria-label="新增节点">
             <i class="fa-solid fa-plus"></i>
           </button>
@@ -2644,7 +2645,7 @@
             <aside class="entry-mapping-panel">
               <div class="entry-mapping-panel__head"><strong>本体映射</strong><span class="muted">选择目标本体及导入字段</span></div>
               <label class="field entry-mapping-ontology"><span>目标本体</span><select id="entryMappingOntologySelect" class="kb-select"><option value="">请选择本体</option></select></label>
-              <div class="entry-mapping-properties"><div class="entry-mapping-properties__head"><div class="field"><span>导入属性</span><small id="entryMappingPropertyCount" class="field-hint">选择本体后显示可用属性</small></div></div><input id="entryMappingPropertySearch" class="app-search-input kb-input sm" placeholder="搜索属性" disabled /><div id="entryMappingPropertyChecklist" class="entry-property-checklist"><span class="muted">请先选择本体</span></div></div>
+              <div class="entry-mapping-properties"><div class="entry-mapping-properties__head"><div class="field"><span>导入属性</span><small id="entryMappingPropertyCount" class="field-hint">选择本体后显示可用属性</small></div></div><input id="entryMappingPropertySearch" class="app-search-input kb-input sm" placeholder="搜索属性" autocomplete="off" disabled /><div id="entryMappingPropertyChecklist" class="entry-property-checklist"><span class="muted">请先选择本体</span></div></div>
             </aside>
             <div class="entry-table-toolbar">
               <div><strong>数据预览</strong><span id="entryEditorTaskCurrent" class="muted">尚未创建录入任务</span></div>
@@ -2743,7 +2744,7 @@
                     <div id="sparqlFilterList" class="sparql-filter-list"></div>
                     <label class="field sparql-label-language"><span>名称语言</span><select id="sparqlLabelLanguage" class="kb-select"><option value="zh" selected>中文</option><option value="en">英文</option><option value="">不限</option></select></label>
                   </section>
-                  <section class="sparql-step-card sparql-return-properties"><div class="sparql-step-title"><b>3</b><span>返回属性</span><button id="btnSparqlLoadReturnProperties" class="btn sm" type="button">读取属性</button></div><input id="sparqlReturnPropertySearch" class="app-search-input kb-input sm" placeholder="搜索属性" disabled /><div id="sparqlReturnPropertyChecklist" class="sparql-property-checklist"><span class="muted">点击“读取属性”</span></div></section>
+                  <section class="sparql-step-card sparql-return-properties"><div class="sparql-step-title"><b>3</b><span>返回属性</span><button id="btnSparqlLoadReturnProperties" class="btn sm" type="button">读取属性</button></div><input id="sparqlReturnPropertySearch" class="app-search-input kb-input sm" placeholder="搜索属性" autocomplete="off" disabled /><div id="sparqlReturnPropertyChecklist" class="sparql-property-checklist"><span class="muted">点击“读取属性”</span></div></section>
                 </div>
                 <datalist id="sparqlPredicateSuggestions"><option value="类型"></option><option value="国籍"></option><option value="国家"></option><option value="名称"></option></datalist>
                 <datalist id="sparqlValueSuggestions"><option value="人类"></option><option value="美国"></option></datalist>
@@ -2767,7 +2768,7 @@
                 </div>
                 <div id="sparqlResultSummary" class="entry-hint">还没有执行查询。</div>
                 <div class="sparql-result-tools">
-                  <input id="sparqlResultSearch" class="app-search-input kb-input" placeholder="搜索结果..." />
+                  <input id="sparqlResultSearch" class="app-search-input kb-input" placeholder="搜索结果..." autocomplete="off" />
                 </div>
                 <div class="entry-grid-shell sparql-preview-grid"><div id="sparqlResultTable" class="sparql-result-grid-host"></div></div>
                 <pre id="sparqlRawResponse" class="sparql-raw" style="display:none;"></pre>
@@ -2798,7 +2799,7 @@
           <div id="semanticMapView" class="semantic-map-view" aria-label="知识语义地图" style="display:none;">
             <div id="deck-root" data-embed="1"></div>
             <div class="semantic-map-hidden" aria-hidden="true">
-              <input id="semanticSearchInput" type="search" />
+              <input id="semanticSearchInput" type="search" autocomplete="off" />
               <button id="semanticSearchButton" type="button"></button>
               <div id="semanticSearchResults"></div>
               <div id="semanticDetailHot"></div>
@@ -3061,7 +3062,7 @@
                     <i class="fa-solid fa-plus"></i> 新增
                   </button>
                 </div>
-                <input id="ontologySearch" type="text" class="app-search-input kb-input sm" placeholder="搜索本体名称..." />
+                <input id="ontologySearch" type="text" class="app-search-input kb-input sm" placeholder="搜索本体名称..." autocomplete="off" />
               </div>
               <div id="ontologyTree" class="ontology-tree-wrap"></div>
             </aside>
@@ -3078,7 +3079,7 @@
                   <button id="btnPropertyDeleteSelected" class="btn sm icon danger" type="button" title="删除选中" aria-label="删除选中" disabled>
                     <i class="fa-solid fa-trash"></i>
                   </button>
-                  <input type="search" id="propertyMgmtSearch" class="app-search-input kb-input sm" placeholder="搜索属性名称..."
+                  <input type="search" id="propertyMgmtSearch" class="app-search-input kb-input sm" placeholder="搜索属性名称..." autocomplete="off"
                     aria-label="搜索属性">
                 </div>
               </div>
@@ -4016,12 +4017,15 @@
         <section id="userManagementPanel" class="panel user-management-page" style="display:none; padding:20px; overflow:auto; min-height:0;">
           <div class="user-management-page__header">
             <div><h2>用户权限管理</h2><p class="muted">管理用户角色与账号状态。</p></div>
-            <button id="btnUserManagementRefresh" class="btn icon" type="button" title="刷新用户" aria-label="刷新用户"><i class="fa-solid fa-rotate"></i></button>
+            <div class="user-management-page__header-actions">
+              <div id="systemManagementTabs" class="system-management-tabs" role="tablist" aria-label="权限管理二级菜单"><button data-system-tab="users" class="active" type="button" role="tab" aria-selected="true">用户</button><button data-system-tab="roles" type="button" role="tab" aria-selected="false">角色</button><button data-system-tab="permissions" type="button" role="tab" aria-selected="false">权限</button><button data-system-tab="login-logs" type="button" role="tab" aria-selected="false">登录日志</button><button data-system-tab="operation-logs" type="button" role="tab" aria-selected="false">操作日志</button></div>
+              <button id="btnUserManagementRefresh" class="btn icon" type="button" title="刷新当前数据" aria-label="刷新当前数据"><i class="fa-solid fa-rotate"></i></button>
+            </div>
           </div>
-          <div id="systemManagementTabs" class="system-management-tabs"><button data-system-tab="users" class="active" type="button">用户管理</button><button data-system-tab="roles" type="button">角色管理</button><button data-system-tab="permissions" type="button">权限管理</button><button data-system-tab="login-logs" type="button">登录日志</button><button data-system-tab="operation-logs" type="button">操作日志</button></div>
-          <div class="system-management-toolbar"><input id="systemManagementSearch" type="search" placeholder="搜索用户名、昵称或邮箱…" /><button id="btnSystemManagementSearch" class="btn" type="button"><i class="fa-solid fa-magnifying-glass"></i><span>查询</span></button><button id="btnSystemManagementReset" class="btn" type="button">重置</button></div>
+          <div class="system-management-toolbar"><input id="systemManagementSearch" type="search" placeholder="搜索用户名、昵称或邮箱…" autocomplete="off" /><button id="btnSystemManagementSearch" class="btn" type="button"><i class="fa-solid fa-magnifying-glass"></i><span>查询</span></button><button id="btnSystemManagementReset" class="btn" type="button">重置</button><button id="btnSystemManagementCreate" class="btn primary" type="button" style="display:none"><i class="fa-solid fa-plus"></i><span>新增角色</span></button></div>
           <div id="userManagementMessage" class="muted"></div>
           <div id="userManagementList" class="user-management-page__list"></div>
+          <dialog id="systemRoleDialog" class="system-role-dialog"><form method="dialog" id="systemRoleForm"><div class="system-role-dialog__head"><div><strong id="systemRoleDialogTitle">新增角色</strong><small>配置角色信息和功能权限</small></div><button class="btn icon" value="cancel" aria-label="关闭" type="submit"><i class="fa-solid fa-xmark"></i></button></div><input id="systemRoleId" type="hidden" /><label><span>角色编码</span><input id="systemRoleCode" class="kb-input" required autocomplete="off" /></label><label><span>角色名称</span><input id="systemRoleName" class="kb-input" required autocomplete="off" /></label><div class="system-role-dialog__fields"><label><span>状态</span><select id="systemRoleStatus" class="kb-select"><option value="active">启用</option><option value="disabled">停用</option></select></label><label><span>数据范围</span><select id="systemRoleScope" class="kb-select"><option value="all">全部数据</option><option value="own">本人数据</option></select></label></div><fieldset><legend>权限</legend><div id="systemRolePermissions" class="system-role-permissions"></div></fieldset><div id="systemRoleDialogMessage" class="muted" aria-live="polite"></div><div class="system-role-dialog__footer"><button class="btn" value="cancel" type="submit">取消</button><button id="btnSystemRoleSave" class="btn primary" value="default" type="submit">保存</button></div></form></dialog>
         </section>
         <!-- Chat panel (embedded demo/chat.html) -->
         <div id="chatPanel" class="panel" style="padding:12px; display: none; min-height: 0; box-sizing: border-box;">
@@ -5088,7 +5092,7 @@
       </div>
       <div class="module-scroll module-scroll--plain stack-8" style="flex: 1; overflow-y: auto; padding-right: 4px;">
         <div class="toolbar" style="margin-bottom: 8px;">
-          <input id="propSearchInput" class="app-search-input" placeholder="输入关键词后回车搜索属性" style="flex: 1" />
+          <input id="propSearchInput" class="app-search-input" placeholder="输入关键词后回车搜索属性" autocomplete="off" style="flex: 1" />
         </div>
         <div class="toolbar" id="propSearchResultsWrap" style="display: none; margin-bottom: 12px;">
           <select id="propSearchResults" size="10" style="flex: 1; min-height: 180px"></select>
@@ -19634,7 +19638,7 @@
   <div id="entityManageModal" class="modal-overlay" style="display:none;position:fixed;inset:0;z-index:2200;align-items:center;justify-content:center;">
     <div class="entity-manage-modal">
       <div class="entity-manage-modal__head"><div><strong>管理表格</strong><small id="entityManageCount">已选 0 项</small></div><button id="btnEntityManageClose" class="btn icon" type="button" aria-label="关闭">×</button></div>
-      <div class="entity-manage-toolbar"><input id="entityManageSearch" class="app-search-input kb-input sm" placeholder="搜索知识" /><span class="entity-manage-hint">单击选中，双击查看详情</span><button id="btnEntityManageExport" class="btn sm" type="button">导出</button></div>
+      <div class="entity-manage-toolbar"><input id="entityManageSearch" class="app-search-input kb-input sm" placeholder="搜索知识" autocomplete="off" /><span class="entity-manage-hint">单击选中，双击查看详情</span><button id="btnEntityManageExport" class="btn sm" type="button">导出</button></div>
       <div class="entity-manage-bulk"><input id="entityManageType" class="kb-input sm" placeholder="批量设置类型" /><button id="btnEntityManageApplyType" class="btn sm" type="button">应用类型</button><input id="entityManageTag" class="kb-input sm" placeholder="批量添加标签" /><button id="btnEntityManageApplyTag" class="btn sm" type="button">添加标签</button><button id="btnEntityManageDelete" class="btn sm danger" type="button">删除所选</button></div>
       <div class="entity-manage-table-wrap"><div id="entityManageRows" class="business-grid-host" aria-label="实体批量管理表格"></div></div>
     </div>
@@ -19687,7 +19691,7 @@
         </div>
       </div>
       <div style="margin-bottom: 12px;">
-        <input type="text" id="edgePropertySearch" class="app-search-input kb-input" placeholder="搜索属性..."
+        <input type="text" id="edgePropertySearch" class="app-search-input kb-input" placeholder="搜索属性..." autocomplete="off"
           style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 4px;">
       </div>
       <div id="edgePropertyList"
@@ -19714,7 +19718,7 @@
   <script src="/assets/scripts/schema-panel.js?v=20260904-1"></script>
   <script src="/assets/scripts/detail-panel.js?v=20260904-5"></script>
   <script src="/assets/scripts/knowledge-interactions.js?v=20260904-1"></script>
-  <script src="/assets/scripts/user-management.js?v=20260904-3"></script>
+  <script src="/assets/scripts/user-management.js?v=20260905-3"></script>
   <script src="/assets/scripts/sidebar-panel.js"></script>
   <script src="/assets/scripts/auth-panel.js?v=20260904-2"></script>
   <script src="/assets/scripts/db-modal.js"></script>

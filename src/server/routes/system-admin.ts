@@ -20,11 +20,11 @@ export async function handleSystemAdminRoutes(req: Request, url: URL, method: st
     if (q) { where.push("(u.username LIKE ? OR u.display_name LIKE ? OR u.email LIKE ?)"); params.push(`%${q}%`, `%${q}%`, `%${q}%`); }
     if (status) { where.push("u.status = ?"); params.push(status); }
     const clause = where.length ? ` WHERE ${where.join(" AND ")}` : "";
-    return json(paged(`SELECT u.id,u.username,u.display_name AS nickname,u.avatar,u.email,u.phone,u.status,u.last_login_at,u.created_at, GROUP_CONCAT(r.name, ', ') AS roles FROM users u LEFT JOIN user_roles ur ON ur.user_id=u.id LEFT JOIN roles r ON r.id=ur.role_id${clause} GROUP BY u.id ORDER BY u.id DESC`, `SELECT COUNT(*) AS count FROM users u${clause}`, params, url));
+    return json(paged(`SELECT u.id,u.username,u.display_name AS nickname,u.avatar,u.email,u.phone,u.role,u.status,u.last_login_at,u.created_at, GROUP_CONCAT(r.name, ', ') AS roles FROM users u LEFT JOIN user_roles ur ON ur.user_id=u.id LEFT JOIN roles r ON r.id=ur.role_id${clause} GROUP BY u.id ORDER BY u.id DESC`, `SELECT COUNT(*) AS count FROM users u${clause}`, params, url));
   }
   if (url.pathname === "/api/system/roles" && method === "GET") {
     if (!requirePermission(req, "role:view")) return json({ error: "无权访问" }, 403);
-    return json(paged("SELECT r.*, COUNT(DISTINCT ur.user_id) AS user_count FROM roles r LEFT JOIN user_roles ur ON ur.role_id=r.id GROUP BY r.id ORDER BY r.id DESC", "SELECT COUNT(*) AS count FROM roles", [], url));
+    return json(paged("SELECT r.*, COUNT(DISTINCT ur.user_id) AS user_count, (SELECT COUNT(*) FROM role_permissions rp WHERE rp.role_id=r.id) AS permission_count, (SELECT GROUP_CONCAT(p.code, ',') FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id WHERE rp.role_id=r.id) AS permission_codes FROM roles r LEFT JOIN user_roles ur ON ur.role_id=r.id GROUP BY r.id ORDER BY r.id DESC", "SELECT COUNT(*) AS count FROM roles", [], url));
   }
   if (url.pathname === "/api/system/permissions" && method === "GET") {
     if (!requirePermission(req, "permission:view")) return json({ error: "无权访问" }, 403);
@@ -47,7 +47,8 @@ export async function handleSystemAdminRoutes(req: Request, url: URL, method: st
     const body: any = await req.json(); const code = String(body.code || "").trim(); const name = String(body.name || "").trim();
     if (!code || !name) return json({ error: "角色编码和名称不能为空" }, 400);
     adminDb.run("INSERT INTO roles (code,name,status,data_scope) VALUES (?,?,?,?)", [code, name, body.status === "disabled" ? "disabled" : "active", body.dataScope === "own" ? "own" : "all"]);
-    audit(req, user, "role", "create", code); return json({ success: true }, 201);
+    const created = adminDb.query("SELECT id FROM roles WHERE code=?").get(code) as any;
+    audit(req, user, "role", "create", code); return json({ success: true, id: created?.id }, 201);
   }
   const roleMatch = url.pathname.match(/^\/api\/system\/roles\/(\d+)$/);
   if (roleMatch && method === "PATCH") {
