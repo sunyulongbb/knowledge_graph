@@ -58,7 +58,6 @@
   let viewportFetchTimer = 0;
   let lastViewportKey = "";
   let initLoaded = false;
-  let lastNodeClick = { id: "", time: 0 };
 
   function notifyParentSelection(nodeId) {
     if (!isEmbedded) return;
@@ -588,12 +587,7 @@
       onClick: function (info) {
         if (!info || !info.object) return;
         const nodeId = String(info.object.id || "");
-        const now = Date.now();
-        const isDoubleClick =
-          lastNodeClick.id === nodeId && now - lastNodeClick.time <= 350;
-        lastNodeClick = isDoubleClick ? { id: "", time: 0 } : { id: nodeId, time: now };
         void showNodeDetail(nodeId);
-        if (isDoubleClick) notifyParentOpenDetail(nodeId);
       },
       onHover: function (info) {
         renderTooltip(info);
@@ -707,6 +701,25 @@
       },
       layers: [],
     });
+    rootEl.addEventListener(
+      "dblclick",
+      function (event) {
+        if (!deckInstance) return;
+        const rect = rootEl.getBoundingClientRect();
+        const picked = deckInstance.pickObject({
+          x: event.clientX - rect.left,
+          y: event.clientY - rect.top,
+          radius: 8,
+          layerIds: ["semantic-nodes-hit-layer"],
+        });
+        const nodeId = String(picked?.object?.id || "").trim();
+        if (!nodeId) return;
+        event.preventDefault();
+        void showNodeDetail(nodeId);
+        notifyParentOpenDetail(nodeId);
+      },
+      true,
+    );
   }
 
   async function loadInit() {

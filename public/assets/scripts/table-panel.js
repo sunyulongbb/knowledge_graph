@@ -106,7 +106,7 @@
       )
         .then(() =>
           loadSemanticMapScript(
-            "/assets/scripts/semantic-map.js?v=20260906-1",
+            "/assets/scripts/semantic-map.js?v=20260906-2",
             "kbSemanticMapRuntime",
           ),
         )
