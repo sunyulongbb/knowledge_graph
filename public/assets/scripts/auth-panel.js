@@ -398,10 +398,11 @@
           hideDbSelectModal();
         }
       } catch {}
-      if (authUser) openProfileModal();
+      if (authUser) window.toggleUserSidebar?.();
       else openAuthModal(false);
     });
   }
+  document.getElementById("btnOpenProfileSidebar")?.addEventListener("click", openProfileModal);
   if (btnCloseAuthModal) btnCloseAuthModal.addEventListener("click", closeAuthModal);
   if (authModal) {
     authModal.addEventListener("click", (e) => {

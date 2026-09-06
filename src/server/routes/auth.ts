@@ -199,8 +199,8 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
 
   if (url.pathname === "/api/auth/users" && method === "GET") {
     const current = getCurrentUser(req);
-    if (!isAdmin(current)) return Response.json({ error: "无权访问" }, { status: 403 });
-    const users = adminDb.query("SELECT id, username, display_name, avatar, role, status, created_at FROM users ORDER BY created_at DESC").all();
+    if (!current) return Response.json({ error: "请先登录" }, { status: 401 });
+    const users = adminDb.query("SELECT id, username, display_name, display_name AS displayName, avatar, role, status, created_at FROM users ORDER BY created_at DESC").all();
     return Response.json({ users });
   }
 

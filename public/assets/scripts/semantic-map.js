@@ -58,6 +58,7 @@
   let viewportFetchTimer = 0;
   let lastViewportKey = "";
   let initLoaded = false;
+  let lastNodeClick = { id: "", time: 0 };
 
   function notifyParentSelection(nodeId) {
     if (!isEmbedded) return;
@@ -71,6 +72,21 @@
     }
     window.parent.postMessage(
       { type: "kb-semantic-map-selection", nodeId: String(nodeId || "") },
+      window.location.origin,
+    );
+  }
+
+  function notifyParentOpenDetail(nodeId) {
+    const detail = { nodeId: String(nodeId || "") };
+    if (!detail.nodeId) return;
+    if (window.parent === window) {
+      window.dispatchEvent(
+        new CustomEvent("kb-semantic-map-open-detail", { detail }),
+      );
+      return;
+    }
+    window.parent.postMessage(
+      { type: "kb-semantic-map-open-detail", nodeId: detail.nodeId },
       window.location.origin,
     );
   }
@@ -571,7 +587,13 @@
       },
       onClick: function (info) {
         if (!info || !info.object) return;
-        void showNodeDetail(info.object.id);
+        const nodeId = String(info.object.id || "");
+        const now = Date.now();
+        const isDoubleClick =
+          lastNodeClick.id === nodeId && now - lastNodeClick.time <= 350;
+        lastNodeClick = isDoubleClick ? { id: "", time: 0 } : { id: nodeId, time: now };
+        void showNodeDetail(nodeId);
+        if (isDoubleClick) notifyParentOpenDetail(nodeId);
       },
       onHover: function (info) {
         renderTooltip(info);
@@ -652,7 +674,7 @@
           speed: 0.02,
           smooth: true,
         },
-        doubleClickZoom: true,
+        doubleClickZoom: false,
         touchZoom: true,
         touchRotate: false,
       },

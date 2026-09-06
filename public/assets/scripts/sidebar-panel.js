@@ -401,23 +401,10 @@
     if (!wrap) return;
     wrap.innerHTML = '<div class="muted">加载中…</div>';
     try {
-      const resp = await fetch("/api/auth/users");
+      const resp = await fetch("/api/auth/users", { credentials: "include" });
       if (!resp.ok) throw new Error("HTTP " + resp.status);
       const data = await resp.json();
-      let items = Array.isArray(data.users) ? data.users : [];
-      // Filter out current logged-in user for the right-side list
-      try {
-        const current =
-          window && window.authUser && window.authUser.username
-            ? (window.authUser.username || "").toString().toLowerCase()
-            : "";
-        if (current) {
-          items = items.filter(
-            (it) =>
-              ((it.username || "") + "").toString().toLowerCase() !== current,
-          );
-        }
-      } catch (e) {}
+      const items = Array.isArray(data.users) ? data.users : [];
       wrap.innerHTML = "";
       if (!items.length) {
         wrap.innerHTML = '<div class="muted">暂无用户</div>';
@@ -431,6 +418,8 @@
         entry.setAttribute("data-username", username);
         entry.setAttribute("data-image", it.avatar || "");
         entry.setAttribute("data-title", it.displayName || username || "");
+        entry.setAttribute("data-status", it.status || "active");
+        entry.classList.toggle("is-disabled-user", it.status === "disabled");
         entry.tabIndex = 0;
         if (it.avatar && typeof it.avatar === "string" && it.avatar.trim()) {
           const img = document.createElement("span");
@@ -451,7 +440,7 @@
         }
         const label = document.createElement("span");
         label.className = "project-entry-label";
-        label.textContent = it.displayName || username || "";
+        label.textContent = `${it.displayName || username || ""}${it.status === "disabled" ? "（已停用）" : ""}`;
         label.dataset.full = label.textContent;
         label.dataset.short = (label.textContent || "").slice(0, 12);
         entry.appendChild(label);
@@ -1585,6 +1574,21 @@
     // The user sidebar is hidden by default. Avoid fetching users or attaching
     // hover behavior until another feature explicitly reveals the rail.
     const userSidebar = document.getElementById("userSidebar");
+    const splitLayout = document.querySelector(".kb-split");
+    const applyUserSidebarCollapsed = (collapsed) => {
+      if (!userSidebar) return;
+      userSidebar.classList.toggle("is-collapsed", collapsed);
+      userSidebar.setAttribute("aria-expanded", String(!collapsed));
+      userSidebar.setAttribute("aria-hidden", String(collapsed));
+      if (splitLayout) splitLayout.style.setProperty("--user-sidebar-width", collapsed ? "0px" : "72px");
+    };
+    applyUserSidebarCollapsed(true);
+    window.toggleUserSidebar = () => {
+      const collapsed = userSidebar.classList.contains("is-collapsed");
+      applyUserSidebarCollapsed(!collapsed);
+      if (collapsed) loadUsersToSidebar();
+      return collapsed;
+    };
     if (userSidebar && !userSidebar.hidden) {
       try {
         loadUsersToSidebar();

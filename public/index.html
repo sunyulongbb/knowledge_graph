@@ -62,7 +62,7 @@
   </script>
   <script src="/assets/scripts/app-settings.js"></script>
   <script src="/assets/scripts/pagination.js"></script>
-  <script src="/assets/scripts/timeline-panel.js?v=20260904-8"></script>
+    <script src="/assets/scripts/timeline-panel.js?v=20260906-3"></script>
   <script type="module">
     import * as pdfjsLib from "/node_modules/pdfjs-dist/build/pdf.min.mjs?v=6.3.289";
 
@@ -4931,15 +4931,13 @@
         </div>
       </div>
       <!-- Right: user sidebar (与左侧 project-sidebar 风格一致，显示用户头像列表) -->
-      <aside id="userSidebar" class="project-sidebar collapsed user-sidebar" role="navigation" aria-label="用户列表"
-        aria-expanded="false" aria-hidden="true" hidden>
-        <div style="display:flex;flex-direction:column;gap:8px;align-items:center;margin-bottom:8px;"
-          aria-hidden="true"></div>
+      <aside id="userSidebar" class="project-sidebar user-sidebar is-collapsed" role="navigation" aria-label="所有用户"
+        aria-expanded="false" aria-hidden="false">
         <div class="project-list user-list" aria-live="polite"></div>
         <div style="margin-top:auto;display:flex;flex-direction:column;gap:8px;align-items:center;">
           <button id="btnRefreshUsers" class="btn sm" title="刷新用户" aria-label="刷新用户"><i
               class="fa-solid fa-arrow-rotate-right"></i></button>
-          <button id="btnMoreUsers" class="btn sm" title="更多用户" aria-label="更多用户">•••</button>
+          <button id="btnOpenProfileSidebar" class="btn sm" type="button" title="个人资料" aria-label="个人资料"><i class="fa-solid fa-user-gear"></i></button>
         </div>
       </aside>
     </div>
@@ -19710,7 +19708,7 @@
       window.kbOntologyTreeModuleReady = import("/assets/generated/ontology-tree.js?v=20260904-1");
   </script>
   <script src="/assets/scripts/property-panel.js?v=20260904-9"></script>
-  <script src="/assets/scripts/table-panel.js?v=20260904-4"></script>
+  <script src="/assets/scripts/table-panel.js?v=20260906-2"></script>
   <script src="/assets/scripts/table-selection.js"></script>
   <script src="/assets/scripts/entity-manage-table.js"></script>
   <script src="/assets/scripts/attr-panel.js"></script>
@@ -19719,8 +19717,8 @@
   <script src="/assets/scripts/detail-panel.js?v=20260904-5"></script>
   <script src="/assets/scripts/knowledge-interactions.js?v=20260904-1"></script>
   <script src="/assets/scripts/user-management.js?v=20260905-3"></script>
-  <script src="/assets/scripts/sidebar-panel.js"></script>
-  <script src="/assets/scripts/auth-panel.js?v=20260904-2"></script>
+  <script src="/assets/scripts/sidebar-panel.js?v=20260906-1"></script>
+  <script src="/assets/scripts/auth-panel.js?v=20260906-1"></script>
   <script src="/assets/scripts/db-modal.js"></script>
   <script src="/assets/scripts/sparql-panel.js"></script>
   <script>

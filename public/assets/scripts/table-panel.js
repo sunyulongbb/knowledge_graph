@@ -67,10 +67,16 @@
   let semanticMapRuntimePromise = null;
   const applySemanticMapSelection = (nodeId) => {
     if (typeof window.setTableSelection !== "function") return;
-    window.setTableSelection(nodeId, false, { skipGraphFocus: true });
+    window.setTableSelection(nodeId, true);
   };
   window.addEventListener("kb-semantic-map-selection", (event) => {
     applySemanticMapSelection(String(event.detail?.nodeId || "").trim());
+  });
+  window.addEventListener("kb-semantic-map-open-detail", (event) => {
+    const nodeId = String(event.detail?.nodeId || "").trim();
+    if (!nodeId) return;
+    applySemanticMapSelection(nodeId);
+    window.setViewMode?.("detail", { targetNodeId: nodeId });
   });
   const loadSemanticMapScript = (src, id) =>
     new Promise((resolve, reject) => {
@@ -100,7 +106,7 @@
       )
         .then(() =>
           loadSemanticMapScript(
-            "/assets/scripts/semantic-map.js?v=20260904-4",
+            "/assets/scripts/semantic-map.js?v=20260906-1",
             "kbSemanticMapRuntime",
           ),
         )

@@ -4,6 +4,34 @@
   let groups = null;
   let currentNodes = [];
   let initialized = false;
+  let visModulePromise = null;
+
+  function loadVisModule() {
+    if (window.vis?.DataSet && window.vis?.Timeline) return Promise.resolve(window.vis);
+    if (!visModulePromise) {
+      visModulePromise = import("/node_modules/vis-timeline/standalone/esm/vis-timeline-graph2d.mjs")
+        .then((module) => {
+          if (!module?.DataSet || !module?.Timeline) throw new Error("vis-timeline 模块导出不完整");
+          return module;
+        })
+        .catch((error) => {
+          visModulePromise = null;
+          throw error;
+        });
+    }
+    return visModulePromise;
+  }
+
+  function showTimelineError(error) {
+    const host = document.getElementById("timelineView");
+    if (!host) return;
+    host.classList.add("timeline-view--error");
+    host.innerHTML = `<div class="timeline-load-error"><span>时间轴组件加载失败：${escapeHtml(error?.message || error)}</span><button type="button" class="btn sm" id="btnTimelineRetry">重试</button></div>`;
+    document.getElementById("btnTimelineRetry")?.addEventListener("click", () => {
+      initialized = false;
+      window.kbTimeline?.update(currentNodes);
+    }, { once: true });
+  }
 
   const DATE_KEY_RE =
     /(date|time|year|start|end|birth|death|founded|established|dissolved|成立|解散|出生|去世|开始|结束|发生|发布时间|任职|服役|退役|研制|获奖|时间|日期)/i;
@@ -218,22 +246,22 @@
     select.value = types.includes(selected) ? selected : "";
   }
 
+  function selectEntity(entityId) {
+    window.setTableSelection?.(entityId || "", true);
+  }
+
   function openEntity(entityId) {
     if (!entityId) return;
-    window.setTableSelection?.(entityId, false, {
-      skipDetailRefresh: true,
-      skipSidebarSync: true,
-    });
+    selectEntity(entityId);
     window.setViewMode?.("detail", { targetNodeId: entityId });
   }
 
   async function init() {
     const host = document.getElementById("timelineView");
     if (!host || initialized) return;
-    const vis = window.vis;
-    if (!vis?.DataSet || !vis?.Timeline) {
-      throw new Error("vis-timeline 组件未加载");
-    }
+    const vis = await loadVisModule();
+    if (initialized) return;
+    host.classList.remove("timeline-view--error");
     const DataSet = vis.DataSet;
     const Timeline = vis.Timeline;
     items = new DataSet();
@@ -287,6 +315,10 @@
     });
     timeline.on("select", (event) => {
       const item = event.items?.[0] ? items.get(event.items[0]) : null;
+      selectEntity(item?.entityId || "");
+    });
+    timeline.on("doubleClick", (event) => {
+      const item = event.item ? items.get(event.item) : null;
       if (item?.entityId) openEntity(item.entityId);
     });
     initialized = true;
@@ -306,7 +338,7 @@
     update(nodes) {
       currentNodes = Array.isArray(nodes) ? nodes : [];
       updateTypeOptions(currentNodes);
-      if (!initialized) return init().then(applyFilters);
+      if (!initialized) return init().then(applyFilters).catch(showTimelineError);
       applyFilters();
     },
     clear() {
