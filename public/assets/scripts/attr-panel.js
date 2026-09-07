@@ -175,6 +175,9 @@ if (btnAttrReset) {
   const attrMsg = byId("attrMsg");
   const attrList = byId("attrList");
   const btnAttrSave = byId("btnAttrSave");
+  byId("attrSnaktype")?.addEventListener("change", () => {
+    updateDatatypeUI(attrType.value);
+  });
   const btnAttrReset = byId("btnAttrReset");
   const btnAttrEditSelected = byId("btnAttrEditSelected");
   const btnAttrDeleteSelected = byId("btnAttrDeleteSelected");
@@ -201,7 +204,7 @@ if (btnAttrReset) {
       currentProp = document.createElement("div");
       currentProp.id = "attrCurrentProp";
       currentProp.className = "wd-current-prop";
-      currentProp.textContent = "当前属性：未选择";
+      currentProp.textContent = "";
     }
     if (propCell.firstElementChild !== currentProp) {
       propCell.insertBefore(currentProp, propCell.firstChild || null);
@@ -315,10 +318,18 @@ if (btnAttrReset) {
     const fallbackEntity = directEntityId
       ? normalizeEntitySearchItem(directEntityId)
       : null;
-    const nextEntity = selectedEntity || fallbackEntity;
-    const entityId = (nextEntity?.id || directEntityId || "").trim();
+    let nextEntity = selectedEntity || fallbackEntity;
+    let entityId = (nextEntity?.id || directEntityId || "").trim();
     if (!entityId) {
-      throw new Error("请输入实体ID，或先检索并选择一个实体");
+      const name = String(inputValue || "").trim();
+      if (!name) throw new Error("请输入实体名称");
+      const resolveUrl = new URL("/api/kb/entity/resolve", window.location.origin);
+      const scopedUrl = typeof window.appendCurrentDbParam === "function" ? window.appendCurrentDbParam(resolveUrl) : resolveUrl;
+      const resolveResp = await fetch(String(scopedUrl instanceof URL ? scopedUrl : resolveUrl), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ property: item?.property || "", name }) });
+      const resolved = await resolveResp.json().catch(() => ({}));
+      if (!resolveResp.ok) throw new Error(resolved.error || "未选择实体，且无法自动创建尾实体");
+      nextEntity = normalizeEntitySearchItem(resolved);
+      entityId = String(nextEntity?.id || resolved.id || "").trim();
     }
     const entityType =
       nextEntity?.entity_type || inferEntityTypeFromId(entityId) || "item";
@@ -331,14 +342,11 @@ if (btnAttrReset) {
       const numericMatch = entityId.match(/(\d+)/);
       numericId = numericMatch ? numericMatch[1] : "";
     }
-    if (!numericId) {
-      throw new Error("无法识别实体 numeric-id");
-    }
     const nextValue = {
       "entity-type": entityType,
       id: entityId,
-      "numeric-id": Number.parseInt(String(numericId), 10),
     };
+    if (/^[QPL]\d+$/.test(entityId) && /^\d+$/.test(String(numericId))) nextValue["numeric-id"] = Number(numericId);
     const entityLabel =
       nextEntity?.label ||
       nextEntity?.name ||
@@ -375,6 +383,7 @@ if (btnAttrReset) {
         node_id: nodeId,
         property: item?.property || "",
         datatype: item?.datatype || "wikibase-entityid",
+        snaktype: "value",
         value: saveValue,
         property_label_zh: item?.property_label_zh || item?.property || undefined,
       }),
@@ -633,31 +642,7 @@ if (btnAttrReset) {
   let attrEntitySearchItems = [];
 
   function mapDatatypeToUi(datatype, datavalueType) {
-    // 数值类型（valuetype / datavalue_type）优先，其次才看 datatype
-    const dv = (datavalueType || "").toString().toLowerCase();
-    const dt = (datatype || "").toString().toLowerCase();
-
-    // --- 数值类型优先判断 ---
-    if (dv === "wikibase-entityid" || dv.startsWith("wikibase-"))
-      return "wikibase-entityid";
-    if (dv === "globecoordinate" || dv === "globe-coordinate")
-      return "globecoordinate";
-    if (dv === "commonsmedia") return "commonsMedia";
-    if (["string", "url", "time", "quantity", "monolingualtext"].includes(dv))
-      return dv;
-
-    // --- 回退到 datatype ---
-    if (dt === "wikibase-entityid" || dt.startsWith("wikibase-"))
-      return "wikibase-entityid";
-    if (dt === "globe-coordinate" || dt === "globecoordinate")
-      return "globecoordinate";
-    if (dt === "commonsmedia") return "commonsMedia";
-    if (["string", "url", "time", "quantity", "monolingualtext"].includes(dt))
-      return dt;
-
-    if (dv) return dv;
-    if (dt) return dt;
-    return "string";
+    return window.KbWikidata.uiDatatype(datatype, datavalueType);
   }
 
   function pickUiDatatype(item) {
@@ -1209,7 +1194,7 @@ if (btnAttrReset) {
           }
         }
         try {
-          val.innerHTML = renderAsMediaThumb
+          val.innerHTML = it.snaktype === "somevalue" ? "未知值" : it.snaktype === "novalue" ? "无值" : renderAsMediaThumb
             ? renderMediaThumbHtml(valItem)
             : renderAttrValue(valDtype, valItem);
         } catch (e) {
@@ -1406,6 +1391,7 @@ if (btnAttrReset) {
   }
 
   function resetAttrForm() {
+    if (byId("attrSnaktype")) byId("attrSnaktype").value = "value";
     window.kbEditingValueIndex = -1;
     ensureAttrInlineEditorLayout();
     resetEditingRow();
@@ -1423,7 +1409,7 @@ if (btnAttrReset) {
     window.kbSelectedSchemaPropLabel = "";
     const currentPropEl = byId("attrCurrentProp");
     if (currentPropEl) {
-      currentPropEl.textContent = "当前属性：未选择";
+      currentPropEl.textContent = "";
     }
     if (attrPropSearchInput) {
       attrPropSearchInput.value = "";
@@ -1479,7 +1465,7 @@ if (btnAttrReset) {
       : [];
     groups.forEach((g) => {
       const gDtype = g.getAttribute("data-dtype");
-      const shouldShow = gDtype === normalized;
+      const shouldShow = gDtype === normalized && (byId("attrSnaktype")?.value || "value") === "value";
       if (shouldShow) {
         g.style.display = "flex";
       } else {
@@ -1496,6 +1482,8 @@ if (btnAttrReset) {
 
   function inferEntityTypeFromId(entityId) {
     if (!entityId) return "item";
+    if (/^L\d+-F\d+$/i.test(entityId)) return "form";
+    if (/^L\d+-S\d+$/i.test(entityId)) return "sense";
     const c = entityId.charAt(0).toUpperCase();
     if (c === "Q") return "item";
     if (c === "P") return "property";
@@ -1507,7 +1495,7 @@ if (btnAttrReset) {
   function parseEntityIdFromInput(value) {
     if (!value || typeof value !== "string") return "";
     const trimmed = value.trim();
-    const match = trimmed.match(/^(?:entity\/)?([QPLE]\d+)$/i);
+    const match = trimmed.match(/^(?:entity\/)?([QPLE]\d+(?:-[FS]\d+)?)$/i);
     if (!match) return "";
     return match[1].toUpperCase();
   }
@@ -2273,7 +2261,7 @@ if (btnAttrReset) {
     if (btnAttrDeleteSelected) btnAttrDeleteSelected.disabled = count === 0;
   }
 
-  function extractDateString(value) {
+  function extractDateString(value, preserveTime = false) {
     try {
       if (value == null) return "";
       let raw = "";
@@ -2290,7 +2278,12 @@ if (btnAttrReset) {
       raw = (raw || "").trim();
       if (!raw) return "";
       if (raw.startsWith("+")) raw = raw.slice(1);
-      if (raw.includes("T")) raw = raw.split("T")[0];
+      if (!preserveTime && raw.includes("T")) raw = raw.split("T")[0];
+      if (typeof value === "object" && value?.time) {
+        const dateOnly = raw.split("T")[0];
+        if (value.precision <= 9) return dateOnly.split(/-(?=\d{2}-)/)[0];
+        if (value.precision === 10) return dateOnly.replace(/-\d{2}$/, "");
+      }
       return raw;
     } catch {
       return "";
@@ -2658,6 +2651,7 @@ if (btnAttrReset) {
   }
 
   function fillAttrForm(nodeId, it, valueIndex = -1) {
+    if (byId("attrSnaktype")) byId("attrSnaktype").value = it?.snaktype || "value";
     window.kbEditingValueIndex = valueIndex;
     attrId.value = it?.id || "";
     attrProp.value = it?.property || "";
@@ -2668,7 +2662,7 @@ if (btnAttrReset) {
       const propLabel = it?.property_label_zh || propId || "";
       currentPropEl.textContent = propId
         ? `当前属性：${propLabel} (${propId})`
-        : "当前属性：未选择";
+        : "";
     }
     if (attrPropSearchInput) {
       attrPropSearchInput.value = it?.property_label_zh || it?.property || "";
@@ -2730,7 +2724,7 @@ if (btnAttrReset) {
       clearEntitySearchState();
 
       if (dtype === "time") {
-        const d = extractDateString(val);
+        const d = extractDateString(val, true);
         attrValueDate.value = d;
       } else if (dtype === "wikibase-entityid") {
         // value expected as { "entity-type": "item", "id": "Q...", "numeric-id": 123 }
@@ -2892,6 +2886,12 @@ if (btnAttrReset) {
 
     // If editing existing attribute (attrId has value), use hidden fields if global selection is empty
     const currentAttrId = (attrId.value || "").trim();
+    const originalItem = (window.kbAttrItems || []).find((item) => item.id === currentAttrId);
+    const originalValue = Array.isArray(originalItem?.value)
+      ? originalItem.value[window.kbEditingValueIndex >= 0 ? window.kbEditingValueIndex : 0]
+      : originalItem?.value;
+    const originalObject = originalValue && typeof originalValue === "object" ? originalValue : {};
+    const snaktype = byId("attrSnaktype")?.value || "value";
     if (currentAttrId && !prop) {
       prop = (attrProp.value || "").trim();
       plabel = (attrPropLabel.value || "").trim();
@@ -2909,11 +2909,13 @@ if (btnAttrReset) {
     const raw = (attrValue.value || "").trim();
     // Determine datatype from selected schema property cache (if available)
     let dtype = (attrType.value || "").trim() || "string";
+    let semanticDatatype = window.KbWikidata.normalizeDatatype(originalItem?.datatype || dtype);
     try {
       const clsId = window.kbSelectedClassId;
       const items = clsId ? window.kbSchemaByClassId?.[clsId] || [] : [];
       const found = items.find((it) => it.id === prop);
       if (found) {
+        semanticDatatype = window.KbWikidata.normalizeDatatype(found.datatype, found.valuetype);
         const mapped =
           pickUiDatatype(found) || found.datatype || found.datavalue_type;
         if (mapped) dtype = mapped;
@@ -2921,31 +2923,43 @@ if (btnAttrReset) {
     } catch {}
     attrType.value = dtype;
     let value = null;
-    if (dtype === "url") {
+    if (snaktype !== "value") {
+      value = null;
+    } else if (dtype === "url") {
       value = (attrValueUrl.value || "").trim();
       if (!value) {
         attrMsg.textContent = "请输入URL";
         return;
       }
     } else if (dtype === "time") {
-      const d = (attrValueDate.value || "").trim();
-      if (!d) {
-        attrMsg.textContent = "请选择日期";
+      const timeText = (attrValueDate.value || "").trim();
+      try {
+        if (originalObject.time && timeText === extractDateString(originalObject, true)) {
+          value = { ...originalObject };
+        } else {
+          const parsedTime = window.KbWikidata.parseTimeValue(timeText);
+          value = { ...parsedTime, ...originalObject, time: parsedTime.time, precision: parsedTime.precision, timezone: parsedTime.timezone };
+          if (!/(?:Z|[+-]\d{2}:?\d{2})$/i.test(timeText) && originalObject.timezone !== undefined) value.timezone = originalObject.timezone;
+        }
+        delete value.date;
+      } catch {
+        attrMsg.textContent = timeText
+          ? "时间格式无效，请输入有效日期，如 2026-09-07、2026年9月7日 或 2026/9/7 14:30"
+          : "请输入时间";
+        attrValueDate.focus();
         return;
       }
-      value = { date: d };
     } else if (dtype === "quantity") {
       const amtStr = (attrValueAmount.value || "").trim();
       if (!amtStr) {
         attrMsg.textContent = "请输入数值";
         return;
       }
-      const amt = parseFloat(amtStr);
-      if (Number.isNaN(amt)) {
+      if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(amtStr)) {
         attrMsg.textContent = "数值格式错误";
         return;
       }
-      value = { amount: amt, unit: (attrValueUnit.value || "").trim() };
+      value = { ...originalObject, amount: amtStr, unit: (attrValueUnit.value || "").trim() || "1" };
     } else if (dtype === "globecoordinate") {
       const latStr = (attrValueLat.value || "").trim();
       const lonStr = (attrValueLon.value || "").trim();
@@ -2953,13 +2967,13 @@ if (btnAttrReset) {
         attrMsg.textContent = "请输入经纬度";
         return;
       }
-      const lat = parseFloat(latStr);
-      const lon = parseFloat(lonStr);
-      if (Number.isNaN(lat) || Number.isNaN(lon)) {
+      const lat = Number(latStr);
+      const lon = Number(lonStr);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
         attrMsg.textContent = "经纬度格式错误";
         return;
       }
-      value = { latitude: lat, longitude: lon };
+      value = { altitude: null, precision: null, globe: "http://www.wikidata.org/entity/Q2", ...originalObject, latitude: lat, longitude: lon };
     } else if (dtype === "wikibase-entityid") {
       let entityType = (attrValueEntityType.value || "").trim();
       let entityId = (attrValueEntityId.value || "").trim();
@@ -2983,6 +2997,36 @@ if (btnAttrReset) {
           }
         }
       }
+      if (!entityId) {
+        const name = (attrEntitySearchInput?.value || "").trim();
+        if (name) {
+          if (semanticDatatype !== "wikibase-item") {
+            attrMsg.textContent = "请输入该类型的实体ID，如 P31、L1、L1-F1 或 L1-S1";
+            return;
+          }
+          try {
+            const resolveUrl = new URL("/api/kb/entity/resolve", window.location.origin);
+            const scopedUrl = typeof window.appendCurrentDbParam === "function" ? window.appendCurrentDbParam(resolveUrl) : resolveUrl;
+            const resolveResp = await fetch(String(scopedUrl instanceof URL ? scopedUrl : resolveUrl), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ property: canonicalProp, name }),
+            });
+            const resolved = await resolveResp.json().catch(() => ({}));
+            if (!resolveResp.ok) throw new Error(resolved.error || "自动创建尾实体失败");
+            entityId = String(resolved.id || "");
+            entityType = "item";
+            numericIdStr = (entityId.match(/(\d+)/)?.[1] || "");
+            entityLabel = resolved.label || name;
+            if (attrValueEntityType) attrValueEntityType.value = entityType;
+            if (attrValueEntityId) attrValueEntityId.value = entityId;
+            if (attrValueEntityNumericId) attrValueEntityNumericId.value = numericIdStr;
+          } catch (error) {
+            attrMsg.textContent = error?.message || "自动创建尾实体失败";
+            return;
+          }
+        }
+      }
       if (!entityLabel && attrEntitySearchInput) {
         const rawText = (attrEntitySearchInput.value || "").trim();
         const directId = parseEntityIdFromInput(rawText);
@@ -2996,20 +3040,17 @@ if (btnAttrReset) {
         );
         entityLabel = found?.label || "";
       }
-      if (!entityType || !entityId || !numericIdStr) {
-        attrMsg.textContent = "请填写全部wikibase-entityid字段";
-        return;
-      }
-      const numericId = parseInt(numericIdStr, 10);
-      if (Number.isNaN(numericId)) {
-        attrMsg.textContent = "numeric-id格式错误";
+      if (!entityId) {
+        attrMsg.textContent = "请填写实体ID";
         return;
       }
       value = {
-        "entity-type": entityType,
+        ...originalObject,
+        "entity-type": semanticDatatype.replace(/^wikibase-/, ""),
         id: entityId,
-        "numeric-id": numericId,
       };
+      delete value["numeric-id"];
+      if (/^[QPL]\d+$/.test(entityId) && /^\d+$/.test(numericIdStr)) value["numeric-id"] = Number(numericIdStr);
       if (entityLabel) {
         value.entity_label_zh = entityLabel;
         value.label = entityLabel;
@@ -3052,7 +3093,11 @@ if (btnAttrReset) {
       node_id: nodeId,
       property: canonicalProp,
       property_label_zh: plabel || undefined,
-      datatype: dtype,
+      datatype: semanticDatatype,
+      snaktype,
+      rank: originalItem?.rank || "normal",
+      qualifiers: originalItem?.qualifiers || {},
+      references: originalItem?.references || [],
       value,
     };
 

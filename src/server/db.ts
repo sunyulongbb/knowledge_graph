@@ -330,8 +330,9 @@ function ensureSharedTables() {
   appDb.run(`CREATE TABLE IF NOT EXISTS operation_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, username TEXT, module TEXT NOT NULL, action TEXT NOT NULL, target TEXT, path TEXT, success INTEGER NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
   appDb.run(`CREATE TABLE IF NOT EXISTS knowledge_favorites (user_id INTEGER NOT NULL, knowledge_id TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, knowledge_id))`);
   runSafe("ALTER TABLE nodes ADD COLUMN created_by INTEGER");
+  runSafe("ALTER TABLE properties ADD COLUMN tail_ontology_id TEXT");
   const defaultPermissions = ["user:view","user:create","user:update","user:delete","role:view","role:create","role:update","role:delete","permission:view","permission:update","knowledge:view","knowledge:create","knowledge:update","knowledge:delete","knowledge:audit","knowledge:like","knowledge:comment","knowledge:share","knowledge:favorite","system:config","system:log"];
-  defaultPermissions.forEach((code) => appDb.run("INSERT OR IGNORE INTO permissions (code, name, module) VALUES (?, ?, ?)", [code, code, code.split(":")[0]]));
+  defaultPermissions.forEach((code) => appDb.run("INSERT OR IGNORE INTO permissions (code, name, module) VALUES (?, ?, ?)", [code, code, code.split(":")[0] || ""]));
   appDb.run("INSERT OR IGNORE INTO roles (code, name, data_scope) VALUES ('super_admin', '超级管理员', 'all')");
   appDb.run("INSERT OR IGNORE INTO roles (code, name, data_scope) VALUES ('user', '普通用户', 'own')");
   const superRole = appDb.query("SELECT id FROM roles WHERE code = 'super_admin'").get() as any;
@@ -581,6 +582,8 @@ function ensureSharedTables() {
       ["id", "node_id", "key", "value", "datatype", "property_name_snapshot", "created_at"],
     );
   }
+
+  runSafe("ALTER TABLE attributes ADD COLUMN statement_json TEXT");
 
   if (tableExists("entity_classes") && tableHasForeignKeyToNodesOld("entity_classes")) {
     rebuildTableWithSchema(

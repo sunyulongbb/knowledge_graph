@@ -1,5 +1,7 @@
 import { db, getProjectByIdentifier } from "../db.ts";
 import { resolve } from "path";
+import { loadOntologyProperties } from '../ontology-properties.ts';
+import { normalizeDatatype, valueTypeFor, datatypeValueTypes } from '../../shared/wikidata.ts';
 import { mkdirSync, writeFileSync } from "fs";
 
 const UPLOADS_DIR = resolve(import.meta.dir, "..", "..", "..", "..", "uploads");
@@ -676,22 +678,19 @@ export async function handleSchemaRoutes(
     if (!ontologyId)
       return new Response("Missing ontology_id", { status: 400 });
     try {
-      const props = db
-        .query(
-          `SELECT p.*
-           FROM properties p
-           INNER JOIN ontology_properties op ON op.property_id = p.id
-           WHERE op.ontology_id = ?
-             AND ${propertyScopeClause("p")}
-           ORDER BY p.name, p.id`,
-        )
-        .all(ontologyId, ...propertyScopeParams())
+      const props = loadOntologyProperties(
+        db, ontologyId, hasProjectScope ? scopedProjectId : null,
+        url.searchParams.get('include_inherited') === '1',
+      )
         .map((row: any) => ({
           id: row.id,
           name: row.name,
           label: row.name,
-          datatype: row.datatype,
-          valuetype: row.valuetype,
+          datatype: normalizeDatatype(row.datatype, row.valuetype),
+          valuetype: valueTypeFor(normalizeDatatype(row.datatype, row.valuetype)),
+          tail_ontology_id: row.tail_ontology_id || '',
+          is_local: row.is_local === 1,
+          inherited: row.is_local !== 1,
           types: parseTypes(row.types),
           description: row.description,
         }));
@@ -1066,8 +1065,9 @@ export async function handleSchemaRoutes(
           : [normalizeAlias(row.name)],
         status: row.status || "active",
         label: row.name,
-        datatype: row.datatype,
-        valuetype: row.valuetype,
+        datatype: normalizeDatatype(row.datatype, row.valuetype),
+        valuetype: valueTypeFor(normalizeDatatype(row.datatype, row.valuetype)),
+        tail_ontology_id: row.tail_ontology_id || "",
         types: parseTypes(row.types),
         description: row.description,
       }));
@@ -1079,8 +1079,10 @@ export async function handleSchemaRoutes(
       const body = (await req.json()) as any;
       const name = body.name;
       const aliases = normalizeAliasList(body.alias || name);
-      const datatype = body.datatype || "string";
-      const valuetype = body.valuetype || null;
+      const datatype = normalizeDatatype(body.datatype, body.valuetype);
+      if (!datatypeValueTypes[datatype]) return new Response('Unsupported datatype', { status: 400 });
+      const valuetype = valueTypeFor(datatype);
+      const tailOntologyId = datatype === 'wikibase-item' ? String(body.tail_ontology_id || "").trim() : '';
       const types = parseTypes(body.types);
       const description = String(body.description || "").trim();
       const ontologyIds = Array.isArray(body.ontology_ids)
@@ -1106,7 +1108,7 @@ export async function handleSchemaRoutes(
         );
         db.run(
           `UPDATE properties
-           SET name = ?, alias = ?, status = 'active', datatype = ?, valuetype = ?, types = ?, description = ?, project_id = ?
+           SET name = ?, alias = ?, status = 'active', datatype = ?, valuetype = ?, types = ?, description = ?, project_id = ?, tail_ontology_id = ?
            WHERE id = ?`,
           [
             name,
@@ -1116,6 +1118,7 @@ export async function handleSchemaRoutes(
             JSON.stringify(types),
             description,
             projectId,
+            tailOntologyId,
             existingId,
           ],
         );
@@ -1157,14 +1160,15 @@ export async function handleSchemaRoutes(
       const id = nextId.toString();
 
       db.run(
-        "INSERT INTO properties (id, name, alias, status, datatype, valuetype, types, description, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO properties (id, name, alias, status, datatype, valuetype, tail_ontology_id, types, description, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
           id,
           name,
           aliasArrayToStorage(aliases),
           "active",
           datatype,
-          valuetype,
+            valuetype,
+            tailOntologyId,
           JSON.stringify(types),
           description,
           projectId,
@@ -1206,8 +1210,9 @@ export async function handleSchemaRoutes(
       const id = body.id;
       const name = body.name;
       const aliasTokens = normalizeAliasList(body.alias);
-      const datatype = body.datatype;
-      const valuetype = body.valuetype;
+      let datatype = body.datatype;
+      let valuetype = body.valuetype;
+      let tailOntologyId = body.tail_ontology_id;
       const types = body.types;
       const ontologyIds = Array.isArray(body.ontology_ids)
         ? body.ontology_ids
@@ -1223,6 +1228,13 @@ export async function handleSchemaRoutes(
         .get(id, ...propertyScopeParams()) as any;
       if (!existingProp?.id) {
         return new Response("Property not found", { status: 404 });
+      }
+      if (datatype !== undefined || valuetype !== undefined || tailOntologyId !== undefined) {
+        datatype = normalizeDatatype(datatype ?? existingProp.datatype, datatype === undefined ? existingProp.valuetype : '');
+        if (!datatypeValueTypes[datatype]) return new Response('Unsupported datatype', { status: 400 });
+        if (valuetype !== undefined && valuetype !== '' && valuetype !== valueTypeFor(datatype)) return new Response('Value type does not match datatype', { status: 400 });
+        valuetype = valueTypeFor(datatype);
+        if (datatype !== 'wikibase-item') tailOntologyId = '';
       }
 
       const status = body.status
@@ -1300,6 +1312,10 @@ export async function handleSchemaRoutes(
         if (valuetype !== undefined) {
           updates.push("valuetype = ?");
           params.push(valuetype);
+        }
+        if (tailOntologyId !== undefined) {
+          updates.push("tail_ontology_id = ?");
+          params.push(String(tailOntologyId || "").trim());
         }
         if (types !== undefined) {
           updates.push("types = ?");
@@ -1483,8 +1499,8 @@ export async function handleSchemaRoutes(
           : [normalizeAlias(row.name)],
         status: row.status || "active",
         label: row.name,
-        datatype: row.datatype,
-        valuetype: row.valuetype,
+        datatype: normalizeDatatype(row.datatype, row.valuetype),
+        valuetype: valueTypeFor(normalizeDatatype(row.datatype, row.valuetype)),
         types: parseTypes(row.types),
         description: row.description,
         ontology_ids: parseCsvField(row.ontology_ids_csv),
@@ -1577,8 +1593,8 @@ export async function handleSchemaRoutes(
             id: row.id,
             name: row.name,
             label: row.name,
-            datatype: row.datatype,
-            valuetype: row.valuetype,
+            datatype: normalizeDatatype(row.datatype, row.valuetype),
+            valuetype: valueTypeFor(normalizeDatatype(row.datatype, row.valuetype)),
             types: parseTypes(row.types),
             description: row.description,
             is_local: row.is_local === 1,

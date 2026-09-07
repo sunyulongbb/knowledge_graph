@@ -1,4 +1,5 @@
 import { db, getProjectByIdentifier } from "../db.ts";
+import { normalizeDatatype, normalizeValue, normalizeStatement, valueTypeFor, uiDatatype } from '../../shared/wikidata.ts';
 import { getCurrentUser, isAdmin } from "../auth-context.ts";
 import { mkdirSync, writeFileSync } from "fs";
 import { resolve } from "path";
@@ -889,7 +890,7 @@ export async function handleCoreKbRoutes(
         db.run(
           "UPDATE properties SET datatype = ?, valuetype = ?, types = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?",
           [
-            "wikibase-entityid",
+            "wikibase-item",
             "wikibase-entityid",
             JSON.stringify(mergedTypes),
             Array.from(descParts).join("\n"),
@@ -901,7 +902,7 @@ export async function handleCoreKbRoutes(
         db.run(
           "UPDATE properties SET datatype = ?, valuetype = ?, types = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id IS NULL",
           [
-            "wikibase-entityid",
+            "wikibase-item",
             "wikibase-entityid",
             JSON.stringify(mergedTypes),
             Array.from(descParts).join("\n"),
@@ -3726,9 +3727,15 @@ export async function handleCoreKbRoutes(
         params.push(body.type !== null ? String(body.type) : null);
       }
       if (body.images !== undefined) {
-        const imageValues = await prepareImageValues(
+        let imageValues = await prepareImageValues(
           normalizeMediaValues(body.images),
         );
+        if (body.appendImages === true) {
+          const existingRow = hasProjectScope
+            ? (db.query(`SELECT images FROM nodes WHERE id = ? AND ${scopedClause()}`).get(id, scopedProjectId) as any)
+            : (db.query("SELECT images FROM nodes WHERE id = ?").get(id) as any);
+          imageValues = Array.from(new Set([...normalizeMediaValues(existingRow?.images), ...imageValues]));
+        }
         updates.push("images = ?");
         params.push(JSON.stringify(imageValues));
       }
@@ -4626,7 +4633,7 @@ export async function handleCoreKbRoutes(
         return new Response("Property not found", { status: 404 });
 
       const oldDatatype =
-        (property.datatype || "string").toString().trim() || "string";
+        uiDatatype(property.datatype, property.valuetype);
       if (oldDatatype === newDatatype) {
         return Response.json({
           success: true,
@@ -4638,16 +4645,16 @@ export async function handleCoreKbRoutes(
       }
 
       const newValuetype =
-        newDatatype === "wikibase-entityid" ? "wikibase-entityid" : null;
+        valueTypeFor(newDatatype);
       if (hasProjectScope) {
         db.run(
           "UPDATE properties SET datatype = ?, valuetype = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?",
-          [newDatatype, newValuetype, propertyId, scopedProjectId],
+          [normalizeDatatype(newDatatype), newValuetype, propertyId, scopedProjectId],
         );
       } else {
         db.run(
           "UPDATE properties SET datatype = ?, valuetype = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id IS NULL",
-          [newDatatype, newValuetype, propertyId],
+          [normalizeDatatype(newDatatype), newValuetype, propertyId],
         );
       }
 
@@ -4966,14 +4973,54 @@ export async function handleCoreKbRoutes(
     return Response.json({ items: attrs });
   }
 
+  if (url.pathname === "/api/kb/entity/resolve" && method === "POST") {
+    try {
+      const body = (await req.json()) as any;
+      const name = String(body.name || "").trim();
+      const property = String(body.property || "").trim();
+      if (!name || !property) return Response.json({ error: "缺少实体名称或属性" }, { status: 400 });
+      const prop = db.query("SELECT tail_ontology_id, datatype, valuetype FROM properties WHERE id = ? OR name = ? LIMIT 1").get(property, property) as any;
+      if (normalizeDatatype(prop?.datatype, prop?.valuetype) !== 'wikibase-item') return Response.json({ error: '只有实体条目类型可自动创建尾实体' }, { status: 400 });
+      const tailType = String(prop?.tail_ontology_id || "").trim();
+      if (!tailType) return Response.json({ error: "该属性未配置尾实体本体类型，请先在属性管理中设置。" }, { status: 400 });
+      const existing = hasProjectScope
+        ? db.query("SELECT id,name FROM nodes WHERE name = ? AND type = ? AND project_id = ? LIMIT 1").get(name, tailType, scopedProjectId) as any
+        : db.query("SELECT id,name FROM nodes WHERE name = ? AND type = ? AND project_id IS NULL LIMIT 1").get(name, tailType) as any;
+      if (existing) return Response.json({ id: String(existing.id), label: existing.name, created: false });
+      const id = getNextNumericNodeId().toString();
+      db.run("INSERT INTO nodes (id, name, type, description, project_id) VALUES (?, ?, ?, '', ?)", [id, name, tailType, hasProjectScope ? scopedProjectId : null]);
+      return Response.json({ id, label: name, created: true });
+    } catch (e) {
+      console.error(e);
+      return Response.json({ error: "自动创建尾实体失败" }, { status: 500 });
+    }
+  }
+
   if (url.pathname === "/api/kb/attributes/save" && method === "POST") {
     try {
       const body = (await req.json()) as any;
       const nodeId = body.node_id || body.entity_id;
       const prop = body.property || body.prop;
-      let value = body.value;
-      const datatype = body.datatype || "string";
+      let value = body.datavalue?.value ?? body.value;
+      const propertyDefinition = db.query('SELECT datatype, valuetype FROM properties WHERE id = ?').get(prop) as any;
+      const configuredDatatype = propertyDefinition ? normalizeDatatype(propertyDefinition.datatype, propertyDefinition.valuetype) : '';
+      const canonicalDatatype = configuredDatatype && uiDatatype(configuredDatatype) === uiDatatype(body.datatype || configuredDatatype)
+        ? configuredDatatype : normalizeDatatype(body.datatype || configuredDatatype);
+      // Keep the legacy storage discriminator for existing graph queries; the
+      // canonical Wikibase statement is stored intact alongside it.
+      const datatype = uiDatatype(canonicalDatatype);
       const id = body.id || `attr/${crypto.randomUUID()}`;
+      const previous = db.query('SELECT statement_json FROM attributes WHERE id = ?').get(id) as any;
+      let previousStatement: any = {};
+      try { previousStatement = JSON.parse(previous?.statement_json || '{}'); } catch {}
+      const snaktype = body.snaktype || previousStatement.snaktype || 'value';
+      if (!['value', 'somevalue', 'novalue'].includes(snaktype)) return new Response('Invalid snaktype', { status: 400 });
+      if (body.datavalue?.type && body.datavalue.type !== valueTypeFor(canonicalDatatype)) return new Response('Value type does not match datatype', { status: 400 });
+      try {
+        value = snaktype === 'value' ? normalizeValue(canonicalDatatype, value) : null;
+      } catch (error) {
+        return new Response(error instanceof Error ? error.message : 'Invalid value', { status: 400 });
+      }
 
       if (datatype === "commonsMedia") {
         if (typeof value === "string" && value.startsWith("data:image/")) {
@@ -5013,15 +5060,21 @@ export async function handleCoreKbRoutes(
         }
       }
 
+      let statementJson: string;
+      try {
+        statementJson = JSON.stringify(normalizeStatement({ ...body, property: prop, datatype: canonicalDatatype, snaktype, datavalue: undefined, value }, previousStatement));
+      } catch (error) {
+        return new Response(error instanceof Error ? error.message : 'Invalid statement', { status: 400 });
+      }
       if (existing) {
         db.run(
-          "UPDATE attributes SET key = ?, value = ?, datatype = ?, property_name_snapshot = ? WHERE id = ?",
-          [prop, valueStr, datatype, snapshot, id],
+          "UPDATE attributes SET key = ?, value = ?, datatype = ?, property_name_snapshot = ?, statement_json = ? WHERE id = ?",
+          [prop, valueStr, datatype, snapshot, statementJson, id],
         );
       } else {
         db.run(
-          "INSERT INTO attributes (id, node_id, key, value, datatype, property_name_snapshot) VALUES (?, ?, ?, ?, ?, ?)",
-          [id, nodeId, prop, valueStr, datatype, snapshot],
+          "INSERT INTO attributes (id, node_id, key, value, datatype, property_name_snapshot, statement_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          [id, nodeId, prop, valueStr, datatype, snapshot, statementJson],
         );
       }
       syncPropertyTypeForNode(prop, nodeId);

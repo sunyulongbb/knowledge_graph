@@ -4,6 +4,19 @@
   let entityGrid = null;
   let renderedRows = [];
   const normalizeId = (node) => String(node?._id || node?.id || "").replace(/^entity\//, "").trim();
+  const imageOf = (node) => {
+    const raw = node?.image || node?.cover || node?.images || node?.covers || "";
+    let values = raw;
+    if (typeof raw === "string") {
+      try { values = JSON.parse(raw); } catch { values = raw.split(/[\n,，;；]+/); }
+    }
+    const first = Array.isArray(values) ? values.flat(Infinity).find(Boolean) : values;
+    return typeof first === "object" ? String(first?.url || first?.src || "") : String(first || "").trim();
+  };
+  const imageCell = (node) => {
+    const url = imageOf(node);
+    return url ? `<img class="entity-manage-image" src="${escapeHtml(url)}" alt="" loading="lazy">` : '<span class="entity-manage-image entity-manage-image--empty"><i class="fa-regular fa-image"></i></span>';
+  };
   const labelOf = (node) => String(node?.label_zh || node?.label || node?.name || "未命名实体").trim();
   const escapeHtml = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const scopedUrl = (path) => {
@@ -60,11 +73,13 @@
       const id = normalizeId(node); const tags = Array.isArray(node.tags) ? node.tags.join("、") : String(node.tags || "");
       return { id, select: "", name: labelOf(node), type: node.typeLabel || node.classLabel || node.type || "—", tags: tags || "—", updated: node.updated_at || node.created_at || "—" };
     });
+    renderedRows.forEach((row, index) => { row.image = imageCell(list[index]); });
     const module = await window.kbBusinessGridModuleReady;
     if (!entityGrid) {
       entityGrid = module.getBusinessGrid(host, {
         columns: [
           { id: "select", header: [{ text: "选择" }], width: 64, sortable: false, htmlEnable: true, template: (_value, row) => `<input class="entity-manage-check" type="checkbox" ${selected.has(String(row.id)) ? "checked" : ""}>` },
+          { id: "image", header: [{ text: "图片" }], width: 74, sortable: false, htmlEnable: true, template: (value) => value },
           { id: "name", header: [{ text: "名称", content: "inputFilter" }], minWidth: 180, gravity: 1.2 },
           { id: "type", header: [{ text: "类型", content: "selectFilter" }], width: 170 },
           { id: "tags", header: [{ text: "标签" }], minWidth: 160, gravity: 1 },

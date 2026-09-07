@@ -2838,13 +2838,14 @@ function __kbInitTableSelection() {
     const coverList = collectNodeCovers(node);
     const hasVideo = videoList.length > 0;
     const hasImage = imageList.length > 0;
+    const mediaImages = slot.dataset.skipAvatarImage === "1" ? imageList.slice(0, -1) : imageList;
 
     let mediaEl = null;
-    if (hasVideo || hasImage) {
+    if (hasVideo || mediaImages.length > 0) {
       mediaEl =
         window.kbTableLayoutMode === "grid"
           ? buildGridMediaElement(node, imageList, videoList, coverList)
-          : buildMixedMediaStripElement(node, imageList, videoList, coverList);
+          : buildMixedMediaStripElement(node, mediaImages, videoList, coverList);
     }
 
     slot.replaceChildren();
@@ -3061,7 +3062,7 @@ function __kbInitTableSelection() {
         avatar.className = "table-feed-avatar";
         avatar.title = label || nodeId || "实体";
         avatar.setAttribute("aria-label", "选中实体");
-        const avatarImage = imageList[0] ? resolveMediaUrl(imageList[0]) : "";
+        const avatarImage = imageList.length ? resolveMediaUrl(imageList[imageList.length - 1]) : "";
         if (avatarImage && !isAnimatedImageVideoUrl(avatarImage)) {
           const avatarImg = document.createElement("img");
           avatarImg.src = avatarImage;
@@ -3170,11 +3171,16 @@ function __kbInitTableSelection() {
         card.appendChild(tagList);
       }
 
-      if (hasVideo || hasImage) {
+      // 列表布局使用最后一张图片作为头像；媒体列表仅展示其余图片及视频。
+      const shouldRenderMediaSlot = isTableLayout
+        ? hasVideo || imageList.length > 1
+        : hasVideo || hasImage;
+      if (shouldRenderMediaSlot) {
         const mediaSlot = document.createElement("div");
         mediaSlot.className = "table-feed-media-slot";
         mediaSlot.dataset.nodeId = nodeId;
         mediaSlot.dataset.hydrated = "0";
+        if (isTableLayout && hasImage) mediaSlot.dataset.skipAvatarImage = "1";
         card.appendChild(mediaSlot);
       }
 
@@ -3292,7 +3298,7 @@ function __kbInitTableSelection() {
       const isTableViewActive = (window.kbViewMode || "table") === "table";
       if (!has) {
         if (!hasExistingSelection) {
-          if (!rows.length) {
+          if (!rows.length && !getRouteNodeIdFromUrl()) {
             setTableSelection("");
           }
         }

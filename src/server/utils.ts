@@ -1,4 +1,5 @@
 import { db } from "./db.ts";
+import { normalizeDatatype, normalizeValue, valueTypeFor, uiDatatype } from '../shared/wikidata.ts';
 
 // ── Formatters ───────────────────────────────────────────────────────────────
 
@@ -360,6 +361,8 @@ export function formatEdge(row: any) {
 }
 
 export function formatAttribute(row: any) {
+  let statement: any = {};
+  try { statement = JSON.parse(row.statement_json || '{}'); } catch {}
   let parsedValue: any = row.value;
   try {
     parsedValue = JSON.parse(row.value);
@@ -389,22 +392,22 @@ export function formatAttribute(row: any) {
         propName = prop.name;
       }
     }
-    propertyDatatype = String(prop?.datatype || prop?.valuetype || "").trim();
+    propertyDatatype = prop ? normalizeDatatype(prop.datatype, prop.valuetype) : '';
   } catch {}
 
-  const datatype = propertyDatatype && propertyDatatype.toLowerCase() !== "string"
-    ? propertyDatatype
-    : (row.datatype || "string");
+  const datatype = normalizeDatatype(statement.datatype || (propertyDatatype && propertyDatatype !== 'string' ? propertyDatatype : row.datatype));
+  if (valueTypeFor(datatype) === 'string' && typeof parsedValue !== 'string' && !Array.isArray(parsedValue) && !['somevalue', 'novalue'].includes(statement.snaktype)) parsedValue = String(row.value ?? '');
+  try { parsedValue = normalizeValue(datatype, parsedValue); } catch {}
 
   // Backward compatibility: older imports stored entity references as plain
   // strings even when the property definition has since been promoted to item.
-  if (datatype === "wikibase-entityid" && typeof parsedValue === "string") {
+  if (datatype === "wikibase-item" && typeof parsedValue === "string") {
     const rawId = parsedValue.match(/([Qq]\d+)$/)?.[1] || parsedValue.trim();
     if (rawId) parsedValue = [{ id: rawId.toUpperCase(), label: rawId.toUpperCase(), "entity-type": "item" }];
   }
 
   if (
-    datatype === "wikibase-entityid" &&
+    valueTypeFor(datatype) === "wikibase-entityid" &&
     parsedValue &&
     typeof parsedValue === "object"
   ) {
@@ -456,10 +459,15 @@ export function formatAttribute(row: any) {
     property: row.key,
     property_label_zh: propName,
     datatype,
+    ui_datatype: uiDatatype(datatype),
+    snaktype: statement.snaktype || 'value',
+    rank: statement.rank || 'normal',
+    qualifiers: statement.qualifiers || {},
+    references: statement.references || [],
     value: parsedValue,
-    datavalue: {
+    datavalue: statement.snaktype && statement.snaktype !== 'value' ? undefined : {
       value: parsedValue,
-      type: datatype,
+      type: valueTypeFor(datatype),
     },
   };
 }
@@ -671,7 +679,7 @@ export function ensurePropertyRecord(
   try {
     db.run(
       "INSERT INTO properties (id, name, datatype, valuetype, types, description, project_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [newId, propertyName, "string", valuetype || null, "[]", "", projectId],
+      [newId, propertyName, normalizeDatatype('string', valuetype), valueTypeFor(normalizeDatatype('string', valuetype)), "[]", "", projectId],
     );
     return { id: newId, created: true };
   } catch (err) {
@@ -811,6 +819,7 @@ export function normalizeEntityAttributeValues(
       undefined;
     const qualifier = raw?.qualifier ?? raw?.value?.qualifier ?? undefined;
     map.set(id, {
+      ...(raw && typeof raw === 'object' ? raw : {}),
       "entity-type": entityType,
       id,
       ...(Number.isFinite(numericId)
@@ -848,11 +857,13 @@ export function ensureAttributeRecord(
   if (!nodeId || !propertyId) {
     return { created: false, updated: false };
   }
-  const datatype = (options.datatype || "string").trim() || "string";
+  const canonicalDatatype = normalizeDatatype(options.datatype);
+  const datatype = uiDatatype(canonicalDatatype);
   const normalizedValues =
     datatype === "wikibase-entityid"
       ? normalizeEntityAttributeValues(values)
-      : normalizeStringAttributeValues(values);
+      : valueTypeFor(canonicalDatatype) === 'string' ? normalizeStringAttributeValues(values)
+      : values.map((value) => normalizeValue(canonicalDatatype, value));
   if (!normalizedValues.length) {
     return { created: false, updated: false };
   }
@@ -887,6 +898,8 @@ export function ensureAttributeRecord(
     existingValues = normalizeEntityAttributeValues(existingValues);
   } else if (existingDatatype === "string" && datatype === "string") {
     existingValues = normalizeStringAttributeValues(existingValues);
+  } else if (existingDatatype === datatype && valueTypeFor(canonicalDatatype) !== 'string') {
+    existingValues = existingValues.map((value) => normalizeValue(canonicalDatatype, value));
   } else {
     existingValues = [];
   }
@@ -901,6 +914,8 @@ export function ensureAttributeRecord(
       map.set(val.id, val);
     }
     mergedValues = Array.from(map.values());
+  } else if (valueTypeFor(canonicalDatatype) !== 'string') {
+    mergedValues = Array.from(new Map([...existingValues, ...normalizedValues].map((value) => [JSON.stringify(value), value])).values());
   } else {
     mergedValues = Array.from(
       new Set([

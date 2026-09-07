@@ -50,7 +50,7 @@
     const previousValue = getUrlParam(name) || "";
     const url = new URL(window.location.href);
     url.searchParams.set(name, value);
-    if (name === "db") {
+    if (name === "db" && previousValue !== String(value || "")) {
       url.searchParams.delete("node");
       url.searchParams.delete("type");
       url.searchParams.delete("class_id");
@@ -736,6 +736,11 @@
     document.addEventListener("DOMContentLoaded", function () {
       if (window.kbCy && typeof window.kbCy.nodes === "function") {
         setTimeout(function () {
+          const route = typeof window.getRouteStateFromHash === "function"
+            ? window.getRouteStateFromHash()
+            : null;
+          const hashParams = new URLSearchParams(window.location.hash.replace(/^#\??/, ""));
+          if (route?.node || hashParams.get("node") || getUrlParam("node") || window.kbSelectedRowId) return;
           const nodes = window.kbCy.nodes();
           if (nodes && nodes.length > 0) {
             nodes[0].select();
@@ -939,7 +944,7 @@
 
   window.addEventListener("kb:url-param-changed", (event) => {
     const detail = event && event.detail ? event.detail : {};
-    if ((detail.key || "") === "db") {
+    if ((detail.key || "") === "db" && detail.previousValue !== detail.value) {
       try {
         if (typeof window.resetFormToAdd === "function")
           window.resetFormToAdd();

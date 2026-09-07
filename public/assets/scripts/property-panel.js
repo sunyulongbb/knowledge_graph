@@ -4,6 +4,21 @@
   const dom = shared.dom || {};
   const byId = dom.byId || ((id) => document.getElementById(id));
   const urlParams = new URLSearchParams(window.location.search);
+  const wikidata = window.KbWikidata;
+  const datatypeSelect = byId("propDatatype");
+  const valueTypeSelect = byId("propValuetype");
+  if (datatypeSelect && valueTypeSelect) {
+    datatypeSelect.replaceChildren(...Object.keys(wikidata.datatypeValueTypes).map((type) => new Option(type, type)));
+    valueTypeSelect.replaceChildren(...[...new Set(Object.values(wikidata.datatypeValueTypes))].map((type) => new Option(type, type)));
+    valueTypeSelect.disabled = true;
+    valueTypeSelect.title = "由数据类型自动关联";
+    datatypeSelect.addEventListener("change", () => {
+      valueTypeSelect.value = wikidata.valueTypeFor(datatypeSelect.value);
+      const tail = byId("propTailOntologyWrap");
+      if (tail) tail.style.display = datatypeSelect.value === "wikibase-item" ? "" : "none";
+      if (datatypeSelect.value !== "wikibase-item" && byId("propTailOntologyId")) byId("propTailOntologyId").value = "";
+    });
+  }
 
   let propertyPage = parseInt(urlParams.get("prop_page") || "1", 10);
   let propertyPageSize = parseInt(urlParams.get("prop_limit") || "20", 10);
@@ -248,14 +263,61 @@
   }
 
   function renderPropertyDataType(prop) {
-    return `<span class="ontology-type-chip">${escapeHtml(prop.datatype || "string")}</span>`;
+    return renderPropertyQuickSelect(prop, "datatype", "propDatatype", prop.datatype || "string");
   }
 
   function renderPropertyValueType(prop) {
-    const valueType = String(prop.valuetype || "").trim();
-    return valueType
-      ? `<span class="ontology-pill">${escapeHtml(valueType)}</span>`
-      : '<span class="muted">—</span>';
+    return `<span class="ontology-type-chip" title="由数据类型自动关联">${escapeHtml(wikidata.valueTypeFor(wikidata.normalizeDatatype(prop.datatype, prop.valuetype)))}</span>`;
+  }
+
+  const propertyQuickSaves = new Set();
+
+  function renderPropertyQuickSelect(prop, field, optionsId, value) {
+    const options = field === "tail_ontology_id"
+      ? [{ value: "", text: "未指定" }, ...ontologyItems.map((item) => ({ value: item.id, text: item.name || item.id }))]
+      : Array.from(byId(optionsId)?.options || []).map((option) => ({ value: option.value, text: option.text }));
+    if (value && !options.some((option) => option.value === value)) options.push({ value, text: value });
+    const disabled = propertyQuickSaves.has(String(prop.id)) || (field === "tail_ontology_id" && wikidata.normalizeDatatype(prop.datatype, prop.valuetype) !== "wikibase-item");
+    const label = { datatype: "数据类型", valuetype: "数值类型", tail_ontology_id: "尾实体本体类型" }[field];
+    return `<select class="kb-select property-quick-edit" style="width:100%;min-width:0" data-property-id="${escapeHtml(prop.id)}" data-field="${field}" aria-label="${label}" ${disabled ? "disabled" : ""}>${options.map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === value ? "selected" : ""}>${escapeHtml(option.text)}</option>`).join("")}</select>`;
+  }
+
+  async function savePropertyQuickEdit(event) {
+    const input = event.target.closest(".property-quick-edit");
+    if (!input) return;
+    const id = input.dataset.propertyId;
+    const field = input.dataset.field;
+    const row = propertyGridRows.find((item) => String(item.id) === id);
+    if (!row || propertyQuickSaves.has(id)) return;
+    const previous = row.source[field] || "";
+    const value = input.value;
+    if (previous === value) return;
+    propertyQuickSaves.add(id);
+    const controls = Array.from(propertyTable.querySelectorAll(".property-quick-edit")).filter((control) => control.dataset.propertyId === id);
+    controls.forEach((control) => { control.disabled = true; });
+    const patch = { id, [field]: value };
+    if (field === "datatype") {
+      patch.valuetype = wikidata.valueTypeFor(value);
+      if (value !== "wikibase-item") patch.tail_ontology_id = "";
+    }
+    try {
+      await apiJson(appendCurrentDbToUrl(new URL("/api/kb/property_update", window.location.origin)).toString(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      Object.assign(row.source, patch);
+    } catch (err) {
+      input.value = previous;
+      alert("保存属性失败: " + (err?.message || err));
+    } finally {
+      propertyQuickSaves.delete(id);
+      row.dataTypeHtml = renderPropertyDataType(row.source);
+      row.valueTypeHtml = renderPropertyValueType(row.source);
+      row.tailEntityHtml = renderPropertyQuickSelect(row.source, "tail_ontology_id", "", row.source.tail_ontology_id || "");
+      propertyGrid.update(propertyGridRows);
+      updatePropertySelectedStyles();
+    }
   }
 
   async function loadOntologyTree() {
@@ -292,6 +354,13 @@
         selectedOntologyId = "";
       }
       renderOntologyTree(treeItems);
+      if (propertyGrid) {
+        propertyGridRows.forEach((row) => {
+          row.tailEntityHtml = renderPropertyQuickSelect(row.source, "tail_ontology_id", "", row.source.tail_ontology_id || "");
+        });
+        propertyGrid.update(propertyGridRows);
+        updatePropertySelectedStyles();
+      }
       if (searchValue && ontologyTreeController)
         ontologyTreeController.filter(searchValue);
       updateOntologySummary();
@@ -342,6 +411,10 @@
   async function renderPropertyGrid(rows) {
     const module = await window.kbBusinessGridModuleReady;
     propertyGridRows = rows;
+    if (!propertyTable.dataset.quickEditBound) {
+      propertyTable.dataset.quickEditBound = "1";
+      propertyTable.addEventListener("change", savePropertyQuickEdit);
+    }
     if (!propertyGrid) {
       propertyGrid = module.getBusinessGrid(propertyTable, {
         columns: [
@@ -381,6 +454,14 @@
             sortable: false,
           },
           {
+            id: "tailEntityHtml",
+            header: [{ text: "尾实体" }],
+            minWidth: 160,
+            gravity: 1.2,
+            htmlEnable: true,
+            sortable: false,
+          },
+          {
             id: "actions",
             header: [{ text: "操作" }],
             minWidth: 166,
@@ -404,6 +485,7 @@
           updatePropertySelectedStyles();
         },
         onCellClick: async (row, column, event) => {
+          if (event.target.closest(".property-quick-edit")) return;
           const id = String(row.id || "");
           if (
             column.id === "select" ||
@@ -485,6 +567,8 @@
 
       const gridRows = [];
       for (const prop of list) {
+        prop.datatype = wikidata.normalizeDatatype(prop.datatype, prop.valuetype);
+        prop.valuetype = wikidata.valueTypeFor(prop.datatype);
         const linkedNames = Array.isArray(prop.ontology_names)
           ? prop.ontology_names.filter(Boolean)
           : [];
@@ -500,6 +584,7 @@
           name: prop.name || prop.label || "",
           datatype: prop.datatype || "string",
           valuetype: prop.valuetype || "",
+          tail_ontology_id: prop.tail_ontology_id || "",
           linked: isLinkedToCurrent,
           ontology_ids: Array.isArray(prop.ontology_ids)
             ? prop.ontology_ids
@@ -511,6 +596,7 @@
           name: prop.label || prop.name || "",
           dataTypeHtml: renderPropertyDataType(prop),
           valueTypeHtml: renderPropertyValueType(prop),
+          tailEntityHtml: renderPropertyQuickSelect(prop, "tail_ontology_id", "", prop.tail_ontology_id || ""),
           linked: isLinkedToCurrent,
           source,
           actions: `${actionHtml}
@@ -553,8 +639,22 @@
     title.textContent = mode === "edit" ? "编辑属性" : "新增属性";
     byId("propId").value = data.id || "";
     byId("propName").value = data.name || "";
-    byId("propDatatype").value = data.datatype || "string";
-    byId("propValuetype").value = data.valuetype || "";
+    byId("propDatatype").value = wikidata.normalizeDatatype(data.datatype, data.valuetype);
+    byId("propValuetype").value = wikidata.valueTypeFor(byId("propDatatype").value);
+    const tailWrap = byId("propTailOntologyWrap");
+    const tailSelect = byId("propTailOntologyId");
+    if (tailSelect) {
+      tailSelect.innerHTML = `<option value="">请选择本体类型</option>${ontologyItems.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name || item.id)}</option>`).join("")}`;
+      tailSelect.value = data.tail_ontology_id || "";
+    }
+    const syncTailOntology = () => {
+      if (!tailWrap) return;
+      const isEntityValue = byId("propDatatype")?.value === "wikibase-item";
+      tailWrap.style.display = isEntityValue ? "" : "none";
+      if (!isEntityValue && tailSelect) tailSelect.value = "";
+    };
+    syncTailOntology();
+    byId("propValuetype")?.addEventListener("change", syncTailOntology);
     form.dataset.mode = mode;
     form.dataset.originalLinked = originalLinked ? "1" : "0";
 
@@ -860,7 +960,8 @@
         const id = (byId("propId")?.value || "").trim();
         const name = (byId("propName")?.value || "").trim();
         const datatype = (byId("propDatatype")?.value || "string").trim();
-        const valuetype = (byId("propValuetype")?.value || "").trim();
+        const valuetype = wikidata.valueTypeFor(datatype);
+        const tail_ontology_id = datatype === "wikibase-item" ? (byId("propTailOntologyId")?.value || "").trim() : "";
         const assignToOntology = Boolean(byId("propAssignOntology")?.checked);
         const originalLinked = propertyForm.dataset.originalLinked === "1";
         if (!name) {
@@ -878,7 +979,7 @@
           const result = await apiJson(url.toString(), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id, name, datatype, valuetype }),
+            body: JSON.stringify({ id, name, datatype, valuetype, tail_ontology_id }),
           });
           const propertyId = id || result?.id;
           if (selectedOntologyId && propertyId) {

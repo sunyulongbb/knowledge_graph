@@ -1552,7 +1552,7 @@
       if (el)
         el.textContent = window.kbSelectedSchemaPropId
           ? `当前属性：${window.kbSelectedSchemaPropLabel} (${window.kbSelectedSchemaPropId})`
-          : "当前属性：未选择";
+          : "";
     } catch {}
     applySchemaSelectionHighlight();
     try {
@@ -2468,7 +2468,7 @@
         it.title ||
         it.id ||
         "";
-      opt.textContent = nameStr + (uiType ? `  [${uiType}]` : "");
+      opt.textContent = nameStr + (uiType ? `  [${uiType}]` : "") + (it.inherited ? "（继承）" : "");
       opt.dataset.propLabel = nameStr;
       opt.dataset.dtype = it.datatype || "";
       opt.dataset.valuetype = it.valuetype || "";
@@ -2650,13 +2650,11 @@
       window.kbSelectedClassId = null;
       try {
         const ontologyUrl = appendCurrentDbToUrl(
-          new URL("/api/kb/property_search", window.location.origin),
+          new URL("/api/kb/ontology/property", window.location.origin),
         );
         ontologyUrl.searchParams.set("q", "");
         ontologyUrl.searchParams.set("ontology_id", ontology.id);
-        ontologyUrl.searchParams.set("association_mode", "linked");
-        ontologyUrl.searchParams.set("limit", "40");
-        ontologyUrl.searchParams.set("offset", "0");
+        ontologyUrl.searchParams.set("include_inherited", "1");
         const ontologyData = await apiGet(ontologyUrl.toString());
         const ontologyItems = Array.isArray(ontologyData?.items)
           ? ontologyData.items

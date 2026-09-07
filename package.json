@@ -6,7 +6,8 @@
   "scripts": {
     "build:widgets": "bun build public/assets/scripts/ontology-tree.ts public/assets/scripts/business-grid.ts --outdir public/assets/generated --target browser --format esm --minify",
     "build:ontology-tree": "bun run build:widgets",
-    "build": "bun run build:widgets",
+    "build:wikidata": "bun build public/assets/scripts/wikidata-model.ts --outfile=public/assets/generated/wikidata.js --target=browser --format=iife",
+    "build": "bun run build:wikidata && bun run build:widgets",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "dev": "bun run src/server/index.ts",

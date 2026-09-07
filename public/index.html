@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>知识库</title>
 
+  <script src="/assets/generated/wikidata.js"></script>
   <script src="/js/marked.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
   <link rel="stylesheet" href="/node_modules/vidstack/player/styles/default/theme.css" />
@@ -35,7 +36,7 @@
     window["@tiptap/starter-kit"] =
       window["@tiptap/starter-kit"] || window.TiptapStarterKit;
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20260904-21" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20260907-2" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -2486,6 +2487,13 @@
                     <input type="hidden" id="attrProp" />
                     <input type="hidden" id="attrPropLabel" />
                     <input type="hidden" id="attrType" />
+                    <label style="font-size:12px">值状态
+                      <select id="attrSnaktype" class="kb-select">
+                        <option value="value">具体值</option>
+                        <option value="somevalue">未知值</option>
+                        <option value="novalue">无值</option>
+                      </select>
+                    </label>
                     <div class="wd-value-action-row">
                       <div class="wd-value-input-row">
                         <div id="attrDatatypeGroups" class="wd-dtype-groups">
@@ -2500,7 +2508,7 @@
                           </div>
                           <!-- time (date) -->
                           <div class="dtype-group" data-dtype="time" style="display:none; gap:6px">
-                            <input id="attrValueDate" type="date" class="wd-input" style="flex:1" />
+                            <input id="attrValueDate" type="text" class="wd-input" style="flex:1" placeholder="如 2026-09-07、2026年9月7日 或 2026/9/7 14:30" aria-label="时间文本" />
                           </div>
                           <!-- quantity -->
                           <div class="dtype-group wd-dtype-row" data-dtype="quantity"
@@ -4967,6 +4975,11 @@
             <option value="monolingualtext">Monolingual Text (多语言文本)</option>
             <option value="commonsMedia">Image (图像)</option>
           </select>
+        </div>
+        <div class="field" id="propTailOntologyWrap" style="margin-bottom: 16px; display:none;">
+          <label style="display: block; margin-bottom: 4px; font-size: 12px; color: var(--muted);">尾实体本体类型</label>
+          <select id="propTailOntologyId" class="kb-select" style="width:100%;"><option value="">请选择本体类型</option></select>
+          <div class="muted" style="margin-top:4px;font-size:12px;">属性值为文本时，将自动创建该本体类型的实体。</div>
         </div>
         <div class="field" style="margin-bottom: 16px;">
           <label style="display: block; margin-bottom: 4px; font-size: 12px; color: var(--muted);">值类型 (Value
@@ -16716,27 +16729,13 @@
       imageUploadInput.addEventListener('change', async () => {
         const files = imageUploadInput.files ? Array.from(imageUploadInput.files) : [];
         if (!files.length) return;
-        const nodeId = getSelectedNodeId();
-        if (!nodeId) {
-          try {
-            const images = await Promise.all(files.map((file) => readFileAsDataUrl(file)));
-            images.forEach((dataUrl) => setPendingEntityImagePreview((dataUrl || '').toString(), { append: true }));
-            if (addMsg) addMsg.textContent = `已添加 ${images.length} 张图片，发布后将自动保存。`;
-          } catch (err) {
-            console.error('读取本地图片失败:', err);
-            if (addMsg) addMsg.textContent = '图片读取失败';
-          }
-          return;
-        }
         try {
-          for (const file of files) {
-            const imageUrl = await uploadNodeImageFile(file);
-            await saveEntityImage(nodeId, imageUrl);
-          }
-          window.kbPendingEntityImageDataUrl = '';
+          const images = await Promise.all(files.map((file) => readFileAsDataUrl(file)));
+          images.forEach((dataUrl) => setPendingEntityImagePreview((dataUrl || '').toString(), { append: true }));
+          if (addMsg) addMsg.textContent = `已添加 ${images.length} 张图片，点击保存后同步到知识。`;
         } catch (err) {
-          console.error('节点图像上传失败:', err);
-          alert('节点图像上传失败: ' + (err?.message || err));
+          console.error('读取本地图片失败:', err);
+          if (addMsg) addMsg.textContent = '图片读取失败';
         }
       });
 
@@ -16793,27 +16792,10 @@
         }
         if (imageFile) {
           ev.preventDefault();
-          const selectedId = getSelectedNodeId();
-          if (!selectedId) {
-            try {
-              const dataUrl = await readFileAsDataUrl(imageFile);
-              setPendingEntityImagePreview((dataUrl || '').toString(), { append: true });
-              if (addMsg) addMsg.textContent = '';
-            } catch (err) {
-              console.error('粘贴图片读取失败', err);
-            }
-            return;
-          }
           try {
-            try {
-              const localDataUrl = await readFileAsDataUrl(imageFile);
-              applyInstantEntityImagePreview(selectedId, localDataUrl || '');
-            } catch (previewErr) {
-              console.warn('粘贴图片预览失败', previewErr);
-            }
-            const imageUrl = await uploadNodeImageFile(imageFile);
-            await saveEntityImage(selectedId, imageUrl);
-            window.kbPendingEntityImageDataUrl = '';
+            const dataUrl = await readFileAsDataUrl(imageFile);
+            setPendingEntityImagePreview((dataUrl || '').toString(), { append: true });
+            if (addMsg) addMsg.textContent = '已添加图片预览，点击保存后同步到知识。';
           } catch (err) {
             console.error('粘贴图片上传失败', err);
             alert('粘贴图片上传失败: ' + (err?.message || err));
@@ -16824,20 +16806,8 @@
         if (imageUrlFromClipboard) {
           ev.preventDefault();
           const imageUrl = imageUrlFromClipboard;
-          const selectedId = getSelectedNodeId();
-          if (!selectedId) {
-            setPendingEntityImagePreview(imageUrl, { append: true });
-            if (addMsg) addMsg.textContent = '';
-            return;
-          }
-          applyInstantEntityImagePreview(selectedId, imageUrl);
-          try {
-            await saveEntityImage(selectedId, imageUrl);
-            window.kbPendingEntityImageDataUrl = '';
-          } catch (err) {
-            console.error('粘贴图片链接保存失败', err);
-            alert('粘贴图片链接失败: ' + (err?.message || ''));
-          }
+          setPendingEntityImagePreview(imageUrl, { append: true });
+          if (addMsg) addMsg.textContent = '已添加图片预览，点击保存后同步到知识。';
         }
       };
       // 编辑器自身会在冒泡阶段拦截粘贴。新增状态在捕获阶段优先处理图片，
@@ -18179,7 +18149,7 @@
           tags,
           mentions: mentionMap,
           type: nodeType || null,
-          ...(pendingHeaderImages.length ? { images: pendingHeaderImages } : {}),
+          ...(pendingHeaderImages.length ? { images: pendingHeaderImages, ...(isEdit ? { appendImages: true } : {}) } : {}),
           ...(posterData
             ? {
                 covers: [posterData],
@@ -19341,7 +19311,7 @@
           try {
             resetAttrForm();
             const el = document.getElementById("attrCurrentProp");
-            if (el) el.textContent = "当前属性：未选择";
+            if (el) el.textContent = "";
             window.kbSelectedSchemaPropId = "";
             window.kbSelectedSchemaPropLabel = "";
             // Clear schema list highlight if any exists before reload
@@ -19635,7 +19605,7 @@
   <!-- Class Modal -->
   <div id="entityManageModal" class="modal-overlay" style="display:none;position:fixed;inset:0;z-index:2200;align-items:center;justify-content:center;">
     <div class="entity-manage-modal">
-      <div class="entity-manage-modal__head"><div><strong>管理表格</strong><small id="entityManageCount">已选 0 项</small></div><button id="btnEntityManageClose" class="btn icon" type="button" aria-label="关闭">×</button></div>
+      <div class="entity-manage-modal__head"><div><strong>管理表格</strong><small id="entityManageCount">已选 0 项</small></div><label class="entity-manage-select-all"><input id="entityManageCheckAll" type="checkbox" /> 全选当前页</label><button id="btnEntityManageClose" class="btn icon" type="button" aria-label="关闭">×</button></div>
       <div class="entity-manage-toolbar"><input id="entityManageSearch" class="app-search-input kb-input sm" placeholder="搜索知识" autocomplete="off" /><span class="entity-manage-hint">单击选中，双击查看详情</span><button id="btnEntityManageExport" class="btn sm" type="button">导出</button></div>
       <div class="entity-manage-bulk"><input id="entityManageType" class="kb-input sm" placeholder="批量设置类型" /><button id="btnEntityManageApplyType" class="btn sm" type="button">应用类型</button><input id="entityManageTag" class="kb-input sm" placeholder="批量添加标签" /><button id="btnEntityManageApplyTag" class="btn sm" type="button">添加标签</button><button id="btnEntityManageDelete" class="btn sm danger" type="button">删除所选</button></div>
       <div class="entity-manage-table-wrap"><div id="entityManageRows" class="business-grid-host" aria-label="实体批量管理表格"></div></div>
@@ -19707,11 +19677,11 @@
   <script>
       window.kbOntologyTreeModuleReady = import("/assets/generated/ontology-tree.js?v=20260904-1");
   </script>
-  <script src="/assets/scripts/property-panel.js?v=20260904-9"></script>
+  <script src="/assets/scripts/property-panel.js?v=20260907-1"></script>
   <script src="/assets/scripts/table-panel.js?v=20260906-2"></script>
-  <script src="/assets/scripts/table-selection.js"></script>
-  <script src="/assets/scripts/entity-manage-table.js"></script>
-  <script src="/assets/scripts/attr-panel.js"></script>
+  <script src="/assets/scripts/table-selection.js?v=20260907-3"></script>
+  <script src="/assets/scripts/entity-manage-table.js?v=20260907-2"></script>
+  <script src="/assets/scripts/attr-panel.js?v=20260907-1"></script>
   <!-- relation-panel.js 已移除，使用 edgehandles 拖拽创建关系 -->
   <script src="/assets/scripts/schema-panel.js?v=20260904-1"></script>
   <script src="/assets/scripts/detail-panel.js?v=20260904-5"></script>
