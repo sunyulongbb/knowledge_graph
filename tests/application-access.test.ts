@@ -87,3 +87,23 @@ test('owners can directly add members, but permissions and application IDs remai
     expect(db.query('SELECT count(*) AS n FROM application_members').get()).toEqual({ n: 0 });
   } finally { db.close(); }
 });
+
+test('the first maintenance applicant atomically becomes owner of a legacy application', async () => {
+  const { db, call } = setup();
+  try {
+    db.run("INSERT INTO projects(name,title,file) VALUES('legacy','Legacy','app.sqlite')");
+    const first = await call('/api/applications/1/request', 2, { message: 'I will maintain it' });
+    expect(first!.status).toBe(200);
+    expect(await first!.json()).toEqual({ success: true, claimedOwnership: true });
+    expect((db.query('SELECT owner_user_id FROM projects WHERE id=1').get() as any).owner_user_id).toBe(2);
+    expect((db.query('SELECT count(*) AS n FROM application_requests WHERE project_id=1').get() as any).n).toBe(0);
+    expect((await (await call('/api/kb/list_projects', 2))!.json()).projects).toHaveLength(1);
+
+    const second = await call('/api/applications/1/request', 3, { message: 'Can I help?' });
+    expect(second!.status).toBe(200);
+    expect(await second!.json()).toEqual({ success: true, claimedOwnership: false });
+    expect((db.query('SELECT owner_user_id FROM projects WHERE id=1').get() as any).owner_user_id).toBe(2);
+    expect((db.query("SELECT status FROM application_requests WHERE project_id=1 AND user_id=3").get() as any).status).toBe('pending');
+    expect((await (await call('/api/notifications', 2))!.json()).unread).toBe(1);
+  } finally { db.close(); }
+});

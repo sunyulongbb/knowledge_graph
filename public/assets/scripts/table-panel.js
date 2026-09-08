@@ -12,6 +12,8 @@
   let tblActiveClassLabel = "";
   let tblGridLoadCheckRaf = 0;
   let tblTypeTreeCache = null;
+  let tableTypeTreeController = null;
+  let tableTypeTreeHost = null;
   const EMPTY_TYPE_FILTER = "__EMPTY_NODE_TYPE__";
 
   const tblPaginationControls = document.getElementById(
@@ -313,90 +315,46 @@
     btnTblTypeFilterTree?.setAttribute("aria-expanded", "false");
   }
 
-  function renderTableTypeTreeNodes(items, depth = 0) {
-    const frag = document.createDocumentFragment();
-    (Array.isArray(items) ? items : []).forEach((item) => {
-      if (!item) return;
-      const itemId = String(item.id || item.value || "").trim();
-      const itemName = String(
-        item.name || item.label || item.alias || itemId,
-      ).trim();
-      if (!itemId || !itemName) return;
-      const childItems = Array.isArray(item.children) ? item.children : [];
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className =
-        "ontology-dropdown-item ontology-dropdown-tree-item" +
-        (itemId === tblActiveType ? " selected" : "");
-      button.dataset.value = itemId;
-      button.style.setProperty("--ontology-tree-depth", String(depth));
-      const row = document.createElement("span");
-      row.className = "ontology-dropdown-tree-item__row";
-      const label = document.createElement("span");
-      label.className = "ontology-dropdown-tree-item__label";
-      label.textContent = itemName;
-      row.appendChild(label);
-      if (childItems.length) {
-        const meta = document.createElement("span");
-        meta.className = "ontology-dropdown-tree-item__meta";
-        meta.textContent = String(childItems.length);
-        row.appendChild(meta);
-      }
-      button.appendChild(row);
-      button.addEventListener("mousedown", (event) => {
-        event.preventDefault();
-        setTableTypeFilterValue(itemId);
-      });
-      frag.appendChild(button);
-      if (childItems.length) {
-        frag.appendChild(renderTableTypeTreeNodes(childItems, depth + 1));
-      }
-    });
-    return frag;
-  }
-
   async function buildTableTypeTreeDropdown() {
     if (!tblTypeFilterTreeDropdown) return;
-    tblTypeFilterTreeDropdown.innerHTML = "";
-
-    const createAction = (labelText, value, selected) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className =
-        "ontology-dropdown-item ontology-dropdown-tree-item" +
-        (selected ? " selected" : "");
-      const row = document.createElement("span");
-      row.className = "ontology-dropdown-tree-item__row";
-      const label = document.createElement("span");
-      label.className = "ontology-dropdown-tree-item__label";
-      label.textContent = labelText;
-      row.appendChild(label);
-      button.appendChild(row);
-      button.addEventListener("mousedown", (event) => {
-        event.preventDefault();
-        setTableTypeFilterValue(value);
-      });
-      return button;
-    };
-
-    tblTypeFilterTreeDropdown.appendChild(
-      createAction("\u5168\u90e8\u7c7b\u578b", "", !tblActiveType),
-    );
-    tblTypeFilterTreeDropdown.appendChild(
-      createAction(
-        "\u65e0\u7c7b\u578b",
-        EMPTY_TYPE_FILTER,
-        tblActiveType === EMPTY_TYPE_FILTER,
-      ),
-    );
-
     try {
-      const treeItems = await loadTableTypeTree();
-      tblTypeFilterTreeDropdown.appendChild(
-        renderTableTypeTreeNodes(treeItems, 0),
+      const [treeItems, treeModule] = await Promise.all([
+        loadTableTypeTree(),
+        window.kbOntologyTreeModuleReady,
+      ]);
+      if (!tableTypeTreeController) {
+        tblTypeFilterTreeDropdown.innerHTML = "";
+        tableTypeTreeHost = document.createElement("div");
+        tableTypeTreeHost.className = "ontology-dropdown-plugin-host";
+        tblTypeFilterTreeDropdown.appendChild(tableTypeTreeHost);
+        tableTypeTreeController = new treeModule.OntologyTreeController(tableTypeTreeHost, {
+          allLabel: "全部类型",
+          showAllButton: true,
+          enableDrag: false,
+          enableContextMenu: false,
+          disableReadonlyItems: false,
+          toggleSelection: false,
+          storageKey: "kb:ontology-tree-state:table-filter",
+          onSelect: (id) => setTableTypeFilterValue(id),
+          onEdit: () => {},
+          onAddChild: () => {},
+          onDelete: () => {},
+          onReload: () => buildTableTypeTreeDropdown(),
+        });
+      }
+      tableTypeTreeController.update(
+        treeItems,
+        tblActiveType === EMPTY_TYPE_FILTER ? "" : tblActiveType,
       );
+      const untyped = document.createElement("button");
+      untyped.type = "button";
+      untyped.className = `ontology-tree-all${tblActiveType === EMPTY_TYPE_FILTER ? " is-selected" : ""}`;
+      untyped.textContent = "无类型";
+      untyped.addEventListener("click", () => setTableTypeFilterValue(EMPTY_TYPE_FILTER));
+      tableTypeTreeHost?.appendChild(untyped);
     } catch (error) {
       console.warn("buildTableTypeTreeDropdown failed", error);
+      tblTypeFilterTreeDropdown.innerHTML = '<div class="ontology-tree-state">本体树加载失败</div>';
     }
   }
 

@@ -23,6 +23,26 @@
 (function () {
   // --- Project sidebar logic ---
   let projectListVersion = 0;
+  function isSidebarAvatarImage(value) {
+    const source = String(value || "").trim();
+    return /^(?:data:|blob:|https?:|\/|\.\.?\/)/i.test(source) || source.includes("/") || /\.(?:avif|gif|jpe?g|png|svg|webp)(?:[?#].*)?$/i.test(source);
+  }
+  function createSidebarAvatar(value, fallback) {
+    const source = String(value || "").trim();
+    const span = document.createElement("span");
+    if (source && isSidebarAvatarImage(source)) {
+      span.className = "project-avatar-img";
+      span.style.backgroundImage = `url(${JSON.stringify(source)})`;
+    } else if (source) {
+      span.className = "project-avatar-emoji";
+      span.textContent = source;
+    } else {
+      span.className = "project-initials";
+      span.textContent = String(fallback || "?").replace(/\s+/g, "").slice(0, 2).toUpperCase() || "?";
+    }
+    span.setAttribute("aria-hidden", "true");
+    return span;
+  }
   async function loadProjectsToSidebar() {
     const token = ++projectListVersion;
     const wrap = document.querySelector(".project-list");
@@ -91,22 +111,7 @@
         entry.title = title + "（双击编辑）";
         entry.setAttribute("aria-label", title);
         entry.tabIndex = 0;
-        if (it.image && typeof it.image === "string" && it.image.trim()) {
-          const img = document.createElement("span");
-          img.className = "project-avatar-img";
-          img.style.backgroundImage = `url(${it.image})`;
-          entry.appendChild(img);
-        } else {
-          const initials =
-            (it.title || dbId || "?")
-              .replace(/\s+/g, "")
-              .slice(0, 2)
-              .toUpperCase() || "?";
-          const span = document.createElement("span");
-          span.className = "project-initials";
-          span.textContent = initials;
-          entry.appendChild(span);
-        }
+        entry.appendChild(createSidebarAvatar(it.image, it.title || dbId));
         // label (shown when sidebar expanded) - show full title (CSS will truncate if needed)
         const label = document.createElement("span");
         label.className = "project-entry-label";
@@ -429,23 +434,7 @@
         entry.setAttribute("data-status", it.status || "active");
         entry.classList.toggle("is-disabled-user", it.status === "disabled");
         entry.tabIndex = 0;
-        if (it.avatar && typeof it.avatar === "string" && it.avatar.trim()) {
-          const img = document.createElement("span");
-          img.className = "project-avatar-img";
-          img.style.backgroundImage = `url(${it.avatar})`;
-          entry.appendChild(img);
-        } else {
-          const initials =
-            (it.displayName || username || "?")
-              .toString()
-              .replace(/\s+/g, "")
-              .slice(0, 2)
-              .toUpperCase() || "?";
-          const span = document.createElement("span");
-          span.className = "project-initials";
-          span.textContent = initials;
-          entry.appendChild(span);
-        }
+        entry.appendChild(createSidebarAvatar(it.avatar, it.displayName || username));
         const label = document.createElement("span");
         label.className = "project-entry-label";
         label.textContent = `${it.displayName || username || ""}${it.status === "disabled" ? "（已停用）" : ""}`;
@@ -800,32 +789,8 @@
           }
         }
         // update avatar
-        if (image && image.trim()) {
-          const imgSpan = sel.querySelector(".project-avatar-img");
-          if (imgSpan) {
-            imgSpan.style.backgroundImage = `url(${image})`;
-          } else {
-            const initials = sel.querySelector(".project-initials");
-            if (initials) initials.remove();
-            const img = document.createElement("span");
-            img.className = "project-avatar-img";
-            img.style.backgroundImage = `url(${image})`;
-            sel.insertBefore(img, sel.firstChild);
-          }
-        } else {
-          const imgSpan = sel.querySelector(".project-avatar-img");
-          if (imgSpan) imgSpan.remove();
-          const initialsText =
-            (title || dbId || "?")
-              .replace(/\s+/g, "")
-              .slice(0, 2)
-              .toUpperCase() || "?";
-          const span = document.createElement("span");
-          span.className = "project-initials";
-          span.textContent = initialsText;
-          const existing = sel.querySelector(".project-initials");
-          if (!existing) sel.insertBefore(span, sel.firstChild);
-        }
+        sel.querySelector(".project-avatar-img,.project-avatar-emoji,.project-initials")?.remove();
+        sel.insertBefore(createSidebarAvatar(image, title || dbId), sel.firstChild);
       }
       // if this is the currently selected DB, update header as well
       try {
@@ -925,11 +890,13 @@
       const safeTitle = title || dbId;
       nameEl.textContent = safeTitle;
       wrap.title = desc ? `${safeTitle} — ${desc}` : safeTitle;
-      try {
-        avatar.textContent = "";
-      } catch (e) {}
-      if (image && image.trim()) {
-        avatar.style.backgroundImage = `url(${image.trim()})`;
+      const avatarValue = String(image || "").trim();
+      avatar.textContent = "";
+      if (avatarValue && isSidebarAvatarImage(avatarValue)) {
+        avatar.style.backgroundImage = `url(${JSON.stringify(avatarValue)})`;
+      } else if (avatarValue) {
+        avatar.style.backgroundImage = "";
+        avatar.textContent = avatarValue;
       } else {
         const initials =
           (safeTitle || dbId || "?")
@@ -1114,22 +1081,7 @@
               entry.title = displayTitle + "（双击编辑）";
               entry.setAttribute("aria-label", displayTitle);
               entry.tabIndex = 0;
-              if (prevImage) {
-                const img = document.createElement("span");
-                img.className = "project-avatar-img";
-                img.style.backgroundImage = `url(${prevImage})`;
-                entry.appendChild(img);
-              } else {
-                const initials =
-                  (displayTitle || prevDb || "?")
-                    .replace(/\s+/g, "")
-                    .slice(0, 2)
-                    .toUpperCase() || "?";
-                const span = document.createElement("span");
-                span.className = "project-initials";
-                span.textContent = initials;
-                entry.appendChild(span);
-              }
+              entry.appendChild(createSidebarAvatar(prevImage, displayTitle || prevDb));
               const label = document.createElement("span");
               label.className = "project-entry-label";
               try {

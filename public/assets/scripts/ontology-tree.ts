@@ -21,8 +21,11 @@ export type OntologyTreeControllerOptions = {
   allLabel?: string;
   showAllButton?: boolean;
   enableDrag?: boolean;
+  enableContextMenu?: boolean;
+  disableReadonlyItems?: boolean;
   toggleSelection?: boolean;
   onDoubleClick?: (id: string) => void;
+  storageKey?: string;
 };
 
 const STORAGE_KEY = "kb:ontology-tree-state";
@@ -102,12 +105,8 @@ export class OntologyTreeController {
       selection: true,
       tooltip: (item) => String(item.value || ""),
       template: (item) => {
-        const source = item.data?.source as OntologyRecord | undefined;
         const color = String(item.data?.color || "#94a3b8");
-        const count = Number(
-          source?.property_count ?? source?.instance_count ?? 0,
-        );
-        return `<span class="ontology-node-dot" style="--ontology-node-color:${this.escape(color)}"></span><span class="ontology-node-label">${this.escape(item.value)}</span><span class="ontology-node-count">${count}</span>`;
+        return `<span class="ontology-node-dot" style="--ontology-node-color:${this.escape(color)}"></span><span class="ontology-node-label">${this.escape(item.value)}</span>`;
       },
     });
     this.bindTreeEvents();
@@ -115,7 +114,17 @@ export class OntologyTreeController {
     try {
       // DHTMLX accepts nested root items without `parent` at runtime, although its
       // public ITreeItem declaration currently marks that field as required.
-      this.tree.data.parse(toOntologyTreeItems(nodes, openedIds) as never);
+      const treeItems = toOntologyTreeItems(nodes, openedIds);
+      if (this.options.disableReadonlyItems === false) {
+        const enableItems = (items: typeof treeItems) => {
+          for (const item of items) {
+            item.disabled = false;
+            if (item.items) enableItems(item.items);
+          }
+        };
+        enableItems(treeItems);
+      }
+      this.tree.data.parse(treeItems as never);
       const restorable = Object.fromEntries(
         Object.entries(oldState)
           .filter(([id]) => this.records.some((item) => item.id === id))
@@ -234,6 +243,7 @@ export class OntologyTreeController {
     });
     tree.events.on("itemRightClick", (rawId, event) => {
       event.preventDefault();
+      if (this.options.enableContextMenu === false) return;
       this.showContextMenu(String(rawId), event as MouseEvent);
     });
     tree.events.on("beforeDrag", (data) => {
@@ -330,7 +340,9 @@ export class OntologyTreeController {
   private readState(): TreeState {
     if (this.tree) return this.tree.getState() as TreeState;
     try {
-      return JSON.parse(sessionStorage.getItem(STORAGE_KEY) || "{}");
+      return JSON.parse(
+        sessionStorage.getItem(this.options.storageKey || STORAGE_KEY) || "{}",
+      );
     } catch {
       return {};
     }
@@ -339,7 +351,10 @@ export class OntologyTreeController {
   private saveState(): void {
     if (!this.tree) return;
     try {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(this.tree.getState()));
+      sessionStorage.setItem(
+        this.options.storageKey || STORAGE_KEY,
+        JSON.stringify(this.tree.getState()),
+      );
     } catch {}
   }
 

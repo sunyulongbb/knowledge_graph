@@ -1145,6 +1145,7 @@ main {
   text-align: center;
 }
 .project-sidebar.expanded .project-list .project-entry .project-avatar-img,
+.project-sidebar.expanded .project-list .project-entry .project-avatar-emoji,
 .project-sidebar.expanded .project-list .project-entry .project-initials {
   /* avatar/initials fill the entry width but stay square and never overflow */
   width: 100%;
@@ -1277,6 +1278,19 @@ main {
   background-position: center;
   flex-shrink: 0;
 }
+.project-avatar-emoji {
+  width: 100%;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-1));
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  font-size: 26px;
+  line-height: 1;
+}
 .project-initials {
   font-weight: 700;
   color: #fff;
@@ -1294,6 +1308,7 @@ main {
 
 /* Smoothly animate avatar size changes */
 .project-sidebar .project-list .project-entry .project-avatar-img,
+.project-sidebar .project-list .project-entry .project-avatar-emoji,
 .project-sidebar .project-list .project-entry .project-initials {
   transition:
     width var(--sidebar-transition),
@@ -4345,19 +4360,6 @@ body {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--surface-0) 72%, transparent);
 }
 
-#clsTree .ontology-node-count {
-  min-width: 20px;
-  margin-left: auto;
-  padding: 1px 6px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 1.4;
-  text-align: center;
-  background: var(--surface-0);
-}
-
 #clsTree .cls-item {
   display: flex;
   align-items: center;
@@ -4578,12 +4580,10 @@ body {
 .editor-panel {
   position: relative;
   gap: 12px;
-  background: var(--surface-0);
+  background-color: var(--surface-0);
   box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
-  transition:
-    background 0.35s ease,
-    box-shadow 0.35s ease,
-    border-color 0.35s ease;
+  isolation: isolate;
+  contain: paint;
 }
 
 .editor-panel::before {
@@ -4605,7 +4605,7 @@ body {
 }
 
 :root[data-theme="dark"] .editor-panel {
-  background: rgba(32, 32, 35, 0.96);
+  background-color: var(--surface-0);
   border-color: rgba(161, 161, 170, 0.28);
   box-shadow: 0 24px 48px rgba(0, 0, 0, 0.58);
 }
@@ -5116,6 +5116,58 @@ body {
   max-width: min(360px, calc(100vw - 24px));
   max-height: min(360px, calc(100vh - 24px));
   z-index: 22050;
+}
+
+.ontology-dropdown-plugin-host {
+  height: min(320px, calc(100vh - 48px));
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color-scheme: inherit;
+  --dhx-background-primary: var(--surface-0);
+  --dhx-background-secondary: var(--surface-1);
+  --dhx-background-additional: color-mix(in srgb, var(--accent) 10%, var(--surface-1));
+  --dhx-font-color-primary: var(--fg);
+  --dhx-font-color-secondary: var(--muted);
+  --dhx-font-color-additional: var(--muted);
+  --dhx-border-color: var(--border);
+  --dhx-color-primary: var(--accent);
+  --dhx-color-primary-hover: var(--accent);
+  --dhx-color-primary-light-hover: color-mix(in srgb, var(--accent) 10%, transparent);
+  --dhx-color-primary-light-active: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.ontology-dropdown-plugin-host .ontology-dhtmlx-host {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ontology-dropdown-plugin-host .ontology-tree-all {
+  width: calc(100% - 8px);
+  min-height: 32px;
+  margin: 2px 4px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ontology-dropdown-plugin-host .ontology-tree-all:hover,
+.ontology-dropdown-plugin-host .ontology-tree-all.is-selected {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.ontology-dropdown-plugin-host .ontology-node-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ontology-dropdown-item {
@@ -6860,11 +6912,6 @@ body {
 :root[data-theme="dark"] #clsTree {
   background: color-mix(in srgb, var(--surface-1) 82%, transparent);
   border-color: color-mix(in srgb, var(--border) 84%, transparent);
-}
-
-:root[data-theme="dark"] #clsTree .ontology-node-count {
-  background: color-mix(in srgb, var(--surface-0) 88%, transparent);
-  border-color: color-mix(in srgb, var(--border) 82%, transparent);
 }
 
 .timeline-view .vis-timeline .vis-item.timeline-card-item .vis-item-content {
@@ -9715,15 +9762,31 @@ body {
   padding: 7px 11px;
   border: 1px solid var(--border-strong, var(--border));
   border-radius: 10px;
-  background: var(--surface-0);
+  background-color: var(--surface-0);
   color: var(--fg);
+  caret-color: var(--fg);
+  color-scheme: light;
   font: inherit;
   line-height: 1.35;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
   transition:
     border-color 160ms ease,
-    box-shadow 160ms ease,
-    background-color 160ms ease;
+    box-shadow 160ms ease;
+}
+
+:root[data-theme="dark"] .app-search-input {
+  color-scheme: dark;
+}
+
+.app-search-input:-webkit-autofill,
+.app-search-input:-webkit-autofill:hover,
+.app-search-input:-webkit-autofill:focus,
+.app-search-input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--fg);
+  caret-color: var(--fg);
+  box-shadow: 0 0 0 1000px var(--surface-0) inset;
+  -webkit-box-shadow: 0 0 0 1000px var(--surface-0) inset;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
 .app-search-input::placeholder {
@@ -9742,14 +9805,14 @@ body {
 .app-search-input:focus {
   outline: none;
   border-color: var(--accent);
-  background: var(--surface-1, var(--surface-0));
+  background-color: var(--surface-0);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 .app-search-input:disabled {
   cursor: not-allowed;
   opacity: 0.58;
-  background: var(--surface-1, var(--surface-0));
+  background-color: var(--surface-0);
 }
 
 .vis-search-input.app-search-input {

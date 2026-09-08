@@ -48,7 +48,7 @@
     window["@tiptap/starter-kit"] =
       window["@tiptap/starter-kit"] || window.TiptapStarterKit;
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20260908-4" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20260909-3" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -1469,15 +1469,6 @@
       white-space: nowrap;
     }
 
-    #ontologyTree .ontology-node-count {
-      flex: 0 0 auto;
-      margin-left: auto;
-      padding: 1px 6px;
-      border-radius: 999px;
-      background: color-mix(in srgb, var(--surface-1, #f1f5f9) 88%, transparent);
-      color: var(--muted);
-      font-size: 11px;
-    }
 
     #ontologyTree .ontology-tree-all {
       width: 100%;
@@ -6837,9 +6828,10 @@
         ensureEntityIdPrefix(currentId) === fullId;
       const force = options.force === true;
 
-      // The editor is shared by every view.  If the selected entity is already
-      // present, refresh its dependent panels; otherwise fetch and render it.
+      // The editor is shared by every view. Pure view switches retain the
+      // rendered state; explicit refreshes may reload dependent panels.
       if (!force && isCurrentNode && hasCurrentPayload) {
+        if (options.refreshCurrent === false) return;
         Promise.allSettled([
           typeof loadAttributes === "function" ? loadAttributes(fullId) : null,
           typeof loadRelations === "function" ? loadRelations(fullId) : null,
@@ -9838,6 +9830,7 @@
         syncActiveEntityEditor(targetNodeIdRaw, {
           force: hasTargetNode,
           skipGraphFocus: normalized !== "vis",
+          refreshCurrent: false,
         });
         if (normalized === "detail" && hasTargetNode) {
           try {
@@ -10207,6 +10200,7 @@
       syncActiveEntityEditor(targetNodeIdRaw, {
         force: hasTargetNode,
         skipGraphFocus: !isVis,
+        refreshCurrent: false,
       });
 
       // 新增：所有页面都带选中节点参数
@@ -19366,6 +19360,8 @@
       ontologyDropdown.className = 'ontology-floating-dropdown is-portal';
       ontologyDropdown.style.display = 'none';
       document.body.appendChild(ontologyDropdown);
+      let composerOntologyTreeController = null;
+      let composerOntologyTreeHost = null;
 
       function positionComposerOntologyDropdown() {
         if (!ontologyDropdown || ontologyDropdown.style.display === 'none') return;
@@ -19424,68 +19420,36 @@
         }
       }
 
-      function renderOntologyTreeNodes(items, depth = 0) {
-        const frag = document.createDocumentFragment();
-        (Array.isArray(items) ? items : []).forEach((item) => {
-          if (!item) return;
-          const itemId = String(item.id || item.value || '').trim();
-          const itemName = String(item.name || item.label || item.alias || itemId).trim();
-          if (!itemId || !itemName) return;
-          const childItems = Array.isArray(item.children) ? item.children : [];
-          const button = document.createElement('button');
-          button.type = 'button';
-          button.className = 'ontology-dropdown-item ontology-dropdown-tree-item' + (itemId === composerTypeSelect.value ? ' selected' : '');
-          button.dataset.value = itemId;
-          button.style.setProperty('--ontology-tree-depth', String(depth));
-          const row = document.createElement('span');
-          row.className = 'ontology-dropdown-tree-item__row';
-          const label = document.createElement('span');
-          label.className = 'ontology-dropdown-tree-item__label';
-          label.textContent = itemName;
-          row.appendChild(label);
-          if (childItems.length) {
-            const meta = document.createElement('span');
-            meta.className = 'ontology-dropdown-tree-item__meta';
-            meta.textContent = String(childItems.length);
-            row.appendChild(meta);
-          }
-          button.appendChild(row);
-          button.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            composerTypeSelect.value = itemId;
-            composerTypeSelect.dispatchEvent(new Event('change', { bubbles: true }));
-            ontologyDropdown.style.display = 'none';
-          });
-          frag.appendChild(button);
-          if (childItems.length) {
-            frag.appendChild(renderOntologyTreeNodes(childItems, depth + 1));
-          }
-        });
-        return frag;
-      }
-
       async function buildOntologyDropdown() {
-        ontologyDropdown.innerHTML = '';
-        const clearItem = document.createElement('button');
-        clearItem.type = 'button';
-        clearItem.className = 'ontology-dropdown-item ontology-dropdown-tree-item' + (!composerTypeSelect.value ? ' selected' : '');
-        const clearRow = document.createElement('span');
-        clearRow.className = 'ontology-dropdown-tree-item__row';
-        const clearLabel = document.createElement('span');
-        clearLabel.className = 'ontology-dropdown-tree-item__label';
-        clearLabel.textContent = '不设置本体';
-        clearRow.appendChild(clearLabel);
-        clearItem.appendChild(clearRow);
-        clearItem.addEventListener('mousedown', (e) => {
-          e.preventDefault();
-          composerTypeSelect.value = '';
-          composerTypeSelect.dispatchEvent(new Event('change', { bubbles: true }));
-          ontologyDropdown.style.display = 'none';
-        });
-        ontologyDropdown.appendChild(clearItem);
-
-        const treeItems = await loadComposerOntologyTree();
-        ontologyDropdown.appendChild(renderOntologyTreeNodes(treeItems, 0));
+        const [treeItems, treeModule] = await Promise.all([
+          loadComposerOntologyTree(),
+          window.kbOntologyTreeModuleReady,
+        ]);
+        if (!composerOntologyTreeController) {
+          ontologyDropdown.innerHTML = '';
+          composerOntologyTreeHost = document.createElement('div');
+          composerOntologyTreeHost.className = 'ontology-dropdown-plugin-host';
+          ontologyDropdown.appendChild(composerOntologyTreeHost);
+          composerOntologyTreeController = new treeModule.OntologyTreeController(composerOntologyTreeHost, {
+            allLabel: '不设置本体',
+            showAllButton: true,
+            enableDrag: false,
+            enableContextMenu: false,
+            disableReadonlyItems: false,
+            toggleSelection: false,
+            storageKey: 'kb:ontology-tree-state:composer',
+            onSelect: (id) => {
+              composerTypeSelect.value = id || '';
+              composerTypeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+              ontologyDropdown.style.display = 'none';
+            },
+            onEdit: () => {},
+            onAddChild: () => {},
+            onDelete: () => {},
+            onReload: () => buildOntologyDropdown(),
+          });
+        }
+        composerOntologyTreeController.update(treeItems, composerTypeSelect.value || '');
       }
 
       btnAddOntologyChip.addEventListener('click', async (e) => {
@@ -19926,10 +19890,10 @@
 
   <script src="/assets/scripts/app-shared.js"></script>
   <script>
-      window.kbOntologyTreeModuleReady = import("/assets/generated/ontology-tree.js?v=20260904-1");
+      window.kbOntologyTreeModuleReady = import("/assets/generated/ontology-tree.js?v=20260909-2");
   </script>
   <script src="/assets/scripts/property-panel.js?v=20260908-4"></script>
-  <script src="/assets/scripts/table-panel.js?v=20260908-1"></script>
+  <script src="/assets/scripts/table-panel.js?v=20260909-1"></script>
   <script src="/assets/scripts/table-selection.js?v=20260908-5"></script>
   <script src="/assets/scripts/entity-manage-table.js?v=20260908-5"></script>
   <script src="/assets/scripts/attr-panel.js?v=20260908-5"></script>
@@ -19938,9 +19902,9 @@
   <script src="/assets/scripts/detail-panel.js?v=20260908-1"></script>
   <script src="/assets/scripts/knowledge-interactions.js?v=20260904-1"></script>
   <script src="/assets/scripts/knowledge-access.js?v=20260908-5"></script>
-  <script src="/assets/scripts/applications.js?v=20260908-1"></script>
+  <script src="/assets/scripts/applications.js?v=20260909-1"></script>
   <script src="/assets/scripts/user-management.js?v=20260905-3"></script>
-  <script src="/assets/scripts/sidebar-panel.js?v=20260906-1"></script>
+  <script src="/assets/scripts/sidebar-panel.js?v=20260909-1"></script>
   <script src="/assets/scripts/auth-panel.js?v=20260906-1"></script>
   <script src="/assets/scripts/db-modal.js"></script>
   <script src="/assets/scripts/sparql-panel.js"></script>

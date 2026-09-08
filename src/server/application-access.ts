@@ -81,18 +81,30 @@ export function createApplicationHandler(db: Database, getUser: (req: Request) =
     if (path === '/api/kb/delete_project') return permissions.owner ? null : error('仅创建者可以删除应用', 403);
     if (path === '/api/kb/update_project' && method === 'POST') return permissions.editSettings ? null : error('无权修改应用设置', 403);
     if (match?.[2] === 'request' && method === 'POST') {
-      if (!project.owner_user_id) return error('历史应用尚未登记创建者，暂不接受维护申请', 409);
       if (permissions.member) return error('你已拥有应用维护权限', 409);
       const message = String(body.message || '').trim();
       if (message.length > 1000) return error('申请说明最多 1000 字');
-      const previous = db.query('SELECT status FROM application_requests WHERE project_id=? AND user_id=?').get(project.id, user.id) as any;
-      if (previous?.status === 'pending') return error('申请已提交，请等待审批', 409);
-      db.transaction(() => {
+      const outcome = db.transaction(() => {
+        const claimed = db.run(
+          'UPDATE projects SET owner_user_id=? WHERE id=? AND owner_user_id IS NULL',
+          [user.id, project.id],
+        );
+        if (claimed.changes > 0) {
+          db.run('DELETE FROM application_requests WHERE project_id=? AND user_id=?', [project.id, user.id]);
+          return 'claimed';
+        }
+        const current = projectBy(project.id, true);
+        const previous = db.query('SELECT status FROM application_requests WHERE project_id=? AND user_id=?').get(project.id, user.id) as any;
+        if (previous?.status === 'pending') return 'pending';
         db.run("INSERT INTO application_requests(project_id,user_id,message) VALUES(?,?,?) ON CONFLICT(project_id,user_id) DO UPDATE SET message=excluded.message,status='pending',reviewed_by=NULL,reviewed_at=NULL,created_at=CURRENT_TIMESTAMP", [project.id, user.id, message]);
         const reviewers = db.query('SELECT user_id FROM application_members WHERE project_id=? AND review_requests=1').all(project.id) as any[];
-        for (const id of new Set([project.owner_user_id, ...reviewers.map((item) => item.user_id)])) notify(id, project.id, `${user.username} 申请维护应用「${project.title || project.name}」`);
+        for (const id of new Set([current.owner_user_id, ...reviewers.map((item) => item.user_id)])) {
+          if (Number.isSafeInteger(Number(id)) && Number(id) > 0) notify(Number(id), project.id, `${user.username} 申请维护应用「${project.title || project.name}」`);
+        }
+        return 'requested';
       })();
-      return Response.json({ success: true });
+      if (outcome === 'pending') return error('申请已提交，请等待审批', 409);
+      return Response.json({ success: true, claimedOwnership: outcome === 'claimed' });
     }
     if (match?.[2] === 'review' && method === 'POST') {
       if (!permissions.reviewRequests) return error('无权审批申请', 403);
