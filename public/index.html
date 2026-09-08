@@ -6,6 +6,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>知识库</title>
 
+  <script>
+    // Restore the theme before styles and page content can paint.
+    try {
+      document.documentElement.setAttribute(
+        "data-theme",
+        localStorage.getItem("theme") === "dark" ? "dark" : "light"
+      );
+    } catch {
+      document.documentElement.setAttribute("data-theme", "light");
+    }
+  </script>
+
   <script src="/assets/generated/wikidata.js"></script>
   <script src="/js/marked.min.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
@@ -36,14 +48,14 @@
     window["@tiptap/starter-kit"] =
       window["@tiptap/starter-kit"] || window.TiptapStarterKit;
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20260907-2" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20260908-3" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
   <link rel="stylesheet" href="/node_modules/vis-timeline/styles/vis-timeline-graph2d.min.css?v=20260904-2" />
   <script src="/node_modules/vis-timeline/standalone/umd/vis-timeline-graph2d.min.js?v=20260904-2"></script>
   <script>
-    window.kbBusinessGridModuleReady = import("/assets/generated/business-grid.js").then((module) => {
+    window.kbBusinessGridModuleReady = import("/assets/generated/business-grid.js?v=20260908-2").then((module) => {
       window.kbBusinessGrid = module;
       return module;
     }).catch((error) => {
@@ -2393,7 +2405,7 @@
                   </div>
                   <div id="entityDisplayName" class="wd-entity-name social-compose-input" contenteditable="true" spellcheck="false"
                     data-placeholder="有什么新鲜事吗？"></div>
-                  <div class="social-compose-hint">支持换行、#添加标签、@引用实体，粘贴图片可直接上传</div>
+                  <div class="social-compose-hint">首段为标题，空行后为描述；标题括号内为别名。支持 #标签、@引用实体及粘贴图片</div>
                   <div id="entityDisplayAliases" class="wd-entity-aliases" style="display:none">
                     <span id="entityAliasValues" class="wd-alias-values"></span>
                   </div>
@@ -3079,6 +3091,7 @@
               <div class="ontology-toolbar">
                 <div class="ontology-toolbar__title">
                   <strong>属性管理</strong>
+                  <span class="muted">双击属性编辑，选中后删除</span>
                 </div>
                 <div class="ontology-toolbar__group ontology-toolbar__controls">
                   <button id="btnPropertyAdd" class="btn sm icon primary" type="button" title="新增属性" aria-label="新增属性">
@@ -3086,6 +3099,9 @@
                   </button>
                   <button id="btnPropertyDeleteSelected" class="btn sm icon danger" type="button" title="删除选中" aria-label="删除选中" disabled>
                     <i class="fa-solid fa-trash"></i>
+                  </button>
+                  <button id="btnPropertyAssignSelected" class="btn sm icon" type="button" title="关联本体（选择一个属性）" aria-label="关联本体（选择一个属性）" disabled>
+                    <i class="fa-solid fa-diagram-project"></i>
                   </button>
                   <input type="search" id="propertyMgmtSearch" class="app-search-input kb-input sm" placeholder="搜索属性名称..." autocomplete="off"
                     aria-label="搜索属性">
@@ -3733,17 +3749,71 @@
                   <div class="vis-style-panel__section">
                     <span class="vis-style-panel__label">节点样式</span>
                     <label class="vis-style-field">
+                      <span>应用本体</span>
+                      <select id="cyStyleNodeOntology" class="vis-style-input" aria-label="节点样式应用本体">
+                        <option value="">请选择本体</option>
+                      </select>
+                    </label>
+                    <label class="vis-style-field">
                       <span>形状</span>
                       <select id="cyStyleNodeShape" class="vis-style-input">
-                        <option value="round-rectangle">圆角矩形</option>
-                        <option value="ellipse">椭圆</option>
-                        <option value="diamond">菱形</option>
-                        <option value="hexagon">六边形</option>
+                        <optgroup label="基础形状">
+                          <option value="round-rectangle">圆角矩形</option>
+                          <option value="rectangle">矩形</option>
+                          <option value="circle">正圆</option>
+                          <option value="ellipse">椭圆</option>
+                          <option value="triangle">三角形</option>
+                          <option value="diamond">菱形</option>
+                          <option value="star">星形</option>
+                        </optgroup>
+                        <optgroup label="多边形">
+                          <option value="pentagon">五边形</option>
+                          <option value="hexagon">六边形</option>
+                          <option value="heptagon">七边形</option>
+                          <option value="octagon">八边形</option>
+                          <option value="concave-hexagon">凹六边形</option>
+                          <option value="rhomboid">平行四边形</option>
+                          <option value="right-rhomboid">反向平行四边形</option>
+                        </optgroup>
+                        <optgroup label="圆角形状">
+                          <option value="round-triangle">圆角三角形</option>
+                          <option value="round-diamond">圆角菱形</option>
+                          <option value="round-pentagon">圆角五边形</option>
+                          <option value="round-hexagon">圆角六边形</option>
+                          <option value="round-heptagon">圆角七边形</option>
+                          <option value="round-octagon">圆角八边形</option>
+                        </optgroup>
+                        <optgroup label="其他形状">
+                          <option value="cut-rectangle">切角矩形</option>
+                          <option value="bottom-round-rectangle">底部圆角矩形</option>
+                          <option value="barrel">桶形</option>
+                          <option value="tag">标签形</option>
+                          <option value="round-tag">圆角标签形</option>
+                          <option value="vee">V 形</option>
+                        </optgroup>
                       </select>
                     </label>
                     <label class="vis-style-field">
                       <span>字号</span>
                       <input id="cyStyleNodeFontSize" class="vis-style-input" type="range" min="11" max="18" step="1" />
+                    </label>
+                    <label class="vis-style-field">
+                      <span>自动大小</span>
+                      <input id="cyStyleNodeAutoSize" type="checkbox" checked />
+                    </label>
+                    <label class="vis-style-field">
+                      <span>节点大小 <output id="cyStyleNodeSizeValue" for="cyStyleNodeSize">128 px</output></span>
+                      <input id="cyStyleNodeSize" class="vis-style-input" type="range" min="24" max="240" step="4" disabled />
+                    </label>
+                    <label class="vis-style-field">
+                      <span>标签位置</span>
+                      <select id="cyStyleNodeLabelPosition" class="vis-style-input">
+                        <option value="center">节点内居中</option>
+                        <option value="top">节点上方</option>
+                        <option value="bottom">节点下方</option>
+                        <option value="left">节点左侧</option>
+                        <option value="right">节点右侧</option>
+                      </select>
                     </label>
                     <label class="vis-style-field">
                       <span>内边距</span>
@@ -5668,7 +5738,7 @@
         i.className = t === "dark" ? "fa-solid fa-sun" : "fa-regular fa-moon";
     }
     (function initTheme() {
-      applyTheme(localStorage.getItem("theme") || "light");
+      applyTheme(document.documentElement.getAttribute("data-theme") || "light");
     })();
     elBtnTheme.addEventListener("click", () => {
       const cur =
@@ -12922,6 +12992,9 @@
     const KB_VIS_NODE_SNAPSHOT_FIELD = "_relationGraphSnapshot";
     const KB_VIS_STYLE_DEFAULTS = Object.freeze({
       nodeShape: "round-rectangle",
+      nodeLabelPosition: "center",
+      nodeAutoSize: true,
+      nodeSize: 128,
       nodeFontSize: 12,
       nodePadding: 8,
       nodeBorderWidth: 2,
@@ -13535,9 +13608,59 @@
         .join("\n");
     }
 
+    const GRAPH_NODE_STYLE_FIELDS = ['nodeShape', 'nodeLabelPosition', 'nodeAutoSize', 'nodeSize', 'nodeFontSize', 'nodePadding', 'nodeBorderWidth'];
+
+    function getGraphNodeOntologyKey(data) {
+      // type is the ontology; classId identifies a separate tag/category.
+      const type = String(data?.type || '').trim();
+      const ontologies = window.kbOntologies || [];
+      const ontology = ontologies.find((item) => String(item.id) === type)
+        || ontologies.find((item) => String(item.name || '').toLowerCase() === type.toLowerCase());
+      return type ? String(ontology?.id || type) : '';
+    }
+
+    function getOntologyGraphStyles() {
+      try {
+        const value = JSON.parse(localStorage.getItem(`kb-vis-ontology-styles:${getCurrentGraphDbScope()}`) || '{}');
+        return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+      } catch { return {}; }
+    }
+
+    function persistOntologyGraphStyle(type, config) {
+      if (!type) return;
+      const styles = getOntologyGraphStyles();
+      const values = Object.fromEntries(GRAPH_NODE_STYLE_FIELDS.map((key) => [key, config[key]]));
+      try {
+        localStorage.setItem(`kb-vis-ontology-styles:${getCurrentGraphDbScope()}`, JSON.stringify({ ...styles, [type]: values }));
+      } catch { }
+    }
+
+    function getGraphNodeLabelPositionStyle(position) {
+      const vertical = position === "top" || position === "bottom";
+      const horizontal = position === "left" || position === "right";
+      return {
+        "text-valign": vertical ? position : "center",
+        "text-halign": horizontal ? position : "center",
+        "text-margin-x": position === "left" ? -8 : position === "right" ? 8 : 0,
+        "text-margin-y": position === "top" ? -8 : position === "bottom" ? 8 : 0,
+      };
+    }
+
+    function getGraphNodeSizeStyle(cfg) {
+      const fixed = cfg.nodeAutoSize === false;
+      const size = Math.min(240, Math.max(24, Number(cfg.nodeSize) || 128));
+      const dimension = fixed ? size : cfg.nodeShape === "circle" ? 128 : "label";
+      return { width: dimension, height: dimension };
+    }
+
     function buildCyStyle() {
       const cfg = getGraphStyleConfig();
       const palette = getGraphThemePalette(cfg);
+      const ontologyStyles = getOntologyGraphStyles();
+      const nodeConfig = (ele) => {
+        const key = getGraphNodeOntologyKey(ele.data());
+        return Object.assign({}, cfg, key && Object.hasOwn(ontologyStyles, key) ? ontologyStyles[key] : {});
+      };
       return [
         // 节点有 image 字段时显示为圆形头像
         {
@@ -13582,21 +13705,23 @@
           selector: "node",
           style: {
             "background-color": (ele) => ele.data("color") || palette.nodeBackground,
-            "border-width": Number(cfg.nodeBorderWidth) || 2,
+            "border-width": (ele) => Number(nodeConfig(ele).nodeBorderWidth) || 2,
             "border-color": (ele) => ele.data("color") || palette.nodeBorder,
             label: (ele) => formatGraphNodeLabel(ele),
-            "text-valign": "center",
-            "text-halign": "center",
-            "font-size": `${Number(cfg.nodeFontSize) || 12}px`,
+            "text-valign": (ele) => getGraphNodeLabelPositionStyle(nodeConfig(ele).nodeLabelPosition)["text-valign"],
+            "text-halign": (ele) => getGraphNodeLabelPositionStyle(nodeConfig(ele).nodeLabelPosition)["text-halign"],
+            "text-margin-x": (ele) => getGraphNodeLabelPositionStyle(nodeConfig(ele).nodeLabelPosition)["text-margin-x"],
+            "text-margin-y": (ele) => getGraphNodeLabelPositionStyle(nodeConfig(ele).nodeLabelPosition)["text-margin-y"],
+            "font-size": (ele) => Number(nodeConfig(ele).nodeFontSize) || 12,
             "font-weight": "500",
             color: palette.text,
-            width: "label",
-            height: "label",
-            padding: `${Number(cfg.nodePadding) || 8}px`,
+            width: (ele) => getGraphNodeSizeStyle(nodeConfig(ele)).width,
+            height: (ele) => getGraphNodeSizeStyle(nodeConfig(ele)).height,
+            padding: (ele) => Number(nodeConfig(ele).nodePadding) || 8,
             "text-wrap": "ellipsis",
             "text-overflow": "ellipsis",
             "text-max-width": "112px",
-            shape: cfg.nodeShape || "round-rectangle",
+            shape: (ele) => nodeConfig(ele).nodeShape === "circle" ? "ellipse" : (nodeConfig(ele).nodeShape || "round-rectangle"),
             "text-background-opacity": 0,
           },
         },
@@ -13608,9 +13733,9 @@
             "shadow-blur": 10,
             "shadow-color": palette.isDark ? "rgba(129, 140, 248, 0.38)" : "rgba(79, 70, 229, 0.24)",
             "shadow-opacity": 1,
-            "text-wrap": "wrap",
-            "text-overflow": "clip",
-            "text-max-width": "148px",
+            "text-wrap": (ele) => nodeConfig(ele).nodeShape === "circle" ? "ellipsis" : "wrap",
+            "text-overflow": (ele) => nodeConfig(ele).nodeShape === "circle" ? "ellipsis" : "clip",
+            "text-max-width": (ele) => nodeConfig(ele).nodeShape === "circle" ? "112px" : "148px",
           },
         },
         {
@@ -16183,7 +16308,12 @@
       const cyBtnCloseStyleConfig = document.getElementById('cy_btnCloseStyleConfig');
       const cyBtnResetStyleConfig = document.getElementById('cy_btnResetStyleConfig');
       const cyStyleConfigPanel = document.getElementById('cyStyleConfigPanel');
+      const cyStyleNodeOntology = document.getElementById('cyStyleNodeOntology');
       const cyStyleNodeShape = document.getElementById('cyStyleNodeShape');
+      const cyStyleNodeLabelPosition = document.getElementById('cyStyleNodeLabelPosition');
+      const cyStyleNodeAutoSize = document.getElementById('cyStyleNodeAutoSize');
+      const cyStyleNodeSize = document.getElementById('cyStyleNodeSize');
+      const cyStyleNodeSizeValue = document.getElementById('cyStyleNodeSizeValue');
       const cyStyleNodeFontSize = document.getElementById('cyStyleNodeFontSize');
       const cyStyleNodePadding = document.getElementById('cyStyleNodePadding');
       const cyStyleNodeBorderWidth = document.getElementById('cyStyleNodeBorderWidth');
@@ -16204,9 +16334,40 @@
         cyStyleConfigPanel.style.display = shouldOpen ? 'block' : 'none';
       }
 
+      function syncNodeOntologyOptions() {
+        if (!cyStyleNodeOntology) return;
+        const previous = cyStyleNodeOntology.value;
+        const options = new Map();
+        for (const ontology of window.kbOntologies || []) {
+          options.set(String(ontology.id), String(ontology.name || ontology.id));
+        }
+        window.kbCy?.nodes().forEach((node) => {
+          const key = getGraphNodeOntologyKey(node.data());
+          if (key && !options.has(key)) options.set(key, String(node.data('typeLabel') || key));
+        });
+        cyStyleNodeOntology.replaceChildren(new Option('请选择本体', ''));
+        for (const [key, label] of options) cyStyleNodeOntology.add(new Option(label, key));
+        const selected = window.kbCy?.nodes(':selected').first();
+        const selectedType = selected?.length ? getGraphNodeOntologyKey(selected.data()) : '';
+        cyStyleNodeOntology.value = options.has(previous) ? previous : options.has(selectedType) ? selectedType : '';
+      }
+
+      function syncNodeSizeControls() {
+        if (cyStyleNodeSize) cyStyleNodeSize.disabled = !cyStyleNodeOntology?.value || cyStyleNodeAutoSize?.checked !== false;
+        if (cyStyleNodeSizeValue) cyStyleNodeSizeValue.textContent = `${cyStyleNodeSize?.value || 128} px`;
+      }
+
       function syncStyleConfigControls() {
-        const cfg = getGraphStyleConfig();
+        syncNodeOntologyOptions();
+        const type = cyStyleNodeOntology?.value || '';
+        const styles = getOntologyGraphStyles();
+        const cfg = Object.assign({}, getGraphStyleConfig(), type && Object.hasOwn(styles, type) ? styles[type] : {});
+        [cyStyleNodeShape, cyStyleNodeLabelPosition, cyStyleNodeAutoSize, cyStyleNodeFontSize, cyStyleNodePadding, cyStyleNodeBorderWidth].filter(Boolean).forEach((control) => { control.disabled = !type; });
         if (cyStyleNodeShape) cyStyleNodeShape.value = cfg.nodeShape || KB_VIS_STYLE_DEFAULTS.nodeShape;
+        if (cyStyleNodeLabelPosition) cyStyleNodeLabelPosition.value = cfg.nodeLabelPosition || KB_VIS_STYLE_DEFAULTS.nodeLabelPosition;
+        if (cyStyleNodeAutoSize) cyStyleNodeAutoSize.checked = cfg.nodeAutoSize !== false;
+        if (cyStyleNodeSize) cyStyleNodeSize.value = String(cfg.nodeSize || KB_VIS_STYLE_DEFAULTS.nodeSize);
+        syncNodeSizeControls();
         if (cyStyleNodeFontSize) cyStyleNodeFontSize.value = String(cfg.nodeFontSize || KB_VIS_STYLE_DEFAULTS.nodeFontSize);
         if (cyStyleNodePadding) cyStyleNodePadding.value = String(cfg.nodePadding || KB_VIS_STYLE_DEFAULTS.nodePadding);
         if (cyStyleNodeBorderWidth) cyStyleNodeBorderWidth.value = String(cfg.nodeBorderWidth || KB_VIS_STYLE_DEFAULTS.nodeBorderWidth);
@@ -16223,6 +16384,9 @@
       function readStyleConfigFromControls() {
         return {
           nodeShape: cyStyleNodeShape ? cyStyleNodeShape.value : KB_VIS_STYLE_DEFAULTS.nodeShape,
+          nodeLabelPosition: cyStyleNodeLabelPosition ? cyStyleNodeLabelPosition.value : KB_VIS_STYLE_DEFAULTS.nodeLabelPosition,
+          nodeAutoSize: cyStyleNodeAutoSize ? cyStyleNodeAutoSize.checked : KB_VIS_STYLE_DEFAULTS.nodeAutoSize,
+          nodeSize: cyStyleNodeSize ? Number(cyStyleNodeSize.value) || KB_VIS_STYLE_DEFAULTS.nodeSize : KB_VIS_STYLE_DEFAULTS.nodeSize,
           nodeFontSize: cyStyleNodeFontSize ? Number(cyStyleNodeFontSize.value) || KB_VIS_STYLE_DEFAULTS.nodeFontSize : KB_VIS_STYLE_DEFAULTS.nodeFontSize,
           nodePadding: cyStyleNodePadding ? Number(cyStyleNodePadding.value) || KB_VIS_STYLE_DEFAULTS.nodePadding : KB_VIS_STYLE_DEFAULTS.nodePadding,
           nodeBorderWidth: cyStyleNodeBorderWidth ? Number(cyStyleNodeBorderWidth.value) || KB_VIS_STYLE_DEFAULTS.nodeBorderWidth : KB_VIS_STYLE_DEFAULTS.nodeBorderWidth,
@@ -16238,14 +16402,25 @@
       }
 
       function handleGraphStyleConfigChange() {
+        syncNodeSizeControls();
         const nextConfig = readStyleConfigFromControls();
-        persistGraphStyleConfig(nextConfig);
+        persistOntologyGraphStyle(cyStyleNodeOntology?.value, nextConfig);
+        const globalConfig = getGraphStyleConfig();
+        for (const [key, value] of Object.entries(nextConfig)) {
+          if (!GRAPH_NODE_STYLE_FIELDS.includes(key)) globalConfig[key] = value;
+        }
+        persistGraphStyleConfig(globalConfig);
         applyCurrentGraphStyleConfig();
       }
 
+      cyStyleNodeOntology?.addEventListener('change', syncStyleConfigControls);
+      window.addEventListener('kb:ontologies-updated', () => {
+        syncStyleConfigControls();
+        applyCurrentGraphStyleConfig();
+      });
       syncStyleConfigControls();
       applyGraphCanvasBackground();
-      [cyStyleNodeShape, cyStyleNodeFontSize, cyStyleNodePadding, cyStyleNodeBorderWidth, cyStyleEdgeWidth, cyStyleEdgeFontSize, cyStyleEdgeColor, cyStyleEdgeLineStyle, cyStyleEdgeArrowShape, cyStyleCanvasMode, cyStyleCanvasColor, cyStyleCanvasAccent]
+      [cyStyleNodeShape, cyStyleNodeLabelPosition, cyStyleNodeAutoSize, cyStyleNodeSize, cyStyleNodeFontSize, cyStyleNodePadding, cyStyleNodeBorderWidth, cyStyleEdgeWidth, cyStyleEdgeFontSize, cyStyleEdgeColor, cyStyleEdgeLineStyle, cyStyleEdgeArrowShape, cyStyleCanvasMode, cyStyleCanvasColor, cyStyleCanvasAccent]
         .filter(Boolean)
         .forEach((el) => el.addEventListener('input', handleGraphStyleConfigChange));
       if (cyBtnStyleConfig) cyBtnStyleConfig.addEventListener('click', (event) => {
@@ -16257,7 +16432,11 @@
         toggleStyleConfigPanel(false);
       });
       if (cyBtnResetStyleConfig) cyBtnResetStyleConfig.addEventListener('click', () => {
-        persistGraphStyleConfig(KB_VIS_STYLE_DEFAULTS);
+        persistOntologyGraphStyle(cyStyleNodeOntology?.value, KB_VIS_STYLE_DEFAULTS);
+        const resetConfig = { ...KB_VIS_STYLE_DEFAULTS };
+        const currentConfig = getGraphStyleConfig();
+        for (const key of GRAPH_NODE_STYLE_FIELDS) resetConfig[key] = currentConfig[key];
+        persistGraphStyleConfig(resetConfig);
         syncStyleConfigControls();
         applyCurrentGraphStyleConfig();
       });
@@ -17979,7 +18158,8 @@
         const eAliases = document.getElementById('entityDisplayAliases');
         const eAliasVals = document.getElementById('entityAliasValues');
         if (eName) {
-          const composerText = (descVal && descVal.trim()) ? descVal : (nameVal || '');
+          const composerTitle = [nameVal, fAliases.value ? `（${fAliases.value}）` : ''].join('');
+          const composerText = [composerTitle, descVal].filter((value) => value && value.trim()).join('\n\n');
           updateEntityDisplayName(eName, composerText);
         }
         if (eDesc) {
@@ -18372,25 +18552,39 @@
       return Array.from(new Set(result));
     }
 
+    function parseComposerNodeText(value) {
+      const normalized = String(value || '')
+        .replace(/\u200B/g, '')
+        .replace(/\u00A0/g, ' ')
+        .replace(/\r\n?/g, '\n')
+        .trim();
+      const paragraphs = normalized.split(/\n[\t ]*\n(?:[\t ]*\n)*/);
+      const title = paragraphs.shift() || '';
+      const aliases = [];
+      const name = title.replace(/（([^（）]*)）|\(([^()]*)\)/g, (_, chinese, english) => {
+        const items = (chinese ?? english).split(/[,，、;；]+/).map((item) => item.trim()).filter(Boolean);
+        aliases.push(...items);
+        return '';
+      }).replace(/\s+/g, ' ').trim();
+      return { name, description: paragraphs.join('\n\n').trim(), aliases: Array.from(new Set(aliases)) };
+    }
+
     function syncComposerToHiddenFields() {
       if (!entityDisplayName) return;
       const rawText = (entityDisplayName.innerText || '')
         .replace(/\u200B/g, '')
         .replace(/\u00A0/g, ' ')
         .replace(/\r\n?/g, '\n');
-      const normalized = rawText.replace(/\n{3,}/g, '\n\n').trim();
-      const lines = normalized
-        .split('\n')
-        .map((line) => line.trim())
-        .filter(Boolean);
-      const primaryName = lines[0] || '';
+      const parsed = parseComposerNodeText(rawText);
+      const primaryName = parsed.name;
 
       if (fName && fName.value !== primaryName) {
         fName.value = primaryName;
       }
-      if (fDesc && fDesc.value !== normalized) {
-        fDesc.value = normalized;
+      if (fDesc && fDesc.value !== parsed.description) {
+        fDesc.value = parsed.description;
       }
+      if (fAliases) fAliases.value = parsed.aliases.join(', ');
 
       const tags = extractComposerList(rawText, '#');
       const mentions = Array.from(
@@ -18404,10 +18598,16 @@
       // @mention 在名称中代表“关联实体”，不再作为 aliases 自动回填。
     }
 
+    function refreshComposerFromHiddenFields() {
+      if (!entityDisplayName || document.activeElement === entityDisplayName) return;
+      const title = (fName?.value || '') + (fAliases?.value ? `（${fAliases.value}）` : '');
+      const description = fDesc?.value || '';
+      updateEntityDisplayName(entityDisplayName, description ? `${title}\n\n${description}` : title);
+    }
+
     if (fName) {
       fName.addEventListener('input', () => {
-        if (!entityDisplayName || document.activeElement === entityDisplayName) return;
-        updateEntityDisplayName(entityDisplayName, fName.value || '');
+        refreshComposerFromHiddenFields();
       });
     }
 
@@ -19017,6 +19217,7 @@
 
     if (fDesc) {
       fDesc.addEventListener('input', () => {
+        refreshComposerFromHiddenFields();
         const el = document.getElementById('entityDisplayDesc');
         if (el) {
           const descValue = fDesc.value.trim();
@@ -19044,6 +19245,7 @@
     }
     if (fAliases) {
       fAliases.addEventListener('input', () => {
+        refreshComposerFromHiddenFields();
         const el = document.getElementById('entityDisplayAliases');
         const vals = document.getElementById('entityAliasValues');
         if (el && vals) {
@@ -19677,10 +19879,10 @@
   <script>
       window.kbOntologyTreeModuleReady = import("/assets/generated/ontology-tree.js?v=20260904-1");
   </script>
-  <script src="/assets/scripts/property-panel.js?v=20260907-1"></script>
+  <script src="/assets/scripts/property-panel.js?v=20260908-2"></script>
   <script src="/assets/scripts/table-panel.js?v=20260906-2"></script>
   <script src="/assets/scripts/table-selection.js?v=20260907-3"></script>
-  <script src="/assets/scripts/entity-manage-table.js?v=20260907-2"></script>
+  <script src="/assets/scripts/entity-manage-table.js?v=20260908-3"></script>
   <script src="/assets/scripts/attr-panel.js?v=20260907-1"></script>
   <!-- relation-panel.js 已移除，使用 edgehandles 拖拽创建关系 -->
   <script src="/assets/scripts/schema-panel.js?v=20260904-1"></script>

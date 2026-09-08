@@ -25,6 +25,7 @@ export type BusinessGridOptions = {
   data?: BusinessGridRow[];
   selection?: "cell" | "row" | "complex";
   multiselection?: boolean;
+  selectAll?: boolean;
   editable?: boolean;
   sortable?: boolean;
   rowHeight?: number;
@@ -47,9 +48,35 @@ export class BusinessGridController {
   private selectedRows = new Set<string>();
   private serverFilters: BusinessGridFilters = {};
   private filterTimer: ReturnType<typeof setTimeout> | null = null;
+  private selectionObserver: MutationObserver | null = null;
+  private handleSelectAll = (event: Event): void => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement) || !target.matches('.business-grid-select-all, input[data-grid-select-id]')) return;
+    event.stopPropagation();
+    // Handle the native checkbox click once, before grid row selection can toggle it again.
+    if (event.type !== 'click' || target.disabled) return;
+    if (target.dataset.gridSelectId !== undefined) {
+      this.selectAll([target.dataset.gridSelectId], target.checked);
+      return;
+    }
+    const ids: string[] = [];
+    this.grid?.data.forEach((row) => { if (row.id !== undefined) ids.push(String(row.id)); });
+    this.selectAll(ids, target.checked);
+  };
 
   constructor(private host: HTMLElement, options: BusinessGridOptions) {
     this.options = options;
+    if (options.selectAll) {
+      this.options.columns = options.columns.map((column) => column.id === 'select' ? {
+        ...column,
+        header: [{ text: '<input class="business-grid-select-all" type="checkbox" aria-label="全选当前页" title="全选当前页">', htmlEnable: true }],
+      } : column);
+      for (const type of ['pointerdown', 'mousedown', 'click', 'dblclick', 'change']) {
+        this.host.addEventListener(type, this.handleSelectAll, true);
+      }
+      this.selectionObserver = new MutationObserver(() => this.syncSelectionCheckboxes());
+      this.selectionObserver.observe(this.host, { childList: true, subtree: true });
+    }
     this.create();
   }
 
@@ -93,6 +120,10 @@ export class BusinessGridController {
   }
 
   destroy(): void {
+    this.selectionObserver?.disconnect();
+    for (const type of ['pointerdown', 'mousedown', 'click', 'dblclick', 'change']) {
+      this.host.removeEventListener(type, this.handleSelectAll, true);
+    }
     if (this.filterTimer) clearTimeout(this.filterTimer);
     this.filterTimer = null;
     this.grid?.destructor();
@@ -172,6 +203,26 @@ export class BusinessGridController {
       const id = String(row.id);
       if (this.selectedRows.has(id)) this.grid!.addRowCss(row.id, "business-grid-row--selected");
       else this.grid!.removeRowCss(row.id, "business-grid-row--selected");
+    });
+    this.syncSelectionCheckboxes();
+  }
+
+  private syncSelectionCheckboxes(): void {
+    if (!this.options.selectAll || !this.grid) return;
+    let total = 0;
+    let selected = 0;
+    this.grid.data.forEach((row) => {
+      if (row.id === undefined) return;
+      total++;
+      if (this.selectedRows.has(String(row.id))) selected++;
+    });
+    this.host.querySelectorAll<HTMLInputElement>('.business-grid-select-all').forEach((input) => {
+      input.checked = total > 0 && selected === total;
+      input.indeterminate = selected > 0 && selected < total;
+      input.disabled = total === 0;
+    });
+    this.host.querySelectorAll<HTMLInputElement>('input[data-grid-select-id]').forEach((input) => {
+      input.checked = this.selectedRows.has(input.dataset.gridSelectId || '');
     });
   }
 }

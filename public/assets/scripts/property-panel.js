@@ -399,6 +399,10 @@
       deleteSelectedButton.setAttribute("aria-label", label);
       deleteSelectedButton.innerHTML = '<i class="fa-solid fa-trash"></i>';
     }
+    const assignButton = byId("btnPropertyAssignSelected");
+    if (assignButton) {
+      assignButton.disabled = selectedCount !== 1 || !propertyGridRows.some((row) => window.propertySelectedIds.has(String(row.id)));
+    }
     const selectionStatus = byId("propertySelectionStatus");
     if (selectionStatus) {
       selectionStatus.textContent = selectedCount
@@ -426,11 +430,11 @@
             sortable: false,
             htmlEnable: true,
             template: (_value, row) =>
-              `<input class="property-row-select" type="checkbox" aria-label="选择属性" ${window.propertySelectedIds.has(String(row.id)) ? "checked" : ""}>`,
+              `<input class="property-row-select" data-grid-select-id="${escapeHtml(row.id)}" type="checkbox" aria-label="选择属性" ${window.propertySelectedIds.has(String(row.id)) ? "checked" : ""}>`,
           },
           {
             id: "name",
-            header: [{ text: "属性", content: "inputFilter" }],
+            header: [{ text: "属性" }],
             minWidth: 160,
             gravity: 2,
             htmlEnable: true,
@@ -461,28 +465,18 @@
             htmlEnable: true,
             sortable: false,
           },
-          {
-            id: "actions",
-            header: [{ text: "操作" }],
-            minWidth: 166,
-            gravity: 1.3,
-            htmlEnable: true,
-            sortable: false,
-          },
         ],
         multiselection: true,
+        selectAll: true,
         rowHeight: 52,
         emptyText: "暂无属性",
-        serverFilter: true,
-        onFilterChange: async (filters) => {
-          const input = byId("propertyMgmtSearch");
-          if (input) input.value = String(filters.name || "").trim();
-          propertyPage = 1;
-          await loadPropertyList();
-        },
         onSelectionChange: (ids) => {
           window.propertySelectedIds = new Set(ids);
           updatePropertySelectedStyles();
+        },
+        onCellDblClick: (row, column, event) => {
+          if (column.id === "select" || event.target.closest("input, select, button, a")) return;
+          openPropertyModal("edit", row.source || {});
         },
         onCellClick: async (row, column, event) => {
           if (event.target.closest(".property-quick-edit")) return;
@@ -498,31 +492,7 @@
             updatePropertySelectedStyles();
             return;
           }
-          const toggle = event.target.closest(".btnPropertyToggleOntology");
-          if (toggle) {
-            try {
-              if (row.linked) await unlinkPropertyFromOntology(id);
-              else await linkPropertyToOntology(id);
-              await Promise.all([loadPropertyList(), loadOntologyTree()]);
-            } catch (err) {
-              alert(
-                (row.linked ? "取消关联" : "关联") +
-                  "失败: " +
-                  (err?.message || err),
-              );
-            }
-            return;
-          }
-          if (event.target.closest(".btnPropertyEdit")) {
-            openPropertyModal("edit", row.source || {});
-            return;
-          }
-          if (event.target.closest(".btnPropertyAssignOntology")) {
-            openPropertyOntologyModal(row.source || {});
-            return;
-          }
-          if (event.target.closest(".btnPropertyDelete"))
-            await deleteProperty(id);
+
         },
       });
     }
@@ -573,12 +543,6 @@
           ? prop.ontology_names.filter(Boolean)
           : [];
         const isLinkedToCurrent = Boolean(prop.linked_to_ontology);
-        const actionHtml = selectedOntologyId
-          ? isLinkedToCurrent
-            ? ""
-            : `<button class="btn sm primary btnPropertyToggleOntology ontology-link-btn" data-id="${escapeHtml(prop.id)}" data-linked="0">关联</button>`
-          : `<button class="btn sm icon btnPropertyAssignOntology" data-id="${escapeHtml(prop.id)}" title="关联本体" aria-label="关联本体"><i class="fa-solid fa-diagram-project"></i></button>`;
-
         const source = {
           id: prop.id || "",
           name: prop.name || prop.label || "",
@@ -599,10 +563,6 @@
           tailEntityHtml: renderPropertyQuickSelect(prop, "tail_ontology_id", "", prop.tail_ontology_id || ""),
           linked: isLinkedToCurrent,
           source,
-          actions: `${actionHtml}
-            <button class="btn sm icon btnPropertyEdit" title="编辑"><i class="fa-solid fa-pen"></i></button>
-            <button class="btn sm icon danger btnPropertyDelete" data-id="${escapeHtml(prop.id || "")}" title="删除"><i class="fa-solid fa-trash"></i></button>
-          `,
         });
       }
       await renderPropertyGrid(gridRows);
@@ -1319,6 +1279,16 @@
     if (btnPropertyAdd && !btnPropertyAdd.dataset.bound) {
       btnPropertyAdd.dataset.bound = "1";
       btnPropertyAdd.addEventListener("click", () => openPropertyModal("add"));
+    }
+
+    const btnAssignSelected = byId("btnPropertyAssignSelected");
+    if (btnAssignSelected && !btnAssignSelected.dataset.bound) {
+      btnAssignSelected.dataset.bound = "1";
+      btnAssignSelected.addEventListener("click", () => {
+        if (window.propertySelectedIds.size !== 1) return;
+        const row = propertyGridRows.find((item) => window.propertySelectedIds.has(String(item.id)));
+        if (row) openPropertyOntologyModal(row.source || {});
+      });
     }
 
     const btnDeleteSelected = byId("btnPropertyDeleteSelected");

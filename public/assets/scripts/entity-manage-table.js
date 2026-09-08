@@ -18,6 +18,14 @@
     return url ? `<img class="entity-manage-image" src="${escapeHtml(url)}" alt="" loading="lazy">` : '<span class="entity-manage-image entity-manage-image--empty"><i class="fa-regular fa-image"></i></span>';
   };
   const labelOf = (node) => String(node?.label_zh || node?.label || node?.name || "未命名实体").trim();
+  const aliasesOf = (node) => {
+    let values = node?.aliases_zh ?? node?.aliases ?? node?.alias ?? [];
+    if (typeof values === "string") {
+      try { values = JSON.parse(values); } catch { /* Plain alias lists are also supported. */ }
+    }
+    if (!Array.isArray(values)) values = String(values ?? "").split(/[\n,，;；、]+/);
+    return [...new Set(values.map((value) => String(value ?? "").trim()).filter(Boolean))].join("、");
+  };
   const escapeHtml = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const scopedUrl = (path) => {
     const url = new URL(path, window.location.origin);
@@ -71,39 +79,23 @@
     const list = filteredNodes();
     renderedRows = list.map((node) => {
       const id = normalizeId(node); const tags = Array.isArray(node.tags) ? node.tags.join("、") : String(node.tags || "");
-      return { id, select: "", name: labelOf(node), type: node.typeLabel || node.classLabel || node.type || "—", tags: tags || "—", updated: node.updated_at || node.created_at || "—" };
+      return { id, select: "", name: labelOf(node), aliases: aliasesOf(node) || "—", type: node.typeLabel || node.classLabel || node.type || "—", tags: tags || "—" };
     });
     renderedRows.forEach((row, index) => { row.image = imageCell(list[index]); });
     const module = await window.kbBusinessGridModuleReady;
     if (!entityGrid) {
       entityGrid = module.getBusinessGrid(host, {
         columns: [
-          { id: "select", header: [{ text: "选择" }], width: 64, sortable: false, htmlEnable: true, template: (_value, row) => `<input class="entity-manage-check" type="checkbox" ${selected.has(String(row.id)) ? "checked" : ""}>` },
+          { id: "select", header: [{ text: "选择" }], width: 64, sortable: false, htmlEnable: true, template: (_value, row) => `<input class="entity-manage-check" data-grid-select-id="${escapeHtml(row.id)}" type="checkbox" ${selected.has(String(row.id)) ? "checked" : ""}>` },
           { id: "image", header: [{ text: "图片" }], width: 74, sortable: false, htmlEnable: true, template: (value) => value },
-          { id: "name", header: [{ text: "名称", content: "inputFilter" }], minWidth: 180, gravity: 1.2 },
-          { id: "type", header: [{ text: "类型", content: "selectFilter" }], width: 170 },
+          { id: "name", header: [{ text: "名称" }], minWidth: 180, gravity: 1.2 },
+          { id: "aliases", header: [{ text: "别名" }], minWidth: 180, gravity: 1, template: (value) => escapeHtml(value) },
+          { id: "type", header: [{ text: "类型" }], width: 170 },
           { id: "tags", header: [{ text: "标签" }], minWidth: 160, gravity: 1 },
-          { id: "updated", header: [{ text: "更新时间" }], width: 180 },
         ],
         multiselection: true,
+        selectAll: true,
         emptyText: "没有可管理的实体",
-        serverFilter: true,
-        onFilterChange: async (filters) => {
-          const search = String(filters.name || "").trim();
-          const type = String(filters.type || "").trim();
-          const manageSearch = byId("entityManageSearch");
-          const tableSearch = byId("tblSearch");
-          if (manageSearch) manageSearch.value = search;
-          if (tableSearch) tableSearch.value = search;
-          const typeSelect = byId("tblTypeFilter");
-          if (typeSelect) {
-            const matchingOption = [...typeSelect.options].find((option) => option.value === type || option.textContent?.trim() === type);
-            typeSelect.value = matchingOption?.value || "";
-            typeSelect.dispatchEvent(new Event("change", { bubbles: true }));
-          } else {
-            await window.loadTablePage?.({ resetPage: true, scrollToTop: true });
-          }
-        },
         onSelectionChange: (ids) => {
           selected.clear(); ids.forEach((id) => selected.add(id));
           syncGlobalSelection(ids[0] || ""); updateCount();
