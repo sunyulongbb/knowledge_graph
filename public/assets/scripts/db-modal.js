@@ -186,6 +186,7 @@
     }
 
     const dbId = (card.dataset.db || "").trim();
+    if (card.dataset.owner !== 'true') { if (err) { err.textContent = '仅创建者可以删除应用'; err.style.display = ''; } return; }
     const title = (card.dataset.title || dbId || "").trim();
     if (!dbId) return;
 
@@ -342,6 +343,7 @@
         card.tabIndex = 0;
         card.setAttribute("role", "button");
         card.dataset.db = dbId;
+        card.dataset.owner = String(!!it.owner);
         card.dataset.title = titleText;
         card.dataset.desc = descText;
         card.dataset.link = it.link || "";
@@ -642,7 +644,7 @@
           const projectName =
             typeof p === "string"
               ? p.replace(/\.sqlite$/, "")
-              : (p.name || p.file || "").toString().replace(/\.sqlite$/, "");
+              : (p.slug || p.name || p.file || "").toString().replace(/\.sqlite$/, "");
           const title =
             typeof p === "object" && p.title ? p.title : projectName;
           const opt = document.createElement("option");
@@ -660,7 +662,7 @@
             (p) =>
               (typeof p === "string"
                 ? p.replace(/\.sqlite$/, "")
-                : (p.name || p.file || "")
+                : (p.slug || p.name || p.file || "")
                     .toString()
                     .replace(/\.sqlite$/, "")) === dbName,
           );

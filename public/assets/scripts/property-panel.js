@@ -283,6 +283,7 @@
   }
 
   async function savePropertyQuickEdit(event) {
+    if (window.authUser?.role !== 'admin') return;
     const input = event.target.closest(".property-quick-edit");
     if (!input) return;
     const id = input.dataset.propertyId;
@@ -585,6 +586,7 @@
   }
 
   function openPropertyModal(mode, data = {}) {
+    if (window.authUser?.role !== 'admin') return;
     const modal = byId("propertyModal");
     const title = byId("propertyModalTitle");
     const form = byId("propertyForm");
@@ -639,6 +641,7 @@
   }
 
   function openOntologyModal(mode, options = {}) {
+    if (window.authUser?.role !== 'admin') return;
     const modal = byId("ontologyModal");
     const title = byId("ontologyModalTitle");
     const form = byId("ontologyForm");
@@ -774,6 +777,7 @@
   }
 
   function openPropertyOntologyModal(data = {}) {
+    if (window.authUser?.role !== 'admin') return;
     const modal = byId("propertyOntologyModal");
     const title = byId("propertyOntologyModalTitle");
     const summary = byId("propertyOntologyModalSummary");
@@ -1272,6 +1276,37 @@
         )
           return;
         await clearAllOntologies();
+      });
+    }
+
+    const importButton = byId("btnOntologyImport");
+    const importFile = byId("ontologyImportFile");
+    if (importButton && importFile && !importButton.dataset.bound) {
+      importButton.dataset.bound = "1";
+      importButton.addEventListener("click", () => importFile.click());
+      importFile.addEventListener("change", async () => {
+        const file = importFile.files?.[0];
+        if (!file) return;
+        const status = byId("ontologyImportStatus");
+        importButton.disabled = true;
+        if (status) status.textContent = "正在导入…";
+        try {
+          if (file.size > 5 * 1024 * 1024) throw new Error("JSON 文件不能超过 5 MB");
+          let data;
+          try { data = JSON.parse((await file.text()).replace(/^\uFEFF/, "")); }
+          catch { throw new Error("JSON 格式错误，请参考示例文件"); }
+          const result = await apiJson(appendCurrentDbToUrl(new URL("/api/kb/ontologies/import", window.location.origin)).toString(), {
+            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data),
+          });
+          if (byId("ontologySearch")) byId("ontologySearch").value = "";
+          await Promise.all([loadOntologyTree(), loadPropertyList()]);
+          if (status) status.textContent = `导入完成：新增 ${result.created} 个，更新 ${result.updated} 个本体`;
+        } catch (error) {
+          if (status) status.textContent = "导入失败：" + (error?.message || error);
+        } finally {
+          importButton.disabled = false;
+          importFile.value = "";
+        }
       });
     }
 

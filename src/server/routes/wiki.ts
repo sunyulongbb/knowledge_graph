@@ -63,8 +63,8 @@ function normalizeMarkdownTables(md: string) {
 
 export async function handleWikiRoutes(req: Request, url: URL, method: string) {
   if (url.pathname === "/api/wiki/page/save" && method === "POST") {
-    if (!isAdmin(getCurrentUser(req))) {
-      return Response.json({ error: "需要管理员权限" }, { status: 403 });
+    if (!getCurrentUser(req)) {
+      return Response.json({ error: "请先登录" }, { status: 401 });
     }
     try {
       const body = (await req.json()) as any;
@@ -76,7 +76,7 @@ export async function handleWikiRoutes(req: Request, url: URL, method: string) {
       }
 
       const dbId = entityId.replace("entity/", "");
-      db.run("UPDATE nodes SET wiki_md = ? WHERE id = ?", [content, dbId]);
+      db.run("UPDATE nodes SET wiki_md = ?, updated_by_user_id = ? WHERE id = ?", [content, getCurrentUser(req).id, dbId]);
 
       return Response.json({ ok: true });
     } catch (e) {

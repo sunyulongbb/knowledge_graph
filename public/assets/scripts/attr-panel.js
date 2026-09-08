@@ -1296,6 +1296,7 @@ if (btnAttrReset) {
             ensureAttrButtonsState();
           });
           row.addEventListener("dblclick", (e) => {
+            if (!window.canEditCurrentKnowledge?.()) return;
             e.stopPropagation();
             openAttrEditorForRow(row, it, vi, nodeId);
           });
@@ -2859,6 +2860,7 @@ if (btnAttrReset) {
   }
 
   async function deleteAttr(edgeId) {
+    if (!window.canEditCurrentKnowledge?.()) return;
     // Backend expects path parameter /api/kb/attributes/<edge_id>
     try {
       const resp = await fetch(

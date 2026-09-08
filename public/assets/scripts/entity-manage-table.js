@@ -65,6 +65,11 @@
   }
 
   function updateCount() {
+    const ids = [...selected];
+    for (const [buttonId, mode] of [['btnEntityManageDelete', 'manage'], ['btnEntityManageApplyType', 'edit'], ['btnEntityManageApplyTag', 'edit']]) {
+      const button = byId(buttonId);
+      if (button) button.disabled = !window.canOperateKnowledgeSelection?.(ids, mode);
+    }
     const count = byId("entityManageCount");
     if (count) count.textContent = `已选 ${selected.size} 项`;
     const all = byId("entityManageCheckAll");
@@ -78,8 +83,8 @@
     if (!host) return;
     const list = filteredNodes();
     renderedRows = list.map((node) => {
-      const id = normalizeId(node); const tags = Array.isArray(node.tags) ? node.tags.join("、") : String(node.tags || "");
-      return { id, select: "", name: labelOf(node), aliases: aliasesOf(node) || "—", type: node.typeLabel || node.classLabel || node.type || "—", tags: tags || "—" };
+      const id = normalizeId(node);
+      return { id, select: "", name: labelOf(node), aliases: aliasesOf(node) || "—", type: node.typeLabel || node.classLabel || node.type || "—" };
     });
     renderedRows.forEach((row, index) => { row.image = imageCell(list[index]); });
     const module = await window.kbBusinessGridModuleReady;
@@ -91,7 +96,6 @@
           { id: "name", header: [{ text: "名称" }], minWidth: 180, gravity: 1.2 },
           { id: "aliases", header: [{ text: "别名" }], minWidth: 180, gravity: 1, template: (value) => escapeHtml(value) },
           { id: "type", header: [{ text: "类型" }], width: 170 },
-          { id: "tags", header: [{ text: "标签" }], minWidth: 160, gravity: 1 },
         ],
         multiselection: true,
         selectAll: true,
@@ -127,6 +131,7 @@
   async function updateSelected(makePayload) {
     const ids = [...selected];
     if (!ids.length) throw new Error("请先选择实体");
+    if (!window.canOperateKnowledgeSelection?.(ids, 'edit')) throw new Error(window.authUser ? '选中项包含无权编辑的知识' : '请先登录');
     const map = new Map(nodes().map((node) => [normalizeId(node), node]));
     for (const id of ids) {
       const response = await fetch(scopedUrl("/api/kb/nodes/update"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, ...makePayload(map.get(id)) }) });
@@ -137,6 +142,7 @@
   async function deleteSelected() {
     const ids = [...selected];
     if (!ids.length) throw new Error("请先选择实体");
+    if (!window.canOperateKnowledgeSelection?.(ids, 'manage')) throw new Error(window.authUser ? '选中项包含无权删除的知识' : '请先登录');
     if (!window.confirm(`确定删除所选 ${ids.length} 个实体及其关系吗？此操作不可恢复。`)) return;
     for (const id of ids) {
       const url = new URL(scopedUrl("/api/kb/nodes")); url.searchParams.set("id", id);

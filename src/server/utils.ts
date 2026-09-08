@@ -1,4 +1,5 @@
 import { db } from "./db.ts";
+import { knowledgeContext, canAccessKnowledge } from './knowledge-access.ts';
 import { normalizeDatatype, normalizeValue, valueTypeFor, uiDatatype } from '../shared/wikidata.ts';
 
 // ── Formatters ───────────────────────────────────────────────────────────────
@@ -281,6 +282,12 @@ export function formatNode(row: any) {
     ...extraData,
     id: row.id,
     _id: row.id,
+    visibility: row.visibility || 'public',
+    owner_user_id: row.owner_user_id || null,
+    creator_username: row.creator_username || '',
+    updated_by_user_id: row.updated_by_user_id || null,
+    can_edit: canAccessKnowledge(db, knowledgeContext.getStore()?.user || null, row.id, 'edit'),
+    can_manage: canAccessKnowledge(db, knowledgeContext.getStore()?.user || null, row.id, 'manage'),
     name: row.name,
     label: row.name,
     label_zh: extraData.label_zh ?? row.name,
@@ -477,7 +484,7 @@ export function formatAttribute(row: any) {
 export function getNextNumericNodeId(): string {
   const maxIdResult = db
     .query(
-      "SELECT MAX(CAST(id AS INTEGER)) as maxId FROM nodes WHERE id GLOB '[0-9]*'",
+      "SELECT MAX(CAST(id AS INTEGER)) as maxId FROM main.nodes WHERE id GLOB '[0-9]*'",
     )
     .get() as any;
   const nextId = (maxIdResult?.maxId || 0) + 1;

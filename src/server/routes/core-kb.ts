@@ -1915,7 +1915,7 @@ export async function handleCoreKbRoutes(
               targetId = targetId.replace("entity/", "");
             }
             // 只添加目标节点也在当前项目中的边
-            if (!hasProjectScope || nodeIdSet.has(targetId)) {
+            if (nodeIdSet.has(targetId)) {
               edges.push(
                 formatEdge({
                   id: attr.id + ":" + targetId,
@@ -3544,8 +3544,8 @@ export async function handleCoreKbRoutes(
   }
 
   if (url.pathname === "/api/kb/nodes" && method === "POST") {
-    if (!isAdmin(getCurrentUser(req))) {
-      return Response.json({ error: "需要管理员权限" }, { status: 403 });
+    if (!getCurrentUser(req)) {
+      return Response.json({ error: "请先登录" }, { status: 401 });
     }
     try {
       const body = (await req.json()) as any;
@@ -3574,7 +3574,7 @@ export async function handleCoreKbRoutes(
       videos = await prepareVideoValues(videos);
 
       db.run(
-        "INSERT INTO nodes (id, name, type, description, aliases, tags, data, images, covers, link, pdf, videos, project_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO nodes (id, name, type, description, aliases, tags, data, images, covers, link, pdf, videos, project_id, visibility) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
           id,
           name,
@@ -3589,6 +3589,7 @@ export async function handleCoreKbRoutes(
           pdf,
           JSON.stringify(videos),
           scopedProjectId,
+          body.visibility === 'private' ? 'private' : 'public',
         ],
       );
 
@@ -3632,8 +3633,8 @@ export async function handleCoreKbRoutes(
   }
 
   if (url.pathname === "/api/kb/nodes/update" && method === "POST") {
-    if (!isAdmin(getCurrentUser(req))) {
-      return Response.json({ error: "需要管理员权限" }, { status: 403 });
+    if (!getCurrentUser(req)) {
+      return Response.json({ error: "请先登录" }, { status: 401 });
     }
     try {
       const body = (await req.json()) as any;
@@ -3643,8 +3644,12 @@ export async function handleCoreKbRoutes(
         id = id.slice("entity/".length);
       }
 
-      const updates: string[] = [];
-      const params: any[] = [];
+      const updates: string[] = ['updated_by_user_id = ?'];
+      const params: any[] = [getCurrentUser(req).id];
+      if (body.visibility !== undefined) {
+        updates.push('visibility = ?');
+        params.push(body.visibility === 'private' ? 'private' : 'public');
+      }
 
       if (body.name !== undefined) {
         updates.push("name = ?");
@@ -4011,8 +4016,8 @@ export async function handleCoreKbRoutes(
   }
 
   if (url.pathname === "/api/kb/nodes" && method === "DELETE") {
-    if (!isAdmin(getCurrentUser(req))) {
-      return Response.json({ error: "需要管理员权限" }, { status: 403 });
+    if (!getCurrentUser(req)) {
+      return Response.json({ error: "请先登录" }, { status: 401 });
     }
     let idParam = url.searchParams.get("id");
     if (!idParam) return new Response("Missing id", { status: 400 });

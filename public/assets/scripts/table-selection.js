@@ -36,7 +36,10 @@ function __kbInitTableSelection() {
           : 0;
     try {
       if (btnDeleteSelected) {
-        btnDeleteSelected.disabled = count === 0;
+        const ids = Array.from(window.kbSelectedRowIds || []);
+        if (!ids.length && window.kbSelectedRowId) ids.push(window.kbSelectedRowId);
+        const disabled = count === 0 || !window.canOperateKnowledgeSelection?.(ids, 'manage');
+        if (btnDeleteSelected.disabled !== disabled) btnDeleteSelected.disabled = disabled;
       }
     } catch {}
   }
@@ -6112,6 +6115,10 @@ function __kbInitTableSelection() {
   async function deleteSelectedRows() {
     const ids = Array.from(window.kbSelectedRowIds || []);
     if (!ids.length) return;
+    if (!window.canOperateKnowledgeSelection?.(ids, 'manage')) {
+      alert(window.authUser ? '选中项包含无权删除的知识，请仅选择自己创建的知识。' : '请先登录');
+      return;
+    }
     if (
       !confirm(
         `确定删除选中 ${ids.length} 个节点及其所有关系？此操作不可恢复。`,

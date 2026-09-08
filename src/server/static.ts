@@ -37,6 +37,7 @@ export async function serveStaticRoute(req: Request, pathname: string) {
       mkv: "video/x-matroska",
       pdf: "application/pdf",
       txt: "text/plain; charset=utf-8",
+      md: "text/plain; charset=utf-8",
     };
     const contentType = contentTypes[ext] || "application/octet-stream";
     headers.set("Content-Type", contentType);
@@ -45,7 +46,7 @@ export async function serveStaticRoute(req: Request, pathname: string) {
     }
     headers.set("Accept-Ranges", "bytes");
     if (pathname.startsWith("/static/uploads/")) {
-      headers.set("Cache-Control", "public, max-age=31536000, immutable");
+      headers.set("Cache-Control", /\/(node-images|node-videos|node-pdfs)\//i.test(pathname) ? 'private, no-store' : "public, max-age=31536000, immutable");
     }
     return new Response(file, { headers });
   };
@@ -65,6 +66,9 @@ export async function serveStaticRoute(req: Request, pathname: string) {
     const sharedUploadPrefix = "/static/uploads/";
     if (pathname.startsWith(sharedUploadPrefix)) {
       const relativePath = pathname.slice(sharedUploadPrefix.length);
+      if (relativePath.split(/[\\/]/).some((part) => part === '..' || /[. :]$/.test(part) || part.includes(':'))) {
+        return new Response('Not Found', { status: 404 });
+      }
       const file = Bun.file(resolve(SHARED_UPLOADS_DIR, relativePath));
       if (await file.exists()) {
         return makeResponse(file);
@@ -85,6 +89,10 @@ export async function serveStaticRoute(req: Request, pathname: string) {
       return makeResponse(file);
     }
     return null;
+  }
+
+  if (pathname === "/examples/ontology-import.json" || pathname === "/examples/ontology-import-format.md") {
+    return makeResponse(Bun.file(`public${pathname}`));
   }
 
   if (pathname.startsWith("/assets/")) {

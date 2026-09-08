@@ -1,6 +1,7 @@
 import { db, getProjectByIdentifier } from "../db.ts";
 import { resolve } from "path";
 import { loadOntologyProperties } from '../ontology-properties.ts';
+import { importOntologies, OntologyImportError } from '../ontology-import.ts';
 import { normalizeDatatype, valueTypeFor, datatypeValueTypes } from '../../shared/wikidata.ts';
 import { mkdirSync, writeFileSync } from "fs";
 
@@ -314,6 +315,23 @@ export async function handleSchemaRoutes(
       items: buildOntologyTree(items),
       flat: items,
     });
+  }
+
+  if (url.pathname === "/api/kb/ontologies/import" && method === "POST") {
+    try {
+      const raw = await req.text();
+      if (new TextEncoder().encode(raw).length > 5 * 1024 * 1024) {
+        return Response.json({ error: "JSON 文件不能超过 5 MB" }, { status: 413 });
+      }
+      const result = importOntologies(db, JSON.parse(raw.replace(/^\uFEFF/, '')), scopedProjectId);
+      return Response.json({ ok: true, ...result });
+    } catch (error) {
+      if (error instanceof OntologyImportError || error instanceof SyntaxError) {
+        return Response.json({ error: error instanceof SyntaxError ? "JSON 格式错误，请检查文件" : error.message }, { status: 400 });
+      }
+      console.error("Ontology import failed", error);
+      return Response.json({ error: "本体导入失败，本次导入已回滚" }, { status: 500 });
+    }
   }
 
   if (url.pathname === "/api/kb/ontologies" && method === "POST") {
@@ -1504,6 +1522,7 @@ export async function handleSchemaRoutes(
         types: parseTypes(row.types),
         description: row.description,
         ontology_ids: parseCsvField(row.ontology_ids_csv),
+        tail_ontology_id: row.tail_ontology_id || "",
         ontology_names: parseCsvField(row.ontology_names_csv),
         linked_to_ontology:
           ontologyIdRaw && row.linked_to_ontology !== undefined

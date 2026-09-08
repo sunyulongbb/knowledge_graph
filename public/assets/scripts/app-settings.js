@@ -227,6 +227,7 @@
     let modal = document.getElementById('appSettingsModal');
     if (!modal) modal = createModal();
     const project = await fetchCurrentProjectInfo();
+    if (!project?.editSettings) { alert('仅创建者或获授权的维护成员可以修改应用设置'); return; }
     const nameInput = document.getElementById('appName');
     const descInput = document.getElementById('appDesc');
     const linkInput = document.getElementById('appLink');

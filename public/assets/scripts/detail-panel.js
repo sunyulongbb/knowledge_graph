@@ -865,7 +865,7 @@
     try {
       const be = document.getElementById("btnEditWiki");
       if (be) {
-        be.style.display = window.authUser?.role === "admin" ? "inline-flex" : "none";
+        be.style.display = "none";
         // click behavior wired separately to open inline editor
       }
     } catch (e) {}
@@ -1669,7 +1669,7 @@
         try {
           const be = document.getElementById("btnEditWiki");
           if (be) {
-            be.style.display = window.authUser?.role === "admin" ? "inline-flex" : "none";
+            be.style.display = doc?.can_edit ? "inline-flex" : "none";
             // inline edit click is handled by wired listener
           }
         } catch (e) {}
@@ -1909,7 +1909,7 @@
     const editButton = document.getElementById("btnEditWiki");
     const detailPanel = document.getElementById("detailPanel");
     if (editButton && detailPanel?.style.display !== "none") {
-      editButton.style.display = event.detail?.user?.role === "admin" ? "inline-flex" : "none";
+      editButton.style.display = "none";
     }
   });
 
@@ -2169,7 +2169,7 @@
         view.innerHTML =
           '<div class="muted">暂无百科内容，点击“编辑百科”创建。</div>';
       const be = document.getElementById("btnEditWiki");
-      if (be) be.style.display = "inline-flex";
+      if (be) be.style.display = "none";
     }
   }
 

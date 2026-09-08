@@ -48,7 +48,7 @@
     window["@tiptap/starter-kit"] =
       window["@tiptap/starter-kit"] || window.TiptapStarterKit;
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20260908-3" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20260908-4" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -1928,9 +1928,13 @@
           <select id="tblTypeFilter" class="kb-select sm table-context-type-filter" aria-label="本体类型筛选" style="display:none;">
             <option value="">本体类型</option>
           </select>
-          <button id="btnTblLayoutToggle" class="btn icon" title="切换到网格布局" aria-label="切换布局">
-            <i class="fa-solid fa-th-large"></i>
-          </button>
+          <select id="tblLayoutSelect" class="kb-select sm" title="知识布局" aria-label="知识布局">
+            <option value="list">列表布局</option>
+            <option value="grid">网格布局</option>
+            <option value="timeline">时间轴布局</option>
+            <option value="semantic">语义地图布局</option>
+            <option value="manage">实体表格</option>
+          </select>
           <div id="tblGridZoomControls" class="table-grid-zoom" style="display:none;" role="group" aria-label="网格缩放">
             <button id="btnTblGridZoomOut" class="btn icon sm" type="button" title="缩小缩略图" aria-label="缩小缩略图">
               <i class="fa-solid fa-minus"></i>
@@ -1979,6 +1983,7 @@
               </div>
             </div>
           </div>
+          <a id="btnViewApplications" class="nav-item" role="tab" aria-selected="false" href="#view=applications"><span class="nav-label">应用</span></a>
           <a id="btnViewEntry" class="nav-item" role="tab" aria-selected="false" title="录入页面" aria-label="录入页面"
             href="#"><span class="nav-label">录入</span></a>
           <a id="btnViewClean" class="nav-item" role="tab" aria-selected="false" title="数据清洗" aria-label="数据清洗"
@@ -2016,6 +2021,7 @@
           <button id="btnTheme" class="btn icon" title="切换主题" aria-label="切换主题">
             <i class="fa-regular fa-moon"></i>
           </button>
+          <button id="btnNotifications" type="button" class="btn icon" title="消息通知" aria-label="消息通知" aria-expanded="false" aria-controls="notificationPanel"><i class="fa-regular fa-bell"></i><span id="notificationBadge" hidden></span></button>
           <button id="btnAuth" type="button" class="btn icon" title="登录" aria-label="登录/用户">
             <i class="fa-regular fa-user"></i>
           </button>
@@ -2394,6 +2400,13 @@
                 </div>
                 <div class="social-compose-main">
                   <div class="social-compose-meta-row">
+                    <label class="knowledge-visibility-control" title="公开：所有人可读；私有：仅创建者与维护者可读">
+                      <span>访问级别</span>
+                      <select id="knowledgeVisibility" class="kb-select sm" aria-label="知识访问级别">
+                        <option value="public">公开</option>
+                        <option value="private">私有</option>
+                      </select>
+                    </label>
                     <button id="btnAddOntologyChip" class="social-ontology-trigger" type="button"><i class="fa-solid fa-tag"></i> 添加本体</button>
                     <select id="composerTypeSelect" class="social-ontology-select" aria-label="添加本体" style="display:none;">
                       <option value="">请选择本体</option>
@@ -3083,6 +3096,13 @@
                   </button>
                 </div>
                 <input id="ontologySearch" type="text" class="app-search-input kb-input sm" placeholder="搜索本体名称..." autocomplete="off" />
+                <div class="ontology-title-row">
+                  <button id="btnOntologyImport" class="btn sm" type="button"><i class="fa-solid fa-file-import"></i> 导入 JSON</button>
+                  <a class="btn sm" href="/examples/ontology-import.json" download="ontology-import.json">下载示例</a>
+                  <input id="ontologyImportFile" type="file" accept=".json,application/json" hidden />
+                </div>
+                <div class="muted" style="font-size:12px">增量导入：同级同名更新，新增追加，未导入的本体保留。<a href="/examples/ontology-import-format.md" target="_blank">格式说明</a></div>
+                <div id="ontologyImportStatus" class="muted" style="font-size:12px" role="status" aria-live="polite"></div>
               </div>
               <div id="ontologyTree" class="ontology-tree-wrap"></div>
             </aside>
@@ -4092,6 +4112,13 @@
             </div>
           </div>
         </div>
+        <section id="applicationsPanel" class="panel applications-page" style="display:none;">
+          <div class="applications-heading"><div><h2>应用</h2><p class="muted">发现知识应用，加入维护，共同完善内容。</p></div><button id="btnApplicationCreate" class="btn primary" type="button">创建应用</button></div>
+          <div class="applications-toolbar"><button type="button" class="btn accent" data-app-scope="market">应用市场</button><button type="button" class="btn" data-app-scope="mine">我的应用</button><input id="applicationSearch" class="kb-input" placeholder="搜索应用名称或描述" aria-label="搜索应用" /></div>
+          <form id="applicationCreateForm" class="application-card" hidden><h3>创建应用</h3><label>应用名称<input name="title" class="kb-input" required maxlength="100" /></label><label>应用短名<input name="name" class="kb-input" required maxlength="64" pattern="[a-zA-Z0-9_-]+" placeholder="例如 my-knowledge" /></label><label>描述<textarea name="description" class="kb-input" maxlength="2000" rows="3"></textarea></label><div><button type="submit" class="btn primary">创建</button><button type="button" class="btn" id="btnApplicationCreateCancel">取消</button></div></form>
+          <p id="applicationStatus" class="muted" role="status"></p><div id="applicationCards" class="application-cards"></div>
+          <section id="applicationAccess" class="application-card" hidden aria-live="polite"></section>
+        </section>
         <section id="userManagementPanel" class="panel user-management-page" style="display:none; padding:20px; overflow:auto; min-height:0;">
           <div class="user-management-page__header">
             <div><h2>用户权限管理</h2><p class="muted">管理用户角色与账号状态。</p></div>
@@ -5833,7 +5860,7 @@
     const tbDetailControls = document.getElementById("tbDetailControls");
     const headerTableContextTargets = [
       document.getElementById("tblTypeFilter"),
-      document.getElementById("btnTblLayoutToggle"),
+      document.getElementById("tblLayoutSelect"),
       document.getElementById("tblGridZoom"),
       document.getElementById("btnTblGridZoomOut"),
       document.getElementById("btnTblGridZoomIn"),
@@ -6111,6 +6138,7 @@
       "shorts",
       "gallery",
       "user_management",
+      "applications",
     ]);
 
     function normalizeViewModeInput(value) {
@@ -9918,6 +9946,12 @@
       const isShorts = normalized === "shorts";
       const isGallery = normalized === "gallery";
       const isUserManagement = normalized === "user_management";
+      const isApplications = normalized === 'applications';
+      document.getElementById('btnViewApplications')?.classList.toggle('active', isApplications);
+      document.getElementById('btnViewApplications')?.setAttribute('aria-selected', String(isApplications));
+      const applicationsPanel = document.getElementById('applicationsPanel');
+      if (applicationsPanel) applicationsPanel.style.display = isApplications ? '' : 'none';
+      if (isApplications) window.loadApplications?.();
       if (isClean) {
         startCleanTaskPolling();
       } else {
@@ -13138,7 +13172,7 @@
     function getGraphSnapshotStorageKey(scopeId) {
       const normalizedScopeId = getCurrentGraphSnapshotScopeId(scopeId);
       if (!normalizedScopeId) return "";
-      return `${KB_VIS_SNAPSHOT_STORAGE_PREFIX}:${getCurrentGraphDbScope()}:${normalizedScopeId}`;
+      return `${KB_VIS_SNAPSHOT_STORAGE_PREFIX}:${getCurrentGraphDbScope()}:${window.authUser?.username || 'anonymous'}:${normalizedScopeId}`;
     }
 
     function getExpandedOutgoingNodeIds() {
@@ -17929,6 +17963,8 @@
     function resetFormToAdd() {
       window.kbIsAddingNewNode = true;
       fId.value = "";
+      if (document.getElementById('knowledgeVisibility')) document.getElementById('knowledgeVisibility').value = 'public';
+      window.dispatchEvent(new CustomEvent('kb-editor-access', { detail: { node: null } }));
       fName.value = "";
       fDesc.value = "";
       if (fLink) fLink.value = "";
@@ -18107,6 +18143,8 @@
       }
       const id = (node && (node._id || node.id)) || "";
       fId.value = id;
+      if (document.getElementById('knowledgeVisibility')) document.getElementById('knowledgeVisibility').value = node?.visibility === 'private' ? 'private' : 'public';
+      window.dispatchEvent(new CustomEvent('kb-editor-access', { detail: { node } }));
       const nameVal = node?.label_zh || node?.label || node?.name || "";
       fName.value = nameVal;
       const descVal = node?.desc_zh || node?.description || node?.desc || "";
@@ -18159,7 +18197,7 @@
         const eAliasVals = document.getElementById('entityAliasValues');
         if (eName) {
           const composerTitle = [nameVal, fAliases.value ? `（${fAliases.value}）` : ''].join('');
-          const composerText = [composerTitle, descVal].filter((value) => value && value.trim()).join('\n\n');
+          const composerText = [composerTitle, descVal, formatComposerTagText(fTags.value)].filter((value) => value && value.trim()).join('\n\n');
           updateEntityDisplayName(eName, composerText);
         }
         if (eDesc) {
@@ -18324,6 +18362,7 @@
         const baseBody = {
           name,
           description,
+          visibility: document.getElementById('knowledgeVisibility')?.value || 'public',
           link,
           aliases,
           tags,
@@ -18566,7 +18605,16 @@
         aliases.push(...items);
         return '';
       }).replace(/\s+/g, ' ').trim();
-      return { name, description: paragraphs.join('\n\n').trim(), aliases: Array.from(new Set(aliases)) };
+      const description = paragraphs.join('\n\n')
+        .replace(/(^|\s)#[^\s#@]+/g, '$1')
+        .replace(/[\t ]+$/gm, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+      return { name, description, aliases: Array.from(new Set(aliases)) };
+    }
+
+    function formatComposerTagText(value) {
+      return String(value || '').split(/[,，;；、\n]+/).map((tag) => tag.trim()).filter(Boolean).map((tag) => `#${tag}`).join(' ');
     }
 
     function syncComposerToHiddenFields() {
@@ -18602,7 +18650,8 @@
       if (!entityDisplayName || document.activeElement === entityDisplayName) return;
       const title = (fName?.value || '') + (fAliases?.value ? `（${fAliases.value}）` : '');
       const description = fDesc?.value || '';
-      updateEntityDisplayName(entityDisplayName, description ? `${title}\n\n${description}` : title);
+      const text = [title, description, formatComposerTagText(fTags?.value)].filter(Boolean).join('\n\n');
+      updateEntityDisplayName(entityDisplayName, text);
     }
 
     if (fName) {
@@ -19879,15 +19928,17 @@
   <script>
       window.kbOntologyTreeModuleReady = import("/assets/generated/ontology-tree.js?v=20260904-1");
   </script>
-  <script src="/assets/scripts/property-panel.js?v=20260908-2"></script>
-  <script src="/assets/scripts/table-panel.js?v=20260906-2"></script>
-  <script src="/assets/scripts/table-selection.js?v=20260907-3"></script>
-  <script src="/assets/scripts/entity-manage-table.js?v=20260908-3"></script>
-  <script src="/assets/scripts/attr-panel.js?v=20260907-1"></script>
+  <script src="/assets/scripts/property-panel.js?v=20260908-4"></script>
+  <script src="/assets/scripts/table-panel.js?v=20260908-1"></script>
+  <script src="/assets/scripts/table-selection.js?v=20260908-5"></script>
+  <script src="/assets/scripts/entity-manage-table.js?v=20260908-5"></script>
+  <script src="/assets/scripts/attr-panel.js?v=20260908-5"></script>
   <!-- relation-panel.js 已移除，使用 edgehandles 拖拽创建关系 -->
   <script src="/assets/scripts/schema-panel.js?v=20260904-1"></script>
-  <script src="/assets/scripts/detail-panel.js?v=20260904-5"></script>
+  <script src="/assets/scripts/detail-panel.js?v=20260908-1"></script>
   <script src="/assets/scripts/knowledge-interactions.js?v=20260904-1"></script>
+  <script src="/assets/scripts/knowledge-access.js?v=20260908-5"></script>
+  <script src="/assets/scripts/applications.js?v=20260908-1"></script>
   <script src="/assets/scripts/user-management.js?v=20260905-3"></script>
   <script src="/assets/scripts/sidebar-panel.js?v=20260906-1"></script>
   <script src="/assets/scripts/auth-panel.js?v=20260906-1"></script>

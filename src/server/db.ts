@@ -1,6 +1,8 @@
 import { Database } from "bun:sqlite";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from "fs";
 import { join, resolve } from "path";
+import { createKnowledgeDatabase, ensureKnowledgeAccessSchema } from './knowledge-access.ts';
+import { ensureApplicationSchema } from './application-access.ts';
 
 const KNOWLEDGE_GRAPH_ROOT = resolve(import.meta.dir, "..", "..");
 const WORKSPACE_ROOT = resolve(KNOWLEDGE_GRAPH_ROOT, "..");
@@ -67,7 +69,7 @@ try {
 }
 
 export let adminDb: any = appDb;
-export let db = appDb;
+export let db = createKnowledgeDatabase(appDb);
 
 function runSafe(sql: string) {
   try {
@@ -1701,7 +1703,7 @@ export function initializeKnowledgeBaseDatabase() {
 }
 
 export function switchDatabase(_filename: string) {
-  db = appDb;
+  db = createKnowledgeDatabase(appDb);
   adminDb = appDb;
   ensureSharedTables();
 }
@@ -1709,3 +1711,5 @@ export function switchDatabase(_filename: string) {
 export { APP_DB_FILENAME, getProjectByIdentifier };
 
 initializeKnowledgeBaseDatabase();
+ensureKnowledgeAccessSchema(appDb);
+ensureApplicationSchema(appDb);

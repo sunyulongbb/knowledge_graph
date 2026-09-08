@@ -30,6 +30,34 @@ test('normalizes pasted whitespace and preserves description line breaks', () =>
   });
 });
 
+test('tag-only paragraphs do not become descriptions; literal hashes remain', () => {
+  expect(parse('标题\n\n#科学 #知识')).toEqual({ name: '标题', description: '', aliases: [] });
+  expect(parse('标题\n\n第一段 #科学\n\n#知识\n\n第二段')).toEqual({ name: '标题', description: '第一段\n\n第二段', aliases: [] });
+  expect(parse('标题\n\nC# 和 https://example.org/#section\n# Markdown 标题').description).toBe('C# 和 https://example.org/#section\n# Markdown 标题');
+});
+
+test('editing a saved entity retains tags independently from its description', () => {
+  const fields = { entityDisplayName: { innerText: '' }, fName: { value: '标题' }, fDesc: { value: '描述' }, fAliases: { value: '' }, fTags: { value: '科学, 知识' } };
+  const extractStart = html.indexOf('    function extractComposerList(');
+  const { refresh, sync } = new Function('fields', `
+    const { entityDisplayName, fName, fDesc, fAliases, fTags } = fields;
+    const document = { activeElement: null };
+    const updateEntityDisplayName = (el, text) => { el.innerText = text; };
+    const parseComposerMentionTokens = () => [];
+    ${html.slice(extractStart, start)}
+    ${source}
+    return {refresh: refreshComposerFromHiddenFields, sync: syncComposerToHiddenFields};
+  `)(fields);
+  refresh(); sync();
+  expect(fields.fDesc.value).toBe('描述');
+  expect(fields.fTags.value).toBe('科学, 知识');
+  fields.fName.value = '新标题';
+  refresh(); sync();
+  expect(fields.fName.value).toBe('新标题');
+  expect(fields.fDesc.value).toBe('描述');
+  expect(fields.fTags.value).toBe('科学, 知识');
+});
+
 test('composer input updates saved fields and clears removed aliases', () => {
   const fields = { entityDisplayName: { innerText: '标题（别名）\n\n描述 #标签' }, fName: { value: '' }, fDesc: { value: '' }, fAliases: { value: '' }, fTags: { value: '' } };
   const sync = new Function('fields', `const { entityDisplayName, fName, fDesc, fAliases, fTags } = fields;
@@ -38,7 +66,7 @@ test('composer input updates saved fields and clears removed aliases', () => {
     ${source}; return syncComposerToHiddenFields;`)(fields);
   sync();
   expect(fields.fName.value).toBe('标题');
-  expect(fields.fDesc.value).toBe('描述 #标签');
+  expect(fields.fDesc.value).toBe('描述');
   expect(fields.fAliases.value).toBe('别名');
   expect(fields.fTags.value).toBe('标签');
   fields.entityDisplayName.innerText = '新标题';
@@ -51,7 +79,7 @@ test('composer input updates saved fields and clears removed aliases', () => {
 test('saved nodes restore title, aliases and description for another save', () => {
   const fillStart = html.indexOf('          const composerTitle =');
   const fillEnd = html.indexOf('          updateEntityDisplayName(eName, composerText);', fillStart);
-  const format = new Function('nameVal', 'descVal', 'fAliases', `${html.slice(fillStart, fillEnd)}; return composerText;`);
+  const format = new Function('nameVal', 'descVal', 'fAliases', `const fTags = {value: ''}; ${source}; ${html.slice(fillStart, fillEnd)}; return composerText;`);
   expect(parse(format('知识图谱', '描述\n\n更多描述', { value: 'Knowledge Graph, KG' }))).toEqual({
     name: '知识图谱', description: '描述\n\n更多描述', aliases: ['Knowledge Graph', 'KG'],
   });

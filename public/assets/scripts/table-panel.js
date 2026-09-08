@@ -34,7 +34,7 @@
   );
   const btnClearTableFilter = document.getElementById("btnClearTableFilter");
   const btnTableRefresh = document.getElementById("btnTableRefresh");
-  const btnTblLayoutToggle = document.getElementById("btnTblLayoutToggle");
+  const tblLayoutSelect = document.getElementById("tblLayoutSelect");
   const tblGridZoomControls = document.getElementById("tblGridZoomControls");
   const tblGridZoom = document.getElementById("tblGridZoom");
   const btnTblGridZoomOut = document.getElementById("btnTblGridZoomOut");
@@ -164,36 +164,7 @@
     document
       .getElementById("tablePanel")
       ?.classList.toggle("manage-layout", normalized === "manage");
-    if (btnTblLayoutToggle) {
-      const nextMode =
-        TABLE_LAYOUT_MODES[
-          (TABLE_LAYOUT_MODES.indexOf(normalized) + 1) %
-            TABLE_LAYOUT_MODES.length
-        ];
-      const nextLabel =
-        nextMode === "grid"
-          ? "网格布局"
-          : nextMode === "timeline"
-            ? "时间轴布局"
-            : nextMode === "semantic"
-              ? "语义地图布局"
-            : nextMode === "manage"
-              ? "管理表格"
-              : "列表布局";
-      const icon =
-        normalized === "grid"
-          ? "fa-table-columns"
-          : normalized === "timeline"
-            ? "fa-clock"
-            : normalized === "semantic"
-              ? "fa-star-of-life"
-            : normalized === "manage"
-              ? "fa-list"
-              : "fa-th-large";
-      btnTblLayoutToggle.innerHTML = `<i class="fa-solid ${icon}"></i>`;
-      btnTblLayoutToggle.title = `切换到${nextLabel}`;
-      btnTblLayoutToggle.setAttribute("aria-label", `切换到${nextLabel}`);
-    }
+    if (tblLayoutSelect) tblLayoutSelect.value = normalized;
     if (tblGridZoomControls) {
       tblGridZoomControls.style.display =
         normalized === "grid" ? "flex" : "none";
@@ -1080,15 +1051,9 @@
       });
     }
 
-    if (btnTblLayoutToggle) {
-      btnTblLayoutToggle.addEventListener("click", () => {
-        const currentMode = normalizeTableLayoutMode(window.kbTableLayoutMode);
-        const nextMode =
-          TABLE_LAYOUT_MODES[
-            (TABLE_LAYOUT_MODES.indexOf(currentMode) + 1) %
-              TABLE_LAYOUT_MODES.length
-          ];
-        applyTableLayoutMode(nextMode);
+    if (tblLayoutSelect) {
+      tblLayoutSelect.addEventListener("change", () => {
+        applyTableLayoutMode(tblLayoutSelect.value);
         tblPage = 1;
         tblLoadedNodes = [];
         tblGridLoadExhausted = false;

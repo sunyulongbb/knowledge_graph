@@ -1,4 +1,5 @@
-import { switchDatabase } from "./db.ts";
+import { switchDatabase, adminDb } from "./db.ts";
+import { createApplicationHandler } from './application-access.ts';
 import { handleCoreKbRoutes } from "./routes/core-kb.ts";
 import { handleAuthRoutes } from "./routes/auth.ts";
 import { handleProjectRoutes } from "./routes/projects.ts";
@@ -10,8 +11,12 @@ import { handleSemanticMapRoutes } from "./routes/semantic-map.ts";
 import { handleSparqlRoutes } from "./routes/sparql.ts";
 import { handleInteractionRoutes } from "./routes/interactions.ts";
 import { handleSystemAdminRoutes } from "./routes/system-admin.ts";
+import { getCurrentUser } from './auth-context.ts';
+import { knowledgeContext } from './knowledge-access.ts';
+import { guardKnowledgeRequest, handleKnowledgeAccessRoutes } from './routes/knowledge-access.ts';
 
 const port = parseInt(process.env.PORT || "8080");
+const handleApplications = createApplicationHandler(adminDb, getCurrentUser);
 
 const server = Bun.serve({
   port: port,
@@ -42,6 +47,15 @@ const server = Bun.serve({
         }
       }
 
+      const requestUrl = url;
+      const response = await knowledgeContext.run({ user: getCurrentUser(req) }, async () => {
+      const url = requestUrl;
+      const applicationResponse = await handleApplications(req, url, method);
+      if (applicationResponse) return applicationResponse;
+      const guardResponse = await guardKnowledgeRequest(req, url, method);
+      if (guardResponse) return guardResponse;
+      const accessResponse = await handleKnowledgeAccessRoutes(req, url, method);
+      if (accessResponse) return accessResponse;
       const projectRes = await handleProjectRoutes(req, url, method);
       if (projectRes) return projectRes;
 
@@ -75,6 +89,9 @@ const server = Bun.serve({
       if (wikiRes) return wikiRes;
 
       return new Response("Not Found", { status: 404 });
+      });
+      if (requestUrl.pathname.startsWith('/api/')) response.headers.set('Cache-Control', 'private, no-store');
+      return response;
     } catch (e) {
       console.warn(
         `${method} - ${url && url.pathname ? url.pathname : "unknown"} failed`,

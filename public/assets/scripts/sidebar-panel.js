@@ -22,7 +22,9 @@
 })();
 (function () {
   // --- Project sidebar logic ---
+  let projectListVersion = 0;
   async function loadProjectsToSidebar() {
+    const token = ++projectListVersion;
     const wrap = document.querySelector(".project-list");
     if (!wrap) return;
     wrap.innerHTML = '<div class="muted">加载中…</div>';
@@ -30,7 +32,10 @@
       const resp = await fetch("/api/kb/list_projects");
       if (!resp.ok) throw new Error("HTTP " + resp.status);
       const data = await resp.json();
+      if (token !== projectListVersion) return;
       const items = Array.isArray(data.projects) ? data.projects : [];
+      window.kbApplicationProjects = items;
+      window.dispatchEvent(new CustomEvent('kb-application-access-change'));
       wrap.innerHTML = "";
       if (!items.length) {
         wrap.innerHTML = '<div class="muted">暂无项目</div>';
@@ -198,6 +203,9 @@
         console.warn('updateSidebarAppLinkButtonState failed', e);
       }
     } catch (err) {
+      if (token !== projectListVersion) return;
+      window.kbApplicationProjects = [];
+      window.dispatchEvent(new CustomEvent('kb-application-access-change'));
       wrap.innerHTML = '<div class="muted">加载失败</div>';
       console.warn("loadProjectsToSidebar failed", err);
     }
@@ -1089,7 +1097,7 @@
         // If there was a previously selected project (prevDb) and it's different from the new one,
         // re-add it to the top of the sidebar so it doesn't disappear permanently.
         try {
-          if (prevDb && prevDb !== dbId) {
+          if (prevDb && prevDb !== dbId && (window.kbApplicationProjects || []).some((project) => project.slug === prevDb && project.member)) {
             const wrap = document.querySelector(".project-list");
             if (
               wrap &&
@@ -1232,7 +1240,15 @@
     }
   }
 
-  function openEditProjectModal(dbId, title, image, desc) {
+  async function openEditProjectModal(dbId, title, image, desc) {
+    try {
+      const response = await fetch('/api/kb/list_projects', { cache: 'no-store' });
+      if (!response.ok) return;
+      const data = await response.json();
+      const project = data.projects.find((item) => item.slug === dbId);
+      if (!project?.editSettings) { alert('未获授修改应用设置的权限'); return; }
+      if (btnDeleteEditProject) btnDeleteEditProject.style.display = project.owner ? '' : 'none';
+    } catch { return; }
     if (!editProjectModal) return;
     editProjectModal.style.display = "flex";
     if (editProjectId) editProjectId.textContent = dbId;

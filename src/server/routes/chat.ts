@@ -1,5 +1,6 @@
 import { db } from "../db.ts";
 import { formatNode } from "../utils.ts";
+import { knowledgeContext } from '../knowledge-access.ts';
 
 const CHAT_MODEL_URL =
   process.env.CHAT_MODEL_URL || "http://10.117.1.238:8104/brief_or_profound";
@@ -10,9 +11,10 @@ const CHAT_MODEL_PING_TIMEOUT = parseInt(
 const LANGGRAPH_TOP_K = parseInt(process.env.LANGGRAPH_TOP_K || "5");
 
 function getSessions(): Map<string, any> {
-  (globalThis as any)._kb_chat_sessions =
-    (globalThis as any)._kb_chat_sessions || new Map();
-  return (globalThis as any)._kb_chat_sessions;
+  const stores = (globalThis as any)._kb_user_chat_sessions ||= new Map();
+  const userId = knowledgeContext.getStore()?.user?.id || 'anonymous';
+  if (!stores.has(userId)) stores.set(userId, new Map());
+  return stores.get(userId);
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -1380,7 +1382,7 @@ export async function handleChatRoutes(
         const lgUrl = new URL("/langgraph", url.origin);
         const forwardResp = await fetch(lgUrl.toString(), {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", cookie: req.headers.get('cookie') || '' },
           body: JSON.stringify({ ...body, message, session_id: sessionId }),
         });
         const j = await forwardResp.json().catch(() => null);

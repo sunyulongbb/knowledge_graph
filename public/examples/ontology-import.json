@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "ontologies": [
+    {
+      "name": "人物",
+      "description": "人物相关的本体分类",
+      "alias": ["Person"],
+      "color": "#3b82f6",
+      "display_shape": "circle",
+      "children": [
+        {
+          "name": "科学家",
+          "description": "从事科学研究的人物",
+          "alias": ["Scientist"],
+          "color": "#10b981",
+          "display_shape": "rounded",
+          "children": [{ "name": "物理学家" }, { "name": "化学家" }]
+        },
+        { "name": "艺术家", "alias": ["Artist"] }
+      ]
+    },
+    {
+      "name": "组织",
+      "description": "组织机构分类",
+      "children": [{ "name": "企业" }, { "name": "研究机构" }]
+    }
+  ]
+}
