@@ -2,6 +2,7 @@ import { db, getProjectByIdentifier } from "../db.ts";
 import { resolve } from "path";
 import { loadOntologyProperties } from '../ontology-properties.ts';
 import { importOntologies, OntologyImportError } from '../ontology-import.ts';
+import { importClasses, ClassImportError } from '../class-import.ts';
 import { normalizeDatatype, valueTypeFor, datatypeValueTypes } from '../../shared/wikidata.ts';
 import { mkdirSync, writeFileSync } from "fs";
 
@@ -760,6 +761,18 @@ export async function handleSchemaRoutes(
     }
   }
 
+  if (url.pathname === "/api/kb/classes/import" && method === "POST") {
+    try {
+      const raw = await req.text();
+      if (new TextEncoder().encode(raw).length > 2 * 1024 * 1024) return Response.json({ error: "JSON 文件不能超过 2 MB" }, { status: 413 });
+      return Response.json({ ok: true, ...importClasses(db, JSON.parse(raw.replace(/^\uFEFF/, "")), scopedProjectId) });
+    } catch (error) {
+      if (error instanceof ClassImportError || error instanceof SyntaxError) return Response.json({ error: error instanceof SyntaxError ? "JSON 格式错误，请检查文件" : error.message }, { status: 400 });
+      console.error("Class import failed", error);
+      return Response.json({ error: "分类导入失败，本次导入已回滚" }, { status: 500 });
+    }
+  }
+
   if (url.pathname === "/api/kb/classes" && method === "GET") {
     const q = url.searchParams.get("q") || "";
     const querySql = hasProjectScope
@@ -796,6 +809,7 @@ export async function handleSchemaRoutes(
           name: row.name,
           label: row.name,
           description: row.description,
+          parent_id: row.parent_id || null,
           parent: row.parent_id,
           project_id: row.project_id ?? null,
           color: row.color,

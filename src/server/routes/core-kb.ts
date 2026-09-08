@@ -1,5 +1,6 @@
 import { db, getProjectByIdentifier } from "../db.ts";
 import { normalizeDatatype, normalizeValue, normalizeStatement, valueTypeFor, uiDatatype } from '../../shared/wikidata.ts';
+import { normalizeEntityTaxonomy } from '../../shared/entity-taxonomy.ts';
 import { getCurrentUser, isAdmin } from "../auth-context.ts";
 import { mkdirSync, writeFileSync } from "fs";
 import { resolve } from "path";
@@ -74,6 +75,29 @@ export async function handleCoreKbRoutes(
   };
   const applyScope = <T extends any[]>(params: T) =>
     hasProjectScope ? [...params, scopedProjectId] : params;
+  const scopedOntologyExists = (id: string) => Boolean(
+    hasProjectScope
+      ? db.query("SELECT 1 FROM ontologies WHERE id = ? AND project_id = ? LIMIT 1").get(id, scopedProjectId)
+      : db.query("SELECT 1 FROM ontologies WHERE id = ? AND project_id IS NULL LIMIT 1").get(id),
+  );
+  const scopedClassExists = (id: string) => Boolean(
+    hasProjectScope
+      ? db.query("SELECT 1 FROM classes WHERE id = ? AND project_id = ? LIMIT 1").get(id, scopedProjectId)
+      : db.query("SELECT 1 FROM classes WHERE id = ? AND project_id IS NULL LIMIT 1").get(id),
+  );
+  const validateCanonicalTaxonomy = (
+    body: any,
+    taxonomy: ReturnType<typeof normalizeEntityTaxonomy>,
+  ): Response | null => {
+    if (Object.prototype.hasOwnProperty.call(body, "typeId") && taxonomy.typeId && !scopedOntologyExists(taxonomy.typeId)) {
+      return Response.json({ error: "typeId 必须来自当前本体树" }, { status: 400 });
+    }
+    if (Object.prototype.hasOwnProperty.call(body, "categoryIds")) {
+      const invalidId = taxonomy.categoryIds.find((id) => !scopedClassExists(id));
+      if (invalidId) return Response.json({ error: `分类不存在：${invalidId}` }, { status: 400 });
+    }
+    return null;
+  };
   const entryTaskScopeClause = (alias = "t") => {
     const prefix = alias ? `${alias}.` : "";
     return hasProjectScope
@@ -3549,6 +3573,9 @@ export async function handleCoreKbRoutes(
     }
     try {
       const body = (await req.json()) as any;
+      const taxonomy = normalizeEntityTaxonomy(body);
+      const taxonomyError = validateCanonicalTaxonomy(body, taxonomy);
+      if (taxonomyError) return taxonomyError;
       let id = body.id;
       if (!id) id = getNextNumericNodeId();
       id = id.toString();
@@ -3556,10 +3583,10 @@ export async function handleCoreKbRoutes(
         body.name !== undefined && body.name !== null
           ? String(body.name).trim()
           : "";
-      const type = body.type !== undefined ? String(body.type) : null;
+      const type = taxonomy.hasType ? taxonomy.typeId : null;
       const desc = body.description || "";
       const aliases = JSON.stringify(body.aliases || []);
-      const tags = JSON.stringify(body.tags || []);
+      const tags = JSON.stringify(taxonomy.tags);
       const mentions =
         body.mentions && typeof body.mentions === "object" ? body.mentions : {};
       const dataJson = JSON.stringify({ mentions });
@@ -3593,9 +3620,8 @@ export async function handleCoreKbRoutes(
         ],
       );
 
-      if (body.categories !== undefined) {
-        const categoryIds = normalizeListValue(body.categories || []);
-        for (const categoryValue of categoryIds) {
+      if (taxonomy.hasCategories) {
+        for (const categoryValue of taxonomy.categoryIds) {
           const classId = ensureClassRecord(categoryValue);
           if (classId) {
             assignNodeClass(id, classId);
@@ -3628,6 +3654,9 @@ export async function handleCoreKbRoutes(
       });
     } catch (e) {
       console.error(e);
+      if (e instanceof TypeError || e instanceof RangeError) {
+        return Response.json({ error: e.message }, { status: 400 });
+      }
       return new Response("Error creating node", { status: 500 });
     }
   }
@@ -3638,6 +3667,9 @@ export async function handleCoreKbRoutes(
     }
     try {
       const body = (await req.json()) as any;
+      const taxonomy = normalizeEntityTaxonomy(body);
+      const taxonomyError = validateCanonicalTaxonomy(body, taxonomy);
+      if (taxonomyError) return taxonomyError;
       let id = body.id;
       if (!id) return new Response("Missing id", { status: 400 });
       if (typeof id === "string" && id.startsWith("entity/")) {
@@ -3663,9 +3695,9 @@ export async function handleCoreKbRoutes(
         updates.push("aliases = ?");
         params.push(JSON.stringify(body.aliases));
       }
-      if (body.tags !== undefined) {
+      if (taxonomy.hasTags) {
         updates.push("tags = ?");
-        params.push(JSON.stringify(body.tags));
+        params.push(JSON.stringify(taxonomy.tags));
       }
       if (body.mentions !== undefined) {
         let existingData: Record<string, any> = {};
@@ -3717,19 +3749,18 @@ export async function handleCoreKbRoutes(
           }),
         );
       }
-      if (body.categories !== undefined) {
-        const normalizedCategories = normalizeListValue(body.categories || []);
+      if (taxonomy.hasCategories) {
         db.run("DELETE FROM entity_classes WHERE entity_id = ?", [id]);
-        for (const categoryValue of normalizedCategories) {
+        for (const categoryValue of taxonomy.categoryIds) {
           const classId = ensureClassRecord(categoryValue);
           if (classId) {
             assignNodeClass(id, classId);
           }
         }
       }
-      if (body.type !== undefined) {
+      if (taxonomy.hasType) {
         updates.push("type = ?");
-        params.push(body.type !== null ? String(body.type) : null);
+        params.push(taxonomy.typeId);
       }
       if (body.images !== undefined) {
         let imageValues = await prepareImageValues(
@@ -3866,7 +3897,7 @@ export async function handleCoreKbRoutes(
       if (!updatedNode) {
         return new Response("Node not found", { status: 404 });
       }
-      if (body.type !== undefined) {
+      if (taxonomy.hasType) {
         syncAllPropertyTypesForNode(id);
       }
 
@@ -3902,6 +3933,9 @@ export async function handleCoreKbRoutes(
       });
     } catch (e) {
       console.error(e);
+      if (e instanceof TypeError || e instanceof RangeError) {
+        return Response.json({ error: e.message }, { status: 400 });
+      }
       return new Response("Error updating node", { status: 500 });
     }
   }

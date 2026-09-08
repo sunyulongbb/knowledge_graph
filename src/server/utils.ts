@@ -132,6 +132,8 @@ export function formatNode(row: any) {
   }
 
   let typeLabel = "";
+  let typeId = row.type ? String(row.type).trim() : null;
+  let ontology = null as null | { id: string; name: string; color: string | null };
   if (row.type) {
     try {
       const typeKey = String(row.type).trim();
@@ -144,7 +146,13 @@ export function formatNode(row: any) {
         color = typeRow.color;
       }
       if (typeRow) {
+        typeId = String(typeRow.id);
         typeLabel = typeRow.name || typeRow.alias || row.type;
+        ontology = {
+          id: String(typeRow.id),
+          name: String(typeRow.name || typeRow.alias || typeRow.id),
+          color: typeRow.color || null,
+        };
       }
       if (!classLabel && typeRow) {
         classLabel = typeRow.alias || typeRow.name || row.type;
@@ -292,7 +300,9 @@ export function formatNode(row: any) {
     label: row.name,
     label_zh: extraData.label_zh ?? row.name,
     type: row.type,
+    typeId,
     typeLabel: typeLabel || row.type || "",
+    ontology,
     description: row.description ?? descZhFromExtra ?? "",
     desc_zh: descZhFromExtra || row.description || "",
     created_at: row.created_at || null,
@@ -305,6 +315,7 @@ export function formatNode(row: any) {
     classLabel: classLabel,
     classes: classes,
     categories,
+    categoryIds: categories,
     categoryLabels,
     images,
     image: image,

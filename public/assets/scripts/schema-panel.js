@@ -7,6 +7,9 @@
   const byId = dom.byId || ((id) => document.getElementById(id));
   const btnClsAdd = byId("btnClsAdd");
   const btnClsRefresh = byId("btnClsRefresh");
+  const btnClassImport = byId("btnClassImport");
+  const classImportFile = byId("classImportFile");
+  const classImportStatus = byId("classImportStatus");
   const clsTree = byId("clsTree");
   const clsForEntity = byId("clsForEntity");
   const btnSetClass = byId("btnSetClass");
@@ -445,9 +448,13 @@
 
       items = items.map((it, index) => {
         const rawOrder = Number(it?.sort_order);
+        const parentId = it?.parent_id ?? it?.parent ?? null;
         return {
           ...it,
-          parent: it?.parent ?? null,
+          // Keep both names because the class manager historically used
+          // `parent`, while the shared DHTMLX adapter uses `parent_id`.
+          parent: parentId,
+          parent_id: parentId,
           sort_order: Number.isFinite(rawOrder) ? rawOrder : index + 1,
         };
       });
@@ -457,6 +464,35 @@
       console.error("loadClasses", e);
       clsTree.innerHTML = '<div class="muted">加载失败</div>';
     }
+  }
+
+  if (btnClassImport && classImportFile) {
+    btnClassImport.addEventListener("click", () => classImportFile.click());
+    classImportFile.addEventListener("change", async () => {
+      const file = classImportFile.files?.[0];
+      if (!file) return;
+      btnClassImport.disabled = true;
+      if (classImportStatus) classImportStatus.textContent = "正在导入分类…";
+      try {
+        if (file.size > 2 * 1024 * 1024) throw new Error("JSON 文件不能超过 2 MB");
+        const url = appendCurrentDbToUrl(new URL("/api/kb/classes/import", window.location.origin));
+        const response = await fetch(url.toString(), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: (await file.text()).replace(/^\uFEFF/, ""),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+        await loadClasses();
+        window.dispatchEvent(new CustomEvent("kb:classes-updated"));
+        if (classImportStatus) classImportStatus.textContent = `导入完成：新增 ${result.created || 0} 个，更新 ${result.updated || 0} 个分类`;
+      } catch (error) {
+        if (classImportStatus) classImportStatus.textContent = `导入失败：${error?.message || error}`;
+      } finally {
+        btnClassImport.disabled = false;
+        classImportFile.value = "";
+      }
+    });
   }
 
   function buildClassTree(items) {
@@ -484,7 +520,8 @@
       const node = {
         ...it,
         children: [],
-        parent: it?.parent ?? null,
+        parent: it?.parent_id ?? it?.parent ?? null,
+        parent_id: it?.parent_id ?? it?.parent ?? null,
         sort_order: Number.isFinite(orderVal) ? orderVal : index + 1,
       };
       byId.set(node.id, node);
@@ -494,6 +531,7 @@
       const parentId =
         node.parent && byId.has(node.parent) ? node.parent : null;
       node.parent = parentId;
+      node.parent_id = parentId;
       const key = parentId ?? CLASS_TREE_ROOT_KEY;
       ensureChildrenList(key).push(node);
     });
@@ -552,6 +590,7 @@
               showAllButton: false,
               enableDrag: false,
               toggleSelection: true,
+              storageKey: "kb:ontology-tree-state:class-manager",
               onSelect: (id) => {
                 const nextId = id || null;
                 window.kbSelectedClassId = nextId;
@@ -633,7 +672,10 @@
       }
       return;
     }
-    classTreeController.update(items, window.kbSelectedClassId || "");
+    classTreeController.update(
+      buildClassTree(items),
+      window.kbSelectedClassId || "",
+    );
     classTreeController.filter("");
     return;
 
@@ -1280,15 +1322,9 @@
     const baseClassId = (window.kbSelectedClassId || "").trim();
     const entityId = (nodeId ?? "").toString().trim();
     if (!baseClassId || !entityId) return;
-    const targets = getClassAncestryIds(baseClassId);
-    if (!targets.length) return;
-    for (const cid of targets) {
-      try {
-        await setEntityClass(entityId, cid);
-      } catch (err) {
-        console.error("自动设置分类失败", err);
-      }
-    }
+    // A category tree expresses navigation hierarchy. Only the category the
+    // user selected is an explicit entity assignment; ancestors are inferred.
+    await setEntityClass(entityId, baseClassId);
   }
 
   async function clearEntityClass(entityId, classId) {
@@ -2787,6 +2823,8 @@
   const tagMgrDesc = byId("tagMgrDesc");
   const tagAddBar = byId("tagAddBar");
   const btnTagRefresh = byId("btnTagRefresh");
+  const btnTagImport = byId("btnTagImport");
+  const tagImportFile = byId("tagImportFile");
 
   let currentTagClassId = null;
   let currentTagClassTags = [];
@@ -2836,6 +2874,18 @@
       if (!tagMap.has(key)) tagMap.set(key, tag);
     });
     return Array.from(tagMap.values());
+  }
+
+  function parseTagImport(input) {
+    if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("文件必须是 JSON 对象");
+    const keys = Object.keys(input);
+    const unsupported = keys.find((key) => !["version", "tags"].includes(key));
+    if (unsupported) throw new Error(`文件包含不支持的字段：${unsupported}`);
+    if (input.version !== 1) throw new Error("version 必须为 1，请参考示例文件");
+    if (!Array.isArray(input.tags) || !input.tags.length) throw new Error("tags 必须是非空数组");
+    if (input.tags.length > 1000) throw new Error("一次最多导入 1000 个标签");
+    if (input.tags.some((tag) => typeof tag !== "string" || !tag.trim() || tag.trim().length > 100)) throw new Error("每个标签必须是 1–100 个字符的字符串");
+    return normalizeTagArray(input.tags);
   }
 
   function getAllClassTags() {
@@ -3134,6 +3184,37 @@
         showTagPanelForClass(cls || null);
       } else {
         showTagPanelForClass(null);
+      }
+    });
+  }
+  if (btnTagImport && tagImportFile) {
+    btnTagImport.addEventListener("click", () => tagImportFile.click());
+    tagImportFile.addEventListener("change", async () => {
+      const file = tagImportFile.files?.[0];
+      if (!file) return;
+      btnTagImport.disabled = true;
+      if (tagMsg) tagMsg.textContent = "正在导入标签…";
+      try {
+        if (file.size > 1024 * 1024) throw new Error("JSON 文件不能超过 1 MB");
+        let input;
+        try { input = JSON.parse((await file.text()).replace(/^\uFEFF/, "")); }
+        catch { throw new Error("JSON 格式错误，请参考示例文件"); }
+        const imported = parseTagImport(input);
+        if (currentTagClassId) {
+          const merged = normalizeTagArray([...currentTagClassTags, ...imported]);
+          await saveClassTags(currentTagClassId, merged);
+          currentTagClassTags = merged;
+        } else {
+          saveCustomTags([...loadCustomTags(), ...imported]);
+          currentTagClassTags = getAllClassTags();
+        }
+        showTagPanelForClass(currentTagClassId ? (window.kbClasses || []).find((item) => item.id === currentTagClassId) || null : null);
+        if (tagMsg) tagMsg.textContent = `导入完成：读取 ${imported.length} 个标签`;
+      } catch (error) {
+        if (tagMsg) tagMsg.textContent = `导入失败：${error?.message || error}`;
+      } finally {
+        btnTagImport.disabled = false;
+        tagImportFile.value = "";
       }
     });
   }

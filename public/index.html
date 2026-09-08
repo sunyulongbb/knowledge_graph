@@ -4936,6 +4936,13 @@
                 <div class="class-tree-subtitle">选择分类查看属性模型</div>
               </div>
               <div class="module-title-actions class-tree-actions">
+                <button class="btn icon" id="btnClassImport" type="button" title="导入分类 JSON" aria-label="导入分类 JSON">
+                  <i class="fa-solid fa-file-import"></i>
+                </button>
+                <a class="btn icon" href="/examples/class-import.json" download="class-import.json" title="下载分类导入示例" aria-label="下载分类导入示例">
+                  <i class="fa-solid fa-file-arrow-down"></i>
+                </a>
+                <input id="classImportFile" type="file" accept=".json,application/json" hidden />
                 <button class="btn icon" id="btnClsAdd" type="button" title="新增分类" aria-label="新增分类">
                   <i class="fa-solid fa-plus"></i>
                 </button>
@@ -4973,6 +4980,8 @@
               </div>
               <div id="clsTree" class="module-scroll"></div>
               <div class="module-footer">
+                <div id="classImportStatus" class="muted" role="status" aria-live="polite"></div>
+                <a class="muted" href="/examples/class-import-format.md" target="_blank">分类导入格式说明</a>
                 <div class="muted" id="clsForEntity">未选择实体</div>
                 <div class="module-actions">
                   <button class="btn icon" id="btnSetClass" type="button" title="设为该类" aria-label="设为该类">
@@ -4989,9 +4998,14 @@
           <section class="class-module module-tags">
             <div class="module-title-row" style="display:flex;align-items:center;justify-content:space-between;">
               <span class="module-title">标签管理</span>
-              <button class="btn icon" id="btnTagRefresh" type="button" title="刷新标签" aria-label="刷新标签">
-                <i class="fa-solid fa-arrow-rotate-right"></i>
-              </button>
+              <div class="module-title-actions">
+                <button class="btn icon" id="btnTagImport" type="button" title="导入标签 JSON" aria-label="导入标签 JSON"><i class="fa-solid fa-file-import"></i></button>
+                <a class="btn icon" href="/examples/tag-import.json" download="tag-import.json" title="下载标签导入示例" aria-label="下载标签导入示例"><i class="fa-solid fa-file-arrow-down"></i></a>
+                <input id="tagImportFile" type="file" accept=".json,application/json" hidden />
+                <button class="btn icon" id="btnTagRefresh" type="button" title="刷新标签" aria-label="刷新标签">
+                  <i class="fa-solid fa-arrow-rotate-right"></i>
+                </button>
+              </div>
             </div>
             <div class="module-body">
               <div id="tagMgrDesc" class="muted" style="font-size:12px;margin-bottom:8px;">全部标签（加载中…）</div>
@@ -5003,6 +5017,7 @@
               </div>
               <div id="tagList" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;min-height:28px;"></div>
               <div id="tagMsg" class="muted" style="font-size:12px;margin-top:4px;"></div>
+              <a class="muted" href="/examples/tag-import-format.md" target="_blank">标签导入格式说明</a>
               <!-- 分类标签说明 -->
               <div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);">
                 <div class="muted" style="font-size:11px;line-height:1.5;">点击标签可快捷为当前实体打标签（高亮 = 已应用）。分类标签用于可视化筛选与样式区分。
@@ -18161,7 +18176,7 @@
       uploadedPdfUrl = (node?.pdf || "").toString().trim();
       window.kbPendingEntityImageDataUrl = "";
       window.kbPendingEntityImages = [];
-      const nodeTypeValue = (node?.type || "").toString().trim();
+      const nodeTypeValue = (node?.typeId ?? node?.type ?? "").toString().trim();
       if (fType) fType.value = nodeTypeValue;
       if (composerTypeSelect) composerTypeSelect.value = nodeTypeValue;
       try { syncComposerTypeOptions(); } catch { }
@@ -18361,7 +18376,7 @@
           aliases,
           tags,
           mentions: mentionMap,
-          type: nodeType || null,
+          typeId: nodeType || null,
           ...(pendingHeaderImages.length ? { images: pendingHeaderImages, ...(isEdit ? { appendImages: true } : {}) } : {}),
           ...(posterData
             ? {
@@ -19898,10 +19913,10 @@
   <script src="/assets/scripts/entity-manage-table.js?v=20260908-5"></script>
   <script src="/assets/scripts/attr-panel.js?v=20260908-5"></script>
   <!-- relation-panel.js 已移除，使用 edgehandles 拖拽创建关系 -->
-  <script src="/assets/scripts/schema-panel.js?v=20260904-1"></script>
+  <script src="/assets/scripts/schema-panel.js?v=20260909-3"></script>
   <script src="/assets/scripts/detail-panel.js?v=20260908-1"></script>
   <script src="/assets/scripts/knowledge-interactions.js?v=20260904-1"></script>
-  <script src="/assets/scripts/knowledge-access.js?v=20260908-5"></script>
+  <script src="/assets/scripts/knowledge-access.js?v=20260909-1"></script>
   <script src="/assets/scripts/applications.js?v=20260909-1"></script>
   <script src="/assets/scripts/user-management.js?v=20260905-3"></script>
   <script src="/assets/scripts/sidebar-panel.js?v=20260909-1"></script>

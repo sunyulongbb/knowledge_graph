@@ -91,7 +91,7 @@ export async function serveStaticRoute(req: Request, pathname: string) {
     return null;
   }
 
-  if (pathname === "/examples/ontology-import.json" || pathname === "/examples/ontology-import-format.md") {
+  if (["/examples/ontology-import.json", "/examples/ontology-import-format.md", "/examples/class-import.json", "/examples/class-import-format.md", "/examples/tag-import.json", "/examples/tag-import-format.md"].includes(pathname)) {
     return makeResponse(Bun.file(`public${pathname}`));
   }
 
