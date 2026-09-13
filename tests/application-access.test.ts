@@ -107,3 +107,35 @@ test('the first maintenance applicant atomically becomes owner of a legacy appli
     expect((await (await call('/api/notifications', 2))!.json()).unread).toBe(1);
   } finally { db.close(); }
 });
+
+test('application details aggregate logo, ontology, category, tags and knowledge statistics', async () => {
+  const { db, call } = setup();
+  try {
+    await call('/api/applications', 1, { name: 'demo', title: 'Demo', image: '/logo.png' });
+    db.run('CREATE TABLE nodes(id TEXT PRIMARY KEY,type TEXT,tags TEXT,images TEXT,videos TEXT,visibility TEXT,project_id INTEGER)');
+    db.run('CREATE TABLE ontologies(id TEXT PRIMARY KEY,name TEXT,description TEXT,parent_id TEXT,color TEXT,sort_order INTEGER,project_id INTEGER)');
+    db.run('CREATE TABLE classes(id TEXT PRIMARY KEY,name TEXT,description TEXT,parent_id TEXT,color TEXT,image TEXT,tags TEXT,sort_order INTEGER,project_id INTEGER)');
+    db.run('CREATE TABLE entity_classes(entity_id TEXT,class_id TEXT)');
+    db.run('CREATE TABLE properties(id TEXT,project_id INTEGER)');
+    db.run('CREATE TABLE attributes(id TEXT,node_id TEXT)');
+    db.run("INSERT INTO ontologies VALUES('ontology/person','人物','',NULL,'#123456',1,1)");
+    db.run("INSERT INTO classes VALUES('class/news','新闻','',NULL,NULL,'','[\"推荐\"]',1,1)");
+    db.run("INSERT INTO nodes VALUES('n1','ontology/person','[\"人物\",\"推荐\"]','[\"a.jpg\"]','[]','public',1)");
+    db.run("INSERT INTO nodes VALUES('n2','ontology/person','[\"私有\"]','[]','[]','private',1)");
+    db.run("INSERT INTO entity_classes VALUES('n1','class/news')");
+    db.run("INSERT INTO properties VALUES('p1',1)");
+    db.run("INSERT INTO attributes VALUES('a1','n1')");
+    const response = await call('/api/applications/1/details');
+    expect(response!.status).toBe(200);
+    const data = await response!.json();
+    expect(data.project.image).toBe('/logo.png');
+    expect(data.ontologies[0]).toMatchObject({ id: 'ontology/person', entity_count: 1 });
+    expect(data.categories[0]).toMatchObject({ id: 'class/news', entity_count: 1, tags: ['推荐'] });
+    expect(data.tags).toEqual([{ name: '人物', count: 1 }, { name: '推荐', count: 1 }]);
+    expect(data.statistics).toMatchObject({ knowledge: 1, ontologies: 1, categories: 1, tags: 2, properties: 1, attributes: 1, media: 1 });
+    expect(data.tags.some((tag: any) => tag.name === '私有')).toBe(false);
+    const ownerData = await (await call('/api/applications/1/details', 1))!.json();
+    expect(ownerData.statistics).toMatchObject({ knowledge: 2, privateKnowledge: 1 });
+    expect(ownerData.tags.some((tag: any) => tag.name === '私有')).toBe(true);
+  } finally { db.close(); }
+});

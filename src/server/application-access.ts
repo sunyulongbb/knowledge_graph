@@ -31,6 +31,71 @@ export function createApplicationHandler(db: Database, getUser: (req: Request) =
     : db.query('SELECT * FROM projects WHERE name=?').get(String(key || '').replace(/\.sqlite$/, '')) as any;
   const notify = (userId: number, projectId: number, message: string) => db.run('INSERT INTO user_notifications(user_id,project_id,message) VALUES(?,?,?)', [userId, projectId, message]);
   const record = (project: any, user: KnowledgeUser | null) => ({ ...project, slug: project.name, name: project.title || project.name, ...applicationPermissions(db, user, project) });
+  const hasTable = (name: string) => !!db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name);
+  const parseList = (value: unknown): string[] => {
+    if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
+    if (typeof value !== 'string' || !value.trim()) return [];
+    try { const parsed = JSON.parse(value); if (Array.isArray(parsed)) return parseList(parsed); } catch {}
+    return value.split(/[,，;；、\n]+/).map((item) => item.trim()).filter(Boolean);
+  };
+  const countByProject = (table: string, projectId: number, extra = '') => {
+    if (!hasTable(table)) return 0;
+    return Number((db.query(`SELECT COUNT(*) AS count FROM ${table} WHERE project_id=?${extra}`).get(projectId) as any)?.count || 0);
+  };
+  const applicationDetails = (project: any, user: KnowledgeUser | null) => {
+    const projectId = Number(project.id);
+    const projectRecord = record(project, user);
+    const canSeePrivate = projectRecord.member === true;
+    const visibilitySql = canSeePrivate ? '' : " AND (n.visibility IS NULL OR n.visibility <> 'private')";
+    const ontologyEntityCount = hasTable('nodes')
+      ? `(SELECT COUNT(*) FROM nodes n WHERE n.project_id=o.project_id AND (n.type=o.id OR lower(n.type)=lower(o.name))${visibilitySql})`
+      : '0';
+    const ontologies = hasTable('ontologies') ? db.query(`
+      SELECT o.id,o.name,o.description,o.parent_id,o.color,o.sort_order,
+        ${ontologyEntityCount} AS entity_count
+      FROM ontologies o WHERE o.project_id=? ORDER BY COALESCE(o.sort_order,999999),o.name
+    `).all(projectId) as any[] : [];
+    const categoryEntityCount = hasTable('entity_classes') && hasTable('nodes')
+      ? `(SELECT COUNT(*) FROM entity_classes ec JOIN nodes n ON n.id=ec.entity_id WHERE ec.class_id=c.id AND n.project_id=?${visibilitySql})`
+      : '0';
+    const categories = hasTable('classes') ? db.query(`
+      SELECT c.id,c.name,c.description,c.parent_id,c.color,c.image,c.tags,c.sort_order,
+        ${categoryEntityCount} AS entity_count
+      FROM classes c WHERE c.project_id=? ORDER BY COALESCE(c.sort_order,999999),c.name
+    `).all(...(categoryEntityCount === '0' ? [projectId] : [projectId, projectId])) as any[] : [];
+    const nodes = hasTable('nodes') ? db.query(`SELECT id,tags,images,videos,visibility FROM nodes n WHERE project_id=?${visibilitySql}`).all(projectId) as any[] : [];
+    const tagCounts = new Map<string, { name: string; count: number }>();
+    const addTags = (raw: unknown, increment: number) => parseList(raw).forEach((name) => {
+      const key = name.toLocaleLowerCase();
+      const current = tagCounts.get(key) || { name, count: 0 };
+      current.count += increment;
+      tagCounts.set(key, current);
+    });
+    addTags(project.tags, 0);
+    categories.forEach((item) => addTags(item.tags, 0));
+    nodes.forEach((item) => addTags(item.tags, 1));
+    const mediaCount = nodes.reduce((sum, node) => sum + parseList(node.images).length + parseList(node.videos).length, 0);
+    const attributeCount = hasTable('attributes') && hasTable('nodes')
+      ? Number((db.query(`SELECT COUNT(*) AS count FROM attributes a JOIN nodes n ON n.id=a.node_id WHERE n.project_id=?${visibilitySql}`).get(projectId) as any)?.count || 0)
+      : 0;
+    return {
+      project: projectRecord,
+      ontologies,
+      categories: categories.map((item) => ({ ...item, tags: parseList(item.tags) })),
+      tags: Array.from(tagCounts.values()).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh-CN')),
+      statistics: {
+        knowledge: nodes.length,
+        publicKnowledge: nodes.filter((node) => node.visibility !== 'private').length,
+        privateKnowledge: canSeePrivate ? nodes.filter((node) => node.visibility === 'private').length : 0,
+        ontologies: ontologies.length,
+        categories: categories.length,
+        properties: countByProject('properties', projectId),
+        attributes: attributeCount,
+        media: mediaCount,
+        tags: tagCounts.size,
+      },
+    };
+  };
   return async function handle(req: Request, url: URL, method: string): Promise<Response | null> {
     const path = url.pathname;
     const legacy = ['/api/kb/list_projects', '/api/kb/create_project', '/api/kb/update_project', '/api/kb/delete_project'].includes(path);
@@ -70,10 +135,13 @@ export function createApplicationHandler(db: Database, getUser: (req: Request) =
       db.run("INSERT INTO projects(name,title,description,file,image,theme_color,tags,link,owner_user_id) VALUES(?,?,?,'app.sqlite',?,'#ff7a2b','[]',?,?)", [name, title, description, String(body.image || ''), String(body.link || ''), user.id]);
       return Response.json({ success: true, project: record(projectBy(name), user) }, { status: 201 });
     }
-    const match = path.match(/^\/api\/applications\/([^/]+)(?:\/(access|request|review|member))?$/);
+    const match = path.match(/^\/api\/applications\/([^/]+)(?:\/(details|access|request|review|member))?$/);
     const project = projectBy(legacy ? body.name : match ? decodeURIComponent(match[1]!) : '', !legacy);
     if (!project) return error('应用不存在', 404);
     const permissions = applicationPermissions(db, user, project);
+    if (match?.[2] === 'details' && method === 'GET') {
+      return Response.json(applicationDetails(project, user));
+    }
     if (match?.[2] === 'access' && method === 'GET') {
       return Response.json({ project: record(project, user), members: permissions.owner ? db.query('SELECT m.*,u.username,u.display_name FROM application_members m JOIN users u ON u.id=m.user_id WHERE project_id=? ORDER BY m.created_at').all(project.id) : [], requests: permissions.reviewRequests ? db.query("SELECT r.*,u.username,u.display_name FROM application_requests r JOIN users u ON u.id=r.user_id WHERE project_id=? AND r.status='pending' ORDER BY r.created_at").all(project.id) : [], ownRequest: user ? db.query('SELECT status FROM application_requests WHERE project_id=? AND user_id=?').get(project.id, user.id) : null });
     }

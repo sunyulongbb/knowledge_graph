@@ -1,7 +1,7 @@
 (function () {
   const byId = (id) => document.getElementById(id);
   const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-  let scope = 'market', projects = [], activeProject = null, listVersion = 0, detailVersion = 0;
+  let scope = 'market', projects = [], activeProject = null, listVersion = 0, detailVersion = 0, infoVersion = 0;
   const updateScope = () => { const value = new URLSearchParams(location.search).get('db'); window.kbApplicationScope = value && value !== 'app' ? value : ''; window.dispatchEvent(new CustomEvent('kb-application-access-change')); };
   updateScope();
   window.addEventListener('kb:url-param-changed', updateScope);
@@ -13,12 +13,62 @@
     return data;
   }
   const status = (message) => { byId('applicationStatus').textContent = message || ''; };
+  const safeUrl = (value, allowImageData = false) => {
+    const source = String(value || '').trim();
+    if (allowImageData && /^data:image\/(?:png|jpe?g|gif|webp|avif|svg\+xml);/i.test(source)) return source;
+    try { const url = new URL(source, location.origin); return ['http:', 'https:'].includes(url.protocol) ? url.href : ''; } catch { return ''; }
+  };
+  const initials = (project) => String(project.title || project.name || '应用').trim().slice(0, 2).toUpperCase();
+  const logo = (project, className = 'application-logo') => { const source = safeUrl(project.image, true); return `<div class="${className}" style="--application-color:${escape(project.theme_color || '#6366f1')}"><span aria-hidden="true">${escape(initials(project))}</span>${source ? `<img src="${escape(source)}" alt="${escape(project.title || project.name)} Logo" loading="lazy" />` : ''}</div>`; };
   function render() {
     const keyword = byId('applicationSearch').value.trim().toLowerCase();
     const items = projects.filter((project) => `${project.title} ${project.description} ${project.slug}`.toLowerCase().includes(keyword));
-    byId('applicationCards').innerHTML = items.map((project) => `<article class="application-card"><div class="application-card-heading"><h3>${escape(project.title || project.name)}</h3><span class="knowledge-role">${project.owner ? '我创建的' : project.member ? '维护成员' : '应用市场'}</span></div><p>${escape(project.description || '暂无描述')}</p><small class="muted">创建者：${escape(project.owner_name || project.owner_username || '历史应用未记录')} · ${escape(project.slug)}</small><div class="application-card-actions"><button class="btn" type="button" data-app-open="${escape(project.slug)}">打开应用</button><button class="btn primary" type="button" data-app-access="${project.id}">${project.owner ? '成员与申请管理' : project.reviewRequests ? '维护申请管理' : project.member ? '查看维护权限' : '申请维护'}</button></div></article>`).join('') || '<p class="muted">暂无应用。你可以创建一个应用，或到市场申请维护。</p>';
+    byId('applicationCards').innerHTML = items.map((project) => `<article class="application-card application-market-card">
+      <button class="application-card-cover" type="button" data-app-detail="${project.id}" aria-label="查看 ${escape(project.title || project.name)} 详情">${logo(project)}</button>
+      <div class="application-card-content"><div class="application-card-heading"><h3 title="${escape(project.title || project.name)}">${escape(project.title || project.name)}</h3><span class="knowledge-role">${project.owner ? '我创建的' : project.member ? '维护成员' : '应用市场'}</span></div>
+      <p class="application-card-description">${escape(project.description || '暂无描述')}</p><small class="muted">创建者：${escape(project.owner_name || project.owner_username || '历史应用未记录')} · ${escape(project.slug)}</small>
+      <div class="application-card-actions"><button class="btn primary" type="button" data-app-detail="${project.id}">查看详情</button><button class="btn" type="button" data-app-open="${escape(project.slug)}">打开应用</button><button class="btn icon" type="button" data-app-access="${project.id}" title="维护管理" aria-label="维护管理"><i class="fa-solid fa-user-gear"></i></button></div></div></article>`).join('') || '<div class="application-empty"><i class="fa-regular fa-folder-open"></i><p>暂无应用。你可以创建一个应用，或到市场申请维护。</p></div>';
     byId('btnApplicationCreate').disabled = !window.authUser;
     byId('btnApplicationCreate').title = window.authUser ? '创建应用' : '请先登录';
+  }
+  function renderTaxonomy(items, emptyText) {
+    if (!Array.isArray(items) || !items.length) return `<p class="muted application-detail-empty">${emptyText}</p>`;
+    const byParent = new Map();
+    const ids = new Set(items.map((item) => String(item.id)));
+    items.forEach((item) => {
+      const parent = item.parent_id && ids.has(String(item.parent_id)) ? String(item.parent_id) : '';
+      if (!byParent.has(parent)) byParent.set(parent, []);
+      byParent.get(parent).push(item);
+    });
+    const seen = new Set();
+    const branch = (parent = '') => (byParent.get(parent) || []).map((item) => {
+      if (seen.has(String(item.id))) return '';
+      seen.add(String(item.id));
+      const children = branch(String(item.id));
+      return `<li><span class="application-model-item"><i class="fa-solid fa-${children ? 'folder-tree' : 'circle-dot'}"></i><span>${escape(item.name || item.id)}</span><small>${Number(item.entity_count || 0)} 个实体</small></span>${children ? `<ul>${children}</ul>` : ''}</li>`;
+    }).join('');
+    return `<ul class="application-model-tree">${branch()}</ul>`;
+  }
+  async function loadDetails(id) {
+    const token = ++infoVersion;
+    const catalog = byId('applicationCatalog'), target = byId('applicationDetail');
+    catalog.hidden = true; target.hidden = false; target.innerHTML = '<div class="application-detail-loading"><span class="loading-spinner"></span>正在加载应用详情…</div>';
+    try {
+      const data = await api(`/api/applications/${id}/details`);
+      if (token !== infoVersion) return;
+      const project = data.project, stats = data.statistics || {};
+      const projectLink = safeUrl(project.link);
+      target.innerHTML = `<div class="application-detail-topbar"><button class="btn" type="button" data-app-detail-back><i class="fa-solid fa-arrow-left"></i> 返回应用</button><div><button class="btn" type="button" data-app-open="${escape(project.slug)}">打开应用</button><button class="btn primary" type="button" data-app-access="${project.id}">维护管理</button></div></div>
+        <header class="application-detail-hero">${logo(project, 'application-detail-logo')}<div class="application-detail-intro"><div class="application-detail-title"><h2>${escape(project.title || project.name)}</h2><span class="knowledge-role">${project.owner ? '我创建的' : project.member ? '维护成员' : '应用市场'}</span></div><p>${escape(project.description || '暂无描述')}</p><div class="application-detail-meta"><span><i class="fa-regular fa-user"></i> ${escape(project.owner_name || project.owner_username || '历史应用未记录')}</span><span><i class="fa-solid fa-code"></i> ${escape(project.slug)}</span>${project.created_at ? `<span><i class="fa-regular fa-calendar"></i> ${escape(String(project.created_at).slice(0, 10))}</span>` : ''}${projectLink ? `<a href="${escape(projectLink)}" target="_blank" rel="noopener noreferrer"><i class="fa-solid fa-arrow-up-right-from-square"></i> 官方链接</a>` : ''}</div></div></header>
+        <section class="application-stat-grid">${[
+          ['knowledge','知识实体','fa-database'],['ontologies','本体','fa-sitemap'],['categories','分类','fa-folder-tree'],['tags','标签','fa-tags'],['properties','属性','fa-list-check'],['attributes','属性值','fa-table-list'],['media','媒体','fa-photo-film']
+        ].map(([key,label,icon]) => `<div class="application-stat-card"><i class="fa-solid ${icon}"></i><strong>${Number(stats[key] || 0).toLocaleString()}</strong><span>${label}</span></div>`).join('')}</section>
+        <div class="application-detail-columns"><section class="application-detail-section"><div class="application-detail-section-head"><h3>本体信息</h3><span>${data.ontologies.length} 项</span></div>${renderTaxonomy(data.ontologies, '该应用暂未配置本体')}</section>
+        <section class="application-detail-section"><div class="application-detail-section-head"><h3>分类信息</h3><span>${data.categories.length} 项</span></div>${renderTaxonomy(data.categories, '该应用暂未配置分类')}</section></div>
+        <section class="application-detail-section application-tags-section"><div class="application-detail-section-head"><h3>标签信息</h3><span>${data.tags.length} 项</span></div><div class="application-detail-tags">${data.tags.map((tag) => `<span class="application-detail-tag">${escape(tag.name)}${tag.count ? `<small>${tag.count}</small>` : ''}</span>`).join('') || '<p class="muted application-detail-empty">该应用暂无标签</p>'}</div></section>`;
+    } catch (error) {
+      if (token === infoVersion) target.innerHTML = `<div class="application-detail-error"><p>${escape(error.message)}</p><button class="btn" type="button" data-app-detail-back>返回应用</button><button class="btn primary" type="button" data-app-detail="${id}">重试</button></div>`;
+    }
   }
   async function loadApplications() {
     const token = ++listVersion;
@@ -61,8 +111,10 @@
   byId('applicationsPanel').addEventListener('click', async (event) => {
     const button = event.target.closest('button'); if (!button) return;
     if (button.dataset.appScope) { scope = button.dataset.appScope; document.querySelectorAll('[data-app-scope]').forEach((item) => item.classList.toggle('accent', item === button)); loadApplications(); return; }
+    if (button.dataset.appDetail) { await loadDetails(button.dataset.appDetail); return; }
+    if (button.hasAttribute('data-app-detail-back')) { infoVersion++; byId('applicationDetail').hidden = true; byId('applicationCatalog').hidden = false; return; }
     if (button.dataset.appOpen) { const url = new URL(location.href); url.searchParams.set('db', button.dataset.appOpen); url.searchParams.delete('node'); url.searchParams.delete('view'); url.hash = 'view=table'; location.href = url; return; }
-    if (button.dataset.appAccess) { await loadAccess(button.dataset.appAccess); byId('applicationAccess').scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+    if (button.dataset.appAccess) { byId('applicationDetail').hidden = true; byId('applicationCatalog').hidden = false; await loadAccess(button.dataset.appAccess); byId('applicationAccess').scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
     if (button.hasAttribute('data-app-close')) { detailVersion++; activeProject = null; byId('applicationAccess').hidden = true; return; }
     if (!button.dataset.appReview && !button.dataset.memberRemove) return;
     const id = activeProject;
@@ -74,6 +126,10 @@
       await refreshAfterChange(id);
     } catch (error) { status(error.message); } finally { button.disabled = false; }
   });
+  byId('applicationsPanel').addEventListener('error', (event) => {
+    const image = event.target;
+    if (image instanceof HTMLImageElement && image.closest('.application-logo,.application-detail-logo')) image.remove();
+  }, true);
   byId('applicationAccess').addEventListener('submit', async (event) => {
     event.preventDefault(); const form = event.target, id = activeProject, button = form.querySelector('[type=submit]'); button.disabled = true;
     try {
