@@ -179,3 +179,10 @@ metric="cosine"
 - The semantic map does not use Cytoscape.js.
 - Version one intentionally does not render relationship edges.
 - `bunx tsc --noEmit` still reports several pre-existing type errors in older route files outside this feature, but the semantic map files added in this change are in place and wired into the Bun server.
+
+
+
+- 用户名：admin
+- 初始密码：R76tmuTLX1pydQouow1RB6ZB
+- 角色：超级管理员
+- 状态：启用

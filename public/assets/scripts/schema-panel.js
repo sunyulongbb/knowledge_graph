@@ -2828,6 +2828,7 @@
 
   let currentTagClassId = null;
   let currentTagClassTags = [];
+  let entityTagUpdatePending = false;
 
   if (!Array.isArray(window.kbProjectNodeTags)) {
     window.kbProjectNodeTags = [];
@@ -2953,10 +2954,27 @@
     );
   }
 
-  /** Toggle a tag in the left panel fTags input */
-  function toggleEntityTag(tag) {
+  function getSelectedEntityIdForTagging() {
+    const formId = String(document.getElementById("fId")?.value || "").trim();
+    if (formId) return formId.replace(/^entity\//, "");
+    const selectedIds = window.kbSelectedRowIds instanceof Set
+      ? Array.from(window.kbSelectedRowIds).map((id) => String(id || "").trim()).filter(Boolean)
+      : [];
+    if (selectedIds.length === 1) return selectedIds[0].replace(/^entity\//, "");
+    return String(window.kbSelectedNodeId || window.kbSelectedRowId || window.kbCurrentNodeId || "")
+      .trim()
+      .replace(/^entity\//, "");
+  }
+
+  /** Toggle and immediately persist a tag on the selected entity. */
+  async function toggleEntityTag(tag) {
     const fTags = document.getElementById("fTags");
-    if (!fTags) return;
+    const entityId = getSelectedEntityIdForTagging();
+    if (!entityId) {
+      if (tagMsg) tagMsg.textContent = "请先选中一个实体";
+      return;
+    }
+    if (!fTags || entityTagUpdatePending) return;
     const current = fTags.value
       .split(/[,，;；、\n]+/)
       .map((t) => t.trim())
@@ -2967,12 +2985,39 @@
     } else {
       current.push(tag);
     }
-    fTags.value = current.join(", ");
-    // Trigger input event so entity header syncs
-    try {
-      fTags.dispatchEvent(new Event("input", { bubbles: true }));
-    } catch {}
+    const nextTags = normalizeTagArray(current);
+    entityTagUpdatePending = true;
+    if (tagMsg) tagMsg.textContent = idx >= 0 ? "正在移除标签…" : "正在标注…";
     renderTagList(currentTagClassTags);
+    try {
+      const url = appendCurrentDbToUrl(
+        new URL("/api/kb/nodes/update", window.location.origin),
+      );
+      const response = await fetch(url.toString(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: entityId, tags: nextTags }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+      fTags.value = nextTags.join(", ");
+      fTags.dispatchEvent(new Event("input", { bubbles: true }));
+      if (window.kbCurrentNodePayload && String(window.kbCurrentNodePayload.id || window.kbCurrentNodePayload._id || "").replace(/^entity\//, "") === entityId) {
+        window.kbCurrentNodePayload.tags = nextTags.slice();
+      }
+      if (Array.isArray(window.kbTableNodes)) {
+        const row = window.kbTableNodes.find((node) => String(node?.id || node?._id || "").replace(/^entity\//, "") === entityId);
+        if (row) row.tags = nextTags.slice();
+      }
+      registerNodeTagsToTagManager(nextTags);
+      if (tagMsg) tagMsg.textContent = idx >= 0 ? `已移除「${tag}」` : `已标注「${tag}」`;
+    } catch (error) {
+      console.error("toggleEntityTag", error);
+      if (tagMsg) tagMsg.textContent = `标注失败：${error?.message || error}`;
+    } finally {
+      entityTagUpdatePending = false;
+      renderTagList(currentTagClassTags);
+    }
   }
 
   function renderTagList(tags) {
@@ -2992,7 +3037,8 @@
     const frag = document.createDocumentFragment();
     arr.forEach((tag, idx) => {
       const isApplied = entityTags.has(tag.toLowerCase());
-      const chip = document.createElement("span");
+      const chip = document.createElement("button");
+      chip.type = "button";
       chip.className = "tag" + (isApplied ? " tag-applied" : "");
       chip.style.display = "inline-flex";
       chip.style.alignItems = "center";
@@ -3003,6 +3049,8 @@
       chip.style.cursor = "pointer";
       chip.style.userSelect = "none";
       chip.style.transition = "all 0.15s ease";
+      chip.style.fontFamily = "inherit";
+      chip.disabled = entityTagUpdatePending;
       if (isApplied) {
         chip.style.background = "var(--accent, #4f46e5)";
         chip.style.color = "#fff";
@@ -3018,7 +3066,7 @@
       // Click on chip label area → toggle tag on entity
       chip.addEventListener("click", (e) => {
         if (e.target.closest(".tag-delete-btn")) return;
-        toggleEntityTag(tag);
+        void toggleEntityTag(tag);
       });
       const labelSpan = document.createElement("span");
       labelSpan.textContent = tag;
