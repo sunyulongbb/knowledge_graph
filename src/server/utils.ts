@@ -9,6 +9,8 @@ export function formatNode(row: any) {
   let aliases = [] as any[];
   let tags = [] as any[];
   let extraData = {} as Record<string, any>;
+  let relationOrder = {};
+  try { relationOrder = JSON.parse(row.relation_order || '{}'); } catch {}
   try {
     aliases = JSON.parse(row.aliases || "[]");
   } catch {}
@@ -296,6 +298,7 @@ export function formatNode(row: any) {
     updated_by_user_id: row.updated_by_user_id || null,
     can_edit: canAccessKnowledge(db, knowledgeContext.getStore()?.user || null, row.id, 'edit'),
     can_manage: canAccessKnowledge(db, knowledgeContext.getStore()?.user || null, row.id, 'manage'),
+    relation_order: relationOrder,
     name: row.name,
     label: row.name,
     label_zh: extraData.label_zh ?? row.name,

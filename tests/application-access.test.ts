@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { test, expect } from 'bun:test';
 import { applicationPermissions, createApplicationHandler, ensureApplicationSchema } from '../src/server/application-access.ts';
+import { ensureApplicationRolePermissions } from '../src/server/application-role-permissions.ts';
 
 function setup() {
   const db = new Database(':memory:');
@@ -9,14 +10,15 @@ function setup() {
   db.run("INSERT INTO users(id,username,display_name) VALUES(1,'owner','Owner'),(2,'member','Member'),(3,'other','Other')");
   db.run('CREATE TABLE projects(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT UNIQUE,title TEXT,description TEXT,file TEXT,image TEXT,theme_color TEXT,tags TEXT,link TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP)');
   ensureApplicationSchema(db);
-  const users = [null, { id: 1, username: 'owner' }, { id: 2, username: 'member' }, { id: 3, username: 'other' }];
+  const grants = ['application:create', 'application:update', 'application:delete', 'application:members', 'application:review'];
+  const users = [null, ...['owner', 'member', 'other'].map((username, index) => ({ id: index + 1, username, permissions: [...grants] }))];
   const handle = createApplicationHandler(db, (req) => users[Number(req.headers.get('test-user'))] || null);
   const call = async (path: string, user = 0, body?: any, method = 'POST') => {
     const url = new URL('http://localhost' + path);
     const req = new Request(url, { method: body === undefined ? 'GET' : method, headers: { 'test-user': String(user), 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     return handle(req, url, req.method);
   };
-  return { db, call };
+  return { db, call, users };
 }
 
 test('application creation records owner, marketplace is public and sidebar lists only owned or maintained apps', async () => {
@@ -56,7 +58,7 @@ test('maintenance lifecycle, delegated permissions, notification isolation and r
     expect((await call('/api/kb/update_project', 2, { name: 'demo' }))!.status).toBe(403);
     expect((await call(prefix + '/member', 2, { user_id: 2, edit_settings: true }))!.status).toBe(403);
     expect((await call(prefix + '/member', 1, { user_id: 2, edit_settings: true, review_requests: true }))!.status).toBe(200);
-    expect(await call('/api/kb/update_project', 2, { name: 'demo' })).toBeNull();
+    expect(await call('/api/kb/update_project', 2, { name: 'demo', title: 'Demo' })).toBeNull();
     expect((await call('/api/kb/delete_project', 2, { name: 'demo' }))!.status).toBe(403);
     await call(prefix + '/request', 3, {});
     expect((await (await call(prefix + '/access', 2))!.json()).requests).toHaveLength(1);
@@ -70,6 +72,51 @@ test('maintenance lifecycle, delegated permissions, notification isolation and r
     await call('/api/notifications/read', 2, { all: true });
     expect((await (await call('/api/notifications', 2))!.json()).unread).toBe(0);
     expect((await (await call('/api/notifications', 1))!.json()).unread).toBeGreaterThan(0);
+  } finally { db.close(); }
+});
+
+test('role permissions gate creation and owner operations without granting access to other applications', async () => {
+  const { db, call, users } = setup();
+  try {
+    users[1]!.permissions = [];
+    expect((await (await call('/api/applications', 1))!.json()).canCreate).toBe(false);
+    expect((await call('/api/applications', 1, { name: 'demo' }))!.status).toBe(403);
+    expect((await call('/api/kb/create_project', 1, { name: 'demo' }))!.status).toBe(403);
+    users[1]!.permissions = ['application:create'];
+    await call('/api/applications', 1, { name: 'demo' });
+    const access = await (await call('/api/applications/1/access', 1))!.json();
+    expect(access.project).toMatchObject({ owner: true, editSettings: false, deleteApplication: false, manageMembers: false, reviewRequests: false });
+    expect((await call('/api/kb/update_project', 1, { name: 'demo', title: 'Edited' }))!.status).toBe(403);
+    expect((await call('/api/kb/delete_project', 1, { name: 'demo', confirmName: 'demo' }))!.status).toBe(403);
+    expect((await call('/api/applications/1/member', 1, { username: 'member' }))!.status).toBe(403);
+    await call('/api/applications/1/request', 2, {});
+    expect((await call('/api/applications/1/review', 1, { user_id: 2, decision: 'approve' }))!.status).toBe(403);
+    users[1]!.permissions.push('application:update', 'application:delete');
+    expect(await call('/api/kb/update_project', 1, { name: 'demo', title: 'Edited' })).toBeNull();
+    expect(await call('/api/kb/delete_project', 1, { name: 'demo', confirmName: 'demo' })).toBeNull();
+    expect((await call('/api/kb/update_project', 1, { name: 'demo', title: ' ' }))!.status).toBe(400);
+    expect((await call('/api/kb/delete_project', 3, { name: 'demo', confirmName: 'demo' }))!.status).toBe(403);
+    users[1]!.permissions = [];
+    expect((await call('/api/kb/update_project', 1, { name: 'demo', title: 'Edited' }))!.status).toBe(403);
+    db.run("INSERT INTO projects(name,title,file) VALUES('legacy','Legacy','app.sqlite')");
+    expect((await call('/api/applications/2/request', 1, {}))!.status).toBe(403);
+    expect((db.query('SELECT owner_user_id FROM projects WHERE id=2').get() as any).owner_user_id).toBeNull();
+  } finally { db.close(); }
+});
+
+test('application permission migration seeds defaults once and preserves revoked grants', () => {
+  const db = new Database(':memory:');
+  try {
+    db.run('CREATE TABLE permissions(id INTEGER PRIMARY KEY,code TEXT UNIQUE,name TEXT,module TEXT)');
+    db.run('CREATE TABLE roles(id INTEGER PRIMARY KEY,code TEXT)');
+    db.run('CREATE TABLE role_permissions(role_id INTEGER,permission_id INTEGER,PRIMARY KEY(role_id,permission_id))');
+    db.run("INSERT INTO roles VALUES(1,'user'),(2,'super_admin')");
+    ensureApplicationRolePermissions(db);
+    expect((db.query('SELECT COUNT(*) AS n FROM permissions').get() as any).n).toBe(5);
+    expect((db.query('SELECT COUNT(*) AS n FROM role_permissions WHERE role_id=1').get() as any).n).toBe(5);
+    db.run('DELETE FROM role_permissions WHERE role_id=1');
+    ensureApplicationRolePermissions(db);
+    expect((db.query('SELECT COUNT(*) AS n FROM role_permissions WHERE role_id=1').get() as any).n).toBe(0);
   } finally { db.close(); }
 });
 

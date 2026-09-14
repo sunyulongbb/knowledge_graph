@@ -48,7 +48,7 @@
     window["@tiptap/starter-kit"] =
       window["@tiptap/starter-kit"] || window.TiptapStarterKit;
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20260914-1" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20260914-2" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -1974,7 +1974,6 @@
               </div>
             </div>
           </div>
-          <a id="btnViewApplications" class="nav-item" role="tab" aria-selected="false" href="#view=applications"><span class="nav-label">应用</span></a>
           <a id="btnViewEntry" class="nav-item" role="tab" aria-selected="false" title="录入页面" aria-label="录入页面"
             href="#"><span class="nav-label">录入</span></a>
           <a id="btnViewClean" class="nav-item" role="tab" aria-selected="false" title="数据清洗" aria-label="数据清洗"
@@ -1989,8 +1988,6 @@
             href="#"><span class="nav-label">智能体</span></a>
           <a id="btnViewReportHome" class="nav-item" role="tab" aria-selected="false" title="报表中心" aria-label="报表中心"
             href="#"><span class="nav-label">报表</span></a>
-          <a id="btnViewUsers" class="nav-item" role="tab" aria-selected="false" title="用户权限管理" aria-label="用户权限管理"
-            href="#" style="display:none;"><span class="nav-label">用户</span></a>
           <div class="nav-underline" aria-hidden="true"></div>
         </nav>
       </div>
@@ -2376,6 +2373,7 @@
               class="fa-solid fa-arrow-up-right-from-square"></i></a>
           <button id="btnAppSettings" class="btn sm" title="应用设置" aria-label="应用设置"><i
               class="fa-solid fa-gear"></i></button>
+          <a id="btnViewApplications" class="btn sm sidebar-management-link" href="#view=applications" title="应用管理" aria-label="应用管理"><i class="fa-solid fa-grip" aria-hidden="true"></i></a>
         </div>
       </aside>
       <!-- Left: Wikidata-style entity editor panel -->
@@ -4103,29 +4101,6 @@
             </div>
           </div>
         </div>
-        <section id="applicationsPanel" class="panel applications-page" style="display:none;">
-          <div id="applicationCatalog">
-            <div class="applications-heading"><div><h2>应用</h2><p class="muted">发现知识应用，查看其知识模型，加入维护并共同完善内容。</p></div><button id="btnApplicationCreate" class="btn primary" type="button">创建应用</button></div>
-            <div class="applications-toolbar"><button type="button" class="btn accent" data-app-scope="market">应用市场</button><button type="button" class="btn" data-app-scope="mine">我的应用</button><input id="applicationSearch" class="kb-input" placeholder="搜索应用名称或描述" aria-label="搜索应用" autocomplete="off" /></div>
-            <form id="applicationCreateForm" class="application-card application-create-form" hidden><h3>创建应用</h3><label>应用名称<input name="title" class="kb-input" required maxlength="100" autocomplete="off" /></label><label>应用短名<input name="name" class="kb-input" required maxlength="64" pattern="[a-zA-Z0-9_-]+" placeholder="例如 my-knowledge" autocomplete="off" /></label><label>Logo 地址<input name="image" class="kb-input" maxlength="2000" placeholder="https://… 或 /static/uploads/…" autocomplete="off" /></label><label>访问地址<input name="link" class="kb-input" maxlength="2000" placeholder="https://…" autocomplete="off" /></label><label>描述<textarea name="description" class="kb-input" maxlength="2000" rows="3"></textarea></label><div><button type="submit" class="btn primary">创建</button><button type="button" class="btn" id="btnApplicationCreateCancel">取消</button></div></form>
-            <p id="applicationStatus" class="muted" role="status"></p><div id="applicationCards" class="application-cards"></div>
-            <section id="applicationAccess" class="application-card" hidden aria-live="polite"></section>
-          </div>
-          <section id="applicationDetail" class="application-detail" hidden aria-live="polite"></section>
-        </section>
-        <section id="userManagementPanel" class="panel user-management-page" style="display:none; padding:20px; overflow:auto; min-height:0;">
-          <div class="user-management-page__header">
-            <div><h2>用户权限管理</h2><p class="muted">管理用户角色与账号状态。</p></div>
-            <div class="user-management-page__header-actions">
-              <div id="systemManagementTabs" class="system-management-tabs" role="tablist" aria-label="权限管理二级菜单"><button data-system-tab="users" class="active" type="button" role="tab" aria-selected="true">用户</button><button data-system-tab="roles" type="button" role="tab" aria-selected="false">角色</button><button data-system-tab="permissions" type="button" role="tab" aria-selected="false">权限</button><button data-system-tab="login-logs" type="button" role="tab" aria-selected="false">登录日志</button><button data-system-tab="operation-logs" type="button" role="tab" aria-selected="false">操作日志</button></div>
-              <button id="btnUserManagementRefresh" class="btn icon" type="button" title="刷新当前数据" aria-label="刷新当前数据"><i class="fa-solid fa-rotate"></i></button>
-            </div>
-          </div>
-          <div class="system-management-toolbar"><input id="systemManagementSearch" type="search" placeholder="搜索用户名、昵称或邮箱…" autocomplete="off" /><button id="btnSystemManagementSearch" class="btn" type="button"><i class="fa-solid fa-magnifying-glass"></i><span>查询</span></button><button id="btnSystemManagementReset" class="btn" type="button">重置</button><button id="btnSystemManagementCreate" class="btn primary" type="button" style="display:none"><i class="fa-solid fa-plus"></i><span>新增角色</span></button></div>
-          <div id="userManagementMessage" class="muted"></div>
-          <div id="userManagementList" class="user-management-page__list"></div>
-          <dialog id="systemRoleDialog" class="system-role-dialog"><form method="dialog" id="systemRoleForm"><div class="system-role-dialog__head"><div><strong id="systemRoleDialogTitle">新增角色</strong><small>配置角色信息和功能权限</small></div><button class="btn icon" value="cancel" aria-label="关闭" type="submit"><i class="fa-solid fa-xmark"></i></button></div><input id="systemRoleId" type="hidden" /><label><span>角色编码</span><input id="systemRoleCode" class="kb-input" required autocomplete="off" /></label><label><span>角色名称</span><input id="systemRoleName" class="kb-input" required autocomplete="off" /></label><div class="system-role-dialog__fields"><label><span>状态</span><select id="systemRoleStatus" class="kb-select"><option value="active">启用</option><option value="disabled">停用</option></select></label><label><span>数据范围</span><select id="systemRoleScope" class="kb-select"><option value="all">全部数据</option><option value="own">本人数据</option></select></label></div><fieldset><legend>权限</legend><div id="systemRolePermissions" class="system-role-permissions"></div></fieldset><div id="systemRoleDialogMessage" class="muted" aria-live="polite"></div><div class="system-role-dialog__footer"><button class="btn" value="cancel" type="submit">取消</button><button id="btnSystemRoleSave" class="btn primary" value="default" type="submit">保存</button></div></form></dialog>
-        </section>
         <!-- Chat panel (embedded demo/chat.html) -->
         <div id="chatPanel" class="panel" style="padding:12px; display: none; min-height: 0; box-sizing: border-box;">
           <!-- Embedded chat app (lazy-initialized). Code copied from demo/chat.html and scoped to #chatRoot -->
@@ -5044,6 +5019,54 @@
           </div>
         </div>
       </div>
+    <div id="globalPage" class="global-page" hidden>
+        <section id="applicationsPanel" class="panel applications-page" style="display:none;">
+          <dialog id="applicationEditorDialog" class="application-editor-dialog" aria-labelledby="applicationEditorTitle"><form id="applicationCreateForm" class="application-create-form"><h3 id="applicationEditorTitle">创建应用</h3><label>应用名称<input name="title" class="kb-input" required maxlength="100" autocomplete="off" /></label><label>应用短名<input name="name" class="kb-input" required maxlength="64" pattern="[a-zA-Z0-9_-]+" placeholder="例如 my-knowledge" autocomplete="off" /></label><label>Logo 地址<input name="image" class="kb-input" maxlength="2000" placeholder="https://… 或 /static/uploads/…" autocomplete="off" /></label><label>访问地址<input name="link" class="kb-input" maxlength="2000" placeholder="https://…" autocomplete="off" /></label><label>描述<textarea name="description" class="kb-input" maxlength="2000" rows="3"></textarea></label><div><button id="btnApplicationSave" type="submit" class="btn primary">创建</button><button type="button" class="btn" id="btnApplicationCreateCancel">取消</button></div><p id="applicationEditorStatus" role="status" class="muted"></p></form></dialog>
+            <dialog id="applicationDeleteDialog" class="application-editor-dialog application-delete-dialog" aria-labelledby="applicationDeleteTitle">
+              <form id="applicationDeleteForm">
+                <h3 id="applicationDeleteTitle">删除应用</h3>
+                <p>删除后，应用及其知识、本体、分类等关联数据将被永久删除，无法恢复。</p>
+                <label>请输入应用短名 <strong id="applicationDeleteName"></strong> 确认删除<input name="confirmName" class="kb-input" required autocomplete="off" /></label>
+                <p id="applicationDeleteStatus" class="muted" role="status"></p>
+                <div class="application-dialog-actions"><button id="btnApplicationDeleteCancel" class="btn" type="button">取消</button><button class="btn danger" type="submit">确认删除</button></div>
+              </form>
+            </dialog>
+          <div id="applicationCatalog">
+
+            <div class="applications-heading"><div><h2>应用</h2><p class="muted">发现知识应用，查看其知识模型，加入维护并共同完善内容。</p></div><button id="btnApplicationCreate" class="btn primary" type="button">创建应用</button></div>
+            <div class="applications-toolbar"><button type="button" class="btn accent" data-app-scope="market">应用市场</button><button type="button" class="btn" data-app-scope="mine">我的应用</button><input id="applicationSearch" class="kb-input" placeholder="搜索应用名称或描述" aria-label="搜索应用" autocomplete="off" /></div>
+
+            <p id="applicationStatus" class="muted" role="status"></p><div id="applicationCards" class="application-cards"></div>
+          </div>
+          <section id="applicationDetail" class="application-detail" hidden aria-live="polite">
+            <div id="applicationDetailContent"></div>
+            <section id="applicationAccess" class="application-card application-detail-section" hidden aria-label="维护管理" tabindex="-1"></section>
+          </section>
+        </section>
+        <section id="userProfilePanel" class="panel account-page" style="display:none;" aria-label="个人详情">
+          <div class="user-management-page__header"><div><h2>个人详情</h2><p class="muted">查看账号信息、访问权限和参与记录。</p></div><div class="account-header-actions"><button id="btnProfileRefresh" class="btn icon" type="button" title="刷新个人详情" aria-label="刷新个人详情"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button><button id="btnProfileEdit" class="btn" type="button">编辑资料</button></div></div>
+          <div id="accountSummary" aria-live="polite"></div>
+          <div id="accountRecords" hidden>
+            <div id="accountTabs" class="system-management-tabs account-tabs" role="tablist" aria-label="个人关联与互动记录"></div>
+            <p id="accountRecordHint" class="muted account-record-hint"></p>
+            <div id="accountActivity" class="account-activity" role="tabpanel" aria-live="polite"></div>
+            <div class="account-pagination"><span id="accountPageInfo" class="muted"></span><button id="btnProfilePrevious" class="btn sm" type="button">上一页</button><button id="btnProfileNext" class="btn sm" type="button">下一页</button></div>
+          </div>
+        </section>
+        <section id="userManagementPanel" class="panel user-management-page" style="display:none; padding:20px; overflow:auto; min-height:0;">
+          <div class="user-management-page__header">
+            <div><h2>用户权限管理</h2><p class="muted">管理用户角色与账号状态。</p></div>
+            <div class="user-management-page__header-actions">
+              <div id="systemManagementTabs" class="system-management-tabs" role="tablist" aria-label="权限管理二级菜单"><button data-system-tab="users" class="active" type="button" role="tab" aria-selected="true">用户</button><button data-system-tab="roles" type="button" role="tab" aria-selected="false">角色</button><button data-system-tab="permissions" type="button" role="tab" aria-selected="false">权限</button><button data-system-tab="login-logs" type="button" role="tab" aria-selected="false">登录日志</button><button data-system-tab="operation-logs" type="button" role="tab" aria-selected="false">操作日志</button></div>
+              <button id="btnUserManagementRefresh" class="btn icon" type="button" title="刷新当前数据" aria-label="刷新当前数据"><i class="fa-solid fa-rotate"></i></button>
+            </div>
+          </div>
+          <div class="system-management-toolbar"><input id="systemManagementSearch" type="search" placeholder="搜索用户名、昵称或邮箱…" autocomplete="off" /><button id="btnSystemManagementSearch" class="btn" type="button"><i class="fa-solid fa-magnifying-glass"></i><span>查询</span></button><button id="btnSystemManagementReset" class="btn" type="button">重置</button><button id="btnSystemManagementCreate" class="btn primary" type="button" style="display:none"><i class="fa-solid fa-plus"></i><span>新增角色</span></button></div>
+          <div id="userManagementMessage" class="muted"></div>
+          <div id="userManagementList" class="user-management-page__list"></div>
+          <dialog id="systemRoleDialog" class="system-role-dialog"><form method="dialog" id="systemRoleForm"><div class="system-role-dialog__head"><div><strong id="systemRoleDialogTitle">新增角色</strong><small>配置角色信息和功能权限</small></div><button class="btn icon" value="cancel" aria-label="关闭" type="submit"><i class="fa-solid fa-xmark"></i></button></div><input id="systemRoleId" type="hidden" /><label><span>角色编码</span><input id="systemRoleCode" class="kb-input" required autocomplete="off" /></label><label><span>角色名称</span><input id="systemRoleName" class="kb-input" required autocomplete="off" /></label><div class="system-role-dialog__fields"><label><span>状态</span><select id="systemRoleStatus" class="kb-select"><option value="active">启用</option><option value="disabled">停用</option></select></label><label><span>数据范围</span><select id="systemRoleScope" class="kb-select"><option value="all">全部数据</option><option value="own">本人数据</option></select></label></div><fieldset><legend>权限</legend><div id="systemRolePermissions" class="system-role-permissions"></div></fieldset><div id="systemRoleDialogMessage" class="muted" aria-live="polite"></div><div class="system-role-dialog__footer"><button class="btn" value="cancel" type="submit">取消</button><button id="btnSystemRoleSave" class="btn primary" value="default" type="submit">保存</button></div></form></dialog>
+        </section>
+    </div>
       <!-- Right: user sidebar (与左侧 project-sidebar 风格一致，显示用户头像列表) -->
       <aside id="userSidebar" class="project-sidebar user-sidebar is-collapsed" role="navigation" aria-label="所有用户"
         aria-expanded="false" aria-hidden="false">
@@ -5052,6 +5075,7 @@
           <button id="btnRefreshUsers" class="btn sm" title="刷新用户" aria-label="刷新用户"><i
               class="fa-solid fa-arrow-rotate-right"></i></button>
           <button id="btnOpenProfileSidebar" class="btn sm" type="button" title="个人资料" aria-label="个人资料"><i class="fa-solid fa-user-gear"></i></button>
+          <a id="btnViewUsers" class="btn sm sidebar-management-link" href="#view=user_management" title="用户管理" aria-label="用户管理" style="display:none;"><i class="fa-solid fa-users-gear" aria-hidden="true"></i></a>
         </div>
       </aside>
     </div>
@@ -6148,6 +6172,7 @@
       "gallery",
       "user_management",
       "applications",
+      "profile",
     ]);
 
     function normalizeViewModeInput(value) {
@@ -9958,8 +9983,22 @@
       const isGallery = normalized === "gallery";
       const isUserManagement = normalized === "user_management";
       const isApplications = normalized === 'applications';
+      const isProfile = normalized === 'profile';
+      const isGlobalPage = isApplications || isUserManagement || isProfile;
+      const userProfilePanel = document.getElementById('userProfilePanel');
+      if (userProfilePanel) userProfilePanel.style.display = isProfile ? '' : 'none';
+      const profileEntry = document.getElementById('btnOpenProfileSidebar');
+      if (isProfile) profileEntry?.setAttribute('aria-current', 'page');
+      else profileEntry?.removeAttribute('aria-current');
+      if (isProfile) window.loadUserProfile?.();
+      document.body.classList.toggle('global-page-active', isGlobalPage);
+      document.getElementById('globalPage').hidden = !isGlobalPage;
+      for (const [id, active] of [['btnViewApplications', isApplications], ['btnViewUsers', isUserManagement]]) {
+        const link = document.getElementById(id);
+        if (active) link?.setAttribute('aria-current', 'page');
+        else link?.removeAttribute('aria-current');
+      }
       document.getElementById('btnViewApplications')?.classList.toggle('active', isApplications);
-      document.getElementById('btnViewApplications')?.setAttribute('aria-selected', String(isApplications));
       const applicationsPanel = document.getElementById('applicationsPanel');
       if (applicationsPanel) applicationsPanel.style.display = isApplications ? '' : 'none';
       if (isApplications) window.loadApplications?.();
@@ -10008,7 +10047,6 @@
       }
       if (btnViewUsers) {
         btnViewUsers.classList.toggle("active", isUserManagement);
-        btnViewUsers.setAttribute("aria-selected", String(isUserManagement));
       }
       if (btnViewDetail) {
         btnViewDetail.classList.toggle("active", isDetail);
@@ -19914,14 +19952,15 @@
   <script src="/assets/scripts/table-panel.js?v=20260909-1"></script>
   <script src="/assets/scripts/table-selection.js?v=20260908-5"></script>
   <script src="/assets/scripts/entity-manage-table.js?v=20260908-5"></script>
-  <script src="/assets/scripts/attr-panel.js?v=20260908-5"></script>
+  <script src="/assets/scripts/attr-panel.js?v=20260914-3"></script>
   <!-- relation-panel.js 已移除，使用 edgehandles 拖拽创建关系 -->
   <script src="/assets/scripts/schema-panel.js?v=20260909-4"></script>
-  <script src="/assets/scripts/detail-panel.js?v=20260908-1"></script>
+  <script src="/assets/scripts/detail-panel.js?v=20260914-3"></script>
   <script src="/assets/scripts/knowledge-interactions.js?v=20260904-1"></script>
   <script src="/assets/scripts/knowledge-access.js?v=20260909-1"></script>
   <script src="/assets/scripts/applications.js?v=20260914-1"></script>
   <script src="/assets/scripts/user-management.js?v=20260905-3"></script>
+  <script src="/assets/scripts/user-profile.js?v=20260914-1"></script>
   <script src="/assets/scripts/sidebar-panel.js?v=20260909-1"></script>
   <script src="/assets/scripts/auth-panel.js?v=20260906-1"></script>
   <script src="/assets/scripts/db-modal.js"></script>

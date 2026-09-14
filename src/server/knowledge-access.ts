@@ -8,6 +8,7 @@ export class KnowledgeAccessError extends Error {}
 
 export function ensureKnowledgeAccessSchema(db: Database) {
   const columns = new Set((db.query('PRAGMA table_info(nodes)').all() as { name: string }[]).map((column) => column.name));
+  if (!columns.has('relation_order')) db.run("ALTER TABLE nodes ADD COLUMN relation_order TEXT NOT NULL DEFAULT '{}'");
   for (const [name, definition] of [['visibility', "TEXT NOT NULL DEFAULT 'public'"], ['owner_user_id', 'INTEGER'], ['creator_username', "TEXT NOT NULL DEFAULT ''"], ['updated_by_user_id', 'INTEGER']] as const) {
     if (!columns.has(name)) db.run(`ALTER TABLE nodes ADD COLUMN ${name} ${definition}`);
   }

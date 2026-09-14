@@ -4,6 +4,8 @@ import { normalizeEntityTaxonomy } from '../../shared/entity-taxonomy.ts';
 import { getCurrentUser, isAdmin } from "../auth-context.ts";
 import { mkdirSync, writeFileSync } from "fs";
 import { resolve } from "path";
+import { relationAttributeResponse, saveRelationOrder } from '../relation-order.ts';
+import { knowledgeContext } from '../knowledge-access.ts';
 import {
   formatNode,
   formatAttribute,
@@ -4981,6 +4983,10 @@ export async function handleCoreKbRoutes(
     return Response.json({ node: formatNode(node), neighbors });
   }
 
+  if (url.pathname === '/api/kb/node/relation-order' && method === 'POST') {
+    const body = await req.json().catch(() => null);
+    return saveRelationOrder(db, knowledgeContext.getStore()?.user || null, body, formatAttribute);
+  }
   if (url.pathname === "/api/kb/node/attributes" && method === "GET") {
     let id = url.searchParams.get("id");
     if (!id) return new Response("Missing id", { status: 400 });
@@ -5009,7 +5015,8 @@ export async function handleCoreKbRoutes(
       )
       .all(id)
       .map(formatAttribute);
-    return Response.json({ items: attrs });
+    const node = db.query('SELECT relation_order FROM nodes WHERE id=?').get(id) as any;
+    return Response.json(relationAttributeResponse(attrs, node?.relation_order));
   }
 
   if (url.pathname === "/api/kb/entity/resolve" && method === "POST") {

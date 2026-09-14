@@ -3,6 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from "fs";
 import { join, resolve } from "path";
 import { createKnowledgeDatabase, ensureKnowledgeAccessSchema } from './knowledge-access.ts';
 import { ensureApplicationSchema } from './application-access.ts';
+import { ensureApplicationRolePermissions } from './application-role-permissions.ts';
 
 const KNOWLEDGE_GRAPH_ROOT = resolve(import.meta.dir, "..", "..");
 const WORKSPACE_ROOT = resolve(KNOWLEDGE_GRAPH_ROOT, "..");
@@ -337,6 +338,7 @@ function ensureSharedTables() {
   defaultPermissions.forEach((code) => appDb.run("INSERT OR IGNORE INTO permissions (code, name, module) VALUES (?, ?, ?)", [code, code, code.split(":")[0] || ""]));
   appDb.run("INSERT OR IGNORE INTO roles (code, name, data_scope) VALUES ('super_admin', '超级管理员', 'all')");
   appDb.run("INSERT OR IGNORE INTO roles (code, name, data_scope) VALUES ('user', '普通用户', 'own')");
+  ensureApplicationRolePermissions(appDb);
   const superRole = appDb.query("SELECT id FROM roles WHERE code = 'super_admin'").get() as any;
   if (superRole) appDb.run("INSERT OR IGNORE INTO role_permissions (role_id, permission_id) SELECT ?, id FROM permissions", [superRole.id]);
   appDb.run("INSERT OR IGNORE INTO user_roles (user_id, role_id) SELECT id, ? FROM users WHERE role = 'admin' OR is_admin = 1", [superRole?.id || 0]);

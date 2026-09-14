@@ -535,7 +535,7 @@ if (btnAttrReset) {
           selectedEntity,
           input.value,
         );
-        await loadAttributes(nodeId);
+        await loadAttributes(nodeId, { force: true });
       } catch (err) {
         console.error("saveRelationInlineEdit failed", err);
         alert(err?.message || "保存失败");
@@ -805,20 +805,30 @@ if (btnAttrReset) {
   }
 
   // Render attribute list into a container element using the same DOM/behavior
+  let relationOrderSaving = false;
   function renderAttrList(container, items, nodeId) {
     if (!container) return;
+    const signature = JSON.stringify([nodeId, items, items?.rowOrder, !!window.canEditCurrentKnowledge?.()]);
+    if (container._attrRenderSignature === signature && container.firstChild === container._attrRenderedFirst) return;
     container.innerHTML = "";
     if (!Array.isArray(items) || !items.length) {
       container.innerHTML = '<div class="muted">暂无属性</div>';
+      container._attrRenderSignature = signature;
+      container._attrRenderedFirst = container.firstChild;
       return;
     }
     const readOnly = container.id === "detailAttrList";
 
-    let displayItems = items;
+    const rows = items.flatMap((item) => {
+      let value = item.value;
+      if (typeof value === 'string') { try { const parsed = JSON.parse(value); if (Array.isArray(parsed)) value = parsed; } catch {} }
+      return (Array.isArray(value) ? value : [value]).map((_, index) => ({ ...item, __renderValueIndex: index }));
+    });
+    const byRowId = new Map(rows.map((item) => [`${item.id}::${item.__renderValueIndex}`, item]));
+    let displayItems = Array.isArray(items.rowOrder) ? items.rowOrder.map((id) => byRowId.get(id)).filter(Boolean) : rows;
     // Special handling for images in detail view
     if (readOnly) {
-      console.log("Rendering attribute list with image handling", items);
-      const imageItems = items.filter((it) => {
+      const imageItems = displayItems.filter((it) => {
         return String(it?.datatype || "").toLowerCase() === "commonsmedia" || it.property_label_zh === "图像";
       });
 
@@ -837,7 +847,7 @@ if (btnAttrReset) {
             }
           }
           const values = Array.isArray(rawVal) ? rawVal : [rawVal];
-          values.forEach((v) => {
+          [values[it.__renderValueIndex]].forEach((v) => {
             if (!v) return;
             let src = String(v);
             // If it looks like a filename and not a URL, try Wikimedia Commons
@@ -1052,20 +1062,61 @@ if (btnAttrReset) {
         }
 
         // Filter out images from the list
-        displayItems = items.filter((it) => {
+        displayItems = displayItems.filter((it) => {
           return String(it?.datatype || "").toLowerCase() !== "commonsmedia" && it.property_label_zh !== "图像";
         });
       }
     }
 
-    // 将相同属性名的条目排在一起（稳定排序，保留原有相对顺序）
-    displayItems = [...displayItems].sort((a, b) => {
-      const ka = canonicalizePropertyId(a?.property) || a?.property_label_zh || a?.property || "";
-      const kb = canonicalizePropertyId(b?.property) || b?.property_label_zh || b?.property || "";
-      if (ka < kb) return -1;
-      if (ka > kb) return 1;
-      return 0;
-    });
+    // The API provides the final row order, including values interleaved across statements.
+
+    let dragged = null;
+    const clearDropMarks = () => container.querySelectorAll('.relation-drop-before,.relation-drop-after').forEach((el) => el.classList.remove('relation-drop-before', 'relation-drop-after'));
+    const status = document.createElement('div');
+    status.className = 'relation-order-status muted'; status.setAttribute('role', 'status');
+    const canSort = () => !readOnly && !relationOrderSaving && window.canEditCurrentKnowledge?.() && !attrFormBody?.classList.contains('inline-editing');
+    async function persistMove(move) {
+      if (!canSort()) return;
+      const sequence = window.kbAttrLoadRequestSeq;
+      relationOrderSaving = true; container.setAttribute('aria-busy', 'true'); status.textContent = '正在保存关系顺序…';
+      try {
+        let url = new URL('/api/kb/node/relation-order', window.location.origin);
+        if (typeof window.appendCurrentDbParam === 'function') url = window.appendCurrentDbParam(url) || url;
+        const response = await fetch(String(url), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: nodeId, ...move }) });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || '顺序保存失败');
+        window.kbAttrCache?.delete(nodeId);
+        if (window.kbAttrLoadRequestSeq === sequence) {
+          await loadAttributes(nodeId, { force: true });
+          const message = container.querySelector('.relation-order-status');
+          if (message) message.textContent = '关系顺序已保存';
+        }
+      } catch (error) {
+        if (window.kbAttrLoadRequestSeq === sequence) status.textContent = error.message;
+      } finally { relationOrderSaving = false; container.removeAttribute('aria-busy'); }
+    }
+    function dragHandle(kind, source, property, labelText) {
+      const handle = document.createElement('button'); handle.type = 'button'; handle.className = 'relation-drag-handle'; handle.draggable = true;
+      handle.title = `${labelText}（也可使用 Alt + ↑ / ↓）`; handle.setAttribute('aria-label', handle.title);
+      handle.innerHTML = '<i class="fa-solid fa-grip-vertical" aria-hidden="true"></i>';
+      handle.addEventListener('click', (event) => { event.preventDefault(); event.stopPropagation(); });
+      handle.addEventListener('dblclick', (event) => event.stopPropagation());
+      handle.addEventListener('dragstart', (event) => {
+        if (!canSort()) { event.preventDefault(); return; }
+        event.stopPropagation(); dragged = { kind, source, property };
+        event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', source);
+      });
+      handle.addEventListener('dragend', () => { dragged = null; clearDropMarks(); });
+      handle.addEventListener('keydown', (event) => {
+        if (!event.altKey || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+        event.preventDefault(); event.stopPropagation();
+        const choices = kind === 'property' ? [...new Set(displayItems.map((item) => canonicalizePropertyId(item.property)))] : displayItems.filter((item) => canonicalizePropertyId(item.property) === property).map((item) => `${item.id}::${item.__renderValueIndex}`);
+        const direction = event.key === 'ArrowUp' ? -1 : 1;
+        const target = choices[choices.indexOf(source) + direction];
+        if (target !== undefined) persistMove({ kind, source, target, placement: direction < 0 ? 'before' : 'after' });
+      });
+      return handle;
+    }
 
     const frag = document.createDocumentFragment();
     let lastReadOnlyProp = null;
@@ -1097,9 +1148,9 @@ if (btnAttrReset) {
         : "";
       const isLastItemOfPropertyGroup =
         !nextItem || currentPropKey !== nextPropKey;
-      for (let vi = 0; vi < values.length; vi++) {
+      for (const vi of [it.__renderValueIndex]) {
         const valItem = values[vi];
-        const isLastValue = vi === values.length - 1;
+        const isLastValue = true;
         const showQuickAddBtn = isLastValue && isLastItemOfPropertyGroup;
         const row = document.createElement("div");
         row.style.display = "flex";
@@ -1110,6 +1161,23 @@ if (btnAttrReset) {
         // to ensure each rendered row has a unique data-id when in detail mode.
         const dataId = `${it.id}::${vi}`;
         row.setAttribute("data-id", dataId);
+        if (!readOnly) {
+          row.classList.add('relation-sort-row');
+          row.addEventListener('dragover', (event) => {
+            if (!dragged || !canSort() || (dragged.kind === 'value' && dragged.property !== currentPropKey)) return;
+            event.preventDefault(); event.dataTransfer.dropEffect = 'move'; clearDropMarks();
+            const bounds = row.getBoundingClientRect();
+            row.classList.add(event.clientY < bounds.top + bounds.height / 2 ? 'relation-drop-before' : 'relation-drop-after');
+          });
+          row.addEventListener('drop', (event) => {
+            if (!dragged || !canSort() || (dragged.kind === 'value' && dragged.property !== currentPropKey)) return;
+            event.preventDefault(); event.stopPropagation();
+            const bounds = row.getBoundingClientRect(), target = dragged.kind === 'property' ? currentPropKey : dataId;
+            const move = { kind: dragged.kind, source: dragged.source, target, placement: event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after' };
+            dragged = null; clearDropMarks();
+            if (move.source !== target) persistMove(move);
+          });
+        }
         // detail panel should be display-only (no selection/edit)
         row.style.cursor = readOnly ? "default" : "pointer";
         const label = document.createElement("div");
@@ -1213,6 +1281,11 @@ if (btnAttrReset) {
           });
         }
         row.appendChild(label);
+        if (!readOnly && window.canEditCurrentKnowledge?.()) {
+          label.classList.add('relation-property-label');
+          if (showLabel) label.prepend(dragHandle('property', currentPropKey, currentPropKey, '拖动调整属性顺序'));
+          row.appendChild(dragHandle('value', dataId, currentPropKey, '拖动调整属性值顺序'));
+        }
         row.appendChild(val);
         // Inline delete button for editable lists
         if (!readOnly) {
@@ -1254,7 +1327,7 @@ if (btnAttrReset) {
                 await deleteAttr(attrDbId);
               }
               window.kbSelectedAttrIds.delete(dataId);
-              await loadAttributes(nodeId);
+              await loadAttributes(nodeId, { force: true });
             } catch (err) {
               console.error(err);
               alert("删除失败: " + (err.message || err));
@@ -1319,6 +1392,9 @@ if (btnAttrReset) {
       }
     }
     container.appendChild(frag);
+    if (!readOnly) container.appendChild(status);
+    container._attrRenderSignature = signature;
+    container._attrRenderedFirst = container.firstChild;
     // only update selection/styles for interactive attrList (left panel)
     if (!readOnly) {
       updateAttrSelectionStyles();
@@ -1999,7 +2075,37 @@ if (btnAttrReset) {
     attrEntitySearchResults.addEventListener("dblclick", selectAndHide);
   }
 
-  async function loadAttributes(nodeId) {
+  const attributeRequests = new Map();
+  function fetchAttributeData(url, force = false) {
+    const key = `${window.authUser?.id || 'anonymous'}:${String(url)}`;
+    if (!force && attributeRequests.has(key)) return attributeRequests.get(key);
+    const promise = fetch(String(url), { cache: 'no-store' }).then(async (response) => {
+      if (!response.ok) throw new Error('属性加载失败，请重试');
+      return response.json();
+    }).finally(() => { if (attributeRequests.get(key) === promise) attributeRequests.delete(key); });
+    attributeRequests.set(key, promise);
+    return promise;
+  }
+  window.kbFetchAttributeData = fetchAttributeData;
+  let activeAttributeLoad = null;
+  function loadAttributes(nodeId, options = {}) {
+    const key = `${window.authUser?.id || 'anonymous'}:${new URLSearchParams(location.search).get('db') || ''}:${String(nodeId || '').replace(/^entity\//, '')}`;
+    if (!options.force && activeAttributeLoad?.key === key && activeAttributeLoad.sequence === window.kbAttrLoadRequestSeq) return activeAttributeLoad.promise;
+    const state = { key, sequence: 0, promise: null };
+    state.promise = performLoadAttributes(nodeId, options).catch((error) => {
+      if (window.kbAttrLoadRequestSeq !== state.sequence) return;
+      const message = document.createElement('div'); message.className = 'relation-load-error muted'; message.setAttribute('role', 'status'); message.textContent = error.message;
+      attrList.querySelector('.relation-load-error')?.remove();
+      if (attrList._attrRenderedFirst !== attrList.firstChild) attrList.replaceChildren();
+      attrList.appendChild(message);
+    }).finally(() => {
+      if (activeAttributeLoad === state) { activeAttributeLoad = null; attrList.removeAttribute('aria-busy'); }
+    });
+    state.sequence = window.kbAttrLoadRequestSeq;
+    activeAttributeLoad = state;
+    return state.promise;
+  }
+  async function performLoadAttributes(nodeId, options) {
     const requestSeq = (window.kbAttrLoadRequestSeq || 0) + 1;
     window.kbAttrLoadRequestSeq = requestSeq;
     if (!nodeId) {
@@ -2018,26 +2124,21 @@ if (btnAttrReset) {
         ensureAttrButtonsState();
       } catch (e) {}
       attrList.innerHTML = "";
+      delete attrList.dataset.entityKey;
       attrPanel.style.display = "none";
       const badge = document.getElementById("attrCountBadge");
       if (badge) badge.textContent = "0";
       return;
     }
-    try {
-      resetAttrForm();
-    } catch (e) {}
-    try {
-      if (
-        window.kbSelectedAttrIds &&
-        typeof window.kbSelectedAttrIds.clear === "function"
-      ) {
-        window.kbSelectedAttrIds.clear();
-      }
-    } catch (e) {}
-    attrPanel.style.display = "";
-    attrList.innerHTML = '<div class="muted">加载属性中…</div>';
-
     const fullId = nodeId.startsWith("entity/") ? nodeId : "entity/" + nodeId;
+    const entityKey = `${window.authUser?.id || 'anonymous'}:${new URLSearchParams(location.search).get('db') || ''}:${fullId}`;
+    if (attrList.dataset.entityKey !== entityKey) {
+      try { resetAttrForm(); window.kbSelectedAttrIds?.clear(); } catch {}
+      attrList.innerHTML = '<div class="muted">加载属性中…</div>';
+      attrList.dataset.entityKey = entityKey;
+    }
+    attrPanel.style.display = "";
+    attrList.setAttribute('aria-busy', 'true');
 
     // Always fetch from server to ensure fresh data
     const attrUrl = new URL("/api/kb/node/attributes", window.location.origin);
@@ -2048,15 +2149,11 @@ if (btnAttrReset) {
       }
     }
     attrUrl.searchParams.set("id", fullId);
-    const resp = await fetch(attrUrl.toString());
-    if ((window.kbAttrLoadRequestSeq || 0) !== requestSeq) return;
-    if (!resp.ok) {
-      attrList.innerHTML = '<div class="muted">加载失败</div>';
-      return;
-    }
-    const data = await resp.json();
+    const data = await fetchAttributeData(attrUrl.toString(), options.force);
     if ((window.kbAttrLoadRequestSeq || 0) !== requestSeq) return;
     let items = Array.isArray(data.items) ? data.items : [];
+    items.rowOrder = data.row_order;
+    attrList.querySelector('.relation-load-error')?.remove();
     // store in cache
     try {
       window.kbAttrCache.set(fullId, { ts: Date.now(), items: items });
@@ -3148,7 +3245,7 @@ if (btnAttrReset) {
       }
       await resp.json();
       attrMsg.textContent = "已保存";
-      await loadAttributes(nodeId);
+      await loadAttributes(nodeId, { force: true });
       // 保存图像属性后同步更新关系图节点
       syncCyNodeImage(nodeId);
 
@@ -3298,7 +3395,7 @@ if (btnAttrReset) {
         }
       }
       window.kbSelectedAttrIds.clear();
-      await loadAttributes(nodeId);
+      await loadAttributes(nodeId, { force: true });
       syncCyNodeImage(nodeId);
     });
 

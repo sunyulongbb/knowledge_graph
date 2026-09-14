@@ -1449,10 +1449,12 @@
             }
           }
           aUrl.searchParams.set("id", fullId);
-          const aResp = await fetch(aUrl.toString());
-          if (aResp && aResp.ok) {
-            const aData = await aResp.json();
+          const aData = typeof window.kbFetchAttributeData === 'function'
+            ? await window.kbFetchAttributeData(aUrl.toString())
+            : await fetch(aUrl.toString()).then((response) => { if (!response.ok) throw new Error('属性加载失败'); return response.json(); });
+          if (aData) {
             attrItems = Array.isArray(aData.items) ? aData.items : [];
+            attrItems.rowOrder = aData.row_order;
           } else {
             // API returned non-ok -> leave attrItems empty
             attrItems = [];
@@ -1514,6 +1516,7 @@
           const detailAttrItems = Array.isArray(attrItems)
             ? attrItems.filter((it) => !isMediaAttrItem(it))
             : [];
+          detailAttrItems.rowOrder = attrItems.rowOrder;
           const detailAttrListEl = document.getElementById("detailAttrList");
           if (detailAttrListEl) {
             // renderAttrList checks container.id === 'detailAttrList' to enable readOnly mode

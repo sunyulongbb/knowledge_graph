@@ -1,5 +1,6 @@
 import { switchDatabase, adminDb } from "./db.ts";
 import { createApplicationHandler } from './application-access.ts';
+import { createUserProfileHandler } from './user-profile.ts';
 import { handleCoreKbRoutes } from "./routes/core-kb.ts";
 import { handleAuthRoutes } from "./routes/auth.ts";
 import { handleProjectRoutes } from "./routes/projects.ts";
@@ -17,6 +18,7 @@ import { guardKnowledgeRequest, handleKnowledgeAccessRoutes } from './routes/kno
 
 const port = parseInt(process.env.PORT || "8080");
 const handleApplications = createApplicationHandler(adminDb, getCurrentUser);
+const handleUserProfile = createUserProfileHandler(adminDb, getCurrentUser);
 
 const server = Bun.serve({
   port: port,
@@ -50,6 +52,8 @@ const server = Bun.serve({
       const requestUrl = url;
       const response = await knowledgeContext.run({ user: getCurrentUser(req) }, async () => {
       const url = requestUrl;
+      const profileResponse = await handleUserProfile(req, url, method);
+      if (profileResponse) return profileResponse;
       const applicationResponse = await handleApplications(req, url, method);
       if (applicationResponse) return applicationResponse;
       const guardResponse = await guardKnowledgeRequest(req, url, method);

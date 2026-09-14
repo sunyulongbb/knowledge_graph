@@ -1,5 +1,6 @@
 import type { Database } from 'bun:sqlite';
 import type { KnowledgeUser } from './knowledge-access.ts';
+import { hasApplicationPermission } from './application-role-permissions.ts';
 
 export function ensureApplicationSchema(db: Database) {
   const columns = db.query('PRAGMA table_info(projects)').all() as any[];
@@ -30,7 +31,15 @@ export function createApplicationHandler(db: Database, getUser: (req: Request) =
     ? db.query('SELECT * FROM projects WHERE id=?').get(Number(key) || -1) as any
     : db.query('SELECT * FROM projects WHERE name=?').get(String(key || '').replace(/\.sqlite$/, '')) as any;
   const notify = (userId: number, projectId: number, message: string) => db.run('INSERT INTO user_notifications(user_id,project_id,message) VALUES(?,?,?)', [userId, projectId, message]);
-  const record = (project: any, user: KnowledgeUser | null) => ({ ...project, slug: project.name, name: project.title || project.name, ...applicationPermissions(db, user, project) });
+  const record = (project: any, user: KnowledgeUser | null) => {
+    const access = applicationPermissions(db, user, project);
+    return { ...project, slug: project.name, name: project.title || project.name, ...access,
+      editSettings: access.editSettings && hasApplicationPermission(user, 'application:update'),
+      deleteApplication: access.owner && hasApplicationPermission(user, 'application:delete'),
+      manageMembers: access.owner && hasApplicationPermission(user, 'application:members'),
+      reviewRequests: access.reviewRequests && hasApplicationPermission(user, 'application:review'),
+    };
+  };
   const hasTable = (name: string) => !!db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name);
   const parseList = (value: unknown): string[] => {
     if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
@@ -117,7 +126,7 @@ export function createApplicationHandler(db: Database, getUser: (req: Request) =
       const mine = path === '/api/kb/list_projects' || url.searchParams.get('scope') === 'mine';
       const rows = db.query(`SELECT p.*, u.username AS owner_username, u.display_name AS owner_name FROM projects p LEFT JOIN users u ON u.id=p.owner_user_id WHERE p.name <> 'shared' ORDER BY p.id DESC`).all() as any[];
       const projects = rows.map((row) => record(row, user)).filter((row) => !mine || row.member);
-      return Response.json({ projects });
+      return Response.json({ projects, canCreate: hasApplicationPermission(user, 'application:create') });
     }
     // Existing switchers use this GET. It now only resolves an existing app.
     if (path === '/api/kb/create_project' && method === 'GET') {
@@ -126,6 +135,7 @@ export function createApplicationHandler(db: Database, getUser: (req: Request) =
     }
     if ((path === '/api/applications' || path === '/api/kb/create_project') && method === 'POST') {
       if (!user) return error('请先登录', 401);
+      if (!hasApplicationPermission(user, 'application:create')) return error('未获授权创建应用，请联系管理员配置角色权限', 403);
       const name = String(body.name || '').trim();
       const title = String(body.title || name).trim();
       const description = String(body.description || '').trim();
@@ -138,7 +148,7 @@ export function createApplicationHandler(db: Database, getUser: (req: Request) =
     const match = path.match(/^\/api\/applications\/([^/]+)(?:\/(details|access|request|review|member))?$/);
     const project = projectBy(legacy ? body.name : match ? decodeURIComponent(match[1]!) : '', !legacy);
     if (!project) return error('应用不存在', 404);
-    const permissions = applicationPermissions(db, user, project);
+    const permissions = record(project, user);
     if (match?.[2] === 'details' && method === 'GET') {
       return Response.json(applicationDetails(project, user));
     }
@@ -146,10 +156,16 @@ export function createApplicationHandler(db: Database, getUser: (req: Request) =
       return Response.json({ project: record(project, user), members: permissions.owner ? db.query('SELECT m.*,u.username,u.display_name FROM application_members m JOIN users u ON u.id=m.user_id WHERE project_id=? ORDER BY m.created_at').all(project.id) : [], requests: permissions.reviewRequests ? db.query("SELECT r.*,u.username,u.display_name FROM application_requests r JOIN users u ON u.id=r.user_id WHERE project_id=? AND r.status='pending' ORDER BY r.created_at").all(project.id) : [], ownRequest: user ? db.query('SELECT status FROM application_requests WHERE project_id=? AND user_id=?').get(project.id, user.id) : null });
     }
     if (!user) return error('请先登录', 401);
-    if (path === '/api/kb/delete_project') return permissions.owner ? null : error('仅创建者可以删除应用', 403);
-    if (path === '/api/kb/update_project' && method === 'POST') return permissions.editSettings ? null : error('无权修改应用设置', 403);
+    if (path === '/api/kb/delete_project') return permissions.deleteApplication ? null : error('仅拥有删除权限的创建者可以删除应用', 403);
+    if (path === '/api/kb/update_project' && method === 'POST') {
+      if (!permissions.editSettings) return error('无权修改应用设置', 403);
+      const title = String(body.title || '').trim();
+      if (!title || title.length > 100 || String(body.description || '').length > 2000) return error('名称不能为空且最多 100 字，描述最多 2000 字');
+      return null;
+    }
     if (match?.[2] === 'request' && method === 'POST') {
       if (permissions.member) return error('你已拥有应用维护权限', 409);
+      if (!project.owner_user_id && !hasApplicationPermission(user, 'application:create')) return error('认领历史应用需要创建应用权限', 403);
       const message = String(body.message || '').trim();
       if (message.length > 1000) return error('申请说明最多 1000 字');
       const outcome = db.transaction(() => {
@@ -188,7 +204,7 @@ export function createApplicationHandler(db: Database, getUser: (req: Request) =
       return Response.json({ success: true });
     }
     if (match?.[2] === 'member' && ['POST', 'DELETE'].includes(method)) {
-      if (!permissions.owner) return error('仅创建者可以管理成员及权限', 403);
+      if (!permissions.manageMembers) return error('仅拥有成员管理权限的创建者可以管理成员及权限', 403);
       const target = body.username ? db.query("SELECT id FROM users WHERE username=? AND COALESCE(status,'active') <> 'disabled'").get(String(body.username).trim()) as any : { id: Number(body.user_id) };
       if (!Number.isSafeInteger(target?.id) || target.id <= 0 || target.id === user.id || !db.query('SELECT 1 FROM users WHERE id=?').get(target.id)) return error('用户不存在或不能修改创建者');
       db.transaction(() => {

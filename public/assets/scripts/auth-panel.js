@@ -402,7 +402,10 @@
       else openAuthModal(false);
     });
   }
-  document.getElementById("btnOpenProfileSidebar")?.addEventListener("click", openProfileModal);
+  document.getElementById("btnOpenProfileSidebar")?.addEventListener("click", () => {
+    if (authUser) window.setViewMode?.('profile');
+    else openAuthModal(false);
+  });
   if (btnCloseAuthModal) btnCloseAuthModal.addEventListener("click", closeAuthModal);
   if (authModal) {
     authModal.addEventListener("click", (e) => {

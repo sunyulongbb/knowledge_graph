@@ -86,6 +86,7 @@ export async function guardKnowledgeRequest(req: Request, url: URL, method: stri
     return (path.endsWith('delete_project') ? permission.owner : permission.editSettings) ? null : response('无权管理该应用', 403);
   }
   const check = (id: unknown, mode: 'read' | 'edit' | 'manage') => denied(id, mode) ? response(mode === 'read' ? '知识不存在或无权访问' : '无权修改该知识', mode === 'read' ? 404 : 403) : null;
+  if (path === '/api/kb/node/relation-order' && method === 'POST') return check(body.id, 'edit');
   if ((path === '/api/kb/nodes' || path === '/api/kb/entity/resolve') && method === 'POST') {
     const appSlug = url.searchParams.get('db');
     if (appSlug && appSlug !== 'app') {

@@ -21,6 +21,35 @@
   });
 })();
 (function () {
+  function readSidebarState() {
+    const params = new URL(window.location.href).searchParams;
+    const read = (param, key, fallback) => {
+      const value = params.get(param);
+      if (value === 'open' || value === 'closed') return value === 'closed';
+      try {
+        const saved = localStorage.getItem(key);
+        if (saved === '0' || saved === '1') return saved === '1';
+      } catch {}
+      return fallback;
+    };
+    return {
+      left: read('leftSidebar', 'kbProjectSidebarCollapsed', true),
+      right: read('rightSidebar', 'kbUserSidebarCollapsed', false),
+    };
+  }
+  function saveSidebarState() {
+    const left = document.getElementById('projectSidebar')?.classList.contains('collapsed');
+    const right = document.getElementById('userSidebar')?.classList.contains('is-collapsed');
+    if (left === undefined || right === undefined) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set('leftSidebar', left ? 'closed' : 'open');
+    url.searchParams.set('rightSidebar', right ? 'closed' : 'open');
+    if (url.href !== window.location.href) history.replaceState(history.state, '', url);
+    try {
+      localStorage.setItem('kbProjectSidebarCollapsed', left ? '1' : '0');
+      localStorage.setItem('kbUserSidebarCollapsed', right ? '1' : '0');
+    } catch {}
+  }
   // --- Project sidebar logic ---
   let projectListVersion = 0;
   function isSidebarAvatarImage(value) {
@@ -225,7 +254,6 @@
   ) {
     const sidebarEl = document.getElementById("projectSidebar");
     const splitEl = document.querySelector(".kb-split");
-    const COLLAPSE_KEY = "kbProjectSidebarCollapsed";
     if (!sidebarEl) return;
     // Avoid toggling while an animation is already in progress, unless instant override requested
     if (sidebarEl.classList.contains("animating") && !instant) return;
@@ -236,11 +264,11 @@
       try {
         sidebarEl.setAttribute("aria-expanded", String(!collapsed));
       } catch (e) {}
-      if (persist && window.localStorage) {
-        try {
-          localStorage.setItem(COLLAPSE_KEY, collapsed ? "1" : "0");
-        } catch (e) {}
+      if (splitEl) {
+        splitEl.classList.toggle('sidebar-collapsed', collapsed);
+        splitEl.classList.toggle('sidebar-expanded', !collapsed);
       }
+      if (persist) saveSidebarState();
       return;
     }
 
@@ -277,6 +305,7 @@
     } catch (e) {}
     if (splitEl) splitEl.classList.toggle("sidebar-collapsed", collapsed);
     if (splitEl) splitEl.classList.toggle("sidebar-expanded", !collapsed);
+    if (persist) saveSidebarState();
     // update aria-hidden on labels for screen readers
     try {
       const labels = sidebarEl.querySelectorAll(".project-entry-label");
@@ -298,11 +327,6 @@
         } catch (e) {}
       });
     } catch (e) {}
-    if (persist && window.localStorage) {
-      try {
-        localStorage.setItem(COLLAPSE_KEY, collapsed ? "1" : "0");
-      } catch (e) {}
-    }
 
     // Recompute compact/short label mode after sidebar size/state changes
     try {
@@ -1052,10 +1076,6 @@
       try {
         playHeaderAppearAnimation();
       } catch (e) {}
-      // hide sidebar for a cleaner UX after selecting a project
-      try {
-        setSidebarCollapsed(true, false);
-      } catch (e) {}
       const onEnd = () => {
         entryEl.removeEventListener("animationend", onEnd);
         try {
@@ -1531,26 +1551,37 @@
     });
 
   document.addEventListener("DOMContentLoaded", () => {
-    // default to collapsed immediately to avoid flicker
+    const initialSidebarState = readSidebarState();
     try {
-      (window.setSidebarCollapsed || setSidebarCollapsed)(true, false);
+      (window.setSidebarCollapsed || setSidebarCollapsed)(initialSidebarState.left, false, true, true);
     } catch (e) {}
     // initialize sidebar projects
     try {
       loadProjectsToSidebar();
     } catch (e) {}
-    // The user sidebar is hidden by default. Avoid fetching users or attaching
-    // hover behavior until another feature explicitly reveals the rail.
+    // Keep the user rail visible so its management and profile actions are reachable.
     const userSidebar = document.getElementById("userSidebar");
     const splitLayout = document.querySelector(".kb-split");
-    const applyUserSidebarCollapsed = (collapsed) => {
+    const applyUserSidebarCollapsed = (collapsed, persist = true) => {
       if (!userSidebar) return;
       userSidebar.classList.toggle("is-collapsed", collapsed);
       userSidebar.setAttribute("aria-expanded", String(!collapsed));
       userSidebar.setAttribute("aria-hidden", String(collapsed));
       if (splitLayout) splitLayout.style.setProperty("--user-sidebar-width", collapsed ? "0px" : "72px");
+      if (persist) saveSidebarState();
     };
-    applyUserSidebarCollapsed(true);
+    applyUserSidebarCollapsed(initialSidebarState.right, false);
+    saveSidebarState();
+    const restoreSidebarRoute = () => {
+      const state = readSidebarState();
+      const wasRightCollapsed = userSidebar?.classList.contains('is-collapsed');
+      setSidebarCollapsed(state.left, false, true, true);
+      applyUserSidebarCollapsed(state.right, false);
+      if (wasRightCollapsed && !state.right) loadUsersToSidebar();
+    };
+    window.addEventListener('popstate', restoreSidebarRoute);
+    window.addEventListener('hashchange', restoreSidebarRoute);
+    window.addEventListener('kb:url-param-changed', restoreSidebarRoute);
     window.toggleUserSidebar = () => {
       const collapsed = userSidebar.classList.contains("is-collapsed");
       applyUserSidebarCollapsed(!collapsed);
@@ -1614,9 +1645,9 @@
             if (!sidebarEl) return;
             const collapsed = sidebarEl.classList.contains("collapsed");
             if (window.setSidebarCollapsed) {
-              window.setSidebarCollapsed(!collapsed, false);
+              window.setSidebarCollapsed(!collapsed, true);
             } else if (typeof setSidebarCollapsed === "function") {
-              setSidebarCollapsed(!collapsed, false);
+              setSidebarCollapsed(!collapsed, true);
             }
           } catch (err) {}
         });
@@ -1625,7 +1656,6 @@
     // sidebar collapse/expand state
     const sidebar = document.getElementById("projectSidebar");
     const split = document.querySelector(".kb-split");
-    const COLLAPSE_KEY = "kbProjectSidebarCollapsed";
     // Whether hovering should reveal labels (disabled by default)
     const ALLOW_HOVER_LABELS = !!(window && window.SIDEBAR_ALLOW_HOVER_LABELS);
     // clicking on sidebar background (not on an entry) will expand/collapse for convenience
@@ -1646,11 +1676,11 @@
           return;
         if (!ALLOW_SIDEBAR_EXPAND_ON_CLICK) return;
         const collapsed = sidebar.classList.contains("collapsed");
-        // Toggle without persisting the preference so mouse-driven auto-collapse still works
+        // Explicit toggles update the route and saved preference.
         try {
           (window.setSidebarCollapsed || setSidebarCollapsed)(
             !collapsed,
-            false,
+            true,
           );
         } catch (e) {}
       });
@@ -1786,7 +1816,6 @@
         };
       } catch (e) {}
 
-      setSidebarCollapsed(true, false);
     } catch (e) {}
   });
   window.loadProjectsToSidebar = loadProjectsToSidebar;

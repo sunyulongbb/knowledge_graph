@@ -13,7 +13,7 @@ export function getCurrentUser(req: Request): any | null {
   if (!user || user.status === "disabled") return null;
   const roles = adminDb.query("SELECT r.id, r.code, r.name, r.data_scope FROM roles r JOIN user_roles ur ON ur.role_id = r.id WHERE ur.user_id = ? AND r.status = 'active'").all(user.id) as any[];
   const isSuper = roles.some((role) => role.code === "super_admin") || user.role === "admin" || user.is_admin;
-  const permissions = isSuper ? ["*"] : (adminDb.query("SELECT DISTINCT p.code FROM permissions p JOIN role_permissions rp ON rp.permission_id = p.id JOIN user_roles ur ON ur.role_id = rp.role_id WHERE ur.user_id = ?").all(user.id) as any[]).map((row) => row.code);
+  const permissions = isSuper ? ["*"] : (adminDb.query("SELECT DISTINCT p.code FROM permissions p JOIN role_permissions rp ON rp.permission_id = p.id JOIN user_roles ur ON ur.role_id = rp.role_id JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = ? AND r.status = 'active'").all(user.id) as any[]).map((row) => row.code);
   return { id: user.id, username: user.username, displayName: user.display_name || user.username, avatar: user.avatar || "", role: isSuper ? "admin" : "user", roles, permissions, dataScope: isSuper ? "all" : (roles.some((role) => role.data_scope === "all") ? "all" : "own"), status: user.status || "active", createdAt: user.created_at };
 }
 

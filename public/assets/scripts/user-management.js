@@ -11,6 +11,7 @@
   const api = async (url, options) => { const response = await fetch(url, { credentials: "include", ...options }); const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data.error || "操作失败"); return data; };
   const updateEntry = () => { if (nav) nav.style.display = isAdmin() ? "" : "none"; if (authResolved && !isAdmin() && window.kbViewMode === "user_management") window.setViewMode?.("table", { replaceRoute: true }); };
   const permissionNames = {
+    "application:create": "创建应用", "application:update": "编辑应用", "application:delete": "删除应用", "application:members": "管理应用成员", "application:review": "审批维护申请",
     "user:view": "查看用户", "user:create": "新增用户", "user:update": "编辑用户", "user:delete": "删除用户",
     "role:view": "查看角色", "role:create": "新增角色", "role:update": "编辑角色与授权", "role:delete": "删除角色",
     "permission:view": "查看权限", "permission:update": "管理权限",
@@ -18,7 +19,7 @@
     "knowledge:audit": "审核知识", "knowledge:like": "点赞知识", "knowledge:comment": "评论知识", "knowledge:share": "分享知识", "knowledge:favorite": "收藏知识",
     "system:config": "系统配置", "system:log": "查看系统日志",
   };
-  const permissionGroups = { user: "用户管理", role: "角色管理", permission: "权限管理", knowledge: "知识管理", system: "系统管理" };
+  const permissionGroups = { user: "用户管理", role: "角色管理", permission: "权限管理", application: "应用管理", knowledge: "知识管理", system: "系统管理" };
   const permissionLabel = (permission) => permissionNames[permission.code] || (permission.name !== permission.code ? permission.name : permission.code);
   function groupPermissions(items) {
     return items.reduce((groups, permission) => {
