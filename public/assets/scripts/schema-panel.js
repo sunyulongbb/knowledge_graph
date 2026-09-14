@@ -3053,27 +3053,9 @@
       const isApplied = entityTags.has(tag.toLowerCase());
       const chip = document.createElement("button");
       chip.type = "button";
-      chip.className = "tag" + (isApplied ? " tag-applied" : "");
-      chip.style.display = "inline-flex";
-      chip.style.alignItems = "center";
-      chip.style.gap = "4px";
-      chip.style.padding = "3px 8px";
-      chip.style.borderRadius = "12px";
-      chip.style.fontSize = "12px";
-      chip.style.cursor = "pointer";
-      chip.style.userSelect = "none";
-      chip.style.transition = "all 0.15s ease";
-      chip.style.fontFamily = "inherit";
+      chip.className = "tag tag-manager-chip" + (isApplied ? " tag-applied" : "");
       chip.disabled = entityTagUpdatePending;
-      if (isApplied) {
-        chip.style.background = "var(--accent, #4f46e5)";
-        chip.style.color = "#fff";
-        chip.style.border = "1px solid var(--accent, #4f46e5)";
-      } else {
-        chip.style.background = "rgba(79,70,229,0.10)";
-        chip.style.color = "var(--accent, #4f46e5)";
-        chip.style.border = "1px solid rgba(79,70,229,0.25)";
-      }
+      chip.setAttribute("aria-pressed", String(isApplied));
       chip.title = isApplied
         ? `点击移除标签「${tag}」`
         : `点击添加标签「${tag}」`;
@@ -3083,29 +3065,18 @@
         void toggleEntityTag(tag);
       });
       const labelSpan = document.createElement("span");
+      labelSpan.className = "tag-manager-chip__label";
       labelSpan.textContent = tag;
       chip.appendChild(labelSpan);
       if (isApplied) {
         const check = document.createElement("i");
-        check.className = "fa-solid fa-check";
-        check.style.fontSize = "10px";
-        check.style.opacity = "0.8";
+        check.className = "fa-solid fa-check tag-manager-chip__check";
         chip.appendChild(check);
       }
       if (allowClassTagEdit) {
         const del = document.createElement("i");
         del.className = "fa-solid fa-xmark tag-delete-btn";
-        del.style.cursor = "pointer";
-        del.style.opacity = "0.6";
-        del.style.fontSize = "10px";
-        del.style.marginLeft = "2px";
         del.title = "从分类中删除此标签";
-        del.addEventListener("mouseover", () => {
-          del.style.opacity = "1";
-        });
-        del.addEventListener("mouseout", () => {
-          del.style.opacity = "0.6";
-        });
         del.addEventListener("click", (e) => {
           e.stopPropagation();
           removeClassTag(idx);

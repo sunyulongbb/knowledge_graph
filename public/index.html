@@ -48,7 +48,7 @@
     window["@tiptap/starter-kit"] =
       window["@tiptap/starter-kit"] || window.TiptapStarterKit;
   </script>
-    <link rel="stylesheet" href="/assets/styles/app.css?v=20260915-12" />
+    <link rel="stylesheet" href="/assets/styles/app.css?v=20260915-21" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -1304,7 +1304,7 @@
     .ontology-workspace {
       display: grid;
       grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
-      gap: 12px;
+      gap: 20px;
       min-height: 0;
       height: 100%;
       overflow: hidden;
@@ -1315,6 +1315,10 @@
       flex-direction: column;
       min-height: 0;
       overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface-0);
+      box-shadow: none;
     }
 
     #attrTablePanel>.ontology-workspace {
@@ -1323,11 +1327,10 @@
     }
 
     .ontology-card {
-      border: 1px solid color-mix(in srgb, var(--border, #dbe3ea) 88%, white);
-      border-radius: 14px;
-      background:
-        linear-gradient(180deg, color-mix(in srgb, var(--surface-0, #fff) 92%, white), var(--surface-0, #fff));
-      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
     }
 
     .ontology-sidebar {
@@ -1342,7 +1345,7 @@
     }
 
     .ontology-sidebar__top {
-      padding: 12px;
+      padding: 8px 8px 10px;
       border-bottom: 1px solid color-mix(in srgb, var(--border, #dbe3ea) 88%, white);
       display: flex;
       flex-direction: column;
@@ -1426,7 +1429,7 @@
     }
 
     #ontologyTree .dhx_tree {
-      background: var(--surface-0);
+      background: transparent;
       color: var(--fg);
     }
 
@@ -1567,6 +1570,8 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      border: 0;
+      border-radius: 0;
     }
 
     .ontology-toolbar {
@@ -1627,7 +1632,7 @@
       flex: 1;
       min-height: 0;
       overflow: auto;
-      padding: 0 6px 6px;
+      padding: 0;
       scrollbar-width: none;
       -ms-overflow-style: none;
     }
@@ -3080,7 +3085,7 @@
           </div>
         </div>
         <!-- 本体管理面板 -->
-        <div id="attrTablePanel" class="panel" style="padding: 8px 10px; display: none">
+        <div id="attrTablePanel" style="padding: 0; display: none">
           <div class="ontology-workspace">
             <aside class="ontology-card ontology-sidebar">
               <div class="ontology-sidebar__top">
@@ -3125,7 +3130,7 @@
               <div class="tbl-wrap ontology-table-wrap">
                 <div id="propertyTable" class="business-grid-host" aria-label="属性管理表格"></div>
               </div>
-              <div id="propertyPagination" class="table-toolbar" style="margin-top: 8px; justify-content: center">
+              <div id="propertyPagination" class="table-toolbar" style="margin: 0; padding-top: 8px; justify-content: center">
                 <div id="propertyPaginationControls"></div>
               </div>
             </section>
@@ -19914,7 +19919,7 @@
   <script src="/assets/scripts/entity-manage-table.js?v=20260914-1"></script>
   <script src="/assets/scripts/attr-panel.js?v=20260914-4"></script>
   <!-- relation-panel.js 已移除，使用 edgehandles 拖拽创建关系 -->
-  <script src="/assets/scripts/schema-panel.js?v=20260915-4"></script>
+  <script src="/assets/scripts/schema-panel.js?v=20260915-7"></script>
   <script src="/assets/scripts/detail-panel.js?v=20260914-3"></script>
   <script src="/assets/scripts/knowledge-interactions.js?v=20260904-1"></script>
   <script src="/assets/scripts/knowledge-access.js?v=20260914-1"></script>

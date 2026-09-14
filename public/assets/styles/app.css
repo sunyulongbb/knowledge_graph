@@ -947,8 +947,7 @@ h1 {
 }
 
 main {
-  padding: 12px;
-  padding-bottom: 12px;
+  padding: 0;
   box-sizing: border-box;
   /* allow main to expand to fill remaining vertical space */
   flex: 1 1 auto;
@@ -999,6 +998,19 @@ body.global-page-active .header-bar::after { display: none !important; }
   min-width: 0;
 }
 
+/* Only the outer application/user rails span edge-to-edge. Workspace modules
+   retain the shared vertical breathing room. */
+.kb-split > .editor-panel,
+.kb-split > .center-col,
+.kb-split > .class-panel,
+.kb-split > .global-page {
+  height: calc(100% - 24px);
+  min-height: 0;
+  max-height: calc(100% - 24px);
+  margin-block: 12px;
+  box-sizing: border-box;
+}
+
 /* center column should fill available height and allow internal scrolling */
 .center-col {
   display: flex;
@@ -1016,8 +1028,21 @@ body.global-page-active .header-bar::after { display: none !important; }
 }
 
 @media (max-width: 900px) {
+  main {
+    padding: 8px;
+  }
+
   .kb-split {
     grid-template-columns: 1fr;
+  }
+
+  .kb-split > .editor-panel,
+  .kb-split > .center-col,
+  .kb-split > .class-panel,
+  .kb-split > .global-page {
+    height: 100%;
+    max-height: 100%;
+    margin-block: 0;
   }
   /* hide project sidebar on small screens */
   .project-sidebar {
@@ -1108,7 +1133,7 @@ body.global-page-active .header-bar::after { display: none !important; }
 .project-sidebar .project-list .project-entry:focus {
   outline: none;
   box-shadow: 0 8px 20px rgba(79, 70, 229, 0.08);
-  transform: translateY(-2px);
+  transform: none;
 }
 .project-sidebar .project-list .project-entry:focus-visible {
   outline: 2px solid rgba(79, 70, 229, 0.12);
@@ -2932,6 +2957,13 @@ header .view-toggle .btn.toggle.active {
   white-space: nowrap;
 }
 
+#attrTablePanel #propertyTable,
+#attrTablePanel #propertyTable .dhx_grid,
+#attrTablePanel #propertyTable .dhx_grid-content,
+#attrTablePanel #propertyTable .dhx_grid-body {
+  background: transparent;
+}
+
 #propertyTable .ontology-pill-list {
   display: flex;
   min-width: 0;
@@ -4694,15 +4726,84 @@ body {
 .tag-manager-list {
   display: flex;
   align-content: flex-start;
+  align-items: flex-start;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: 8px;
   min-height: 34px;
   overflow: auto;
 }
 
-.tag-manager-list .tag {
-  min-height: 28px;
+.tag-manager-list .tag-manager-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  min-height: 30px;
   margin: 0;
+  padding: 4px 9px;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-1) 64%, transparent);
+  color: var(--muted);
+  font: 500 12px/1.35 inherit;
+  cursor: pointer;
+  user-select: none;
+  transition: color 140ms ease, border-color 140ms ease, background-color 140ms ease;
+}
+
+.tag-manager-list .tag-manager-chip:hover,
+.tag-manager-list .tag-manager-chip:focus-visible {
+  color: var(--fg);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface-1));
+}
+
+.tag-manager-list .tag-manager-chip:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  outline-offset: 2px;
+}
+
+.tag-manager-list .tag-manager-chip.tag-applied {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-0));
+}
+
+.tag-manager-chip__label {
+  min-width: 0;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-manager-chip__check {
+  flex: 0 0 auto;
+  font-size: 9px;
+}
+
+.tag-manager-list .tag-delete-btn {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  margin-left: 1px;
+  border-radius: 50%;
+  color: currentColor;
+  font-size: 9px;
+  opacity: .48;
+  cursor: pointer;
+}
+
+.tag-manager-list .tag-delete-btn:hover {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  opacity: 1;
+}
+
+.tag-manager-list .tag-manager-chip:disabled {
+  cursor: wait;
+  opacity: .55;
 }
 
 .tag-manager-status {
