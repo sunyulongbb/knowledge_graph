@@ -16,7 +16,7 @@
   function nodeUrl(node) {
     const url = new URL(location.href);
     url.searchParams.delete('node'); url.searchParams.delete('view');
-    url.hash = new URLSearchParams({ view: 'detail', node: node.id || node._id });
+    url.hash = new URLSearchParams({ view: 'knowledge_detail', node: node.id || node._id });
     return url.href;
   }
   function card(node) {

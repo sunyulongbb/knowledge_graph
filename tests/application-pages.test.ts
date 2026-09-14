@@ -29,6 +29,8 @@ test('home and search render safe entity links and preserve application and side
   const url = new URL(nodeUrl(node));
   expect(url.searchParams.get('db')).toBe('demo');
   expect(url.searchParams.get('leftSidebar')).toBe('closed');
-  expect(new URLSearchParams(url.hash.slice(1)).get('node')).toBe('Q1');
+  const route = new URLSearchParams(url.hash.slice(1));
+  expect(route.get('view')).toBe('knowledge_detail');
+  expect(route.get('node')).toBe('Q1');
   expect(flatten([{ id: 'root', name: 'Root', children: [{ id: 'child', name: 'Child' }] }]).map((item: any) => item.id)).toEqual(['root', 'child']);
 });

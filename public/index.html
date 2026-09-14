@@ -48,7 +48,7 @@
     window["@tiptap/starter-kit"] =
       window["@tiptap/starter-kit"] || window.TiptapStarterKit;
   </script>
-    <link rel="stylesheet" href="/assets/styles/app.css?v=20260915-21" />
+    <link rel="stylesheet" href="/assets/styles/app.css?v=20260915-22" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -4993,6 +4993,9 @@
         </div>
       </div>
     <div id="globalPage" class="global-page" hidden>
+      <section id="knowledgeDetailPagePanel" class="knowledge-detail-page" style="display:none" aria-label="知识详情">
+        <div id="knowledgeDetailPageHost" class="knowledge-detail-page__host"></div>
+      </section>
       <section id="applicationHomePanel" class="panel application-content-page" style="display:none">
         <div class="app-page-heading"><div><h1 id="appHomeName">应用首页</h1><p id="appHomeCount" class="muted"></p></div><div class="app-page-actions"><button id="appHomeSearch" type="button" class="btn">搜索知识</button><button id="appHomeBrowse" type="button" class="btn">浏览知识</button></div></div>
         <div id="appHomeContent" class="app-home-columns"></div>
@@ -5983,6 +5986,26 @@
     const relPanel = document.getElementById("relPanel");
     const cywrap = document.getElementById("cywrap");
     const detailPanel = document.getElementById("detailPanel");
+    const detailPanelHome = detailPanel?.parentElement || null;
+    const detailPanelNextSibling = detailPanel?.nextSibling || null;
+    const knowledgeDetailPagePanel = document.getElementById("knowledgeDetailPagePanel");
+    const knowledgeDetailPageHost = document.getElementById("knowledgeDetailPageHost");
+    function mountDetailPanelStandalone(standalone) {
+      if (!detailPanel) return;
+      if (standalone && knowledgeDetailPageHost) {
+        if (detailPanel.parentElement !== knowledgeDetailPageHost) {
+          knowledgeDetailPageHost.appendChild(detailPanel);
+        }
+        return;
+      }
+      if (detailPanelHome && detailPanel.parentElement !== detailPanelHome) {
+        if (detailPanelNextSibling?.parentNode === detailPanelHome) {
+          detailPanelHome.insertBefore(detailPanel, detailPanelNextSibling);
+        } else {
+          detailPanelHome.appendChild(detailPanel);
+        }
+      }
+    }
     const btnDetailBack = document.getElementById("btnDetailBack");
     const tblSearch = document.getElementById("tblSearch");
     const btnTableAdd = document.getElementById("btnTableAdd");
@@ -6146,6 +6169,7 @@
     const KB_VIEW_MODES = new Set([
       "app_home",
       "app_search",
+      "knowledge_detail",
       "entry",
       "table",
       "vis",
@@ -6516,7 +6540,7 @@
         ).trim();
         if (
           pinnedNode &&
-          ["table", "detail", "report_detail", "vis", "entry"].includes(normalizedMode)
+          ["table", "detail", "knowledge_detail", "report_detail", "vis", "entry"].includes(normalizedMode)
         ) {
           normalizedNode = pinnedNode;
         }
@@ -6530,6 +6554,7 @@
         normalizedNode &&
         (normalizedMode === "table" ||
           normalizedMode === "detail" ||
+          normalizedMode === "knowledge_detail" ||
           normalizedMode === "report_detail" ||
           normalizedMode === "vis" ||
           normalizedMode === "entry" ||
@@ -9788,10 +9813,12 @@
           ? ""
           : String(options.targetNodeId).trim();
       const previousMode = window.kbViewMode;
-      if (previousMode === "detail" && normalized !== "detail") {
+      const enteringDetail = normalized === "detail" || normalized === "knowledge_detail";
+      const leavingDetail = previousMode === "detail" || previousMode === "knowledge_detail";
+      if (leavingDetail && !enteringDetail) {
         stopDetailMediaPlayback();
       }
-      if (normalized === "detail" && previousMode && previousMode !== "detail") {
+      if (enteringDetail && previousMode && !leavingDetail) {
         window.kbDetailReturnState = {
           view: detailReturnView || previousMode,
           scrollTop: Number(window.kbTableListScrollTop || 0),
@@ -9864,12 +9891,12 @@
           skipGraphFocus: normalized !== "vis",
           refreshCurrent: false,
         });
-        if (normalized === "detail" && hasTargetNode) {
+        if ((normalized === "detail" || normalized === "knowledge_detail") && hasTargetNode) {
           try {
             showNodeDetailInline(targetNodeIdRaw, {
-              preserveSidebarState: focusDetailOnly,
+              preserveSidebarState: normalized === "knowledge_detail" || focusDetailOnly,
             });
-            if (!focusDetailOnly) {
+            if (normalized !== "knowledge_detail" && !focusDetailOnly) {
               enterEditById(targetNodeIdRaw);
             }
           } catch { }
@@ -9962,6 +9989,8 @@
       const isVis = normalized === "vis";
       const isAttr = normalized === "attr";
       const isDetail = normalized === "detail";
+      const isStandaloneDetail = normalized === "knowledge_detail";
+      const isAnyDetail = isDetail || isStandaloneDetail;
       const isClean = normalized === "clean";
       const isChat = normalized === "chat";
       const isReportHome = normalized === "report_home";
@@ -9975,7 +10004,8 @@
       const isProfile = normalized === 'profile';
       const isAppHome = normalized === 'app_home';
       const isAppSearch = normalized === 'app_search';
-      const isGlobalPage = isApplications || isUserManagement || isProfile || isAppHome || isAppSearch;
+      const isGlobalPage = isApplications || isUserManagement || isProfile || isAppHome || isAppSearch || isStandaloneDetail;
+      if (knowledgeDetailPagePanel) knowledgeDetailPagePanel.style.display = isStandaloneDetail ? '' : 'none';
       document.getElementById('applicationHomePanel').style.display = isAppHome ? '' : 'none';
       document.getElementById('applicationSearchPanel').style.display = isAppSearch ? '' : 'none';
       document.getElementById('btnApplicationSearch').classList.toggle('active', isAppSearch);
@@ -10009,7 +10039,7 @@
         btnViewEntry.setAttribute("aria-selected", String(isEntry));
       }
       if (btnViewTable) {
-        const isKnowledgeView = isTable || isDetail;
+        const isKnowledgeView = isTable || isAnyDetail;
         btnViewTable.classList.toggle("active", isKnowledgeView);
         btnViewTable.setAttribute("aria-selected", String(isKnowledgeView));
       }
@@ -10071,7 +10101,8 @@
       if (reportGeneratePanel) reportGeneratePanel.style.display = isReportGenerate ? "" : "none";
       if (reportDetailPanel) reportDetailPanel.style.display = isReportDetail ? "" : "none";
       if (reportTemplatePanel) reportTemplatePanel.style.display = isReportTemplate ? "" : "none";
-      if (detailPanel) detailPanel.style.display = isDetail ? "" : "none";
+      mountDetailPanelStandalone(isStandaloneDetail);
+      if (detailPanel) detailPanel.style.display = isAnyDetail ? "" : "none";
       if (chatPanel) chatPanel.style.display = isChat ? "" : "none";
       if (userManagementPanel) userManagementPanel.style.display = isUserManagement ? "" : "none";
       if (isUserManagement) window.loadUserManagement?.();
@@ -10207,7 +10238,7 @@
           });
         }
 
-      } else if (isDetail) {
+      } else if (isAnyDetail) {
         // 优先显示kbSelectedNodeId
         let detailId =
           targetNodeIdRaw ||
@@ -10217,7 +10248,7 @@
         if (detailId) {
           try {
             showNodeDetailInline(detailId, {
-              preserveSidebarState: focusDetailOnly,
+              preserveSidebarState: isStandaloneDetail || focusDetailOnly,
             });
             // 高亮cy节点
             if (window.kbCy) {
@@ -10355,7 +10386,12 @@
         const returnState = window.kbDetailReturnState || {};
         window.kbPinnedKnowledgeDetailRouteId = "";
         window.kbDetailRouteBeforeVis = "";
-        setViewMode("table");
+        const returnView = normalizeViewModeInput(returnState.view || "");
+        const targetView = window.kbViewMode === "knowledge_detail" && ["app_home", "app_search"].includes(returnView)
+          ? returnView
+          : "table";
+        setViewMode(targetView);
+        if (targetView !== "table") return;
         const scrollTop = Number(
           returnState.scrollTop || window.kbTableListScrollTop || 0,
         );
@@ -19925,7 +19961,7 @@
   <script src="/assets/scripts/knowledge-access.js?v=20260914-1"></script>
   <script src="/assets/scripts/applications.js?v=20260914-2"></script>
   <script src="/assets/scripts/user-management.js?v=20260915-1"></script>
-  <script src="/assets/scripts/application-pages.js?v=20260915-1"></script>
+  <script src="/assets/scripts/application-pages.js?v=20260915-2"></script>
   <script src="/assets/scripts/user-profile.js?v=20260915-1"></script>
   <script src="/assets/scripts/sidebar-panel.js?v=20260915-1"></script>
   <script src="/assets/scripts/auth-panel.js?v=20260914-2"></script>
