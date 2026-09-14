@@ -11,6 +11,7 @@
   let tblActiveClassId = "";
   let tblActiveClassLabel = "";
   let tblGridLoadCheckRaf = 0;
+  let tblLoadVersion = 0;
   let tblTypeTreeCache = null;
   let tableTypeTreeController = null;
   let tableTypeTreeHost = null;
@@ -37,6 +38,77 @@
   const btnClearTableFilter = document.getElementById("btnClearTableFilter");
   const btnTableRefresh = document.getElementById("btnTableRefresh");
   const tblLayoutSelect = document.getElementById("tblLayoutSelect");
+  function createInlineChoice(select, ids, icons) {
+  const layoutOptions = document.getElementById(ids.options);
+  const layoutDrawer = document.getElementById(ids.drawer);
+  const layoutTrigger = document.getElementById(ids.trigger);
+  const layoutControl = document.getElementById(ids.control);
+  function closeLayoutDrawer(restoreFocus = true) {
+    if (!layoutControl?.classList.contains('is-open')) return;
+    layoutControl.classList.remove('is-open');
+    layoutDrawer.style.width = '0px';
+    layoutDrawer.inert = true;
+    layoutDrawer.setAttribute('aria-hidden', 'true');
+    layoutTrigger.setAttribute('aria-expanded', 'false');
+    if (restoreFocus) layoutTrigger.focus();
+  }
+  if (layoutDrawer && layoutTrigger && layoutControl) {
+    layoutTrigger.addEventListener('click', () => {
+      if (layoutControl.classList.contains('is-open')) { closeLayoutDrawer(); return; }
+      layoutControl.classList.add('is-open');
+      layoutDrawer.style.width = `${layoutOptions.scrollWidth}px`;
+      layoutDrawer.inert = false;
+      layoutDrawer.setAttribute('aria-hidden', 'false');
+      layoutTrigger.setAttribute('aria-expanded', 'true');
+    });
+    layoutTrigger.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowRight' && layoutControl.classList.contains('is-open')) {
+        event.preventDefault();
+        (layoutOptions.querySelector('[aria-pressed="true"]') || layoutOptions.querySelector('button'))?.focus();
+      }
+    });
+    document.addEventListener('click', (event) => {
+      if (!event.composedPath().includes(layoutControl)) closeLayoutDrawer(false);
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && layoutControl.classList.contains('is-open')) { event.preventDefault(); closeLayoutDrawer(); }
+    });
+    document.addEventListener('focusin', (event) => {
+      if (!layoutControl.contains(event.target)) closeLayoutDrawer(false);
+    });
+  }
+  for (const option of select?.options || []) {
+    const button = document.createElement('button');
+    button.type = 'button'; button.className = 'btn icon';
+    button.dataset.choice = option.value;
+    button.title = option.textContent; button.setAttribute('aria-label', option.textContent);
+    button.innerHTML = `<i class="fa-solid ${icons[option.value]}" aria-hidden="true"></i>`;
+    button.addEventListener('click', () => {
+      select.value = option.value;
+      select.dispatchEvent(new Event('change'));
+      sync();
+      closeLayoutDrawer();
+    });
+    layoutOptions?.appendChild(button);
+  }
+  function sync() {
+    const option = select?.selectedOptions[0];
+    const icon = layoutTrigger?.querySelector('i');
+    if (icon) icon.className = `fa-solid ${icons[select.value] || Object.values(icons)[0]}`;
+    if (layoutTrigger && option) {
+      layoutTrigger.title = option.textContent;
+      layoutTrigger.setAttribute('aria-label', option.textContent);
+    }
+    layoutOptions?.querySelectorAll('button').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.choice === select.value)));
+  }
+  select?.addEventListener('change', sync);
+  sync();
+  return { sync, close: closeLayoutDrawer };
+  }
+  const layoutIcons = { list: 'fa-list', grid: 'fa-grip', timeline: 'fa-timeline', semantic: 'fa-diagram-project', manage: 'fa-table' };
+  const layoutPicker = createInlineChoice(tblLayoutSelect, { options: 'tblLayoutOptions', drawer: 'tblLayoutDrawer', trigger: 'btnLayoutDrawer', control: 'tblLayoutControl' }, layoutIcons);
+  const sortControl = document.getElementById('tblSortControl');
+  const sortPicker = createInlineChoice(tblSortSelect, { options: 'tblSortOptions', drawer: 'tblSortDrawer', trigger: 'btnSortDrawer', control: 'tblSortControl' }, { modified_desc: 'fa-clock', hot: 'fa-fire-flame-curved' });
   const tblGridZoomControls = document.getElementById("tblGridZoomControls");
   const tblGridZoom = document.getElementById("tblGridZoom");
   const btnTblGridZoomOut = document.getElementById("btnTblGridZoomOut");
@@ -44,15 +116,15 @@
   const btnDeleteSelected = document.getElementById("btnDeleteSelected");
   const tblCount = document.getElementById("tblCount");
   const tblPagination = document.getElementById("tblPagination");
-  const TABLE_LAYOUT_MODES = ["list", "grid", "timeline", "semantic", "manage"];
+  const TABLE_LAYOUT_MODES = ["manage", "list", "grid", "timeline", "semantic"];
   const normalizeTableLayoutMode = (mode) =>
     mode === "table"
-      ? "list"
+      ? "manage"
       : TABLE_LAYOUT_MODES.includes(mode)
         ? mode
-        : "list";
+        : "manage";
   const getInitialTableLayoutMode = () => {
-    let mode = "list";
+    let mode = "manage";
     try {
       if (window.localStorage) {
         const stored = localStorage.getItem("kbTableLayoutMode");
@@ -153,6 +225,11 @@
   const applyTableLayoutMode = (mode) => {
     const normalized = normalizeTableLayoutMode(mode);
     window.kbTableLayoutMode = normalized;
+    if (sortControl) {
+      const visible = ['manage', 'list', 'grid'].includes(normalized);
+      sortControl.style.display = visible ? '' : 'none';
+      if (!visible) sortPicker.close(false);
+    }
     try {
       if (window.localStorage)
         localStorage.setItem("kbTableLayoutMode", normalized);
@@ -167,6 +244,9 @@
       .getElementById("tablePanel")
       ?.classList.toggle("manage-layout", normalized === "manage");
     if (tblLayoutSelect) tblLayoutSelect.value = normalized;
+    const layoutIcon = document.getElementById('tblLayoutIcon');
+    if (layoutIcon) layoutIcon.className = `fa-solid ${layoutIcons[normalized]}`;
+    layoutPicker.sync();
     if (tblGridZoomControls) {
       tblGridZoomControls.style.display =
         normalized === "grid" ? "flex" : "none";
@@ -606,6 +686,7 @@
   }
 
   async function loadTablePage(options = {}) {
+    const requestVersion = ++tblLoadVersion;
     const opts = options || {};
     const append = opts.append === true;
     const hasClassId = Object.prototype.hasOwnProperty.call(opts, "classId");
@@ -645,6 +726,7 @@
       url.searchParams.set("offset", offset);
 
       const sortOrder = tblSortSelect ? tblSortSelect.value : "";
+      url.searchParams.set('order', sortOrder || 'modified_desc');
       if (typeof window.updateUrlParam === "function") {
         window.updateUrlParam("order", sortOrder === "id" ? "" : sortOrder);
         window.updateUrlParam("page", tblPage);
@@ -684,6 +766,7 @@
       if (!resp.ok) throw new Error("HTTP " + resp.status);
 
       const data = await resp.json();
+      if (requestVersion !== tblLoadVersion) return;
       const nodes = Array.isArray(data.nodes) ? data.nodes : [];
       if (append) {
         const existing = Array.isArray(window.kbTableNodes)
@@ -845,6 +928,7 @@
     const tblSortTimeIcon = document.getElementById("tblSortTimeIcon");
 
     const updateTimeSortHeader = () => {
+      sortPicker.sync();
       if (!tblSortSelect || !tblSortTimeIcon) return;
       const value = tblSortSelect.value;
       if (value === "modified_desc") {

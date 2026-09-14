@@ -13,6 +13,31 @@
   const editControls = '#btnAddOntologyChip,#composerTypeSelect,#btnEntityImageUpload,#btnEntityVideoUpload,#btnEntityPdfUpload,#btnShowAttrForm,#btnAttrEditSelected,#btnAttrDeleteSelected,#btnSubmit,.attr-row-del-btn,.attr-quick-add-btn';
   const adminControls = '#btnOntologyAddRoot,#btnOntologyImport,#btnPropertyAdd,#btnPropertyDeleteSelected,#btnClsAdd,#btnClsDelete,#btnClassImport,#btnTagAdd,#btnTagImport,#btnSparqlConfirmImport,#btnSparqlImport';
   const permissionDisabled = new WeakSet();
+  function syncVisibilityIcon() {
+    const select = byId('knowledgeVisibility');
+    const button = byId('btnKnowledgeVisibility');
+    const icon = byId('knowledgeVisibilityIcon');
+    if (!select || !button || !icon) return;
+    const isPrivate = select.value === 'private';
+    icon.className = isPrivate ? '' : 'fa-regular fa-eye';
+    if (icon.dataset.visibility !== select.value) {
+      icon.dataset.visibility = select.value;
+      icon.innerHTML = isPrivate ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true" style="display:block"><path d="M3 8c2 4 5 6 9 6s7-2 9-6M5 11l-2 3m6-1-1 4m8-4 1 4m2-6 2 3"/></svg>' : '';
+    }
+    button.setAttribute('aria-pressed', String(isPrivate));
+    button.title = `${isPrivate ? '私有' : '公开'}，${select.disabled ? '无权修改访问级别' : `点击切换为${isPrivate ? '公开' : '私有'}`}`;
+    button.setAttribute('aria-label', button.title);
+    lock(button, select.disabled);
+  }
+  byId('btnKnowledgeVisibility')?.addEventListener('click', () => {
+    const select = byId('knowledgeVisibility');
+    if (!select || select.disabled) return;
+    select.value = select.value === 'private' ? 'public' : 'private';
+    select.dispatchEvent(new Event('input', { bubbles: true }));
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    syncVisibilityIcon();
+  });
+  byId('knowledgeVisibility')?.addEventListener('change', syncVisibilityIcon);
   function lock(element, denied) {
     if (denied) {
       if (!element.disabled) { permissionDisabled.add(element); element.disabled = true; }
@@ -24,8 +49,9 @@
   }
   function syncControls() {
     const allowed = canEditCurrent();
-    document.querySelectorAll(`${editControls},#nodeForm input,#nodeForm textarea,#nodeForm select:not(#knowledgeVisibility),#nodeForm button:not(#btnCancelEdit),#attrForm input,#attrForm textarea,#attrForm select,#attrForm button:not(#btnAttrReset)`).forEach((element) => lock(element, !allowed));
+    document.querySelectorAll(`${editControls},#nodeForm input,#nodeForm textarea,#nodeForm select:not(#knowledgeVisibility),#nodeForm button:not(#btnCancelEdit):not(#btnKnowledgeVisibility),#attrForm input,#attrForm textarea,#attrForm select,#attrForm button:not(#btnAttrReset)`).forEach((element) => lock(element, !allowed));
     if (byId('knowledgeVisibility')) lock(byId('knowledgeVisibility'), !window.authUser || (!!byId('fId')?.value && !editorNode?.can_manage));
+    syncVisibilityIcon();
     document.querySelectorAll('#entityDisplayName,#entityDisplayDesc,#entityDisplayAliases').forEach((element) => {
       if (!allowed && element.contentEditable !== 'false') element.contentEditable = 'false';
     });

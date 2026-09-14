@@ -1632,23 +1632,20 @@
         } catch (err) {}
       });
     }
-    // header project click toggles sidebar collapse/expand
+    // The application name links to its home page.
     try {
       const headerProj = document.getElementById("headerProject");
       if (headerProj) {
         headerProj.style.cursor = "pointer";
-        headerProj.title = "单击此处收起/展开侧边栏";
+        headerProj.title = "应用首页";
+        headerProj.setAttribute('role', 'link');
+        headerProj.tabIndex = 0;
+        headerProj.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); window.setViewMode?.('app_home'); }
+        });
         headerProj.addEventListener("click", (e) => {
           e.preventDefault();
-          try {
-            const sidebarEl = document.getElementById("projectSidebar");
-            if (!sidebarEl) return;
-            const collapsed = sidebarEl.classList.contains("collapsed");
-            if (window.setSidebarCollapsed) {
-              window.setSidebarCollapsed(!collapsed, true);
-            } else if (typeof setSidebarCollapsed === "function") {
-              setSidebarCollapsed(!collapsed, true);
-            }
+          try { window.setViewMode?.('app_home');
           } catch (err) {}
         });
       }

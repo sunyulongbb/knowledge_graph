@@ -723,6 +723,9 @@
           if (data && data.success) {
             const nextUrl = new URL(window.location.href);
             nextUrl.searchParams.set("db", name.replace(/\.sqlite$/, ""));
+            nextUrl.searchParams.delete('node');
+            nextUrl.searchParams.delete('view');
+            nextUrl.hash = 'view=app_home';
             window.location.href = nextUrl.toString();
           } else {
             alert(data && data.message ? data.message : "Switch failed");

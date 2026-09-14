@@ -1,3 +1,4 @@
+import { ontologyTypeFilterSql } from '../ontology-filter.ts';
 import { db, getProjectByIdentifier } from "../db.ts";
 import { normalizeDatatype, normalizeValue, normalizeStatement, valueTypeFor, uiDatatype } from '../../shared/wikidata.ts';
 import { normalizeEntityTaxonomy } from '../../shared/entity-taxonomy.ts';
@@ -2135,9 +2136,16 @@ export async function handleCoreKbRoutes(
       try {
         const propRow = db
           .query(
-            "SELECT name, alias FROM properties WHERE id = ? OR lower(name) = lower(?) LIMIT 1",
+            "SELECT id, name, alias FROM properties WHERE id = ? OR lower(name) = lower(?) LIMIT 1",
           )
           .get(propertyId, propertyId) as any;
+        if (propRow?.id) {
+          const resolvedId = String(propRow.id).replace(/^property\//, '');
+          propertyKeys.add(String(propRow.id));
+          propertyKeys.add(resolvedId);
+          if (/^P\d+$/i.test(resolvedId)) propertyKeys.add(resolvedId.substring(1));
+          if (/^\d+$/.test(resolvedId)) propertyKeys.add(`P${resolvedId}`);
+        }
         if (propRow?.name) {
           propertyKeys.add(propRow.name);
         }
@@ -2261,12 +2269,9 @@ export async function handleCoreKbRoutes(
           );
         } catch {}
       } else {
-        joinClause +=
-          " LEFT JOIN ontologies ot_filter ON lower(trim(n.type)) = lower(trim(ot_filter.id))";
-        whereClause +=
-          " AND (lower(trim(n.type)) = lower(?) OR lower(trim(ot_filter.id)) = lower(?))";
-        params.push(typeFilter, typeFilter);
-        countParams.push(typeFilter, typeFilter);
+        whereClause += ` AND ${ontologyTypeFilterSql}`;
+        params.push(typeFilter);
+        countParams.push(typeFilter);
       }
     }
 
@@ -2279,7 +2284,11 @@ export async function handleCoreKbRoutes(
     const orderBy = (url.searchParams.get("order") || "modified_desc").trim();
     let orderClause =
       " ORDER BY datetime(COALESCE(n.updated_at, n.created_at)) DESC, n.rowid DESC";
-    if (orderBy === "modified_desc") {
+    if (orderBy === "hot") {
+      const popularity = ['knowledge_likes', 'knowledge_favorites', 'knowledge_comments']
+        .map((table) => `(SELECT COUNT(*) FROM ${table} h WHERE h.knowledge_id IN (n.id, 'entity/' || n.id))`).join(' + ');
+      orderClause = ` ORDER BY (${popularity}) DESC, datetime(COALESCE(n.updated_at, n.created_at)) DESC, n.rowid DESC`;
+    } else if (orderBy === "modified_desc") {
       orderClause =
         " ORDER BY datetime(COALESCE(n.updated_at, n.created_at)) DESC, n.rowid DESC";
     } else if (orderBy === "modified_asc") {

@@ -48,7 +48,7 @@
     window["@tiptap/starter-kit"] =
       window["@tiptap/starter-kit"] || window.TiptapStarterKit;
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20260914-2" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20260914-11" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -1910,7 +1910,7 @@
         </div>
         <div id="tbTableControls" class="table-context-tools">
           <div class="table-type-tree-filter">
-            <button id="btnTblTypeFilterTree" type="button" class="btn table-type-tree-trigger" aria-label="本体类型筛选">
+            <button id="btnTblTypeFilterTree" type="button" class="btn table-type-tree-trigger" aria-label="本体类型筛选" title="筛选所选本体及其所有下级本体">
               <i class="fa-solid fa-sitemap"></i>
               <span id="tblTypeFilterTreeLabel">本体类型</span>
             </button>
@@ -1919,12 +1919,28 @@
           <select id="tblTypeFilter" class="kb-select sm table-context-type-filter" aria-label="本体类型筛选" style="display:none;">
             <option value="">本体类型</option>
           </select>
-          <select id="tblLayoutSelect" class="kb-select sm" title="知识布局" aria-label="知识布局">
+          <div id="tblSortControl" class="table-layout-control">
+            <button id="btnSortDrawer" class="btn icon" type="button" title="最新" aria-label="最新" aria-controls="tblSortDrawer" aria-expanded="false"><i class="fa-solid fa-clock" aria-hidden="true"></i></button>
+            <div id="tblSortDrawer" class="table-layout-drawer" inert aria-hidden="true">
+              <div id="tblSortOptions" class="table-layout-options" role="group" aria-label="知识排序"></div>
+            </div>
+          </div>
+          <select id="tblSort" hidden style="display:none" title="最热按点赞、收藏、评论总数排序" aria-label="知识排序">
+            <option value="modified_desc">最新</option>
+            <option value="hot">最热</option>
+          </select>
+          <div id="tblLayoutControl" class="table-layout-control">
+            <button id="btnLayoutDrawer" class="btn icon" type="button" title="知识布局" aria-label="知识布局" aria-controls="tblLayoutDrawer" aria-expanded="false"><i id="tblLayoutIcon" class="fa-solid fa-table" aria-hidden="true"></i></button>
+            <div id="tblLayoutDrawer" class="table-layout-drawer" inert aria-hidden="true">
+              <div id="tblLayoutOptions" class="table-layout-options" role="group" aria-label="知识布局"></div>
+            </div>
+          </div>
+          <select id="tblLayoutSelect" hidden title="知识布局" aria-label="知识布局">
+            <option value="manage" selected>表格</option>
             <option value="list">列表布局</option>
             <option value="grid">网格布局</option>
             <option value="timeline">时间轴布局</option>
             <option value="semantic">语义地图布局</option>
-            <option value="manage">实体表格</option>
           </select>
           <div id="tblGridZoomControls" class="table-grid-zoom" style="display:none;" role="group" aria-label="网格缩放">
             <button id="btnTblGridZoomOut" class="btn icon sm" type="button" title="缩小缩略图" aria-label="缩小缩略图">
@@ -2002,6 +2018,7 @@
           </button>
         </div>
         <div class="header-global-actions" role="group" aria-label="全局操作">
+          <button id="btnApplicationSearch" class="btn icon" type="button" title="应用搜索" aria-label="应用搜索"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i></button>
           <!-- Chat quick link removed; use 顶部导航 智能聊天 菜单进入聊天面板 -->
           <button id="btnDbSwitch" class="btn icon" title="切换知识库">
             <i class="fa-solid fa-database"></i>
@@ -2389,13 +2406,15 @@
                 </div>
                 <div class="social-compose-main">
                   <div class="social-compose-meta-row">
-                    <label class="knowledge-visibility-control" title="公开：所有人可读；私有：仅创建者与维护者可读">
-                      <span>访问级别</span>
-                      <select id="knowledgeVisibility" class="kb-select sm" aria-label="知识访问级别">
+                    <div class="knowledge-visibility-control">
+                      <button id="btnKnowledgeVisibility" class="btn icon sm" type="button" title="公开，点击切换为私有" aria-label="公开，点击切换为私有" aria-pressed="false">
+                        <i id="knowledgeVisibilityIcon" class="fa-regular fa-eye" aria-hidden="true"></i>
+                      </button>
+                      <select id="knowledgeVisibility" hidden aria-label="知识访问级别">
                         <option value="public">公开</option>
                         <option value="private">私有</option>
                       </select>
-                    </label>
+                    </div>
                     <button id="btnAddOntologyChip" class="social-ontology-trigger" type="button"><i class="fa-solid fa-tag"></i> 添加本体</button>
                     <select id="composerTypeSelect" class="social-ontology-select" aria-label="添加本体" style="display:none;">
                       <option value="">请选择本体</option>
@@ -2501,13 +2520,7 @@
                     <input type="hidden" id="attrProp" />
                     <input type="hidden" id="attrPropLabel" />
                     <input type="hidden" id="attrType" />
-                    <label style="font-size:12px">值状态
-                      <select id="attrSnaktype" class="kb-select">
-                        <option value="value">具体值</option>
-                        <option value="somevalue">未知值</option>
-                        <option value="novalue">无值</option>
-                      </select>
-                    </label>
+                    <input type="hidden" id="attrSnaktype" value="value" />
                     <div class="wd-value-action-row">
                       <div class="wd-value-input-row">
                         <div id="attrDatatypeGroups" class="wd-dtype-groups">
@@ -2845,12 +2858,6 @@
                 flex: 0 0 auto;
               ">
             <div id="tblPaginationControls"></div>
-            <label for="tblSort" class="muted" style="font-size: 12px">排序：</label>
-            <select id="tblSort" class="kb-select sm">
-              <option value="id">按编号</option>
-              <option value="modified_desc" selected>按更新时间↓</option>
-              <option value="modified_asc">按更新时间↑</option>
-            </select>
             <select id="tblPageSize" class="kb-select sm">
               <option value="10">10条/页</option>
               <option value="20" selected>20条/页</option>
@@ -5020,6 +5027,25 @@
         </div>
       </div>
     <div id="globalPage" class="global-page" hidden>
+      <section id="applicationHomePanel" class="panel application-content-page" style="display:none">
+        <div class="app-page-heading"><div><h1 id="appHomeName">应用首页</h1><p id="appHomeCount" class="muted"></p></div><div class="app-page-actions"><button id="appHomeSearch" type="button" class="btn">搜索知识</button><button id="appHomeBrowse" type="button" class="btn">浏览知识</button><button id="appHomeRefresh" type="button" class="btn icon" title="刷新首页" aria-label="刷新首页"><i class="fa-solid fa-rotate-right"></i></button></div></div>
+        <div id="appHomeContent" class="app-home-columns"></div>
+      </section>
+      <section id="applicationSearchPanel" class="panel application-content-page" style="display:none">
+        <div class="app-page-heading"><h1>搜索</h1><span class="muted">搜索当前应用中你有权访问的知识</span></div>
+        <form id="appSearchForm" class="app-search-form">
+          <div class="app-search-query"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input id="appSearchQuery" type="search" class="kb-input" placeholder="搜索名称、别名、描述或实体编号" aria-label="搜索关键词"><button class="btn primary" type="submit">搜索</button></div>
+          <details id="appSearchAdvanced" class="app-search-advanced"><summary>高级搜索</summary><div class="app-search-fields">
+            <label>本体类型<select id="appSearchType" class="kb-select"><option value="">全部本体</option></select><small class="muted" id="appSearchTypeHint">包含所选本体及所有子本体</small></label>
+            <label>属性<input id="appSearchProperty" class="kb-input" placeholder="属性名称或编号，例如 P31"></label>
+            <label>属性值<input id="appSearchValue" class="kb-input" placeholder="包含的属性值"></label>
+            <label>排序<select id="appSearchOrder" class="kb-select"><option value="modified_desc">最新更新</option><option value="hot">最热</option><option value="created_desc">最新创建</option></select></label>
+            <label class="app-search-checkbox"><input id="appSearchImage" type="checkbox">仅包含图片的知识</label><button id="appSearchReset" type="button" class="btn">清除条件</button>
+          </div></details>
+        </form>
+        <div id="appSearchResults" class="app-search-results"></div>
+        <div id="appSearchPaging" class="app-search-paging" hidden><button id="appSearchPrev" type="button" class="btn">上一页</button><span id="appSearchPageLabel" class="muted"></span><button id="appSearchNext" type="button" class="btn">下一页</button></div>
+      </section>
         <section id="applicationsPanel" class="panel applications-page" style="display:none;">
           <dialog id="applicationEditorDialog" class="application-editor-dialog" aria-labelledby="applicationEditorTitle"><form id="applicationCreateForm" class="application-create-form"><h3 id="applicationEditorTitle">创建应用</h3><label>应用名称<input name="title" class="kb-input" required maxlength="100" autocomplete="off" /></label><label>应用短名<input name="name" class="kb-input" required maxlength="64" pattern="[a-zA-Z0-9_-]+" placeholder="例如 my-knowledge" autocomplete="off" /></label><label>Logo 地址<input name="image" class="kb-input" maxlength="2000" placeholder="https://… 或 /static/uploads/…" autocomplete="off" /></label><label>访问地址<input name="link" class="kb-input" maxlength="2000" placeholder="https://…" autocomplete="off" /></label><label>描述<textarea name="description" class="kb-input" maxlength="2000" rows="3"></textarea></label><div><button id="btnApplicationSave" type="submit" class="btn primary">创建</button><button type="button" class="btn" id="btnApplicationCreateCancel">取消</button></div><p id="applicationEditorStatus" role="status" class="muted"></p></form></dialog>
             <dialog id="applicationDeleteDialog" class="application-editor-dialog application-delete-dialog" aria-labelledby="applicationDeleteTitle">
@@ -5074,7 +5100,7 @@
         <div style="margin-top:auto;display:flex;flex-direction:column;gap:8px;align-items:center;">
           <button id="btnRefreshUsers" class="btn sm" title="刷新用户" aria-label="刷新用户"><i
               class="fa-solid fa-arrow-rotate-right"></i></button>
-          <button id="btnOpenProfileSidebar" class="btn sm" type="button" title="个人资料" aria-label="个人资料"><i class="fa-solid fa-user-gear"></i></button>
+          <button id="btnOpenProfileSidebar" class="btn sm" type="button" title="个人详情" aria-label="个人详情"><i class="fa-solid fa-user-gear"></i></button>
           <a id="btnViewUsers" class="btn sm sidebar-management-link" href="#view=user_management" title="用户管理" aria-label="用户管理" style="display:none;"><i class="fa-solid fa-users-gear" aria-hidden="true"></i></a>
         </div>
       </aside>
@@ -5845,7 +5871,7 @@
     }
 
     // View mode state
-    window.kbViewMode = "report_home"; // 'entry' | 'table' | 'vis' | 'attr' | 'detail' | 'clean' | 'report_home'
+    window.kbViewMode = "app_home"; // 'entry' | 'table' | 'vis' | 'attr' | 'detail' | 'clean' | 'report_home'
     window.kbActiveDetailNodeId = ""; // canonical (entity/...) id used for API calls
     window.kbActiveDetailRouteId = ""; // raw id used for routing to match table list
     window.kbActiveVisNodeId = ""; // raw id mirrored into vis routing
@@ -6157,6 +6183,8 @@
     };
 
     const KB_VIEW_MODES = new Set([
+      "app_home",
+      "app_search",
       "entry",
       "table",
       "vis",
@@ -9984,7 +10012,14 @@
       const isUserManagement = normalized === "user_management";
       const isApplications = normalized === 'applications';
       const isProfile = normalized === 'profile';
-      const isGlobalPage = isApplications || isUserManagement || isProfile;
+      const isAppHome = normalized === 'app_home';
+      const isAppSearch = normalized === 'app_search';
+      const isGlobalPage = isApplications || isUserManagement || isProfile || isAppHome || isAppSearch;
+      document.getElementById('applicationHomePanel').style.display = isAppHome ? '' : 'none';
+      document.getElementById('applicationSearchPanel').style.display = isAppSearch ? '' : 'none';
+      document.getElementById('btnApplicationSearch').classList.toggle('active', isAppSearch);
+      if (isAppHome) window.loadApplicationHome?.();
+      if (isAppSearch) window.loadApplicationSearch?.();
       const userProfilePanel = document.getElementById('userProfilePanel');
       if (userProfilePanel) userProfilePanel.style.display = isProfile ? '' : 'none';
       const profileEntry = document.getElementById('btnOpenProfileSidebar');
@@ -16647,7 +16682,7 @@
       } = getRouteStateFromHash();
       const queryParams = getUrlParams();
       const queryMode = normalizeViewModeInput(queryParams.view);
-      const initialMode = hashMode || queryMode || "report_home";
+      const initialMode = hashMode || queryMode || "app_home";
       const skipRouteUpdate = Boolean(hashMode);
       const replaceRoute = !hashMode && Boolean(queryMode);
       const initialNodeId = hashNode || queryParams.node || "";
@@ -19518,7 +19553,11 @@
         }
       });
 
-      document.addEventListener('click', () => {
+      document.addEventListener('click', (event) => {
+        // Tree expansion can replace the clicked DOM node before bubbling ends.
+        // The original event path still identifies clicks inside the dropdown.
+        const path = event.composedPath();
+        if (path.includes(ontologyDropdown) || path.includes(btnAddOntologyChip)) return;
         ontologyDropdown.style.display = 'none';
       });
       window.addEventListener('resize', positionComposerOntologyDropdown, { passive: true });
@@ -19949,21 +19988,22 @@
       window.kbOntologyTreeModuleReady = import("/assets/generated/ontology-tree.js?v=20260909-2");
   </script>
   <script src="/assets/scripts/property-panel.js?v=20260908-4"></script>
-  <script src="/assets/scripts/table-panel.js?v=20260909-1"></script>
+  <script src="/assets/scripts/table-panel.js?v=20260914-7"></script>
   <script src="/assets/scripts/table-selection.js?v=20260908-5"></script>
-  <script src="/assets/scripts/entity-manage-table.js?v=20260908-5"></script>
-  <script src="/assets/scripts/attr-panel.js?v=20260914-3"></script>
+  <script src="/assets/scripts/entity-manage-table.js?v=20260914-1"></script>
+  <script src="/assets/scripts/attr-panel.js?v=20260914-4"></script>
   <!-- relation-panel.js 已移除，使用 edgehandles 拖拽创建关系 -->
   <script src="/assets/scripts/schema-panel.js?v=20260909-4"></script>
   <script src="/assets/scripts/detail-panel.js?v=20260914-3"></script>
   <script src="/assets/scripts/knowledge-interactions.js?v=20260904-1"></script>
-  <script src="/assets/scripts/knowledge-access.js?v=20260909-1"></script>
-  <script src="/assets/scripts/applications.js?v=20260914-1"></script>
+  <script src="/assets/scripts/knowledge-access.js?v=20260914-1"></script>
+  <script src="/assets/scripts/applications.js?v=20260914-2"></script>
   <script src="/assets/scripts/user-management.js?v=20260905-3"></script>
+  <script src="/assets/scripts/application-pages.js?v=20260914-1"></script>
   <script src="/assets/scripts/user-profile.js?v=20260914-1"></script>
-  <script src="/assets/scripts/sidebar-panel.js?v=20260909-1"></script>
-  <script src="/assets/scripts/auth-panel.js?v=20260906-1"></script>
-  <script src="/assets/scripts/db-modal.js"></script>
+  <script src="/assets/scripts/sidebar-panel.js?v=20260914-1"></script>
+  <script src="/assets/scripts/auth-panel.js?v=20260914-2"></script>
+  <script src="/assets/scripts/db-modal.js?v=20260914-1"></script>
   <script src="/assets/scripts/sparql-panel.js"></script>
   <script>
     // The initial hash route is handled before these dependent sidebar scripts

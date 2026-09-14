@@ -1,4 +1,5 @@
 import { db } from "./db.ts";
+import { entityThumbnail } from './entity-thumbnail.ts';
 import { knowledgeContext, canAccessKnowledge } from './knowledge-access.ts';
 import { normalizeDatatype, normalizeValue, valueTypeFor, uiDatatype } from '../shared/wikidata.ts';
 
@@ -427,6 +428,7 @@ export function formatAttribute(row: any) {
     if (rawId) parsedValue = [{ id: rawId.toUpperCase(), label: rawId.toUpperCase(), "entity-type": "item" }];
   }
 
+  const valueThumbnails: string[] = [];
   if (
     valueTypeFor(datatype) === "wikibase-entityid" &&
     parsedValue &&
@@ -434,7 +436,7 @@ export function formatAttribute(row: any) {
   ) {
     try {
       const values = Array.isArray(parsedValue) ? parsedValue : [parsedValue];
-      for (const value of values) {
+      for (const [valueIndex, value] of values.entries()) {
         let entityId =
           value?.id ??
           value?.value?.id ??
@@ -461,11 +463,21 @@ export function formatAttribute(row: any) {
         let resolvedNode: any = null;
         for (const candidate of candidateIds) {
           resolvedNode = db
-            .query("SELECT name FROM nodes WHERE id = ? LIMIT 1")
+            .query("SELECT id, name, images, data FROM nodes WHERE id = ? LIMIT 1")
             .get(candidate) as any;
           if (resolvedNode && resolvedNode.name) break;
         }
 
+        if (resolvedNode) {
+          let extra: any = {};
+          try { extra = JSON.parse(resolvedNode.data || '{}'); } catch {}
+          let thumbnail = entityThumbnail(resolvedNode.images, extra?.images, extra?.image);
+          if (!thumbnail) {
+            const imageAttributes = db.query("SELECT value FROM attributes WHERE node_id = ? AND (datatype = 'commonsMedia' OR key IN ('P18', '18', 'image', '图像')) ORDER BY id").all(resolvedNode.id) as any[];
+            thumbnail = entityThumbnail(...imageAttributes.map((attribute) => attribute.value));
+          }
+          valueThumbnails[valueIndex] = thumbnail;
+        }
         if (resolvedNode && resolvedNode.name && value && typeof value === "object") {
           value.entity_label_zh = resolvedNode.name;
           value.label_zh = resolvedNode.name;
@@ -486,6 +498,7 @@ export function formatAttribute(row: any) {
     qualifiers: statement.qualifiers || {},
     references: statement.references || [],
     value: parsedValue,
+    value_thumbnails: valueThumbnails,
     datavalue: statement.snaktype && statement.snaktype !== 'value' ? undefined : {
       value: parsedValue,
       type: valueTypeFor(datatype),

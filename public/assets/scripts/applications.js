@@ -166,7 +166,7 @@
     if (button.dataset.appScope) { scope = button.dataset.appScope; document.querySelectorAll('[data-app-scope]').forEach((item) => item.classList.toggle('accent', item === button)); loadApplications(); return; }
     if (button.dataset.appDetail) { await loadDetails(button.dataset.appDetail); return; }
     if (button.hasAttribute('data-app-detail-back')) { infoVersion++; detailVersion++; activeProject = null; byId('applicationAccess').hidden = true; byId('applicationDetail').hidden = true; byId('applicationCatalog').hidden = false; return; }
-    if (button.dataset.appOpen) { const url = new URL(location.href); url.searchParams.set('db', button.dataset.appOpen); url.searchParams.delete('node'); url.searchParams.delete('view'); url.hash = 'view=table'; location.href = url; return; }
+    if (button.dataset.appOpen) { const url = new URL(location.href); url.searchParams.set('db', button.dataset.appOpen); url.searchParams.delete('node'); url.searchParams.delete('view'); url.hash = 'view=app_home'; location.href = url; return; }
     if (button.dataset.appAccess) { byId('applicationAccess').scrollIntoView({ behavior: 'smooth', block: 'start' }); byId('applicationAccess').focus({ preventScroll: true }); return; }
     if (button.hasAttribute('data-access-retry')) { await loadAccess(activeProject); return; }
     if (!button.dataset.appReview && !button.dataset.memberRemove) return;

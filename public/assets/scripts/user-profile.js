@@ -50,6 +50,7 @@
     byId('btnProfileNext').disabled = busy || page >= totalPages;
   }
   function writeRoute() {
+    if (window.kbViewMode !== 'profile') return;
     const url = new URL(location.href); url.searchParams.set('profileTab', currentSection); url.searchParams.set('profilePage', page);
     history.replaceState(history.state, '', url);
   }

@@ -1268,6 +1268,24 @@ if (btnAttrReset) {
         } catch (e) {
           val.textContent = formatAttrValue(valDtype, valItem);
         }
+        const entityThumbnail = it.value_thumbnails?.[vi];
+        if (!readOnly && String(valDtype).toLowerCase() === 'wikibase-entityid' &&
+            !['somevalue', 'novalue'].includes(it.snaktype) && typeof entityThumbnail === 'string' &&
+            /^(https?:\/\/|\/(?!\/)|data:image\/(?:png|jpeg|gif|webp|avif);base64,)/i.test(entityThumbnail)) {
+          const text = document.createElement('span');
+          text.className = 'relation-entity-text';
+          while (val.firstChild) text.appendChild(val.firstChild);
+          const thumbnail = document.createElement('img');
+          thumbnail.className = 'relation-entity-thumbnail';
+          thumbnail.alt = ''; thumbnail.width = 28; thumbnail.height = 28;
+          thumbnail.loading = 'lazy'; thumbnail.decoding = 'async'; thumbnail.draggable = false;
+          thumbnail.addEventListener('error', () => {
+            thumbnail.remove(); val.classList.remove('relation-entity-value');
+          }, { once: true });
+          thumbnail.src = entityThumbnail;
+          val.classList.add('relation-entity-value');
+          val.append(thumbnail, text);
+        }
         if (
           readOnly &&
           String(valDtype || "").toLowerCase() === "wikibase-entityid"
