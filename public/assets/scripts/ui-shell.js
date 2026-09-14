@@ -290,12 +290,7 @@
             window.kbSelectedClassId = null;
             btnClsDelete.style.display = "none";
 
-            if (typeof window.loadClasses === "function") {
-              window.loadClasses();
-            } else {
-              const btnRefresh = document.getElementById("btnClsRefresh");
-              if (btnRefresh) btnRefresh.click();
-            }
+            if (typeof window.loadClasses === "function") window.loadClasses();
           } catch (e) {
             alert("Delete failed: " + e.message);
           }
@@ -324,12 +319,7 @@
             if (!resp.ok) throw new Error("HTTP " + resp.status);
 
             document.getElementById("classModal").style.display = "none";
-            if (typeof window.loadClasses === "function") {
-              window.loadClasses();
-            } else {
-              const btnRefresh = document.getElementById("btnClsRefresh");
-              if (btnRefresh) btnRefresh.click();
-            }
+            if (typeof window.loadClasses === "function") window.loadClasses();
           } catch (e) {
             alert("Create failed: " + e.message);
           }

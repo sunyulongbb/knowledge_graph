@@ -102,7 +102,6 @@
   byId('btnApplicationSearch').addEventListener('click', () => window.setViewMode('app_search'));
   byId('appHomeSearch').addEventListener('click', () => window.setViewMode('app_search'));
   byId('appHomeBrowse').addEventListener('click', () => window.setViewMode('table'));
-  byId('appHomeRefresh').addEventListener('click', window.loadApplicationHome);
   byId('appSearchForm').addEventListener('submit', (event) => { event.preventDefault(); page = 1; search(); });
   byId('appSearchReset').addEventListener('click', () => { Object.entries(fields).forEach(([key, id]) => { byId(id).value = key === 'order' ? 'modified_desc' : ''; }); byId('appSearchImage').checked = false; page = 1; search(); });
   byId('appSearchPrev').addEventListener('click', () => { if (page > 1) { page--; search(); } });

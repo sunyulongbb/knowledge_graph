@@ -245,6 +245,14 @@
     }
   }
 
+  function syncHeaderSidebarToggle(collapsed) {
+    const headerLogo = document.getElementById("headerProjectAvatar");
+    if (!headerLogo) return;
+    headerLogo.setAttribute("aria-expanded", String(!collapsed));
+    headerLogo.setAttribute("aria-label", collapsed ? "展开应用栏" : "收起应用栏");
+    headerLogo.title = collapsed ? "展开应用栏" : "收起应用栏";
+  }
+
   // Global helper to control sidebar collapsed/expanded state
   function setSidebarCollapsed(
     collapsed,
@@ -268,6 +276,7 @@
         splitEl.classList.toggle('sidebar-collapsed', collapsed);
         splitEl.classList.toggle('sidebar-expanded', !collapsed);
       }
+      syncHeaderSidebarToggle(collapsed);
       if (persist) saveSidebarState();
       return;
     }
@@ -303,6 +312,7 @@
     try {
       sidebarEl.setAttribute("aria-expanded", String(!collapsed));
     } catch (e) {}
+    syncHeaderSidebarToggle(collapsed);
     if (splitEl) splitEl.classList.toggle("sidebar-collapsed", collapsed);
     if (splitEl) splitEl.classList.toggle("sidebar-expanded", !collapsed);
     if (persist) saveSidebarState();
@@ -913,7 +923,8 @@
       }
       const safeTitle = title || dbId;
       nameEl.textContent = safeTitle;
-      wrap.title = desc ? `${safeTitle} — ${desc}` : safeTitle;
+      nameEl.title = desc ? `进入${safeTitle}首页 — ${desc}` : `进入${safeTitle}首页`;
+      nameEl.setAttribute("aria-label", `进入${safeTitle}首页`);
       const avatarValue = String(image || "").trim();
       avatar.textContent = "";
       if (avatarValue && isSidebarAvatarImage(avatarValue)) {
@@ -1596,15 +1607,6 @@
         setupUserSidebarHover();
       } catch (e) {}
     }
-    const btnRefreshUsers = document.getElementById("btnRefreshUsers");
-    if (btnRefreshUsers) {
-      btnRefreshUsers.addEventListener("click", (e) => {
-        e.preventDefault();
-        try {
-          loadUsersToSidebar();
-        } catch (err) {}
-      });
-    }
     const btnMoreUsers = document.getElementById("btnMoreUsers");
     if (btnMoreUsers) {
       btnMoreUsers.addEventListener("click", (e) => {
@@ -1632,21 +1634,27 @@
         } catch (err) {}
       });
     }
-    // The application name links to its home page.
+    // The application logo toggles the left rail; its name opens the app home.
     try {
-      const headerProj = document.getElementById("headerProject");
-      if (headerProj) {
-        headerProj.style.cursor = "pointer";
-        headerProj.title = "应用首页";
-        headerProj.setAttribute('role', 'link');
-        headerProj.tabIndex = 0;
-        headerProj.addEventListener('keydown', (event) => {
-          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); window.setViewMode?.('app_home'); }
-        });
-        headerProj.addEventListener("click", (e) => {
+      const headerLogo = document.getElementById("headerProjectAvatar");
+      const headerName = document.getElementById("headerProjectName");
+      if (headerLogo) {
+        headerLogo.addEventListener("click", (e) => {
           e.preventDefault();
-          try { window.setViewMode?.('app_home');
-          } catch (err) {}
+          e.stopPropagation();
+          const sidebarEl = document.getElementById("projectSidebar");
+          if (!sidebarEl) return;
+          (window.setSidebarCollapsed || setSidebarCollapsed)(
+            !sidebarEl.classList.contains("collapsed"),
+            true,
+          );
+        });
+      }
+      if (headerName) {
+        headerName.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          window.setViewMode?.("app_home");
         });
       }
     } catch (e) {}

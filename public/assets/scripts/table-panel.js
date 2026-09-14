@@ -36,7 +36,6 @@
     "tblPropertyFilterValue",
   );
   const btnClearTableFilter = document.getElementById("btnClearTableFilter");
-  const btnTableRefresh = document.getElementById("btnTableRefresh");
   const tblLayoutSelect = document.getElementById("tblLayoutSelect");
   function createInlineChoice(select, ids, icons) {
   const layoutOptions = document.getElementById(ids.options);

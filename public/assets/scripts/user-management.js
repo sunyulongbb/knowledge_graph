@@ -90,7 +90,6 @@
     if (createButton) createButton.style.display = activeTab === "roles" ? "inline-flex" : "none";
   }
 
-  byId("btnUserManagementRefresh")?.addEventListener("click", loadCurrentTab);
   tabs?.addEventListener("click", (event) => { const button = event.target.closest("[data-system-tab]"); if (!button || !validTabs.has(button.dataset.systemTab)) return; activeTab = button.dataset.systemTab; try { localStorage.setItem("kbSystemManagementTab", activeTab); } catch {} syncActiveTabControls(); loadCurrentTab(); });
   byId("btnSystemManagementSearch")?.addEventListener("click", loadCurrentTab); byId("btnSystemManagementReset")?.addEventListener("click", () => { searchInput.value = ""; loadCurrentTab(); });
   searchInput?.addEventListener("keydown", (event) => { if (event.key === "Enter") loadCurrentTab(); }); createButton?.addEventListener("click", () => openRoleDialog(null).catch((e) => { message.textContent = e.message; }));

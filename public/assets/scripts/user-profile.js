@@ -93,7 +93,6 @@
     }
   }
   byId('btnProfileEdit').addEventListener('click', () => window.openProfileModal?.());
-  byId('btnProfileRefresh').addEventListener('click', loadUserProfile);
   byId('btnProfilePrevious').addEventListener('click', () => { if (!busy && page > 1) { page--; loadRecords(); } });
   byId('btnProfileNext').addEventListener('click', () => { if (!busy && page < totalPages) { page++; loadRecords(); } });
   byId('userProfilePanel').addEventListener('click', (event) => {

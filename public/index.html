@@ -48,7 +48,7 @@
     window["@tiptap/starter-kit"] =
       window["@tiptap/starter-kit"] || window.TiptapStarterKit;
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20260914-11" />
+    <link rel="stylesheet" href="/assets/styles/app.css?v=20260915-12" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -1903,10 +1903,10 @@
     <div class="header-bar">
       <div class="header-brand" style="display:flex;align-items:center;gap:10px;">
         <div id="headerProject" style="align-items:center;gap:8px;min-width:0;">
-          <span id="headerProjectAvatar"
-            style="width:28px;height:28px;border-radius:6px;background:#e0e7ef;background-size:cover;background-position:center;border:1px solid var(--border);display:inline-block;flex-shrink:0;"></span>
-          <span id="headerProjectName"
-            style="font-weight:600;color:var(--fg);font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;display:inline-block;">&nbsp;</span>
+          <button id="headerProjectAvatar" class="header-project-logo" type="button" aria-label="展开应用栏" aria-controls="projectSidebar" aria-expanded="false"
+            style="width:28px;height:28px;border-radius:6px;background:#e0e7ef;background-size:cover;background-position:center;border:1px solid var(--border);display:inline-grid;flex-shrink:0;"></button>
+          <button id="headerProjectName" class="header-project-name" type="button" title="进入应用首页" aria-label="进入应用首页"
+            style="font-weight:600;color:var(--fg);font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;display:inline-block;">&nbsp;</button>
         </div>
         <div id="tbTableControls" class="table-context-tools">
           <div class="table-type-tree-filter">
@@ -1959,9 +1959,6 @@
               <option value="">全部类型</option>
             </select>
           </div>
-          <button id="btnTableRefresh" class="btn icon" title="刷新列表" aria-label="刷新列表">
-            <i class="fa-solid fa-rotate-right"></i>
-          </button>
         </div>
       </div>
       <div class="header-nav">
@@ -2769,7 +2766,7 @@
                 </div>
                 <div class="sparql-structured-form">
                   <section class="sparql-step-card">
-                    <div class="sparql-step-title"><b>1</b><span>选择 Dataset</span><button id="btnSparqlRefreshDatasets" class="btn sm" type="button">刷新</button></div>
+                    <div class="sparql-step-title"><b>1</b><span>选择 Dataset</span></div>
                     <select id="sparqlDatasetSelect" class="kb-select" disabled><option value="">正在读取 Dataset…</option></select>
                     <small id="sparqlDatasetHint" class="field-hint"></small>
                     <small id="sparqlDatasetStats" class="field-hint"></small>
@@ -2825,7 +2822,7 @@
           </div>
         </div>
         <!-- Table panel (default) -->
-        <div id="tablePanel" class="panel" style="padding: 8px 10px">
+        <div id="tablePanel" class="panel" style="padding: 0; overflow: hidden;">
           <div id="tablePanelToolbar" class="table-panel-toolbar" aria-label="知识页面工具"></div>
           <div class="tbl-wrap">
             <div id="tblNodes" class="entity-list" role="list" aria-label="实体列表"></div>
@@ -2848,7 +2845,9 @@
             <div id="semanticTooltip" class="semantic-map-tooltip"></div>
           </div>
           <div id="tblPagination" style="
-                margin: 12px auto 0;
+                margin: 0;
+                padding: 6px 8px;
+                border-top: 1px solid var(--border);
                 display: none;
                 align-items: center;
                 gap: 8px;
@@ -3693,9 +3692,6 @@
             </div>
             <button id="cy_btnSettings" class="vis-topbar-btn" title="筛选设置">
               <i class="fa-solid fa-sliders"></i>
-            </button>
-            <button id="cy_btnRefresh" class="vis-topbar-btn" title="刷新图谱">
-              <i class="fa-solid fa-arrows-rotate"></i>
             </button>
           </div>
           <!-- Main canvas area with left/right toolbars -->
@@ -4912,41 +4908,36 @@
         </div>
       </div>
       <!-- Right: classification & schema panel -->
-      <div class="panel column-panel class-panel" id="classAttrPanel">
+      <div class="column-panel class-panel" id="classAttrPanel">
         <div class="class-panel-inner">
-          <section class="class-module module-tree">
-            <div class="module-title-row class-tree-header">
-              <div>
-                <div class="module-title">分类管理</div>
-                <div class="class-tree-subtitle">选择分类查看属性模型</div>
-              </div>
+          <section class="class-module module-taxonomy">
+            <div class="module-compact-toolbar class-tree-header" role="toolbar" aria-label="分类与标签操作">
               <div class="module-title-actions class-tree-actions">
                 <button class="btn icon" id="btnClassImport" type="button" title="导入分类 JSON" aria-label="导入分类 JSON">
                   <i class="fa-solid fa-file-import"></i>
                 </button>
-                <a class="btn icon" href="/examples/class-import.json" download="class-import.json" title="下载分类导入示例" aria-label="下载分类导入示例">
-                  <i class="fa-solid fa-file-arrow-down"></i>
-                </a>
                 <input id="classImportFile" type="file" accept=".json,application/json" hidden />
-                <button class="btn icon" id="btnClsAdd" type="button" title="新增分类" aria-label="新增分类">
-                  <i class="fa-solid fa-plus"></i>
+                <button class="btn icon" id="btnClsAdd" type="button" title="新增根分类" aria-label="新增根分类">
+                  <i class="fa-solid fa-folder-plus"></i>
                 </button>
                 <button class="btn icon" id="btnClsDelete" type="button" title="删除选中分类" aria-label="删除选中分类"
                   style="display: none;">
-                  <i class="fa-solid fa-trash"></i>
+                  <i class="fa-regular fa-trash-can"></i>
                 </button>
-                <input type="color" id="clsColorPicker" list="clsColorPresets" title="设置分类标记颜色"
-                  style="display: none; width: 24px; height: 24px; padding: 0; border: none; background: none; cursor: pointer;" />
+                <input type="color" id="clsColorPicker" list="clsColorPresets" title="设置分类颜色" aria-label="设置分类颜色"
+                  style="display: none;" />
                 <button class="btn icon" id="btnClsImage" type="button" title="设置分类图标" aria-label="设置分类图标"
                   style="display: none;">
-                  <i class="fa-solid fa-image"></i>
-                </button>
-                <button class="btn icon" id="btnClsRefresh" type="button" title="刷新分类" aria-label="刷新分类">
-                  <i class="fa-solid fa-arrow-rotate-right"></i>
+                  <i class="fa-regular fa-image"></i>
                 </button>
               </div>
+              <div class="module-title-actions taxonomy-tag-actions">
+                <button class="btn icon" id="btnTagCreateToggle" type="button" title="新增标签" aria-label="新增标签" aria-expanded="false" aria-controls="tagAddBar"><i class="fa-solid fa-tag"></i><i class="fa-solid fa-plus taxonomy-action-badge"></i></button>
+                <button class="btn icon" id="btnTagImport" type="button" title="导入标签 JSON" aria-label="导入标签 JSON"><i class="fa-solid fa-tags"></i></button>
+                <input id="tagImportFile" type="file" accept=".json,application/json" hidden />
+              </div>
             </div>
-            <div class="module-body">
+            <div class="module-body taxonomy-body">
               <div class="class-tree-toolbar">
                 <datalist id="clsColorPresets">
                   <option>#ef4444</option>
@@ -4963,55 +4954,25 @@
                   <option>#64748b</option>
                 </datalist>
               </div>
-              <div id="clsTree" class="module-scroll"></div>
+              <div id="clsTree" class="module-scroll taxonomy-tree"></div>
               <div class="module-footer">
                 <div id="classImportStatus" class="muted" role="status" aria-live="polite"></div>
-                <a class="muted" href="/examples/class-import-format.md" target="_blank">分类导入格式说明</a>
-                <div class="muted" id="clsForEntity">未选择实体</div>
-                <div class="module-actions">
-                  <button class="btn icon" id="btnSetClass" type="button" title="设为该类" aria-label="设为该类">
-                    <i class="fa-solid fa-circle-check"></i>
-                  </button>
-                  <button class="btn icon" id="btnClearClass" type="button" title="清除分类" aria-label="清除分类">
-                    <i class="fa-solid fa-circle-xmark"></i>
-                  </button>
+              </div>
+              <div class="taxonomy-tags" aria-label="标签">
+                <div id="tagMgrDesc" hidden aria-hidden="true"></div>
+                <div class="tag-create-row" id="tagAddBar" hidden>
+                  <input id="tagInput" class="kb-input" placeholder="标签名称" aria-label="标签名称" autocomplete="off" />
+                  <button id="btnTagAdd" class="btn primary sm" type="button">添加</button>
+                  <button id="btnTagAddCancel" class="btn sm" type="button">取消</button>
                 </div>
-              </div>
-            </div>
-          </section>
-          <!-- 标签管理：分类绑定标签，支撑可视化应用 -->
-          <section class="class-module module-tags">
-            <div class="module-title-row" style="display:flex;align-items:center;justify-content:space-between;">
-              <span class="module-title">标签管理</span>
-              <div class="module-title-actions">
-                <button class="btn icon" id="btnTagImport" type="button" title="导入标签 JSON" aria-label="导入标签 JSON"><i class="fa-solid fa-file-import"></i></button>
-                <a class="btn icon" href="/examples/tag-import.json" download="tag-import.json" title="下载标签导入示例" aria-label="下载标签导入示例"><i class="fa-solid fa-file-arrow-down"></i></a>
-                <input id="tagImportFile" type="file" accept=".json,application/json" hidden />
-                <button class="btn icon" id="btnTagRefresh" type="button" title="刷新标签" aria-label="刷新标签">
-                  <i class="fa-solid fa-arrow-rotate-right"></i>
-                </button>
-              </div>
-            </div>
-            <div class="module-body">
-              <div id="tagMgrDesc" class="muted" style="font-size:12px;margin-bottom:8px;">全部标签（加载中…）</div>
-              <div class="toolbar" id="tagAddBar" style="display:none;">
-                <input id="tagInput" placeholder="输入新标签…" style="flex:1;font-size:13px;" />
-                <button id="btnTagAdd" class="btn icon" type="button" title="添加标签" aria-label="添加标签">
-                  <i class="fa-solid fa-plus"></i>
-                </button>
-              </div>
-              <div id="tagList" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;min-height:28px;"></div>
-              <div id="tagMsg" class="muted" style="font-size:12px;margin-top:4px;"></div>
-              <a class="muted" href="/examples/tag-import-format.md" target="_blank">标签导入格式说明</a>
-              <!-- 分类标签说明 -->
-              <div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);">
-                <div class="muted" style="font-size:11px;line-height:1.5;">点击标签可快捷为当前实体打标签（高亮 = 已应用）。分类标签用于可视化筛选与样式区分。
-                </div>
+                <div id="tagList" class="tag-manager-list"></div>
+                <div id="tagMsg" class="muted tag-manager-status" role="status" aria-live="polite"></div>
               </div>
             </div>
           </section>
           <!-- 保留隐藏的schema相关元素（供schema-panel.js使用）-->
           <div style="display:none;" aria-hidden="true">
+            <div id="clsForEntity"></div>
             <div id="schemaList"></div>
             <input id="schemaPropId" />
             <button id="btnAddSchema" type="button"></button>
@@ -5028,7 +4989,7 @@
       </div>
     <div id="globalPage" class="global-page" hidden>
       <section id="applicationHomePanel" class="panel application-content-page" style="display:none">
-        <div class="app-page-heading"><div><h1 id="appHomeName">应用首页</h1><p id="appHomeCount" class="muted"></p></div><div class="app-page-actions"><button id="appHomeSearch" type="button" class="btn">搜索知识</button><button id="appHomeBrowse" type="button" class="btn">浏览知识</button><button id="appHomeRefresh" type="button" class="btn icon" title="刷新首页" aria-label="刷新首页"><i class="fa-solid fa-rotate-right"></i></button></div></div>
+        <div class="app-page-heading"><div><h1 id="appHomeName">应用首页</h1><p id="appHomeCount" class="muted"></p></div><div class="app-page-actions"><button id="appHomeSearch" type="button" class="btn">搜索知识</button><button id="appHomeBrowse" type="button" class="btn">浏览知识</button></div></div>
         <div id="appHomeContent" class="app-home-columns"></div>
       </section>
       <section id="applicationSearchPanel" class="panel application-content-page" style="display:none">
@@ -5070,7 +5031,7 @@
           </section>
         </section>
         <section id="userProfilePanel" class="panel account-page" style="display:none;" aria-label="个人详情">
-          <div class="user-management-page__header"><div><h2>个人详情</h2><p class="muted">查看账号信息、访问权限和参与记录。</p></div><div class="account-header-actions"><button id="btnProfileRefresh" class="btn icon" type="button" title="刷新个人详情" aria-label="刷新个人详情"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button><button id="btnProfileEdit" class="btn" type="button">编辑资料</button></div></div>
+          <div class="user-management-page__header"><div><h2>个人详情</h2><p class="muted">查看账号信息、访问权限和参与记录。</p></div><div class="account-header-actions"><button id="btnProfileEdit" class="btn" type="button">编辑资料</button></div></div>
           <div id="accountSummary" aria-live="polite"></div>
           <div id="accountRecords" hidden>
             <div id="accountTabs" class="system-management-tabs account-tabs" role="tablist" aria-label="个人关联与互动记录"></div>
@@ -5084,7 +5045,6 @@
             <div><h2>用户权限管理</h2><p class="muted">管理用户角色与账号状态。</p></div>
             <div class="user-management-page__header-actions">
               <div id="systemManagementTabs" class="system-management-tabs" role="tablist" aria-label="权限管理二级菜单"><button data-system-tab="users" class="active" type="button" role="tab" aria-selected="true">用户</button><button data-system-tab="roles" type="button" role="tab" aria-selected="false">角色</button><button data-system-tab="permissions" type="button" role="tab" aria-selected="false">权限</button><button data-system-tab="login-logs" type="button" role="tab" aria-selected="false">登录日志</button><button data-system-tab="operation-logs" type="button" role="tab" aria-selected="false">操作日志</button></div>
-              <button id="btnUserManagementRefresh" class="btn icon" type="button" title="刷新当前数据" aria-label="刷新当前数据"><i class="fa-solid fa-rotate"></i></button>
             </div>
           </div>
           <div class="system-management-toolbar"><input id="systemManagementSearch" type="search" placeholder="搜索用户名、昵称或邮箱…" autocomplete="off" /><button id="btnSystemManagementSearch" class="btn" type="button"><i class="fa-solid fa-magnifying-glass"></i><span>查询</span></button><button id="btnSystemManagementReset" class="btn" type="button">重置</button><button id="btnSystemManagementCreate" class="btn primary" type="button" style="display:none"><i class="fa-solid fa-plus"></i><span>新增角色</span></button></div>
@@ -5098,8 +5058,6 @@
         aria-expanded="false" aria-hidden="false">
         <div class="project-list user-list" aria-live="polite"></div>
         <div style="margin-top:auto;display:flex;flex-direction:column;gap:8px;align-items:center;">
-          <button id="btnRefreshUsers" class="btn sm" title="刷新用户" aria-label="刷新用户"><i
-              class="fa-solid fa-arrow-rotate-right"></i></button>
           <button id="btnOpenProfileSidebar" class="btn sm" type="button" title="个人详情" aria-label="个人详情"><i class="fa-solid fa-user-gear"></i></button>
           <a id="btnViewUsers" class="btn sm sidebar-management-link" href="#view=user_management" title="用户管理" aria-label="用户管理" style="display:none;"><i class="fa-solid fa-users-gear" aria-hidden="true"></i></a>
         </div>
@@ -5923,7 +5881,6 @@
       document.getElementById("tblGridZoom"),
       document.getElementById("btnTblGridZoomOut"),
       document.getElementById("btnTblGridZoomIn"),
-      document.getElementById("btnTableRefresh"),
       document.getElementById("tblSearch"),
       document.getElementById("btnTableAdd"),
     ];
@@ -6024,7 +5981,6 @@
     const btnDetailBack = document.getElementById("btnDetailBack");
     const tblSearch = document.getElementById("tblSearch");
     const btnTableAdd = document.getElementById("btnTableAdd");
-    const btnTableRefresh = document.getElementById("btnTableRefresh");
     const btnDeleteSelected = document.getElementById("btnDeleteSelected");
     const tblNodes = document.getElementById("tblNodes");
     const cleanTaskForm = document.getElementById("cleanTaskForm");
@@ -16067,28 +16023,6 @@
         if (fName) fName.focus();
       });
     }
-    btnTableRefresh.addEventListener("click", async () => {
-      const pinnedRoute = getPinnedKnowledgeRouteState();
-      tblActiveClassId = "";
-      tblActiveClassLabel = "";
-      tblPage = 1;
-      await loadGraph();
-      await loadTablePage({ resetPage: true });
-      restoreKnowledgeRouteState(pinnedRoute);
-      if (
-        pinnedRoute.view === "detail" &&
-        pinnedRoute.nodeId &&
-        typeof showNodeDetailInline === "function"
-      ) {
-        try {
-          await showNodeDetailInline(pinnedRoute.nodeId);
-        } catch (err) {
-          if (window.console && console.warn) {
-            console.warn("refresh detail restore failed", err);
-          }
-        }
-      }
-    });
     tblSearch.addEventListener("input", () => {
       renderTableList();
     });
@@ -16318,19 +16252,6 @@
           }
         });
       }
-      const cyBtnRefresh = document.getElementById('cy_btnRefresh');
-      if (cyBtnRefresh) cyBtnRefresh.addEventListener('click', () => {
-        const selId = ensureEntityIdPrefix(
-          window.kbActiveVisNodeId ||
-          (window.kbSelectedRowId || '').trim() ||
-          (document.getElementById('fId')?.value || '').trim() || ''
-        );
-        if (selId) {
-          if (typeof clearNeighborFilter === 'function') clearNeighborFilter();
-          loadNodeNeighborhood(selId, { replace: false });
-        }
-      });
-
       // Empty state buttons
       const cyBtnLoadSnippet = document.getElementById('cy_btnLoadSnippet');
       if (cyBtnLoadSnippet) cyBtnLoadSnippet.addEventListener('click', () => { loadGraph(); });
@@ -19985,7 +19906,7 @@
 
   <script src="/assets/scripts/app-shared.js"></script>
   <script>
-      window.kbOntologyTreeModuleReady = import("/assets/generated/ontology-tree.js?v=20260909-2");
+      window.kbOntologyTreeModuleReady = import("/assets/generated/ontology-tree.js?v=20260915-2");
   </script>
   <script src="/assets/scripts/property-panel.js?v=20260908-4"></script>
   <script src="/assets/scripts/table-panel.js?v=20260914-7"></script>
@@ -19993,18 +19914,18 @@
   <script src="/assets/scripts/entity-manage-table.js?v=20260914-1"></script>
   <script src="/assets/scripts/attr-panel.js?v=20260914-4"></script>
   <!-- relation-panel.js 已移除，使用 edgehandles 拖拽创建关系 -->
-  <script src="/assets/scripts/schema-panel.js?v=20260909-4"></script>
+  <script src="/assets/scripts/schema-panel.js?v=20260915-4"></script>
   <script src="/assets/scripts/detail-panel.js?v=20260914-3"></script>
   <script src="/assets/scripts/knowledge-interactions.js?v=20260904-1"></script>
   <script src="/assets/scripts/knowledge-access.js?v=20260914-1"></script>
   <script src="/assets/scripts/applications.js?v=20260914-2"></script>
-  <script src="/assets/scripts/user-management.js?v=20260905-3"></script>
-  <script src="/assets/scripts/application-pages.js?v=20260914-1"></script>
-  <script src="/assets/scripts/user-profile.js?v=20260914-1"></script>
-  <script src="/assets/scripts/sidebar-panel.js?v=20260914-1"></script>
+  <script src="/assets/scripts/user-management.js?v=20260915-1"></script>
+  <script src="/assets/scripts/application-pages.js?v=20260915-1"></script>
+  <script src="/assets/scripts/user-profile.js?v=20260915-1"></script>
+  <script src="/assets/scripts/sidebar-panel.js?v=20260915-1"></script>
   <script src="/assets/scripts/auth-panel.js?v=20260914-2"></script>
   <script src="/assets/scripts/db-modal.js?v=20260914-1"></script>
-  <script src="/assets/scripts/sparql-panel.js"></script>
+  <script src="/assets/scripts/sparql-panel.js?v=20260915-1"></script>
   <script>
     // The initial hash route is handled before these dependent sidebar scripts
     // are loaded. Re-hydrate once they are ready so every routed view restores
@@ -20167,7 +20088,7 @@
       });
     });
   </script>
-  <script src="/assets/scripts/ui-shell.js"></script>
+  <script src="/assets/scripts/ui-shell.js?v=20260915-1"></script>
 </body>
 
 </html>

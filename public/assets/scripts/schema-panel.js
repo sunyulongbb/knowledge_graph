@@ -6,14 +6,11 @@
   const dom = shared.dom || {};
   const byId = dom.byId || ((id) => document.getElementById(id));
   const btnClsAdd = byId("btnClsAdd");
-  const btnClsRefresh = byId("btnClsRefresh");
   const btnClassImport = byId("btnClassImport");
   const classImportFile = byId("classImportFile");
   const classImportStatus = byId("classImportStatus");
   const clsTree = byId("clsTree");
   const clsForEntity = byId("clsForEntity");
-  const btnSetClass = byId("btnSetClass");
-  const btnClearClass = byId("btnClearClass");
   const classModal = byId("classModal");
   const classModalTitle = byId("classModalTitle");
   const classForm = byId("classForm");
@@ -591,6 +588,11 @@
               enableDrag: false,
               toggleSelection: true,
               storageKey: "kb:ontology-tree-state:class-manager",
+              nodeIcon: "dot",
+              nodeIconFilled: (id) =>
+                Array.isArray(window.kbEntityClasses) &&
+                window.kbEntityClasses.some((item) => String(item?.id || "") === id),
+              onNodeIconClick: (id) => toggleEntityClassFromTree(id),
               onSelect: (id) => {
                 const nextId = id || null;
                 window.kbSelectedClassId = nextId;
@@ -613,6 +615,7 @@
                   document
                     .getElementById("btnClsImage")
                     ?.style.setProperty("display", "none");
+                  updateClassAssignmentActions();
                   return;
                 }
                 const selected = window.kbClasses.find(
@@ -632,6 +635,7 @@
                     ?.style.setProperty("display", "inline-flex");
                   void loadClassSchema(nextId);
                   void updatePropertyRecommendations();
+                  updateClassAssignmentActions();
                 }
               },
               onEdit: () => {},
@@ -1147,9 +1151,42 @@
     }
   }
 
+  function updateClassAssignmentActions() {
+    // 分类关联状态直接由树节点圆点表达。
+  }
+
+  const pendingClassAssignments = new Set();
+  async function toggleEntityClassFromTree(classId) {
+    const entityId = String(fId?.value || "").trim();
+    if (!entityId) {
+      alert("请先选择左侧一个实体");
+      return;
+    }
+    if (!classId || pendingClassAssignments.has(classId)) return;
+    const assigned = Array.isArray(window.kbEntityClasses) &&
+      window.kbEntityClasses.some((item) => String(item?.id || "") === classId);
+    pendingClassAssignments.add(classId);
+    clsTree?.setAttribute("aria-busy", "true");
+    try {
+      if (assigned) await clearEntityClass(entityId, classId);
+      else await setEntityClass(entityId, classId);
+      await loadEntityClass(entityId);
+    } catch (error) {
+      console.error("toggleEntityClassFromTree", error);
+      alert(`${assigned ? "取消" : "设置"}分类失败: ${error?.message || error}`);
+      await loadEntityClass(entityId).catch(() => {});
+    } finally {
+      pendingClassAssignments.delete(classId);
+      clsTree?.removeAttribute("aria-busy");
+    }
+  }
+
   async function loadEntityClass(entityId) {
     if (!entityId) {
+      window.kbEntityClasses = [];
       clsForEntity.textContent = "未选择实体";
+      updateClassAssignmentActions();
+      renderClassTree(window.kbClasses || []);
       try {
         updatePropertyRecommendations();
       } catch {}
@@ -1167,19 +1204,16 @@
       const data = await apiGet(url.toString());
       const items = Array.isArray(data?.items) ? data.items : [];
       window.kbEntityClasses = items;
+      renderClassTree(window.kbClasses || []);
       if (!items.length) {
         clsForEntity.textContent = "当前实体未设置分类";
+        updateClassAssignmentActions();
         try {
           updatePropertyRecommendations();
         } catch {}
         return;
       }
       clsForEntity.innerHTML = "";
-      const titleDiv = document.createElement("div");
-      titleDiv.textContent = "当前实体分类：";
-      titleDiv.style.marginBottom = "6px";
-      clsForEntity.appendChild(titleDiv);
-
       const tagsDiv = document.createElement("div");
       tagsDiv.style.display = "flex";
       tagsDiv.style.flexWrap = "wrap";
@@ -1228,6 +1262,7 @@
         tagsDiv.appendChild(tag);
       });
       clsForEntity.appendChild(tagsDiv);
+      updateClassAssignmentActions();
 
       // Auto-select the first class of the entity
       try {
@@ -1254,6 +1289,7 @@
 
           // Load schema
           await loadClassSchema(targetId);
+          updateClassAssignmentActions();
         }
       } catch (e) {
         console.error(e);
@@ -1650,7 +1686,6 @@
   }
 
   // Events
-  btnClsRefresh.addEventListener("click", () => loadClasses());
   btnSchemaRefresh.addEventListener("click", () => {
     if (window.kbSelectedClassId) loadClassSchema(window.kbSelectedClassId);
   });
@@ -1774,39 +1809,6 @@
     });
   }
   updateSchemaRemoveButtonState();
-  btnSetClass.addEventListener("click", async () => {
-    try {
-      const eid = (fId.value || "").trim();
-      const cid = window.kbSelectedClassId;
-      if (!eid) {
-        alert("请先选择左侧一个实体");
-        return;
-      }
-      if (!cid) {
-        alert("请在上方选择一个分类");
-        return;
-      }
-      await setEntityClass(eid, cid);
-      await loadEntityClass(eid);
-    } catch (e) {
-      console.error(e);
-      alert("设置失败: " + (e.message || e));
-    }
-  });
-  btnClearClass.addEventListener("click", async () => {
-    try {
-      const eid = (fId.value || "").trim();
-      if (!eid) {
-        alert("请先选择左侧一个实体");
-        return;
-      }
-      await clearEntityClass(eid, window.kbSelectedClassId || "");
-      await loadEntityClass(eid);
-    } catch (e) {
-      console.error(e);
-      alert("清除失败: " + (e.message || e));
-    }
-  });
   // Removed subclass add/delete handlers
 
   const clsColorPicker = document.getElementById("clsColorPicker");
@@ -2822,13 +2824,25 @@
   const tagMsg = byId("tagMsg");
   const tagMgrDesc = byId("tagMgrDesc");
   const tagAddBar = byId("tagAddBar");
-  const btnTagRefresh = byId("btnTagRefresh");
+  const btnTagCreateToggle = byId("btnTagCreateToggle");
+  const btnTagAddCancel = byId("btnTagAddCancel");
   const btnTagImport = byId("btnTagImport");
   const tagImportFile = byId("tagImportFile");
 
   let currentTagClassId = null;
   let currentTagClassTags = [];
   let entityTagUpdatePending = false;
+
+  function setTagCreateOpen(open) {
+    if (!tagAddBar) return;
+    tagAddBar.hidden = !open;
+    if (btnTagCreateToggle) btnTagCreateToggle.setAttribute("aria-expanded", String(open));
+    if (open) {
+      tagInput?.focus();
+    } else if (tagInput) {
+      tagInput.value = "";
+    }
+  }
 
   if (!Array.isArray(window.kbProjectNodeTags)) {
     window.kbProjectNodeTags = [];
@@ -3155,6 +3169,7 @@
       saveCustomTags([...loadCustomTags(), val]);
       currentTagClassTags = getAllClassTags();
       tagInput.value = "";
+      setTagCreateOpen(false);
       renderTagList(currentTagClassTags);
       if (tagMgrDesc) tagMgrDesc.textContent = `全部标签（${currentTagClassTags.length}）`;
       if (tagMsg) {
@@ -3175,6 +3190,7 @@
       await saveClassTags(currentTagClassId, tags);
       currentTagClassTags = tags;
       tagInput.value = "";
+      setTagCreateOpen(false);
       renderTagList(currentTagClassTags);
       if (tagMsg) {
         tagMsg.textContent = "已添加";
@@ -3194,7 +3210,6 @@
       currentTagClassTags = getAllClassTags();
       if (tagMgrDesc)
         tagMgrDesc.textContent = `全部标签（${currentTagClassTags.length}）`;
-      if (tagAddBar) tagAddBar.style.display = "flex";
       if (tagInput) tagInput.placeholder = "输入新标签…";
       renderTagList(currentTagClassTags);
       return;
@@ -3203,7 +3218,6 @@
     currentTagClassTags = Array.isArray(cls.tags) ? cls.tags.slice() : [];
     if (tagMgrDesc)
       tagMgrDesc.textContent = `当前分类：${cls.label || cls.name}（${currentTagClassTags.length}）`;
-    if (tagAddBar) tagAddBar.style.display = "flex";
     if (tagInput) tagInput.placeholder = "为当前分类新增标签…";
     renderTagList(currentTagClassTags);
     if (tagMsg) tagMsg.textContent = "";
@@ -3214,24 +3228,17 @@
       addClassTagFromInput().catch(console.error),
     );
   }
+  if (btnTagCreateToggle) {
+    btnTagCreateToggle.addEventListener("click", () => setTagCreateOpen(tagAddBar?.hidden !== false));
+  }
+  if (btnTagAddCancel) {
+    btnTagAddCancel.addEventListener("click", () => setTagCreateOpen(false));
+  }
   if (tagInput) {
     tagInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
         addClassTagFromInput().catch(console.error);
-      }
-    });
-  }
-  if (btnTagRefresh) {
-    btnTagRefresh.addEventListener("click", () => {
-      syncProjectTagsFromTableNodes();
-      if (currentTagClassId) {
-        const cls = (window.kbClasses || []).find(
-          (c) => c.id === currentTagClassId,
-        );
-        showTagPanelForClass(cls || null);
-      } else {
-        showTagPanelForClass(null);
       }
     });
   }

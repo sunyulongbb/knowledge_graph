@@ -955,7 +955,6 @@ LIMIT 1000`);
     });
 
     byId("btnSparqlAddFilter")?.addEventListener("click", () => createFilterRow());
-    byId("btnSparqlRefreshDatasets")?.addEventListener("click", () => loadFusekiDatasets().catch(showError));
     byId("btnSparqlLoadReturnProperties")?.addEventListener("click", () => loadReturnProperties().catch(showError));
     byId("sparqlReturnPropertySearch")?.addEventListener("input", (event) => {
       const keyword = String(event.target.value || "").trim().toLowerCase();

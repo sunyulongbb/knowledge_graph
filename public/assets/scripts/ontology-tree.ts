@@ -26,6 +26,9 @@ export type OntologyTreeControllerOptions = {
   toggleSelection?: boolean;
   onDoubleClick?: (id: string) => void;
   storageKey?: string;
+  nodeIcon?: "dot" | "folder";
+  nodeIconFilled?: (id: string) => boolean;
+  onNodeIconClick?: (id: string) => void | Promise<void>;
 };
 
 const STORAGE_KEY = "kb:ontology-tree-state";
@@ -92,6 +95,21 @@ export class OntologyTreeController {
     }
     const host = document.createElement("div");
     host.className = "ontology-dhtmlx-host";
+    if (this.options.onNodeIconClick) {
+      const activateIcon = (event: Event) => {
+        const target = event.target as HTMLElement | null;
+        const icon = target?.closest<HTMLElement>("[data-ontology-node-icon]");
+        if (!icon || !host.contains(icon)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const id = icon.dataset.ontologyNodeIcon || "";
+        if (id) void this.options.onNodeIconClick?.(id);
+      };
+      host.addEventListener("click", activateIcon, true);
+      host.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") activateIcon(event);
+      }, true);
+    }
     this.container.appendChild(host);
     const openedIds = new Set(
       Object.entries(oldState)
@@ -106,7 +124,11 @@ export class OntologyTreeController {
       tooltip: (item) => String(item.value || ""),
       template: (item) => {
         const color = String(item.data?.color || "#94a3b8");
-        return `<span class="ontology-node-dot" style="--ontology-node-color:${this.escape(color)}"></span><span class="ontology-node-label">${this.escape(item.value)}</span>`;
+        const filled = Boolean(this.options.nodeIconFilled?.(String(item.id)));
+        const icon = this.options.nodeIcon === "folder"
+          ? `<span class="ontology-node-folder" style="--ontology-node-color:${this.escape(color)}" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path fill="currentColor" d="M3 5.75A1.75 1.75 0 0 1 4.75 4h5.19c.46 0 .9.18 1.23.51L12.66 6h6.59A1.75 1.75 0 0 1 21 7.75v8.5A2.75 2.75 0 0 1 18.25 19H5.75A2.75 2.75 0 0 1 3 16.25V5.75Z"/></svg></span>`
+          : `<span class="ontology-node-dot${filled ? " is-filled" : ""}" style="--ontology-node-color:${this.escape(color)}"${this.options.onNodeIconClick ? ` data-ontology-node-icon="${this.escape(String(item.id))}" role="button" tabindex="0" aria-pressed="${filled}" aria-label="${filled ? "取消分类" : "添加分类"}"` : ""}></span>`;
+        return `${icon}<span class="ontology-node-label">${this.escape(item.value)}</span>`;
       },
     });
     this.bindTreeEvents();
