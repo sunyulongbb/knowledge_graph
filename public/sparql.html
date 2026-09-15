@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SPARQL 工具</title>
+<link rel="stylesheet" href="/assets/styles/app.css"><link rel="stylesheet" href="/assets/styles/sparql.css"><link rel="stylesheet" href="/assets/generated/business-grid.css">
+<style>body{display:block;overflow:auto;padding:16px}main{display:flex;flex-direction:column;gap:16px;min-height:calc(100vh - 32px)}.sparql-navigation{display:flex;gap:16px;align-items:center}</style>
+<script>try{document.documentElement.dataset.theme=localStorage.getItem('theme')==='dark'?'dark':'light'}catch{}window.kbBusinessGridModuleReady=import('/assets/generated/business-grid.js');</script>
+<script defer src="/assets/scripts/sparql-panel.js?v=20260915-3"></script></head><body><main>
+<header class="sparql-navigation"><strong>SPARQL 工具</strong><a id="backToEntry" href="/kb#entry">返回数据录入</a></header>
+          <div id="sparqlImportView" class="sparql-view" style="display:flex; min-width:0; min-height:0; flex:1 1 auto; flex-direction:column; gap:12px;">
+            <div class="sparql-layout sparql-layout-top">
+              <section class="panel sparql-card sparql-card-sidebar">
+                <div class="sparql-card-head">
+                  <div>
+                    <div class="sparql-card-title">数据连接</div>
+                    <div class="muted">已固定连接项目数据服务</div>
+                  </div>
+                  <div class="sparql-actions">
+                    <button id="btnSparqlEndpointTest" class="btn sm" type="button">测试连接</button>
+                  </div>
+                </div>
+                <div class="sparql-form-grid sparql-form-compact">
+                  <label class="field sparql-span-2">
+                    <span>选择数据源</span>
+                    <select id="sparqlEndpointSelect" class="kb-select"></select>
+                    <small class="field-hint">优先从内置或已保存的数据源中选择，再按需补充下面的必要字段。</small>
+                  </label>
+                  <label class="field"><span>名称</span><input id="sparqlEndpointName" class="kb-input" placeholder="例如：Wikidata 公共端点" /></label>
+                  <label class="field"><span>请求方式</span><select id="sparqlEndpointMethod" class="kb-select"><option value="GET">GET</option><option value="POST">POST 表单</option><option value="SPARQL_POST">SPARQL POST</option></select></label>
+                  <label class="field sparql-span-2"><span>Endpoint</span><input id="sparqlEndpointUrl" class="kb-input" placeholder="https://query.wikidata.org/sparql" /></label>
+                  <label class="field"><span>认证方式</span><select id="sparqlEndpointAuthType" class="kb-select"><option value="none">无认证</option><option value="basic">Basic Auth</option><option value="bearer">Bearer Token</option></select></label>
+                  <label class="field"><span>超时(ms)</span><input id="sparqlEndpointTimeout" class="kb-input" type="number" value="30000" /></label>
+                  <label id="sparqlBasicAuthUserField" class="field"><span>用户名</span><input id="sparqlEndpointUsername" class="kb-input" placeholder="Basic Auth 用户名" /></label>
+                  <label id="sparqlBasicAuthPasswordField" class="field"><span>密码</span><input id="sparqlEndpointPassword" class="kb-input" type="password" placeholder="留空则不修改" /></label>
+                  <label id="sparqlBearerTokenField" class="field sparql-span-2"><span>Token</span><input id="sparqlEndpointToken" class="kb-input" type="password" placeholder="Bearer Token，留空则不修改" /></label>
+                </div>
+                <details class="sparql-advanced">
+                  <summary>高级设置</summary>
+                  <div class="sparql-form-grid">
+                    <label class="field"><span>重试次数</span><input id="sparqlEndpointRetries" class="kb-input" type="number" value="1" /></label>
+                    <label class="field"><span>User-Agent</span><input id="sparqlEndpointUserAgent" class="kb-input" value="KnowledgeGraphSPARQL/1.0" /></label>
+                    <label class="field sparql-span-2"><span>自定义请求头(JSON)</span><textarea id="sparqlEndpointHeaders" class="kb-input" rows="3">{}</textarea></label>
+                    <label class="field sparql-span-2"><span>说明</span><textarea id="sparqlEndpointDescription" class="kb-input" rows="2" placeholder="记录该数据源用途、限流说明或特殊约束"></textarea></label>
+                  </div>
+                </details>
+                <div id="sparqlConnectionStatus" class="sparql-hint">默认内置多套测试数据源与模板，通常只需要选择一个数据源并补充必要信息即可。</div>
+              </section>
+
+              <section class="panel sparql-card sparql-card-main">
+                <div class="sparql-card-head">
+                  <div>
+                    <div class="sparql-card-title">知识录入</div>
+                  </div>
+                  <div class="sparql-actions">
+                    <button id="btnSparqlStructuredPreview" class="btn sm accent" type="button">预览数据</button>
+                  </div>
+                </div>
+                <div class="sparql-structured-form">
+                  <section class="sparql-step-card">
+                    <div class="sparql-step-title"><b>1</b><span>选择 Dataset</span></div>
+                    <select id="sparqlDatasetSelect" class="kb-select" disabled><option value="">正在读取 Dataset…</option></select>
+                    <small id="sparqlDatasetHint" class="field-hint"></small>
+                    <small id="sparqlDatasetStats" class="field-hint"></small>
+                  </section>
+                  <section class="sparql-step-card">
+                    <div class="sparql-step-title"><b>2</b><span>筛选实体</span><button id="btnSparqlAddFilter" class="btn sm" type="button">添加条件</button></div>
+                    <div id="sparqlFilterList" class="sparql-filter-list"></div>
+                    <label class="field sparql-label-language"><span>名称语言</span><select id="sparqlLabelLanguage" class="kb-select"><option value="zh" selected>中文</option><option value="en">英文</option><option value="">不限</option></select></label>
+                  </section>
+                  <section class="sparql-step-card sparql-return-properties"><div class="sparql-step-title"><b>3</b><span>返回属性</span><button id="btnSparqlLoadReturnProperties" class="btn sm" type="button">读取属性</button></div><input id="sparqlReturnPropertySearch" class="app-search-input kb-input sm" placeholder="搜索属性" autocomplete="off" disabled /><div id="sparqlReturnPropertyChecklist" class="sparql-property-checklist"><span class="muted">点击“读取属性”</span></div></section>
+                </div>
+                <datalist id="sparqlPredicateSuggestions"><option value="类型"></option><option value="国籍"></option><option value="国家"></option><option value="名称"></option></datalist>
+                <datalist id="sparqlValueSuggestions"><option value="人类"></option><option value="美国"></option></datalist>
+                <textarea id="sparqlQueryEditor" class="sparql-editor" spellcheck="false" style="display:none"></textarea>
+                <select id="sparqlTemplateSelect" style="display:none"></select><button id="btnSparqlTemplateFavorite" type="button" style="display:none"></button><button id="btnSparqlTemplateSave" type="button" style="display:none"></button><button id="btnSparqlRun" type="button" style="display:none"></button><button id="btnSparqlClear" type="button" style="display:none"></button><input id="sparqlAutoLimit" type="checkbox" checked style="display:none" />
+                <div class="sparql-editor-footer"><span id="sparqlQueryMeta" class="muted">系统将根据所选类型和属性自动生成查询。</span></div>
+              </section>
+            </div>
+
+            <div class="sparql-layout sparql-layout-middle">
+              <section class="panel sparql-card sparql-card-main">
+                <div class="sparql-card-head">
+                  <div>
+                    <div class="sparql-card-title">查询结果预览</div>
+                    <div class="muted">确认勾选属性后生成的数据</div>
+                  </div>
+                  <div class="sparql-actions">
+                    <select id="sparqlPageSize" class="kb-select sm"><option>20</option><option selected>50</option><option>100</option><option>200</option></select>
+                    <button id="btnSparqlShowRaw" class="btn sm sparql-secondary-control" type="button">原始响应</button>
+                  </div>
+                </div>
+                <div id="sparqlResultSummary" class="sparql-hint">还没有执行查询。</div>
+                <div class="sparql-result-tools">
+                  <input id="sparqlResultSearch" class="app-search-input kb-input" placeholder="搜索结果..." autocomplete="off" />
+                </div>
+                <div class="sparql-grid-shell sparql-preview-grid"><div id="sparqlResultTable" class="sparql-result-grid-host"></div></div>
+                <pre id="sparqlRawResponse" class="sparql-raw" style="display:none;"></pre>
+              </section>
+
+              <div class="sparql-import-legacy" aria-hidden="true">
+                <button id="btnSparqlBuildPreview" type="button" disabled></button><button id="btnSparqlImport" type="button" disabled></button>
+                <select id="sparqlSchemaSelect"></select><input id="sparqlDefaultEntityType" value="SPARQL实体" /><input id="sparqlTaskName" />
+                <div id="sparqlMappingTable"></div><div id="sparqlPreviewSummary"></div><div id="sparqlPreviewEntities"></div><div id="sparqlPreviewRelations"></div>
+              </div>
+            </div>
+
+            <div class="sparql-import-bar sparql-bottom-actions">
+              <div><strong id="sparqlPreviewCount">共 0 条</strong><span id="sparqlImportStatus" class="muted" aria-live="polite">已选择预览数据</span></div>
+              <div class="sparql-import-bar__actions"><button id="btnSparqlCancelSelection" class="btn sm" type="button">取消选择</button><button id="btnSparqlPreviewImport" class="btn sm" type="button" disabled>预览导入</button><button id="btnSparqlConfirmImport" class="btn sm accent" type="button" disabled>确认导入</button></div>
+            </div>
+
+            <div class="sparql-task-legacy" aria-hidden="true"><div id="sparqlTaskList"></div><pre id="sparqlTaskLogs"></pre></div>
+          </div>
+
+</main><script>const back=new URL('/kb',location.origin);back.search=location.search;back.searchParams.delete('tool');back.hash='entry';document.getElementById('backToEntry').href=back.href;</script></body></html>

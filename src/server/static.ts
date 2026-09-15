@@ -29,6 +29,7 @@ export async function serveStaticRoute(req: Request, pathname: string) {
       css: "text/css",
       html: "text/html; charset=utf-8",
       json: "application/json",
+      csv: "text/csv; charset=utf-8",
       mp4: "video/mp4",
       webm: "video/webm",
       ogg: "video/ogg",
@@ -51,7 +52,17 @@ export async function serveStaticRoute(req: Request, pathname: string) {
     return new Response(file, { headers });
   };
 
+  if (pathname === "/sparql" || pathname === "/sparql.html") {
+    return new Response(Bun.file("public/sparql.html"), { headers: { "Content-Type": "text/html; charset=utf-8" } });
+  }
+
   if (pathname === "/kb" || pathname === "/") {
+    const url = new URL(req.url);
+    if (url.searchParams.get("tool") === "sparql") {
+      url.pathname = "/sparql";
+      url.searchParams.delete("tool");
+      return Response.redirect(url.toString(), 302);
+    }
     return new Response(PUBLIC_INDEX_FILE, { headers: { "Content-Type": "text/html; charset=utf-8" } });
   }
 
@@ -91,7 +102,7 @@ export async function serveStaticRoute(req: Request, pathname: string) {
     return null;
   }
 
-  if (["/examples/ontology-import.json", "/examples/ontology-import-format.md", "/examples/class-import.json", "/examples/class-import-format.md", "/examples/tag-import.json", "/examples/tag-import-format.md"].includes(pathname)) {
+  if (["/examples/ontology-import.json", "/examples/ontology-import-format.md", "/examples/class-import.json", "/examples/class-import-format.md", "/examples/tag-import.json", "/examples/tag-import-format.md", "/examples/pipeline-people.csv", "/examples/pipeline-people-update.csv"].includes(pathname)) {
     return makeResponse(Bun.file(`public${pathname}`));
   }
 

@@ -2431,7 +2431,7 @@
           .trim()
           .toLowerCase();
         const node = String(route.node || "").trim();
-        if (view === "detail" && node) {
+        if (["detail", "knowledge_detail"].includes(view) && node) {
           return { view, node };
         }
       }
@@ -2444,7 +2444,7 @@
           .trim()
           .toLowerCase();
         const node = String(params.node || "").trim();
-        if (view === "detail" && node) {
+        if (["detail", "knowledge_detail"].includes(view) && node) {
           return { view, node };
         }
       }
@@ -2462,14 +2462,14 @@
         const fallbackView =
           explicitView || hash.split("&")[0].split("=")[0].trim().toLowerCase();
         const node = String(parsed.get("node") || "").trim();
-        if (fallbackView === "detail" && node) {
-          return { view: "detail", node };
+        if (["detail", "knowledge_detail"].includes(fallbackView) && node) {
+          return { view: fallbackView, node };
         }
-        if (hash.toLowerCase() === "detail") {
+        if (["detail", "knowledge_detail"].includes(hash.toLowerCase())) {
           const queryNode =
             new URLSearchParams(window.location.search || "").get("node") || "";
           if (String(queryNode).trim()) {
-            return { view: "detail", node: String(queryNode).trim() };
+            return { view: hash.toLowerCase(), node: String(queryNode).trim() };
           }
         }
       }
@@ -2481,7 +2481,7 @@
   function hydrateDetailFromCurrentRoute() {
     try {
       const route = resolveInitialDetailRoute();
-      if (route.view !== "detail" || !route.node) return;
+      if (!["detail", "knowledge_detail"].includes(route.view) || !route.node) return;
       const detailPanel = document.getElementById("detailPanel");
       if (!detailPanel) return;
       const canonicalNodeId =
@@ -2498,7 +2498,9 @@
       window.kbActiveDetailRouteId = route.node;
       window.kbActiveDetailNodeId = canonicalNodeId;
       detailPanel.style.display = "";
-      showNodeDetailInline(route.node);
+      showNodeDetailInline(route.node, {
+        preserveSidebarState: route.view === "knowledge_detail",
+      });
     } catch (err) {
       if (window.console && console.warn) {
         console.warn("hydrateDetailFromCurrentRoute failed", err);

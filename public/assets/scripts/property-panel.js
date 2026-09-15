@@ -272,10 +272,106 @@
 
   const propertyQuickSaves = new Set();
 
+  let tailTreePopup = null;
+  let tailTreeController = null;
+  let tailTreeTrigger = null;
+
+  function closeTailTree() {
+    tailTreeTrigger?.setAttribute("aria-expanded", "false");
+    tailTreeController?.destroy();
+    tailTreePopup?.remove();
+    tailTreeController = null;
+    tailTreePopup = null;
+    tailTreeTrigger = null;
+  }
+
+  function tailOntologyLabel(value) {
+    return ontologyItems.find((item) => item.id === value)?.name || value || "未指定";
+  }
+
+  function syncTailTreeLabel() {
+    const button = byId("propTailOntologyTree");
+    if (button) button.textContent = tailOntologyLabel(byId("propTailOntologyId")?.value || "") + " ▾";
+  }
+
+  async function openTailTree(trigger) {
+    const wasOpen = tailTreeTrigger === trigger;
+    closeTailTree();
+    if (wasOpen || trigger.disabled || window.authUser?.role !== 'admin') return;
+    tailTreeTrigger = trigger;
+    trigger.setAttribute("aria-expanded", "true");
+    const popup = document.createElement("div");
+    tailTreePopup = popup;
+    popup.id = "propertyTailTreePopup";
+    popup.className = "ontology-floating-dropdown is-portal";
+    popup.setAttribute("aria-label", "选择尾实体本体类型");
+    popup.innerHTML = '<input class="kb-input" type="search" aria-label="搜索本体" placeholder="搜索本体" style="width:calc(100% - 16px);margin:4px 8px"><div class="ontology-dropdown-plugin-host"></div>';
+    document.body.appendChild(popup);
+    const rect = trigger.getBoundingClientRect();
+    const width = Math.min(Math.max(rect.width, 280), window.innerWidth - 24);
+    popup.style.width = width + "px";
+    popup.style.left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)) + "px";
+    popup.style.top = Math.max(12, Math.min(rect.bottom + 4, window.innerHeight - 372)) + "px";
+    const host = popup.querySelector(".ontology-dropdown-plugin-host");
+    host.textContent = "加载本体中…";
+    try {
+      const module = await window.kbOntologyTreeModuleReady;
+      if (tailTreePopup !== popup) return;
+      const input = trigger.id === "propTailOntologyTree" ? byId("propTailOntologyId") : trigger;
+      tailTreeController = new module.OntologyTreeController(host, {
+        allLabel: "未指定",
+        showAllButton: true,
+        enableDrag: false,
+        enableContextMenu: false,
+        disableReadonlyItems: false,
+        toggleSelection: false,
+        storageKey: "kb:ontology-tree-state:property-tail",
+        onSelect: (id) => {
+          input.value = id || "";
+          syncTailTreeLabel();
+          closeTailTree();
+          trigger.focus();
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        },
+        onEdit: () => {}, onAddChild: () => {}, onDelete: () => {},
+        onReload: () => {},
+      });
+      tailTreeController.update(buildLocalTree(), input.value || "");
+      const search = popup.querySelector("input");
+      search.addEventListener("input", () => tailTreeController?.filter(search.value));
+      search.focus();
+    } catch (error) {
+      if (tailTreePopup === popup) host.textContent = "本体加载失败，请关闭后重试";
+      console.warn("openTailTree failed", error);
+    }
+  }
+
+  document.addEventListener("click", (event) => {
+    const trigger = event.target.closest(".property-tail-tree-trigger");
+    if (trigger) { openTailTree(trigger); return; }
+    if (tailTreePopup && !tailTreePopup.contains(event.target)) closeTailTree();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && tailTreePopup) {
+      const trigger = tailTreeTrigger;
+      closeTailTree();
+      trigger?.focus();
+      event.preventDefault();
+    }
+  });
+  window.addEventListener("resize", closeTailTree);
+  window.addEventListener("hashchange", closeTailTree);
+  document.addEventListener("scroll", (event) => {
+    if (tailTreePopup && !tailTreePopup.contains(event.target)) closeTailTree();
+  }, true);
+  datatypeSelect?.addEventListener("change", () => { closeTailTree(); syncTailTreeLabel(); });
+
   function renderPropertyQuickSelect(prop, field, optionsId, value) {
-    const options = field === "tail_ontology_id"
-      ? [{ value: "", text: "未指定" }, ...ontologyItems.map((item) => ({ value: item.id, text: item.name || item.id }))]
-      : Array.from(byId(optionsId)?.options || []).map((option) => ({ value: option.value, text: option.text }));
+    if (field === "tail_ontology_id") {
+      const disabled = propertyQuickSaves.has(String(prop.id)) || wikidata.normalizeDatatype(prop.datatype, prop.valuetype) !== "wikibase-item";
+      return `<button type="button" class="kb-select property-quick-edit property-tail-tree-trigger" style="width:100%;min-width:0;text-align:left" data-property-id="${escapeHtml(prop.id)}" data-field="tail_ontology_id" value="${escapeHtml(value)}" aria-label="尾实体本体类型" aria-haspopup="tree" aria-expanded="false" aria-controls="propertyTailTreePopup" ${disabled ? "disabled" : ""}>${escapeHtml(tailOntologyLabel(value))} ▾</button>`;
+    }
+    const options = Array.from(byId(optionsId)?.options || []).map((option) => ({ value: option.value, text: option.text }));
     if (value && !options.some((option) => option.value === value)) options.push({ value, text: value });
     const disabled = propertyQuickSaves.has(String(prop.id)) || (field === "tail_ontology_id" && wikidata.normalizeDatatype(prop.datatype, prop.valuetype) !== "wikibase-item");
     const label = { datatype: "数据类型", valuetype: "数值类型", tail_ontology_id: "尾实体本体类型" }[field];
@@ -606,8 +702,8 @@
     const tailWrap = byId("propTailOntologyWrap");
     const tailSelect = byId("propTailOntologyId");
     if (tailSelect) {
-      tailSelect.innerHTML = `<option value="">请选择本体类型</option>${ontologyItems.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name || item.id)}</option>`).join("")}`;
       tailSelect.value = data.tail_ontology_id || "";
+      syncTailTreeLabel();
     }
     const syncTailOntology = () => {
       if (!tailWrap) return;
@@ -616,6 +712,7 @@
       if (!isEntityValue && tailSelect) tailSelect.value = "";
     };
     syncTailOntology();
+    syncTailTreeLabel();
     byId("propValuetype")?.addEventListener("change", syncTailOntology);
     form.dataset.mode = mode;
     form.dataset.originalLinked = originalLinked ? "1" : "0";
@@ -636,6 +733,7 @@
   }
 
   function closePropertyModal() {
+    closeTailTree();
     const modal = byId("propertyModal");
     if (modal) modal.style.display = "none";
   }

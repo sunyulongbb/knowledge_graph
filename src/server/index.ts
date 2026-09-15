@@ -12,6 +12,7 @@ import { handleSemanticMapRoutes } from "./routes/semantic-map.ts";
 import { handleSparqlRoutes } from "./routes/sparql.ts";
 import { handleInteractionRoutes } from "./routes/interactions.ts";
 import { handleSystemAdminRoutes } from "./routes/system-admin.ts";
+import { handlePipelineRoutes } from './routes/pipeline.ts';
 import { getCurrentUser } from './auth-context.ts';
 import { knowledgeContext } from './knowledge-access.ts';
 import { guardKnowledgeRequest, handleKnowledgeAccessRoutes } from './routes/knowledge-access.ts';
@@ -70,6 +71,8 @@ const server = Bun.serve({
       if (interactionRes) return interactionRes;
       const systemAdminRes = await handleSystemAdminRoutes(req, url, method);
       if (systemAdminRes) return systemAdminRes;
+      const pipelineRes = await handlePipelineRoutes(req, url, method);
+      if (pipelineRes) return pipelineRes;
 
       const chatRes = await handleChatRoutes(req, url, method);
       if (chatRes) return chatRes;

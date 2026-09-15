@@ -176,6 +176,12 @@ metric="cosine"
 
 ## Notes
 
+### 数据录入与知识清洗
+
+新增“数据录入 → 二维实体表 → 数据清洗 → 确认保存知识库”流程原型。支持 MySQL（含演示源）、CSV / Excel / JSON、Wikidata，以及六节点单向流程画布。
+
+完整演示步骤、新接口、SQLite 表结构、验证命令和原型限制见 [数据流程说明](docs/data-pipeline.md)。
+
 - The semantic map does not use Cytoscape.js.
 - Version one intentionally does not render relationship edges.
 - `bunx tsc --noEmit` still reports several pre-existing type errors in older route files outside this feature, but the semantic map files added in this change are in place and wired into the Bun server.

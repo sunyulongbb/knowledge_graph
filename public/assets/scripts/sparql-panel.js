@@ -88,37 +88,6 @@
     });
   }
 
-  function setMode(mode) {
-    state.mode = mode;
-    const entryPanel = byId("entryPanel");
-    const sparqlView = byId("sparqlImportView");
-    const managerView = byId("entryManagerView");
-    const editorView = byId("entryEditorView");
-    const fileForm = byId("entryFileForm");
-    const apiForm = byId("entryApiForm");
-    const btnSheet = byId("btnEntryModeSheet");
-    const btnSparql = byId("btnEntryModeSparql");
-
-    if (mode === "sparql") {
-      if (entryPanel) entryPanel.dataset.entryMode = "sparql";
-      if (fileForm) fileForm.style.display = "none";
-      if (apiForm) apiForm.style.display = "none";
-      if (managerView) managerView.style.display = "none";
-      if (editorView) editorView.style.display = "none";
-      if (sparqlView) sparqlView.style.display = "flex";
-    } else {
-      if (entryPanel) entryPanel.dataset.entryMode = "sheet";
-      if (fileForm) fileForm.style.display = "none";
-      if (apiForm) apiForm.style.display = "none";
-      if (sparqlView) sparqlView.style.display = "none";
-      if (managerView && managerView.style.display === "none") managerView.style.display = "flex";
-      if (editorView) editorView.style.display = "flex";
-    }
-
-    if (btnSheet) btnSheet.classList.toggle("accent", mode === "sheet");
-    if (btnSparql) btnSparql.classList.toggle("accent", mode === "sparql");
-  }
-
   function toggleEndpointAuthFields(authType) {
     byId("sparqlBasicAuthUserField")?.classList.toggle("is-hidden", authType !== "basic");
     byId("sparqlBasicAuthPasswordField")?.classList.toggle("is-hidden", authType !== "basic");
@@ -930,8 +899,6 @@ LIMIT 1000`);
   async function bootstrap() {
     if (!byId("sparqlImportView")) return;
 
-    byId("btnEntryModeSheet")?.addEventListener("click", () => setMode("sheet"));
-    byId("btnEntryModeSparql")?.addEventListener("click", () => setMode("sparql"));
 
     byId("sparqlEndpointSelect")?.addEventListener("change", (event) => {
       const selected = state.endpoints.find((item) => item.id === event.target.value);
@@ -1068,8 +1035,7 @@ LIMIT 1000`);
     createFilterRow({ predicate: "wdt:P27", operator: "resource", value: "wd:Q30" });
     renderMappingTable();
     refreshTemplateOptions({ keepSelection: true });
-    setMode("sparql");
   }
 
-  document.addEventListener("DOMContentLoaded", bootstrap);
+  document.addEventListener("DOMContentLoaded", () => bootstrap().catch(showError));
 })();

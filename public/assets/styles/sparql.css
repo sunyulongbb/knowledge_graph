@@ -369,19 +369,6 @@
   color: var(--fg);
 }
 
-/* One source workspace at a time. This also protects against delayed task UI updates. */
-#entryPanel[data-entry-mode="sparql"] #entryEditorView,
-#entryPanel[data-entry-mode="sparql"] #entryManagerView,
-#entryPanel[data-entry-mode="sparql"] .entry-import-bar:not(.sparql-bottom-actions),
-#entryPanel[data-entry-mode="sparql"] .entry-task-details,
-#entryPanel[data-entry-mode="sparql"] #entryFileForm,
-#entryPanel[data-entry-mode="sparql"] #entryApiForm {
-  display: none !important;
-}
-#entryPanel[data-entry-mode="sheet"] #sparqlImportView {
-  display: none !important;
-}
-
 @media (max-width: 900px) {
   #sparqlImportView.sparql-view { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; overflow: visible; }
   #sparqlImportView .sparql-layout-top .sparql-card-main,
@@ -436,3 +423,10 @@
 .sparql-task-details { padding:10px 14px; }
 .sparql-task-details > summary { cursor:pointer; color:var(--muted); font-size:13px; }
 .sparql-task-details[open] > summary { margin-bottom:12px; }
+
+/* Standalone tool layout, independent of the data-entry page. */
+.sparql-hint { font-size:12px; color:var(--muted); line-height:1.6; margin-top:4px; }
+.sparql-grid-shell { border:1px solid var(--border-strong); border-radius:12px; background:var(--surface-0); overflow:hidden; min-height:0; flex:1 1 auto; display:flex; }
+.sparql-import-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; position:sticky; bottom:0; z-index:4; padding:10px 0 0; border-top:1px solid var(--border); background:var(--surface-0); }
+.sparql-import-bar > div:first-child, .sparql-import-bar__actions { display:flex; gap:12px; align-items:center; flex-wrap:wrap; font-size:13px; }
+.sparql-import-bar .muted { font-size:12px; }
