@@ -7,10 +7,10 @@ const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;
 const text = v => typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v ?? '');
 const options = (items, selected, label = '请选择') => `<option value="">${label}</option>` + items.map(i => `<option value="${esc(i.id)}" ${i.id === selected ? 'selected' : ''}>${esc(i.name || i.id)}</option>`).join('');
 let entryRoot, cleanRoot, source = 'file', staged = null, tables = [], flows = [], ontologies = [], properties = [], activeTable = null;
-let flow = defaultFlow(), selected = 'input', connectFrom = '', result = null, decisions = {}, resultPage = 0, dirty = false;
+let flow = defaultFlow(), selected = 'input', result = null, decisions = {}, resultPage = 0, dirty = false;
 const grids = new Map();
-let ontologyTree = [], canvasZoom = 1, canvasObserver, dock = '';
-const icons = { input:'table', ontology:'sitemap', properties:'list-check', alignment:'link', fusion:'code-merge', output:'database', 'new-flow':'plus', 'save-flow':'floppy-disk', preview:'play', full:'forward', confirm:'database', 'delete-node':'trash-can', 'connect-all':'link', disconnect:'link-slash', 'fit-canvas':'expand', 'zoom-in':'plus', 'zoom-out':'minus', 'read-file':'file-import', 'save-table':'floppy-disk', 'mysql-test':'plug', 'mysql-fields':'list', 'mysql-read':'download', 'wikidata-read':'download', 'result-prev':'chevron-left', 'result-next':'chevron-right' };
+let ontologyTree = [], canvasZoom = 1, canvasObserver, dock = '', drawflowEditor = null;
+const icons = { input:'table', ontology:'sitemap', properties:'list-check', alignment:'link', fusion:'code-merge', output:'database', 'new-flow':'plus', 'save-flow':'floppy-disk', preview:'play', full:'forward', confirm:'database', 'delete-node':'trash-can', 'connect-all':'link', disconnect:'link-slash', 'fit-canvas':'expand', 'zoom-in':'plus', 'zoom-out':'minus', 'read-file':'file-import', 'save-table':'floppy-disk', 'mysql-test':'plug', 'mysql-fields':'list', 'mysql-read':'download', 'result-prev':'chevron-left', 'result-next':'chevron-right' };
 const iconPaths = {
   table:'M3 3h18v18H3z M3 9h18 M9 9v12', sitemap:'M9 2h6v5H9z M2 17h6v5H2z M16 17h6v5h-6z M12 7v5 M5 17v-5h14v5',
   'list-check':'m3 6 2 2 3-4 M11 6h10 m-18 9 2 2 3-4 M11 15h10', link:'M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-2 2 M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l2-2',
@@ -39,7 +39,30 @@ function showDock(value) {
 function fitCanvas() {
   const viewport=cleanRoot?.querySelector('.pipeline-canvas-scroll'); if (!viewport || !viewport.clientWidth) return;
   const width=Math.max(500,...flow.nodes.map(n=>n.x+210)),height=Math.max(300,...flow.nodes.map(n=>n.y+100));
-  canvasZoom=Math.max(.25,Math.min(1,(viewport.clientWidth-24)/width,(viewport.clientHeight-24)/height)); renderCanvas();
+  canvasZoom=Math.max(.5,Math.min(1,(viewport.clientWidth-24)/width,(viewport.clientHeight-24)/height));
+  if (drawflowEditor) {
+    drawflowEditor.zoom = canvasZoom;
+    centerCanvas();
+    drawflowEditor.zoom_refresh();
+  }
+  cleanRoot.querySelector('[data-zoom]').textContent=Math.round(canvasZoom*100)+'%';
+}
+function centerCanvas() {
+  if (!drawflowEditor || !cleanRoot) return;
+  const viewport = cleanRoot.querySelector('.pipeline-canvas-scroll');
+  if (!viewport) return;
+  const nodes = flow.nodes;
+  if (!nodes.length) {
+    drawflowEditor.canvas_x = 0;
+    drawflowEditor.canvas_y = 0;
+    return;
+  }
+  const minX = Math.min(...nodes.map(node => node.x));
+  const minY = Math.min(...nodes.map(node => node.y));
+  const maxX = Math.max(...nodes.map(node => node.x + 184));
+  const maxY = Math.max(...nodes.map(node => node.y + 80));
+  drawflowEditor.canvas_x = (viewport.clientWidth - (maxX - minX) * canvasZoom) / 2 - minX * canvasZoom;
+  drawflowEditor.canvas_y = (viewport.clientHeight - (maxY - minY) * canvasZoom) / 2 - minY * canvasZoom;
 }
 function nodeSummary(n) {
   if(n.type==='input') return activeTable?.name || '选择实体表';
@@ -90,26 +113,20 @@ async function preview(host, columns, rows) {
   } catch { host.classList.remove('pipeline-grid'); host.innerHTML = htmlTable(columns, rows.slice(0, 100)); }
 }
 function destroyGrids(root) { for (const [host, grid] of grids) if (root.contains(host)) { grid.destroy(); grids.delete(host); } }
-function shell(panel, title, subtitle, tabs) {
+function shell(panel, tabs) {
   panel.classList.add('pipeline-enabled');
+  panel.style.visibility = 'visible';
   const root = document.createElement('section'); root.className = 'pipeline-root';
-  root.innerHTML = `<header class="pipeline-head"><h2 title="${subtitle}">${title}</h2><nav class="pipeline-tabs">${tabs.map(([id, name], i) => `<button type="button" class="btn ${i ? '' : 'active'}" data-tab="${id}">${name}</button>`).join('')}</nav></header><div data-message role="status" aria-live="polite" class="pipeline-message"></div><div data-body></div>`;
-  panel.prepend(root); return root;
+  root.innerHTML = `<header class="pipeline-head"><nav class="pipeline-tabs">${tabs.map(([id, name], i) => `<button type="button" class="btn ${i ? '' : 'active'}" data-tab="${id}">${name}</button>`).join('')}</nav></header><div data-message role="status" aria-live="polite" class="pipeline-message"></div><div data-body></div>`;
+  panel.replaceChildren(root); return root;
 }
 function entryForm() {
   destroyGrids(entryRoot);
-  entryRoot.querySelector('[data-body]').innerHTML = `<div class="pipeline-card pipeline-source"><h3>数据源</h3><div class="pipeline-tabs">${[['mysql','数据库'],['file','文件'],['wikidata','Wikidata']].map(([id, name]) => `<button class="btn ${source === id ? 'active' : ''}" data-source="${id}">${name}</button>`).join('')}</div><div data-source-form></div></div><div class="pipeline-card pipeline-staged" data-staged></div>`;
+  entryRoot.querySelector('[data-body]').innerHTML = `<div class="pipeline-card pipeline-source"><h3>数据源</h3><div class="pipeline-tabs">${[['mysql','数据库'],['file','文件']].map(([id, name]) => `<button class="btn ${source === id ? 'active' : ''}" data-source="${id}">${name}</button>`).join('')}</div><div data-source-form></div></div><div class="pipeline-card pipeline-staged" data-staged></div>`;
   entryRoot.querySelector('[data-body]').className = 'pipeline-entry-layout';
   const form = entryRoot.querySelector('[data-source-form]');
   if (source === 'file') form.innerHTML = '<div class="pipeline-fields"><label>选择 CSV、Excel 或 JSON 文件<input type="file" data-file accept=".csv,.xlsx,.xls,.json"></label><label>Excel 工作表<select data-sheet hidden></select><span class="muted">CSV 使用 UTF-8；JSON 使用对象数组。最多 10000 行、200 列。</span></label></div><button class="btn" data-action="read-file">读取文件</button>';
   if (source === 'mysql') form.innerHTML = `<div class="pipeline-fields">${[['connectionName','连接名称','人物数据源'],['host','主机','localhost'],['port','端口','3306'],['database','数据库名称',''],['username','用户名',''],['password','密码',''],['table','数据表','people']].map(([id, name, value]) => `<label>${name}<input data-mysql="${id}" value="${value}" type="${id === 'password' ? 'password' : 'text'}" autocomplete="${id === 'password' ? 'new-password' : 'off'}"></label>`).join('')}</div><label>SQL（填写后优先于数据表，仅支持 SELECT）<textarea data-mysql="sql" placeholder="SELECT * FROM people"></textarea></label><p class="muted">连接密码仅用于本次请求，不保存到实体表或流程。</p><label class="pipeline-check"><input type="checkbox" data-demo>使用演示数据（不连接 MySQL）</label><div class="pipeline-actions"><button class="btn" data-action="mysql-test">测试连接</button><button class="btn" data-action="mysql-fields">读取字段</button><button class="btn" data-action="mysql-read">读取并预览</button></div>`;
-  if (source === 'wikidata') form.innerHTML = `<div class="pipeline-fields"><label>实体类型（Q 编号）<input data-wiki="entityType" value="Q5" placeholder="Q5 人物"></label><label>语言<select data-wiki="language"><option value="zh">中文</option><option value="en">English</option></select></label><label>数量<input data-wiki="limit" type="number" min="1" max="10000" value="100"></label><label>简单条件：属性<input data-wiki="property" placeholder="P27 国籍（可选）"></label><label>简单条件：实体<input data-wiki="value" placeholder="Q148 中国（可选）"></label></div><details><summary>高级设置</summary><label>SPARQL（填写后优先使用）<textarea data-wiki="query" placeholder="SELECT ?id ?name WHERE { ... } LIMIT 100"></textarea></label></details><button class="btn" data-action="wikidata-read">读取并预览</button>`;
-  if (source === 'wikidata') {
-    const url = new URL('/sparql', location.origin); url.search = location.search; url.searchParams.delete('tool');
-    const link = document.createElement('a'); link.href = url.toString(); link.target = '_blank'; link.rel = 'noopener';
-    link.textContent = '打开现有 SPARQL 工具（独立页面）';
-    form.querySelector('details').appendChild(link);
-  }
   renderStaged(); decorate(entryRoot);
 }
 function renderStaged() {
@@ -162,23 +179,117 @@ async function loadFlowData() {
 }
 function editor() {
   closePipelineTree(); canvasObserver?.disconnect(); destroyGrids(cleanRoot);
+  drawflowEditor = null;
   const body=cleanRoot.querySelector('[data-body]'); body.className='pipeline-editor-layout';
   body.innerHTML = `<div class="pipeline-toolbar"><label class="pipeline-flow-title"><span class="sr-only">流程名称</span><input data-flow-name aria-label="流程名称" value="${esc(flow.name)}"></label><select data-flow-select aria-label="已有流程">${options(flows,flow.id,'打开已有流程')}</select><div class="pipeline-actions">${tool('new-flow','新建流程')}${tool('save-flow','保存流程')}<span class="pipeline-divider"></span>${tool('preview','预览运行（前100条）')}${tool('full','正式运行（全量预览）')}${tool('confirm','确认保存知识库','disabled')}</div></div><div class="pipeline-workbench"><aside class="pipeline-palette" aria-label="可用节点">${Object.entries(labels).map(([type,name])=>`<button type="button" class="btn pipeline-palette-node" draggable="true" data-add-node="${type}" title="拖拽或点击添加：${name}" aria-label="添加${name}">${icon(type)}<span>${name.slice(0,2)}</span></button>`).join('')}</aside><div class="pipeline-canvas-wrap"><div class="pipeline-canvas-tools">${tool('connect-all','按流程顺序连接')}${tool('disconnect','清空连接')}<span class="pipeline-divider"></span>${tool('zoom-out','缩小画布')}<span data-zoom></span>${tool('zoom-in','放大画布')}${tool('fit-canvas','适应画布')}</div><div class="pipeline-canvas-scroll"><div class="pipeline-canvas-space"><div class="pipeline-canvas" data-canvas></div></div></div><span class="pipeline-canvas-hint">拖动标题移动 · 点击端口连接</span></div><aside class="pipeline-config" data-config></aside></div><section class="pipeline-dock" data-dock=""><nav><button class="btn" data-dock-tab="input" aria-expanded="false">${icon('table')} 输入预览</button><button class="btn" data-dock-tab="results" aria-expanded="false">${icon('list-check')} 运行结果</button><button class="btn pipeline-icon-btn" data-dock-close title="收起预览" aria-label="收起预览">${icon('chevron-down')}</button></nav><div data-input-preview></div><div data-results></div></section>`;
-  renderCanvas(); renderConfig(); renderInput(); if(result) renderResult(); else showDock(dock); bindCanvas();
+  renderCanvas(); renderConfig(); renderInput(); if(result) renderResult(); else showDock(dock);
   canvasObserver = new ResizeObserver(()=>{ fitCanvas(); for(const grid of grids.values()) grid.resize?.(); });
   canvasObserver.observe(body.querySelector('.pipeline-canvas-scroll')); requestAnimationFrame(fitCanvas);
 }
+function flowToDrawflow() {
+  const data = {};
+  for (const node of flow.nodes) {
+    data[node.id] = {
+      id: node.id,
+      name: node.type,
+      data: { type: node.type, config: node.config },
+      class: `pipeline-node pipeline-node-${node.type}`,
+      html: `<div class="pipeline-node-content" data-select-node="${esc(node.id)}"><span class="pipeline-node-icon">${icon(node.type)}</span><span><strong>${labels[node.type]}</strong><small>${esc(nodeSummary(node))}</small></span></div>`,
+      typenode: false,
+      inputs: node.type === 'input' ? {} : { input_1: { connections: [] } },
+      outputs: node.type === 'output' ? {} : { output_1: { connections: [] } },
+      pos_x: node.x,
+      pos_y: node.y,
+    };
+  }
+  for (const edge of flow.edges) {
+    const from = data[edge.from], to = data[edge.to];
+    if (from?.outputs.output_1 && to?.inputs.input_1) {
+      from.outputs.output_1.connections.push({ node: String(edge.to), output: 'input_1' });
+      to.inputs.input_1.connections.push({ node: String(edge.from), input: 'output_1' });
+    }
+  }
+  return { drawflow: { Home: { data } } };
+}
+function syncFlowFromDrawflow() {
+  if (!drawflowEditor) return;
+  const data = drawflowEditor.drawflow.drawflow.Home.data;
+  flow.nodes = Object.values(data).map(node => ({
+    id: String(node.id),
+    type: node.data.type,
+    config: node.data.config,
+    x: node.pos_x,
+    y: node.pos_y,
+  }));
+  flow.edges = [];
+  for (const node of Object.values(data)) {
+    for (const connection of node.outputs?.output_1?.connections || []) {
+      flow.edges.push({ from: String(node.id), to: String(connection.node) });
+    }
+  }
+}
+function bindDrawflow() {
+  const canvas = cleanRoot.querySelector('[data-canvas]');
+  canvas.addEventListener('dragover', event => event.preventDefault());
+  canvas.addEventListener('drop', event => {
+    event.preventDefault();
+    const type = event.dataTransfer.getData('text/plain');
+    const rect = canvas.getBoundingClientRect();
+    addNode(type, (event.clientX - rect.left) / drawflowEditor.zoom, (event.clientY - rect.top) / drawflowEditor.zoom);
+  });
+  drawflowEditor.on('nodeSelected', id => {
+    selected = String(id);
+    renderConfig();
+  });
+  drawflowEditor.on('nodeMoved', () => {
+    syncFlowFromDrawflow();
+    dirty = true;
+  });
+  drawflowEditor.on('nodeRemoved', () => {
+    syncFlowFromDrawflow();
+    selected = '';
+    invalidate();
+    renderConfig();
+  });
+  drawflowEditor.on('connectionCreated', connection => {
+    const from = flow.nodes.find(n => n.id === String(connection.output_id));
+    const to = flow.nodes.find(n => n.id === String(connection.input_id));
+    if (!from || !to || Object.keys(labels).indexOf(to.type) !== Object.keys(labels).indexOf(from.type) + 1) {
+      drawflowEditor.removeSingleConnection(connection.output_id, connection.input_id, connection.output_class, connection.input_class);
+      message(cleanRoot, '仅支持按六步顺序连接相邻节点', true);
+      return;
+    }
+    syncFlowFromDrawflow();
+    invalidate();
+  });
+  drawflowEditor.on('connectionRemoved', () => {
+    syncFlowFromDrawflow();
+    invalidate();
+  });
+}
 function renderCanvas() {
   const canvas=cleanRoot.querySelector('[data-canvas]'); if(!canvas) return;
-  const viewport=canvas.closest('.pipeline-canvas-scroll');
-  const width=Math.max(viewport.clientWidth/canvasZoom,...flow.nodes.map(n=>n.x+210)),height=Math.max(viewport.clientHeight/canvasZoom,...flow.nodes.map(n=>n.y+100));
-  Object.assign(canvas.style,{width:width+'px',height:height+'px',transform:'scale('+canvasZoom+')'});
-  Object.assign(canvas.parentElement.style,{width:width*canvasZoom+'px',height:height*canvasZoom+'px'});
+  if (!drawflowEditor) {
+    if (!window.Drawflow) throw new Error('Drawflow 组件尚未加载，请刷新重试');
+    drawflowEditor = new window.Drawflow(canvas);
+    drawflowEditor.reroute = true;
+    drawflowEditor.zoom_min = 0.5;
+    drawflowEditor.zoom_max = 1.5;
+    drawflowEditor.start();
+    bindDrawflow();
+  } else {
+    drawflowEditor.clearModuleSelected();
+  }
+  drawflowEditor.import(flowToDrawflow());
+  for (const node of flow.nodes) {
+    const element = cleanRoot.querySelector(`#node-${CSS.escape(node.id)}`);
+    element?.setAttribute('data-node', node.id);
+    element?.setAttribute('data-type', node.type);
+  }
+  drawflowEditor.zoom = canvasZoom;
+  centerCanvas();
+  drawflowEditor.zoom_refresh();
   cleanRoot.querySelector('[data-zoom]').textContent=Math.round(canvasZoom*100)+'%';
-  canvas.innerHTML = `<svg aria-label="流程连接"><defs><marker id="pipeline-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/></marker></defs>${flow.edges.map(e=>{
-    const a=flow.nodes.find(n=>n.id===e.from),b=flow.nodes.find(n=>n.id===e.to); if(!a||!b)return '';
-    return `<path d="M ${a.x+184} ${a.y+40} C ${a.x+224} ${a.y+40}, ${b.x-40} ${b.y+40}, ${b.x} ${b.y+40}" fill="none" stroke="var(--accent,#2563eb)" stroke-width="1.6" marker-end="url(#pipeline-arrow)"/>`;
-  }).join('')}</svg>${flow.nodes.map(n=>`<div class="pipeline-node ${selected===n.id?'selected':''} ${connectFrom===n.id?'pending':''}" data-node="${esc(n.id)}" data-type="${n.type}" style="left:${n.x}px;top:${n.y}px"><button type="button" class="pipeline-node-title" data-select-node="${esc(n.id)}"><span class="pipeline-node-icon">${icon(n.type)}</span><span><strong>${labels[n.type]}</strong><small>${esc(nodeSummary(n))}</small></span></button><button class="pipeline-port port-in" data-port-in="${esc(n.id)}" title="输入" aria-label="${labels[n.type]}输入" ${n.type==='input'?'disabled':''}></button><button class="pipeline-port port-out" data-port-out="${esc(n.id)}" title="输出" aria-label="${labels[n.type]}输出" ${n.type==='output'?'disabled':''}></button></div>`).join('')}`;
 }
 function renderConfig() {
   closePipelineTree();
@@ -201,19 +312,6 @@ function renderInput() {
   const host = cleanRoot.querySelector('[data-input-preview]'); destroyGrids(host);
   host.innerHTML = activeTable ? `<h3>输入预览：${esc(activeTable.name)} · ${activeTable.rowCount} 条</h3><div data-preview-grid></div>` : '<p class="muted">选择实体表后显示输入预览。</p>';
   if (activeTable) preview(host.querySelector('[data-preview-grid]'), activeTable.columns, activeTable.rows);
-}
-function bindCanvas() {
-  const canvas = cleanRoot.querySelector('[data-canvas]');
-  canvas.addEventListener('dragover', e => e.preventDefault());
-  canvas.addEventListener('drop', e => { e.preventDefault(); const rect = canvas.getBoundingClientRect(); addNode(e.dataTransfer.getData('text/plain'), (e.clientX - rect.left)/canvasZoom, (e.clientY - rect.top)/canvasZoom); });
-  canvas.addEventListener('pointerdown', event => {
-    const button = event.target.closest('[data-select-node]'); if (!button || event.button !== 0) return;
-    const node = flow.nodes.find(n => n.id === button.dataset.selectNode), startX = event.clientX, startY = event.clientY, oldX = node.x, oldY = node.y;
-    selected = node.id;
-    const move = e => { node.x = Math.max(4, oldX + (e.clientX - startX)/canvasZoom); node.y = Math.max(4, oldY + (e.clientY - startY)/canvasZoom); renderCanvas(); dirty = true; };
-    const end = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end); window.removeEventListener('pointercancel', end); renderCanvas(); renderConfig(); };
-    window.addEventListener('pointermove', move); window.addEventListener('pointerup', end); window.addEventListener('pointercancel', end);
-  });
 }
 function addNode(type, x = 30, y = 30) {
   if (!labels[type]) return;
@@ -246,8 +344,8 @@ async function showRuns() {
 }
 function initialize() {
   if (!document.getElementById('entryPanel') || !document.getElementById('cleanPanel')) return;
-  entryRoot = shell(document.getElementById('entryPanel'), '数据录入', '读取数据并保存二维实体表，随后进入数据清洗。', [['new','新建录入'],['tables','实体表']]);
-  cleanRoot = shell(document.getElementById('cleanPanel'), '数据清洗', '通过本体、属性和实体对齐，将实体表融合到知识库。', [['flows','清洗流程'],['runs','运行记录']]);
+  entryRoot = shell(document.getElementById('entryPanel'), [['new','新建录入'],['tables','实体表']]);
+  cleanRoot = shell(document.getElementById('cleanPanel'), [['flows','清洗流程'],['runs','运行记录']]);
   entryForm(); editor(); decorate(entryRoot); decorate(cleanRoot);
   entryRoot.addEventListener('change', e => { if (e.target.matches('[data-file]')) { workbook = null; const sheet = entryRoot.querySelector('[data-sheet]'); sheet.innerHTML = ''; sheet.hidden = true; } });
   entryRoot.addEventListener('click', e => action(entryRoot, async () => {
@@ -261,9 +359,6 @@ function initialize() {
       const data = await api('mysql', { ...config, demo: entryRoot.querySelector('[data-demo]').checked, action: b.dataset.action.slice(6) });
       if (b.dataset.action === 'mysql-read') { staged = { ...data, sourceType:'mysql',name:config.connectionName || config.table || '数据库实体表' }; renderStaged(); }
       message(entryRoot, b.dataset.action === 'mysql-fields' ? '字段：' + data.columns.join('、') + (data.demo ? '（演示数据）' : '') : data.message || `已读取 ${data.rows.length} 条记录`);
-    } else if (b.dataset.action === 'wikidata-read') {
-      const config = Object.fromEntries([...entryRoot.querySelectorAll('[data-wiki]')].map(i => [i.dataset.wiki,i.value]));
-      const data = await api('wikidata', config); staged = { ...data, sourceType:'wikidata',name:'Wikidata ' + config.entityType }; renderStaged(); message(entryRoot, `读取 ${data.rows.length} 条；尚未保存。${data.truncated ? '结果已按数量截取。' : ''}`);
     } else if (b.dataset.action === 'save-table') {
       const columns = [...entryRoot.querySelectorAll('[data-column]:checked')].map(i => i.dataset.column);
       const saved = await api('tables', { ...staged, columns, name:entryRoot.querySelector('[data-table-name]').value, sourceKey:entryRoot.querySelector('[data-source-key]').value });
@@ -304,13 +399,7 @@ function initialize() {
       if (b.dataset.tab === 'flows') { setTab(cleanRoot,'flows'); await loadCatalog(); editor(); }
       else if (b.dataset.addNode) addNode(b.dataset.addNode);
       else if (b.dataset.selectNode) { selected = b.dataset.selectNode; renderCanvas(); renderConfig(); }
-      else if (b.dataset.portOut) { connectFrom = b.dataset.portOut; renderCanvas(); message(cleanRoot,'请选择下一节点的输入端口'); return; }
-      else if (b.dataset.portIn) {
-        if (!connectFrom) throw new Error('请先选择上游节点的输出');
-        const a = flow.nodes.find(n => n.id === connectFrom), next = flow.nodes.find(n => n.id === b.dataset.portIn), types = Object.keys(labels);
-        if (types.indexOf(next.type) !== types.indexOf(a.type) + 1) throw new Error('仅支持按六步顺序连接相邻节点');
-        flow.edges = flow.edges.filter(edge => edge.from !== a.id && edge.to !== next.id); flow.edges.push({from:a.id,to:next.id}); connectFrom = ''; invalidate(); renderCanvas();
-      } else if (cmd === 'new-flow') { flow = defaultFlow(); selected = 'input'; activeTable = null; properties = []; invalidate(); editor(); }
+      else if (cmd === 'new-flow') { flow = defaultFlow(); selected = 'input'; activeTable = null; properties = []; invalidate(); editor(); }
       else if (cmd === 'save-flow') { flow.name = cleanRoot.querySelector('[data-flow-name]').value; await saveFlow(); message(cleanRoot,'流程已保存'); return; }
       else if (cmd === 'delete-node') { flow.nodes = flow.nodes.filter(n => n.id !== selected); flow.edges = flow.edges.filter(edge => edge.from !== selected && edge.to !== selected); selected = ''; invalidate(); renderCanvas(); renderConfig(); }
       else if (cmd === 'connect-all') { const nodes = Object.keys(labels).map(t => flow.nodes.find(n => n.type === t)); if (nodes.some(n => !n)) throw new Error('请先添加全部六种节点'); flow.edges = nodes.slice(1).map((n,i) => ({from:nodes[i].id,to:n.id})); invalidate(); renderCanvas(); }

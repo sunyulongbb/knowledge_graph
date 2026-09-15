@@ -1991,10 +1991,10 @@
               </div>
             </div>
           </div>
-          <a id="btnViewEntry" class="nav-item" role="tab" aria-selected="false" title="数据录入" aria-label="数据录入"
-            href="#"><span class="nav-label">数据录入</span></a>
-          <a id="btnViewClean" class="nav-item" role="tab" aria-selected="false" title="数据清洗" aria-label="数据清洗"
-            href="#"><span class="nav-label">数据清洗</span></a>
+          <a id="btnViewEntry" class="nav-item" role="tab" aria-selected="false" title="录入" aria-label="录入"
+            href="#"><span class="nav-label">录入</span></a>
+          <a id="btnViewClean" class="nav-item" role="tab" aria-selected="false" title="清洗" aria-label="清洗"
+            href="#"><span class="nav-label">清洗</span></a>
           <a id="btnViewAttr" class="nav-item" role="tab" aria-selected="false" title="本体管理" aria-label="本体管理"
             href="#"><span class="nav-label">本体</span></a>
           <a id="btnViewTable" class="nav-item" role="tab" aria-selected="true" title="知识视图" aria-label="知识视图"
@@ -2963,131 +2963,8 @@
           </div>
         </div>
 
-        <!-- 数据清洗面板 -->
-        <div id="cleanPanel" class="panel" style="padding: 12px; display: none">
-          <div class="panel-header">
-            <div class="panel-title">
-              <span>数据清洗任务</span>
-              <span class="panel-subtitle">共 <span id="cleanTaskCount">0</span> 个任务</span>
-            </div>
-            <div id="tbCleanControls" class="table-toolbar panel-actions" style="display: none">
-              <button id="btnCleanClear" class="btn icon" title="清空任务列表" aria-label="清空任务列表">
-                <i class="fa-solid fa-trash-can"></i>
-              </button>
-            </div>
-          </div>
-          <!-- 属性值提取到字段工具 -->
-          <div class="clean-tool-section">
-            <div class="clean-tool-header">
-              <i class="fa-solid fa-arrow-right-arrow-left"></i>
-              <span>属性值提取到字段</span>
-            </div>
-            <div class="clean-tool-body">
-              <select id="cleanAttrPropSelect"
-                style="flex:1 1 180px;min-width:140px;height:36px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface-0);color:var(--fg);padding:6px 8px;font-size:13px;">
-                <option value="">选择属性…</option>
-              </select>
-              <select id="cleanAttrTargetField"
-                style="flex:1 1 140px;min-width:140px;height:36px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface-0);color:var(--fg);padding:6px 8px;font-size:13px;">
-                <option value="aliases">别名</option>
-                <option value="name">名称</option>
-                <option value="description">描述</option>
-                <option value="tags">标签</option>
-              </select>
-              <label
-                style="display:flex;align-items:center;gap:4px;font-size:13px;color:var(--fg);white-space:nowrap;cursor:pointer;">
-                <input type="checkbox" id="cleanAttrRemoveAfter" checked /> 提取后删除属性
-              </label>
-              <label
-                style="display:flex;align-items:center;gap:4px;font-size:13px;color:var(--fg);white-space:nowrap;cursor:pointer;">
-                <input type="checkbox" id="cleanAttrDeleteTargets" /> 删除目标节点
-              </label>
-              <button id="btnCleanAttrToAlias" class="btn primary" type="button" style="white-space:nowrap;">
-                <i class="fa-solid fa-play"></i>
-                <span style="margin-left:4px">执行提取</span>
-              </button>
-            </div>
-            <div id="cleanAttrResult" class="clean-tool-result" style="display:none;"></div>
-          </div>
-          <!-- 删除属性和目标节点工具 -->
-          <div class="clean-tool-section">
-            <div class="clean-tool-header">
-              <i class="fa-solid fa-trash-can"></i>
-              <span>删除属性和目标节点</span>
-            </div>
-            <div class="clean-tool-body">
-              <select id="cleanDelPropSelect"
-                style="flex:1 1 200px;min-width:140px;height:36px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface-0);color:var(--fg);padding:6px 8px;font-size:13px;">
-                <option value="">选择属性…</option>
-              </select>
-              <label
-                style="display:flex;align-items:center;gap:4px;font-size:13px;color:var(--fg);white-space:nowrap;cursor:pointer;">
-                <input type="checkbox" id="cleanDelTargets" checked /> 同时删除目标节点
-              </label>
-              <button id="btnCleanDelAttr" class="btn" type="button"
-                style="white-space:nowrap;background:#ef4444;color:#fff;border-color:#ef4444;">
-                <i class="fa-solid fa-trash"></i>
-                <span style="margin-left:4px">执行删除</span>
-              </button>
-            </div>
-            <div id="cleanDelResult" class="clean-tool-result" style="display:none;"></div>
-          </div>
-
-          <div class="clean-tool-section">
-            <div class="clean-tool-header">
-              <i class="fa-solid fa-tag"></i>
-              <span>批量设置目标节点类型</span>
-            </div>
-            <div class="clean-tool-body">
-              <select id="cleanAssignTypePropSelect"
-                style="flex:1 1 220px;min-width:160px;height:36px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface-0);color:var(--fg);padding:6px 8px;font-size:13px;">
-                <option value="">选择属性…</option>
-              </select>
-              <input id="cleanAssignTargetTypeInput" list="cleanAssignTargetTypeList" type="text" placeholder="输入目标节点类型"
-                style="flex:1 1 240px;min-width:180px;height:36px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface-0);color:var(--fg);padding:6px 8px;font-size:13px;" />
-              <datalist id="cleanAssignTargetTypeList"></datalist>
-              <button id="btnCleanAssignTargetType" class="btn" type="button"
-                style="white-space:nowrap;background:#2563eb;color:#fff;border-color:#2563eb;">
-                <i class="fa-solid fa-play"></i>
-                <span style="margin-left:4px">设置类型</span>
-              </button>
-            </div>
-            <div style="font-size:12px;color:var(--muted);margin-top:8px;">
-              仅对关系属性（wikibase-entityid）有效。会将目标节点设置为该类型，同时同步本体关联与属性模型。
-            </div>
-            <div id="cleanAssignResult" class="clean-tool-result" style="display:none;"></div>
-          </div>
-
-          <div class="clean-tool-section">
-            <div class="clean-tool-header">
-              <i class="fa-solid fa-exchange-alt"></i>
-              <span>修改属性类型并同步</span>
-            </div>
-            <div class="clean-tool-body">
-              <select id="cleanTypePropSelect"
-                style="flex:1 1 220px;min-width:160px;height:36px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface-0);color:var(--fg);padding:6px 8px;font-size:13px;">
-                <option value="">选择属性…</option>
-              </select>
-              <select id="cleanTypeSelect"
-                style="flex:1 1 180px;min-width:140px;height:36px;border:1px solid var(--border-strong);border-radius:8px;background:var(--surface-0);color:var(--fg);padding:6px 8px;font-size:13px;">
-                <option value="string">文本(string)</option>
-                <option value="wikibase-entityid">实体关系(wikibase-entityid)</option>
-              </select>
-              <label
-                style="display:none;align-items:center;gap:4px;font-size:13px;color:var(--fg);white-space:nowrap;cursor:pointer;">
-                <input type="checkbox" id="cleanTypeDeleteTargets" /> 删除目标节点
-              </label>
-              <button id="btnCleanChangePropType" class="btn" type="button"
-                style="white-space:nowrap;background:#9333ea;color:#fff;border-color:#9333ea;">
-                <i class="fa-solid fa-play"></i>
-                <span style="margin-left:4px">执行修改</span>
-              </button>
-            </div>
-            <div id="cleanTypeResult" class="clean-tool-result" style="display:none;"></div>
-          </div>
-
-          <div id="cleanTaskList" class="clean-task-list"></div>
-        </div>
+        <!-- 数据清洗流程面板由 pipeline-ui.js 挂载 -->
+        <div id="cleanPanel" class="panel" style="padding: 12px; display: none"></div>
 
         <style>
           #cleanPanel {
@@ -17325,7 +17202,9 @@
       });
     });
   </script>
+  <link rel="stylesheet" href="/node_modules/drawflow/dist/drawflow.min.css" />
   <link rel="stylesheet" href="/assets/styles/pipeline.css?v=20260915-3">
+  <script src="/node_modules/drawflow/dist/drawflow.min.js"></script>
   <script type="module" src="/assets/scripts/pipeline-ui.js?v=20260915-3"></script>
   <script src="/assets/scripts/ui-shell.js?v=20260915-1"></script>
 </body>
