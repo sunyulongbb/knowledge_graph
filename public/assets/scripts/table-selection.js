@@ -112,6 +112,12 @@ function __kbInitTableSelection() {
       .replace(/^entity\//, "");
   }
 
+  function isSameEntityId(left, right) {
+    const normalizedLeft = normalizeEntityIdLike(left);
+    const normalizedRight = normalizeEntityIdLike(right);
+    return Boolean(normalizedLeft && normalizedRight && normalizedLeft === normalizedRight);
+  }
+
   function getNodeVideoEntryKey(item) {
     const explicitKey = String(
       item?.__videoEntryKey || item?.__shortsReplayKey || "",
@@ -217,13 +223,20 @@ function __kbInitTableSelection() {
     if (!id) return null;
     const nodeMap = window.kbTableNodeMap;
     if (nodeMap && typeof nodeMap.get === "function") {
-      const mapped = nodeMap.get(id);
+      const normalizedId = normalizeEntityIdLike(id);
+      const mapped =
+        nodeMap.get(id) ||
+        nodeMap.get(normalizedId) ||
+        nodeMap.get(`entity/${normalizedId}`);
       if (mapped) return mapped;
+      for (const [key, item] of nodeMap.entries()) {
+        if (isSameEntityId(key, id)) return item;
+      }
     }
     const list = Array.isArray(window.kbTableNodes) ? window.kbTableNodes : [];
     for (const item of list) {
       const itemId = String(item?._id || item?.id || "").trim();
-      if (itemId === id) return item;
+      if (isSameEntityId(itemId, id)) return item;
     }
     return null;
   }
@@ -289,7 +302,10 @@ function __kbInitTableSelection() {
       checkboxes.forEach((chk) => {
         const rid = chk.getAttribute("data-id") || "";
         const selected =
-          window.kbSelectedRowIds && window.kbSelectedRowIds.has(rid);
+          window.kbSelectedRowIds &&
+          Array.from(window.kbSelectedRowIds).some((id) =>
+            isSameEntityId(id, rid),
+          );
         chk.checked = selected;
         if (selected) checkedCount++;
       });
@@ -339,6 +355,12 @@ function __kbInitTableSelection() {
     if (!id) {
       window.kbSelectionHydrated = false;
       window.kbTableSidebarHydratedId = "";
+      // Cancel entity hydration started by the route or the previous click.
+      // Otherwise a late response can repopulate the editor after deselection.
+      window.kbEnterEditRequestSeq = (window.kbEnterEditRequestSeq || 0) + 1;
+      window.kbRouteEnforceSeq = (window.kbRouteEnforceSeq || 0) + 1;
+      window.kbAttrLoadRequestSeq = (window.kbAttrLoadRequestSeq || 0) + 1;
+      window.kbCurrentNodePayload = null;
     }
     updateSelectedRowStyles();
     syncCheckboxStates();
@@ -3279,9 +3301,6 @@ function __kbInitTableSelection() {
 
     try {
       const rows = getListItems();
-      const has = rows.some(
-        (tr) => (tr.getAttribute("data-id") || "") === window.kbSelectedRowId,
-      );
       const findSelectedRow = () => {
         const selectedId = String(window.kbSelectedRowId || "").trim();
         const normalizedSelectedId = normalizeEntityIdLike(selectedId);
@@ -3299,6 +3318,8 @@ function __kbInitTableSelection() {
         (window.kbSelectedRowId && window.kbSelectedRowId.trim()) ||
         (window.kbSelectedRowIds && window.kbSelectedRowIds.size > 0);
       const isTableViewActive = (window.kbViewMode || "table") === "table";
+      const selectedRow = findSelectedRow();
+      const has = Boolean(selectedRow);
       if (!has) {
         if (!hasExistingSelection) {
           if (!rows.length && !getRouteNodeIdFromUrl()) {
@@ -3309,7 +3330,6 @@ function __kbInitTableSelection() {
         updateSelectedRowStyles();
         syncCheckboxStates();
         // Disable auto locate after each render to keep scrolling smooth.
-        const selectedRow = findSelectedRow();
         const selectedRowId = String(
           selectedRow?.getAttribute("data-id") || window.kbSelectedRowId || "",
         ).trim();

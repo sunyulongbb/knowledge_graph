@@ -18,10 +18,17 @@ test('direct checkbox clicks update once and bypass grid row selection', () => {
   const controller = { selectAll: (ids: string[], checked: boolean) => calls.push([ids, checked]), grid: { data: { forEach: (fn: any) => [{ id: 'a' }, { id: 'b' }].forEach(fn) } } };
   const target = new Input();
   let stopped = 0;
-  const dispatch = (type: string) => handler.call(controller, { type, target, stopPropagation() { stopped++; } });
+  let immediatelyStopped = 0;
+  const dispatch = (type: string) => handler.call(controller, {
+    type,
+    target,
+    stopPropagation() { stopped++; },
+    stopImmediatePropagation() { immediatelyStopped++; },
+  });
   dispatch('pointerdown'); dispatch('mousedown'); dispatch('click'); dispatch('change');
   expect(calls).toEqual([[['a'], true]]);
   expect(stopped).toBe(4);
+  expect(immediatelyStopped).toBe(4);
   target.checked = false;
   dispatch('click');
   expect(calls.at(-1)).toEqual([['a'], false]);
@@ -29,6 +36,16 @@ test('direct checkbox clicks update once and bypass grid row selection', () => {
   target.checked = true;
   dispatch('click');
   expect(calls.at(-1)).toEqual([['a', 'b'], true]);
+});
+
+test('entity checkbox clicks are not toggled again by the cell callback', () => {
+  const source = readFileSync(new URL('../public/assets/scripts/entity-manage-table.js', import.meta.url), 'utf8');
+  const callback = source.slice(
+    source.indexOf('        onCellClick:'),
+    source.indexOf('        onCellDblClick:'),
+  );
+  expect(callback).toContain('BusinessGrid owns checkbox selection');
+  expect(callback).not.toContain('selected.has(id) ? selected.delete(id)');
 });
 
 test('select all tracks current page, partial selection and empty pages', () => {
@@ -60,4 +77,30 @@ test('select all tracks current page, partial selection and empty pages', () => 
   controller.setSelectedRows(reported);
   expect(header.disabled).toBe(true);
   expect(header.indeterminate).toBe(false);
+});
+
+test('plain row click replaces another selection and toggles the current row off', () => {
+  const source = readFileSync(new URL('../public/assets/scripts/business-grid.ts', import.meta.url), 'utf8');
+  const cellClick = source.slice(
+    source.indexOf('    this.grid.events.on("cellClick"'),
+    source.indexOf('    this.grid.events.on("cellDblClick"'),
+  );
+  expect(cellClick).toContain('this.selectedRows.clear()');
+  expect(cellClick).toContain('const shouldDeselect =');
+  expect(cellClick).toContain('this.pendingPlainClickWasSelected');
+  expect(cellClick).toContain('if (!shouldDeselect) this.selectedRows.add(id)');
+  expect(cellClick).toContain('queueMicrotask(() =>');
+  expect(cellClick).toContain('!event.ctrlKey');
+  expect(cellClick).toContain('!event.metaKey');
+  expect(cellClick).toContain('!event.shiftKey');
+});
+
+test('row toggle captures selection before the grid afterSelect event', () => {
+  const source = readFileSync(new URL('../public/assets/scripts/business-grid.ts', import.meta.url), 'utf8');
+  const capture = source.slice(
+    source.indexOf('  private handleRowPointerDown'),
+    source.indexOf('  private handleSelectAll'),
+  );
+  expect(capture).toContain('this.pendingPlainClickWasSelected = this.selectedRows.has(id)');
+  expect(source).toContain("this.host.addEventListener('pointerdown', this.handleRowPointerDown, true)");
 });

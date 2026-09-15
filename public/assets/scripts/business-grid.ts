@@ -49,10 +49,26 @@ export class BusinessGridController {
   private serverFilters: BusinessGridFilters = {};
   private filterTimer: ReturnType<typeof setTimeout> | null = null;
   private selectionObserver: MutationObserver | null = null;
+  private pendingPlainClickId: string | null = null;
+  private pendingPlainClickWasSelected = false;
+  private handleRowPointerDown = (event: PointerEvent): void => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (target.closest('.business-grid-select-all, input[data-grid-select-id]')) return;
+    if (event.ctrlKey || event.metaKey || event.shiftKey) return;
+    const row = target.closest<HTMLElement>('.dhx_grid-row[data-dhx-id]');
+    const id = String(row?.dataset.dhxId || '').trim();
+    if (!id) return;
+    this.pendingPlainClickId = id;
+    this.pendingPlainClickWasSelected = this.selectedRows.has(id);
+  };
   private handleSelectAll = (event: Event): void => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement) || !target.matches('.business-grid-select-all, input[data-grid-select-id]')) return;
     event.stopPropagation();
+    // DHTMLX also listens on the grid host. Keep a checkbox gesture from
+    // becoming a second, conflicting row-selection event.
+    event.stopImmediatePropagation();
     // Handle the native checkbox click once, before grid row selection can toggle it again.
     if (event.type !== 'click' || target.disabled) return;
     if (target.dataset.gridSelectId !== undefined) {
@@ -66,6 +82,7 @@ export class BusinessGridController {
 
   constructor(private host: HTMLElement, options: BusinessGridOptions) {
     this.options = options;
+    this.host.addEventListener('pointerdown', this.handleRowPointerDown, true);
     if (options.selectAll) {
       this.options.columns = options.columns.map((column) => column.id === 'select' ? {
         ...column,
@@ -121,6 +138,7 @@ export class BusinessGridController {
 
   destroy(): void {
     this.selectionObserver?.disconnect();
+    this.host.removeEventListener('pointerdown', this.handleRowPointerDown, true);
     for (const type of ['pointerdown', 'mousedown', 'click', 'dblclick', 'change']) {
       this.host.removeEventListener(type, this.handleSelectAll, true);
     }
@@ -154,6 +172,36 @@ export class BusinessGridController {
       css: "kb-business-grid",
     });
     this.grid.events.on("cellClick", (row, column, event) => {
+      const target = event.target;
+      const isCheckbox =
+        target instanceof Element &&
+        Boolean(target.closest('.business-grid-select-all, input[data-grid-select-id]'));
+      const isPlainRowClick =
+        (this.options.selection ?? "row") === "row" &&
+        !isCheckbox &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.shiftKey;
+      if (isPlainRowClick && row.id !== undefined) {
+        // A restored route selection lives in selectedRows even though DHTMLX
+        // has no native selection yet. Replace it on the first ordinary row
+        // click instead of appending a second selected entity.
+        const id = String(row.id);
+        const shouldDeselect =
+          this.pendingPlainClickId === id
+            ? this.pendingPlainClickWasSelected
+            : false;
+        this.pendingPlainClickId = null;
+        this.pendingPlainClickWasSelected = false;
+        queueMicrotask(() => {
+          // Apply after DHTMLX's synchronous selection events so its native
+          // afterSelect callback cannot reselect a row the user toggled off.
+          this.selectedRows.clear();
+          if (!shouldDeselect) this.selectedRows.add(id);
+          this.applySelectedRows();
+          this.options.onSelectionChange?.(this.getSelectedRows());
+        });
+      }
       this.options.onCellClick?.(row as BusinessGridRow, column as unknown as BusinessGridColumn, event);
     });
     this.grid.events.on("cellDblClick", (row, column, event) => {

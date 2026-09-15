@@ -55,7 +55,7 @@
   <link rel="stylesheet" href="/node_modules/vis-timeline/styles/vis-timeline-graph2d.min.css?v=20260904-2" />
   <script src="/node_modules/vis-timeline/standalone/umd/vis-timeline-graph2d.min.js?v=20260904-2"></script>
   <script>
-    window.kbBusinessGridModuleReady = import("/assets/generated/business-grid.js?v=20260908-2").then((module) => {
+    window.kbBusinessGridModuleReady = import("/assets/generated/business-grid.js?v=20260916-3").then((module) => {
       window.kbBusinessGrid = module;
       return module;
     }).catch((error) => {
@@ -6201,6 +6201,10 @@
         Promise.resolve()
           .then(async () => {
             const url = new URL("/api/kb/node", window.location.origin);
+            if (typeof window.appendCurrentDbParam === "function") {
+              const scopedUrl = window.appendCurrentDbParam(url);
+              if (scopedUrl instanceof URL) url.search = scopedUrl.search;
+            }
             url.searchParams.set("id", fullId);
             const resp = await fetch(url.toString());
             if (!resp.ok) throw new Error("HTTP " + resp.status);
@@ -6211,10 +6215,12 @@
                 ? getRouteStateFromHash()
                 : { node: "" };
             const currentRouteNode = String(currentRoute?.node || "").trim();
+            const currentSelectedNode = String(
+              window.kbSelectedRowId || window.kbSelectedNodeId || "",
+            ).trim();
             if (
-              currentRouteNode &&
-              currentRouteNode !== nextNodeId &&
-              ensureEntityIdPrefix(currentRouteNode) !== fullId
+              ensureEntityIdPrefix(currentRouteNode) !== fullId ||
+              ensureEntityIdPrefix(currentSelectedNode) !== fullId
             ) {
               return;
             }
@@ -6274,6 +6280,10 @@
 
       try {
         const url = new URL("/api/kb/node", window.location.origin);
+        if (typeof window.appendCurrentDbParam === "function") {
+          const scopedUrl = window.appendCurrentDbParam(url);
+          if (scopedUrl instanceof URL) url.search = scopedUrl.search;
+        }
         url.searchParams.set("id", fullId);
         const resp = await fetch(url.toString());
         if (!resp.ok) throw new Error("HTTP " + resp.status);
@@ -7349,15 +7359,6 @@
               if (node && node.length) node.addClass('selected');
             }
           } catch { }
-          try {
-            if (typeof window.loadAttributes === "function") {
-              window.loadAttributes(detailId);
-            }
-          } catch (err) {
-            if (window.console && console.warn) {
-              console.warn("loadAttributes failed on detail view switch", err);
-            }
-          }
           try {
             if (typeof window.loadAttributes === "function") {
               window.loadAttributes(detailId);
@@ -15089,6 +15090,7 @@
     }
     function resetFormToAdd() {
       window.kbIsAddingNewNode = true;
+      window.kbCurrentNodePayload = null;
       fId.value = "";
       if (document.getElementById('knowledgeVisibility')) document.getElementById('knowledgeVisibility').value = 'public';
       window.dispatchEvent(new CustomEvent('kb-editor-access', { detail: { node: null } }));
@@ -17031,8 +17033,8 @@
   </script>
   <script src="/assets/scripts/property-panel.js?v=20260915-1"></script>
   <script src="/assets/scripts/table-panel.js?v=20260914-7"></script>
-  <script src="/assets/scripts/table-selection.js?v=20260908-5"></script>
-  <script src="/assets/scripts/entity-manage-table.js?v=20260914-1"></script>
+  <script src="/assets/scripts/table-selection.js?v=20260916-2"></script>
+  <script src="/assets/scripts/entity-manage-table.js?v=20260916-1"></script>
   <script src="/assets/scripts/attr-panel.js?v=20260914-4"></script>
   <!-- relation-panel.js 已移除，使用 edgehandles 拖拽创建关系 -->
   <script src="/assets/scripts/schema-panel.js?v=20260915-7"></script>

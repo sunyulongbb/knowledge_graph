@@ -74,6 +74,32 @@
     return String(node?._id || node?.id || localId || "").trim();
   }
 
+  function hydrateSelectionFromRoute() {
+    const routeId = (() => {
+      try {
+        const route = window.getRouteStateFromHash?.() || {};
+        if (route.node) return String(route.node);
+      } catch {}
+      try {
+        return new URL(window.location.href).searchParams.get("node") || "";
+      } catch {
+        return "";
+      }
+    })();
+    const activeId = normalizeId({
+      id:
+        routeId ||
+        window.kbSelectedRowId ||
+        window.kbSelectedNodeId ||
+        window.kbCurrentNodeId ||
+        "",
+    });
+    selected.clear();
+    if (activeId && nodes().some((node) => normalizeId(node) === activeId)) {
+      selected.add(activeId);
+    }
+  }
+
   function syncGlobalSelection(primaryLocalId = "") {
     const globalIds = [...selected].map(globalIdFor).filter(Boolean);
     const primaryId = globalIdFor(primaryLocalId) || globalIds[0] || "";
@@ -212,10 +238,9 @@
             column.id === "select" ||
             event.target.closest(".entity-manage-check")
           ) {
-            selected.has(id) ? selected.delete(id) : selected.add(id);
-            entityGrid.setSelectedRows(selected);
-            syncGlobalSelection(selected.has(id) ? id : "");
-            updateCount();
+            // BusinessGrid owns checkbox selection and emits one
+            // onSelectionChange callback. Avoid toggling the same row twice.
+            return;
           }
         },
         onCellDblClick: (row) => {
@@ -313,6 +338,7 @@
       }
       modal.classList.add("entity-manage-inline");
       modal.style.display = "block";
+      hydrateSelectionFromRoute();
       void render();
     };
     window.closeEntityManageTable = () => {
