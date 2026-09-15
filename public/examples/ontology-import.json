@@ -7,6 +7,20 @@
       "alias": ["Person"],
       "color": "#3b82f6",
       "display_shape": "circle",
+      "properties": [
+        {
+          "name": "出生日期",
+          "alias": ["Date of birth"],
+          "datatype": "time",
+          "description": "人物的出生日期",
+          "types": ["基础信息"]
+        },
+        {
+          "name": "所属组织",
+          "datatype": "wikibase-item",
+          "tail_ontology_id": "ontology/organization"
+        }
+      ],
       "children": [
         {
           "name": "科学家",

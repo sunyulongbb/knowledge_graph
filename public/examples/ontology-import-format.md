@@ -13,6 +13,15 @@
       "alias": ["Person"],
       "color": "#3b82f6",
       "display_shape": "circle",
+      "properties": [
+        {
+          "name": "出生日期",
+          "alias": ["Date of birth"],
+          "datatype": "time",
+          "description": "人物的出生日期",
+          "types": ["基础信息"]
+        }
+      ],
       "children": [{ "name": "科学家" }]
     }
   ]
@@ -28,7 +37,10 @@
 | alias | 否 | 别名字符串数组，名称自动包含在别名中 |
 | color | 否 | `#RRGGBB` 格式的颜色 |
 | display_shape | 否 | rectangle、rounded、circle、diamond、hexagon；默认 rectangle |
+| properties | 否 | 当前本体关联的属性定义数组 |
 | children | 否 | 子本体数组，字段与父本体相同 |
+
+`properties` 中支持以下字段：`name`（必填）、`alias`、`datatype`、`description`、`types`、`tail_ontology_id`。`datatype` 支持 `string`、`url`、`time`、`quantity`、`globe-coordinate`、`commonsMedia`、`wikibase-item`、`external-id`，默认值为 `string`。导入时属性按当前项目内名称匹配，已有属性更新并建立本体关联，新属性创建后建立关联。`tail_ontology_id` 仅用于 `wikibase-item` 属性，可填写目标本体 ID。
 
 导入到当前知识库的本体树根级，children 决定父子关系，数组顺序决定新增节点顺序。
 本体 ID 由系统自动生成，不接受 id、parent_id 或 project_id 字段。
@@ -38,4 +50,4 @@ description 为空字符串可清空描述，color 为 null 可清空颜色；�
 名称或别名与其他同级本体冲突时拒绝导入，错误信息会指出冲突本体。
 整个文件在一个事务中导入，校验或写入失败会全部回滚。
 
-此格式导入本体层级及上述信息，不包含属性定义、实体数据或关系图节点样式。
+此格式导入本体层级、属性定义及本体-属性关联，不包含实体数据或关系图节点样式。

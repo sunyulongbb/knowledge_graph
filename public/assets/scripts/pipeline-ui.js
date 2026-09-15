@@ -135,6 +135,33 @@ function renderStaged() {
   host.innerHTML = `<h3>二维实体表预览 · ${staged.rows.length} 条记录</h3><div class="pipeline-fields"><label>表名称<input data-table-name value="${esc(staged.name)}"></label><label>来源标识（同一来源请保持一致）<input data-source-key value="${esc(staged.sourceKey)}"></label></div><div class="pipeline-actions">${staged.columns.map(c => `<label class="pipeline-check"><input type="checkbox" data-column="${esc(c)}" checked>${esc(c)}</label>`).join('')}</div><p class="muted">预览前 100 条；保存全部读取记录及勾选列。</p><div data-table-preview></div><button class="btn primary" data-action="save-table">保存实体表</button>`;
   decorate(host); preview(host.querySelector('[data-table-preview]'), staged.columns, staged.rows);
 }
+function ontologyImportFromTable(table) {
+  return {
+    version: 1,
+    ontologies: [{
+      name: table.name,
+      description: `由实体表“${table.name}”生成`,
+      properties: table.columns.map(name => ({
+        name,
+        datatype: 'string',
+        description: `实体表“${table.name}”中的字段“${name}”`,
+      })),
+    }],
+  };
+}
+function downloadOntologyJson(table) {
+  const payload = ontologyImportFromTable(table);
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `${table.name || 'ontology-import'}.ontology.json`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+  message(entryRoot, `已生成“${anchor.download}”，可直接导入本体树。`);
+}
 let workbook = null;
 async function readFile() {
   const file = entryRoot.querySelector('[data-file]').files[0];
@@ -158,7 +185,7 @@ async function readFile() {
 async function showTables() {
   entryRoot.querySelector('[data-body]').className='pipeline-list-layout';
   destroyGrids(entryRoot); tables = (await api('tables')).items;
-  entryRoot.querySelector('[data-body]').innerHTML = `<div class="pipeline-card"><h3>已保存实体表</h3><div class="pipeline-scroll"><table><thead><tr><th>表名称</th><th>来源</th><th>字段 / 记录</th><th>创建时间</th><th>操作</th></tr></thead><tbody>${tables.map(t => `<tr><td>${esc(t.name)}</td><td>${esc(t.sourceType)}</td><td>${t.columnCount} / ${t.rowCount}</td><td>${esc(t.createdAt)}</td><td><button class="btn" data-table-view="${t.id}">预览</button> <button class="btn" data-table-clean="${t.id}">开始清洗</button></td></tr>`).join('')}</tbody></table></div><div data-saved-preview></div></div>`;
+  entryRoot.querySelector('[data-body]').innerHTML = `<div class="pipeline-card"><h3>已保存实体表</h3><div class="pipeline-scroll"><table><thead><tr><th>表名称</th><th>来源</th><th>字段 / 记录</th><th>创建时间</th><th>操作</th></tr></thead><tbody>${tables.map(t => `<tr><td>${esc(t.name)}</td><td>${esc(t.sourceType)}</td><td>${t.columnCount} / ${t.rowCount}</td><td>${esc(t.createdAt)}</td><td><button class="btn" data-table-view="${t.id}">预览</button> <button class="btn" data-table-export-ontology="${t.id}">导出本体 JSON</button> <button class="btn" data-table-clean="${t.id}">开始清洗</button></td></tr>`).join('')}</tbody></table></div><div data-saved-preview></div></div>`;
   message(entryRoot, tables.length ? `共 ${tables.length} 张实体表` : '尚未保存实体表，请先新建录入。');
 }
 function setTab(root, tab) { root.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab)); }
@@ -364,6 +391,7 @@ function initialize() {
       const saved = await api('tables', { ...staged, columns, name:entryRoot.querySelector('[data-table-name]').value, sourceKey:entryRoot.querySelector('[data-source-key]').value });
       setTab(entryRoot,'tables'); await showTables(); message(entryRoot, `“${saved.name}”已保存为实体表，可开始清洗；知识库未修改。`);
     } else if (b.dataset.tableView) { const t = await api('tables/' + b.dataset.tableView); await preview(entryRoot.querySelector('[data-saved-preview]'),t.columns,t.rows); message(entryRoot,`预览 ${t.name}（前100条）`); }
+    else if (b.dataset.tableExportOntology) { const t = await api('tables/' + b.dataset.tableExportOntology); downloadOntologyJson(t); }
     else if (b.dataset.tableClean) { flow = defaultFlow(b.dataset.tableClean); selected = 'input'; invalidate(); window.setViewMode('clean'); await open('clean'); }
   }));
   cleanRoot.addEventListener('dragstart', e => { const b = e.target.closest('[data-add-node]'); if (b) e.dataTransfer.setData('text/plain',b.dataset.addNode); });

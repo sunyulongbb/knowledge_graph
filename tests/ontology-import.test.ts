@@ -9,6 +9,12 @@ function setup() {
   db.run('CREATE TABLE ontologies (id TEXT PRIMARY KEY, name TEXT, alias TEXT, description TEXT, parent_id TEXT, project_id INTEGER, color TEXT, display_shape TEXT, sort_order INTEGER)');
   return db;
 }
+function setupWithProperties() {
+  const db = setup();
+  db.run('CREATE TABLE properties (id TEXT PRIMARY KEY, name TEXT, alias TEXT, status TEXT, datatype TEXT, valuetype TEXT, types TEXT, description TEXT, project_id INTEGER, tail_ontology_id TEXT)');
+  db.run('CREATE TABLE ontology_properties (ontology_id TEXT, property_id TEXT, PRIMARY KEY (ontology_id, property_id))');
+  return db;
+}
 const example = JSON.parse(readFileSync(new URL('../public/examples/ontology-import.json', import.meta.url), 'utf8'));
 
 test('example imports hierarchy, metadata, order, and reuses repeated imports per project', () => {
@@ -33,7 +39,7 @@ test('invalid child rejects whole document before writing', () => {
   try {
     expect(() => importOntologies(db, { version: 1, ontologies: [{ name: 'Valid', children: [{ name: '' }] }] }, null)).toThrow('children[0].name');
     expect(db.query('SELECT count(*) AS count FROM ontologies').get()).toEqual({ count: 0 });
-    for (const input of [{ version: 2, ontologies: [] }, { version: 1, ontologies: [{ name: 'A', children: 'bad' }] }, { version: 1, ontologies: [{ name: 'A', properties: [] }] }]) {
+    for (const input of [{ version: 2, ontologies: [] }, { version: 1, ontologies: [{ name: 'A', children: 'bad' }] }, { version: 1, ontologies: [{ name: 'A', properties: [{ name: '' }] }] }]) {
       expect(() => parseOntologyImport(input)).toThrow();
     }
   } finally { db.close(); }
@@ -54,6 +60,26 @@ test('same-name import updates provided data and permits new children', () => {
     importOntologies(db, { version: 1, ontologies: [{ name: 'Root', description: 'Original' }] }, 1);
     expect(importOntologies(db, { version: 1, ontologies: [{ name: 'root', description: 'Changed', children: [{ name: 'New child' }] }] }, 1)).toEqual({ created: 1, updated: 1, total: 2 });
     expect(db.query('SELECT description FROM ontologies WHERE name = ?').get('Root')).toEqual({ description: 'Changed' });
+  } finally { db.close(); }
+});
+
+test('imports properties and ontology-property associations idempotently', () => {
+  const db = setupWithProperties();
+  try {
+    importOntologies(db, {
+      version: 1,
+      ontologies: [{ name: 'Person', properties: [{ name: 'Country', alias: ['国家'], datatype: 'wikibase-item', tail_ontology_id: 'ontology/Country' }] }],
+    }, 1);
+    const property: any = db.query('SELECT * FROM properties WHERE name = ?').get('Country');
+    expect(property.valuetype).toBe('wikibase-entityid');
+    expect(JSON.parse(property.alias)).toContain('国家');
+    expect(db.query('SELECT count(*) AS count FROM ontology_properties').get()).toEqual({ count: 1 });
+    importOntologies(db, {
+      version: 1,
+      ontologies: [{ name: 'Person', properties: [{ name: 'Country', datatype: 'string', description: 'Updated' }] }],
+    }, 1);
+    expect(db.query('SELECT count(*) AS count FROM properties').get()).toEqual({ count: 1 });
+    expect(db.query('SELECT datatype, description FROM properties WHERE name = ?').get('Country')).toEqual({ datatype: 'string', description: 'Updated' });
   } finally { db.close(); }
 });
 
