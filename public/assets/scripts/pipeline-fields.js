@@ -1,10 +1,11 @@
 // Shared by the native browser UI and Bun cleaning engine.
 export const BASIC_FIELDS = [
-  { key: 'idField', target: 'id', label: '实体唯一标识字段', required: true, names: ['id', 'source_id', 'qid', 'item', '实体唯一标识', '唯一标识', '实体ID', '来源ID'] },
+  { key: 'idField', target: 'id', label: '实体唯一标识字段', required: false, names: ['id', 'source_id', 'qid', 'item', '实体唯一标识', '唯一标识', '实体ID', '来源ID'] },
   { key: 'nameField', target: 'name', label: '名称（label）', required: true, names: ['name', 'label', 'labels', 'label_zh', 'name_zh', 'itemLabel', '名称', '姓名', '实体名称'] },
   { key: 'aliasesField', target: 'aliases', label: '别名（aliases）', names: ['aliases', 'alias', 'aliases_zh', '别名'] },
   { key: 'descriptionField', target: 'description', label: '描述（description）', names: ['description', 'descriptions', 'desc', 'description_zh', 'desc_zh', '描述', '简介', '说明'] },
   { key: 'tagsField', target: 'tags', label: '标签（项目扩展）', names: ['tags', 'tag', 'tag_list', '标签'] },
+  { key: 'categoriesField', target: 'categories', label: '分类', names: ['categories', 'category', 'category_name', '分类', '分类名称'] },
 ];
 
 export function inferBasicFields(columns, current = {}) {

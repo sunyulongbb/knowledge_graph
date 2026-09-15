@@ -1056,6 +1056,26 @@ export async function handleSchemaRoutes(
     }
   }
 
+  if (url.pathname === "/api/kb/classes/clear" && method === "DELETE") {
+    try {
+      const result = hasProjectScope
+        ? db.query("SELECT COUNT(*) AS count FROM classes WHERE project_id = ?").get(scopedProjectId) as any
+        : db.query("SELECT COUNT(*) AS count FROM classes WHERE project_id IS NULL").get() as any;
+      const deleted = Number(result?.count || 0);
+      if (hasProjectScope) {
+        db.run("DELETE FROM entity_classes WHERE class_id IN (SELECT id FROM classes WHERE project_id = ?)", [scopedProjectId]);
+        db.run("DELETE FROM classes WHERE project_id = ?", [scopedProjectId]);
+      } else {
+        db.run("DELETE FROM entity_classes WHERE class_id IN (SELECT id FROM classes WHERE project_id IS NULL)");
+        db.run("DELETE FROM classes WHERE project_id IS NULL");
+      }
+      return Response.json({ ok: true, deleted });
+    } catch (e) {
+      console.error(e);
+      return new Response("Error clearing classes", { status: 500 });
+    }
+  }
+
   if (url.pathname === "/api/kb/classes" && method === "DELETE") {
     const id = url.searchParams.get("id");
     if (!id) return new Response("Missing id", { status: 400 });
@@ -1069,6 +1089,7 @@ export async function handleSchemaRoutes(
       } else {
         db.run("DELETE FROM classes WHERE id = ?", [id]);
       }
+
       return Response.json({ ok: true });
     } catch (e) {
       console.error(e);

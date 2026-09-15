@@ -11,7 +11,7 @@
   const nodeForId = (id) => (window.kbTableNodes || []).find((node) => normalizeId(node.id || node._id) === normalizeId(id));
   window.canOperateKnowledgeSelection = (ids, mode = 'edit') => !!window.authUser && ids.length > 0 && ids.every((id) => !!nodeForId(id)?.[mode === 'manage' ? 'can_manage' : 'can_edit']);
   const editControls = '#btnAddOntologyChip,#composerTypeSelect,#btnEntityImageUpload,#btnEntityVideoUpload,#btnEntityPdfUpload,#btnShowAttrForm,#btnAttrEditSelected,#btnAttrDeleteSelected,#btnSubmit,.attr-row-del-btn,.attr-quick-add-btn';
-  const adminControls = '#btnOntologyAddRoot,#btnOntologyImport,#btnPropertyAdd,#btnPropertyDeleteSelected,#btnClsAdd,#btnClsDelete,#btnClassImport,#btnTagAdd,#btnTagImport,#btnSparqlConfirmImport,#btnSparqlImport';
+  const adminControls = '#btnOntologyAddRoot,#btnOntologyImport,#btnPropertyAdd,#btnPropertyDeleteSelected,#btnClsAdd,#btnClsDelete,#btnClearAllClasses,#btnClassImport,#btnTagAdd,#btnTagImport,#btnSparqlConfirmImport,#btnSparqlImport,#btnClearAllNodes';
   const permissionDisabled = new WeakSet();
   function syncVisibilityIcon() {
     const select = byId('knowledgeVisibility');

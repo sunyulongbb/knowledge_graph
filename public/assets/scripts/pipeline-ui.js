@@ -70,6 +70,12 @@ function nodeSummary(n) {
   if(n.type==='properties') return n.config.nameField ? '名称：'+n.config.nameField : '配置基础字段与属性';
   return {alignment:'来源 ID / 名称匹配',fusion:{keep:'冲突保留原值',replace:'冲突使用新值',merge:'合并为多值'}[n.config.strategy] || '设置融合策略',output:'确认后写入知识库'}[n.type];
 }
+function listMappingControls(node, key) {
+  const option = node.config.mappingOptions?.[key] || {};
+  const separator = option.separator ?? ' ';
+  const checked = option.multi === true;
+  return `<span class="pipeline-mapping-options"><label><input type="checkbox" data-mapping-option="${esc(key)}" data-mapping-option-key="multi" ${checked ? 'checked' : ''}>多值</label><input class="pipeline-mapping-separator" data-mapping-option="${esc(key)}" data-mapping-option-key="separator" value="${esc(separator)}" placeholder="分隔符（默认空格）" aria-label="${esc(key)}分隔符" ${checked ? '' : 'hidden'}></span>`;
+}
 async function api(path, body) {
   let url = new URL('/api/kb/pipeline/' + path, location.origin);
   if (window.appendCurrentDbParam) url = window.appendCurrentDbParam(url) || url;
@@ -185,7 +191,7 @@ async function readFile() {
 async function showTables() {
   entryRoot.querySelector('[data-body]').className='pipeline-list-layout';
   destroyGrids(entryRoot); tables = (await api('tables')).items;
-  entryRoot.querySelector('[data-body]').innerHTML = `<div class="pipeline-card"><h3>已保存实体表</h3><div class="pipeline-scroll"><table><thead><tr><th>表名称</th><th>来源</th><th>字段 / 记录</th><th>创建时间</th><th>操作</th></tr></thead><tbody>${tables.map(t => `<tr><td>${esc(t.name)}</td><td>${esc(t.sourceType)}</td><td>${t.columnCount} / ${t.rowCount}</td><td>${esc(t.createdAt)}</td><td><button class="btn" data-table-view="${t.id}">预览</button> <button class="btn" data-table-export-ontology="${t.id}">导出本体 JSON</button> <button class="btn" data-table-clean="${t.id}">开始清洗</button></td></tr>`).join('')}</tbody></table></div><div data-saved-preview></div></div>`;
+  entryRoot.querySelector('[data-body]').innerHTML = `<div class="pipeline-card"><h3>已保存实体表</h3><div class="pipeline-scroll"><table><thead><tr><th>表名称</th><th>来源</th><th>字段 / 记录</th><th>创建时间</th><th>操作</th></tr></thead><tbody>${tables.map(t => `<tr><td>${esc(t.name)}</td><td>${esc(t.sourceType)}</td><td>${t.columnCount} / ${t.rowCount}</td><td>${esc(t.createdAt)}</td><td><button class="btn" data-table-view="${t.id}">预览</button> <button class="btn pipeline-icon-btn" data-table-export-ontology="${t.id}" title="导出本体 JSON" aria-label="导出本体 JSON">${icon('download')}</button> <button class="btn" data-table-clean="${t.id}">开始清洗</button></td></tr>`).join('')}</tbody></table></div><div data-saved-preview></div></div>`;
   message(entryRoot, tables.length ? `共 ${tables.length} 张实体表` : '尚未保存实体表，请先新建录入。');
 }
 function setTab(root, tab) { root.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab)); }
@@ -322,18 +328,28 @@ function renderConfig() {
   closePipelineTree();
   const host = cleanRoot.querySelector('[data-config]'), node = flow.nodes.find(n => n.id === selected);
   if (!node) { host.innerHTML = '<p>选择节点以配置</p>'; return; }
+  const previousBody = host.querySelector('.pipeline-config-body');
+  const previousScrollTop = previousBody?.scrollTop || 0;
   let body = '';
   if (node.type === 'input') body = `<label>二维实体表<select data-config-key="tableId">${options(tables, node.config.tableId)}</select></label><p class="muted">${activeTable ? `${esc(activeTable.name)} · ${activeTable.columns.length} 列 · ${activeTable.rowCount} 条` : '请选择录入模块已保存的实体表'}</p>`;
   if (node.type === 'ontology') body = `<label>目标本体<input type="hidden" data-config-key="ontologyId" value="${esc(node.config.ontologyId || '')}"><button type="button" class="pipeline-tree-trigger" data-ontology-tree aria-haspopup="tree" aria-expanded="false" aria-controls="pipelineOntologyPopup"><span>${esc(ontologies.find(o=>o.id===node.config.ontologyId)?.name || '请选择目标本体')}</span>${icon('chevron-down')}</button></label><p class="muted">本体来自当前应用，每张表对应一个本体。</p>`;
   if (node.type === 'properties') {
     const fields = (activeTable?.columns || []).map(c => ({ id: c, name: c }));
     const baseColumns = new Set(BASIC_FIELDS.map(f => node.config[f.key]).filter(Boolean));
-    body = `<h3>基础字段对齐</h3><p class="muted">自动识别中英文字段名，可手动调整。名称、别名和描述支持 Wikidata 多语言对象；标签沿用项目字段。</p>${BASIC_FIELDS.map(f => `<label>${f.label}${f.required ? ' *' : ''}<select data-config-key="${f.key}">${options(fields.filter(c => c.id === node.config[f.key] || !baseColumns.has(c.id) || (f.key === 'idField' && c.id === node.config.nameField) || (f.key === 'nameField' && c.id === node.config.idField)), node.config[f.key], f.required ? '请选择' : '不导入此基础字段')}</select></label>`).join('')}<label>基础字段语言<select data-config-key="language"><option value="zh" ${node.config.language !== 'en' ? 'selected' : ''}>中文（zh）</option><option value="en" ${node.config.language === 'en' ? 'selected' : ''}>English（en）</option></select></label><h3>字段 → 知识库属性</h3>${fields.filter(f => !baseColumns.has(f.id)).map(f => `<label>${esc(f.name)}<select data-map-field="${esc(f.id)}"><option value="__unmapped__" ${!Object.hasOwn(node.config.mapping || {}, f.id) ? 'selected' : ''}>请选择映射或忽略</option>${options(properties, node.config.mapping?.[f.id], '忽略此字段')}</select></label>`).join('')}<p class="muted">基础字段直接写入实体信息，不需要在本体中创建同名属性。其他属性来自目标本体（含继承）。</p>`;
+    body = `<h3>基础字段对齐</h3><p class="muted">自动识别中英文字段名，可手动调整。名称、别名和描述支持 Wikidata 多语言对象；标签和分类支持多值及分隔符。</p>${BASIC_FIELDS.map(f => `<label>${f.label}${f.required ? ' *' : ''}<select data-config-key="${f.key}">${options(fields.filter(c => c.id === node.config[f.key] || !baseColumns.has(c.id) || (f.key === 'idField' && c.id === node.config.nameField) || (f.key === 'nameField' && c.id === node.config.idField)), node.config[f.key], f.required ? '请选择' : '不导入此基础字段')}</select>${['aliasesField', 'tagsField', 'categoriesField'].includes(f.key) && node.config[f.key] ? listMappingControls(node, f.key) : ''}</label>`).join('')}<label>基础字段语言<select data-config-key="language"><option value="zh" ${node.config.language !== 'en' ? 'selected' : ''}>中文（zh）</option><option value="en" ${node.config.language === 'en' ? 'selected' : ''}>English（en）</option></select></label><h3>字段 → 知识库属性</h3>${fields.filter(f => !baseColumns.has(f.id)).map(f => `<label>${esc(f.name)}<select data-map-field="${esc(f.id)}"><option value="__unmapped__" ${!Object.hasOwn(node.config.mapping || {}, f.id) ? 'selected' : ''}>请选择映射或忽略</option>${options(properties, node.config.mapping?.[f.id], '忽略此字段')}</select>${Object.hasOwn(node.config.mapping || {}, f.id) ? listMappingControls(node, f.id) : ''}</label>`).join('')}<p class="muted">基础字段直接写入实体信息，不需要在本体中创建同名属性。其他属性来自目标本体（含继承）。</p>`;
   }
   if (node.type === 'alignment') body = '<p>来源标识和来源 ID 相同 → 已对齐</p><p>名称和本体相同 → 疑似对齐</p><p>没有匹配 → 未对齐，创建新实体</p><p class="muted">在运行结果中处理疑似记录，再重新运行。</p>';
   if (node.type === 'fusion') body = `<label>默认冲突策略<select data-config-key="strategy">${[['keep','保留原值'],['replace','使用新值'],['merge','合并为多值']].map(([v,n]) => `<option value="${v}" ${node.config.strategy === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label><p>原值为空时填入新值；相同值自动去重。</p><p>名称冲突保留原名称，新名称加入别名。</p>`;
   if (node.type === 'output') body = '<p>预览运行不修改知识库。</p><p>正式运行先计算全部数据，确认预计结果后再保存到当前应用知识库。</p><p class="muted">失败记录不入库，错误显示在结果明细。</p>';
   host.innerHTML = `<header class="pipeline-config-head"><h3>${icon(node.type)} ${labels[node.type]}</h3>${tool('delete-node','删除节点')}</header><div class="pipeline-config-body">${body}</div>`;
+  const nextBody = host.querySelector('.pipeline-config-body');
+  if (nextBody) {
+    nextBody.scrollTop = previousScrollTop;
+    requestAnimationFrame(() => {
+      nextBody.scrollTop = previousScrollTop;
+      requestAnimationFrame(() => { nextBody.scrollTop = previousScrollTop; });
+    });
+  }
 }
 function renderInput() {
   const host = cleanRoot.querySelector('[data-input-preview]'); destroyGrids(host);
@@ -411,7 +427,25 @@ function initialize() {
         await loadFlowData(); renderInput();
       }
       invalidate(); renderCanvas(); renderConfig();
-    } else if (t.dataset.mapField && n) { n.config.mapping ||= {}; if (t.value === '__unmapped__') delete n.config.mapping[t.dataset.mapField]; else n.config.mapping[t.dataset.mapField] = t.value; invalidate(); }
+    } else if (t.dataset.mappingOption && n) {
+      n.config.mappingOptions ||= {};
+      n.config.mappingOptions[t.dataset.mappingOption] ||= {};
+      n.config.mappingOptions[t.dataset.mappingOption][t.dataset.mappingOptionKey] = t.dataset.mappingOptionKey === 'multi' ? t.checked : t.value;
+      if (t.dataset.mappingOptionKey === 'multi') {
+        const separator = t.closest('.pipeline-mapping-options')?.querySelector('[data-mapping-option-key="separator"]');
+        if (separator) separator.hidden = !t.checked;
+      }
+      invalidate();
+    } else if (t.dataset.mapField && n) {
+      const configBody = cleanRoot.querySelector('.pipeline-config-body');
+      const scrollTop = configBody?.scrollTop || 0;
+      n.config.mapping ||= {};
+      if (t.value === '__unmapped__') delete n.config.mapping[t.dataset.mapField];
+      else n.config.mapping[t.dataset.mapField] = t.value;
+      invalidate();
+      renderConfig();
+      if (configBody) requestAnimationFrame(() => { configBody.scrollTop = scrollTop; });
+    }
     message(cleanRoot,'配置已更新，请保存流程或运行预览。');
   }));
   cleanRoot.addEventListener('click', e => {

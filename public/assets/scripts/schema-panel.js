@@ -1928,6 +1928,28 @@
     });
   }
 
+  const btnClearAllClasses = byId("btnClearAllClasses");
+  if (btnClearAllClasses) {
+    btnClearAllClasses.addEventListener("click", async () => {
+      if (!window.confirm("确定清空当前应用全部分类？分类与实体的分类关联将一并删除，此操作不可恢复！")) return;
+      if (!window.confirm("请再次确认：确定要永久删除当前应用的全部分类吗？")) return;
+      btnClearAllClasses.disabled = true;
+      try {
+        const url = appendCurrentDbToUrl(new URL("/api/kb/classes/clear", window.location.origin));
+        const response = await fetch(url.toString(), { method: "DELETE" });
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        const data = await response.json();
+        window.kbSelectedClassId = null;
+        await loadClasses();
+        if (classImportStatus) classImportStatus.textContent = `已清空 ${data.deleted || 0} 个分类`;
+      } catch (error) {
+        if (classImportStatus) classImportStatus.textContent = `清空分类失败：${error.message || error}`;
+      } finally {
+        btnClearAllClasses.disabled = false;
+      }
+    });
+  }
+
   if (classModal) {
     classModal.addEventListener("click", (event) => {
       if (event.target === classModal) closeClassModal();

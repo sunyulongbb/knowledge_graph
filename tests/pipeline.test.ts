@@ -18,10 +18,12 @@ function fixture(rows: any[] = [{ id: '1', name: '张三', birthday: '1990-01-01
   raw.exec(`PRAGMA foreign_keys=ON;
     CREATE TABLE nodes (id TEXT PRIMARY KEY, name TEXT, type TEXT, aliases TEXT, description TEXT, tags TEXT, project_id INTEGER, updated_at TEXT, data TEXT);
     CREATE TABLE attributes (id TEXT PRIMARY KEY, node_id TEXT REFERENCES nodes(id), key TEXT, value TEXT, datatype TEXT, property_name_snapshot TEXT, statement_json TEXT);
-    CREATE TABLE ontologies (id TEXT PRIMARY KEY, name TEXT, parent_id TEXT, project_id INTEGER);
+    CREATE TABLE ontologies (id TEXT PRIMARY KEY, name TEXT, description TEXT, parent_id TEXT, project_id INTEGER, color TEXT, sort_order INTEGER);
     CREATE TABLE properties (id TEXT PRIMARY KEY, name TEXT, datatype TEXT, valuetype TEXT, tail_ontology_id TEXT, project_id INTEGER, status TEXT);
     CREATE TABLE ontology_properties (ontology_id TEXT, property_id TEXT);
-    INSERT INTO ontologies VALUES ('person','人物',NULL,1),('country','国家',NULL,1),('other','另一应用',NULL,2);
+    CREATE TABLE classes (id TEXT PRIMARY KEY, name TEXT, description TEXT, parent_id TEXT, project_id INTEGER, color TEXT, image TEXT, tags TEXT, sort_order INTEGER, updated_at TEXT);
+    CREATE TABLE entity_classes (entity_id TEXT, class_id TEXT, PRIMARY KEY(entity_id, class_id));
+    INSERT INTO ontologies VALUES ('person','人物','',NULL,1,NULL,1),('country','国家','',NULL,1,NULL,2),('other','另一应用','',NULL,2,NULL,1);
     INSERT INTO properties VALUES ('birthday','出生日期','time','time',NULL,1,'active'),('country','国籍','wikibase-item','wikibase-entityid','country',1,'active'),('job','职业','string','string',NULL,1,'active');
     INSERT INTO ontology_properties VALUES ('person','birthday'),('person','country'),('person','job');
   `);
@@ -69,6 +71,17 @@ test('staging keeps only selected columns and never creates knowledge; tables an
   expect(f.store.getFlow(f.flow.id)).toEqual(f.flow);
 });
 
+test('cleaning run history does not persist row-level white-table preview data', () => {
+  const f = fixture();
+  const run = f.run('full');
+  expect(run.result.rows.length).toBe(1);
+  const stored = f.raw.query('SELECT result_json FROM cleaning_runs WHERE id = ?').get(run.id) as { result_json: string };
+  const persisted = JSON.parse(stored.result_json);
+  expect(persisted.rows).toBeUndefined();
+  expect(f.store.getRun(run.id).result.rows).toBeUndefined();
+  expect(f.confirm(run.id).status).toBe('completed');
+});
+
 test('flow validation rejects missing nodes, branches, cycles, disconnected paths and invalid mappings', () => {
   const f = fixture();
   for (const edges of [[],[{from:'output',to:'input'}], [...f.flow.edges.slice(1),{from:'input',to:'output'}]]) expect(() => validateFlow({...f.flow,edges})).toThrow();
@@ -77,6 +90,51 @@ test('flow validation rejects missing nodes, branches, cycles, disconnected path
   expect(() => f.engine.plan(f.flow,'preview')).toThrow('尚未映射');
   f.flow.nodes.find(n=>n.type==='ontology')!.config.ontologyId = 'other';
   expect(() => f.engine.plan(f.flow,'preview')).toThrow('当前应用');
+});
+
+test('entity unique identifier is optional and name-only rows can be processed', () => {
+  const f = fixture([{ name: '张三', job: '工程师' }]);
+  const properties: any = f.flow.nodes.find((n: any) => n.type === 'properties')!.config;
+  properties.idField = '';
+  properties.nameField = 'name';
+  properties.mapping = { job: 'job' };
+  const result = f.run('preview').result;
+  expect(result.summary.failed).toBe(0);
+  expect(result.rows[0].basic).toMatchObject({ id: '', name: '张三' });
+  expect(result.summary.created).toBe(1);
+});
+
+test('confirm synchronizes mapped categories to classification tree and links imported entities', () => {
+  const f = fixture([{ id: '1', name: '张三', job: '工程师', category: '人物|科学家' }]);
+  const config: any = f.flow.nodes.find((n: any) => n.type === 'properties')!.config;
+  config.categoriesField = 'category';
+  delete config.mapping.category;
+  config.mappingOptions = { categoriesField: { multi: true, separator: '|' } };
+  f.confirm(f.run().id);
+  expect(f.raw.query('SELECT name, parent_id FROM classes ORDER BY name').all()).toEqual([
+    { name: '人物', parent_id: null },
+    { name: '科学家', parent_id: null },
+  ]);
+  const entity: any = f.raw.query('SELECT id FROM nodes WHERE name = ?').get('张三');
+  expect(f.raw.query('SELECT count(*) AS count FROM entity_classes WHERE entity_id = ?').get(entity.id)).toEqual({ count: 2 });
+});
+
+test('category mapping uses spaces as the default multi-value separator', () => {
+  const f = fixture([{ id: '1', name: '张三', category: '人物 科学家' }]);
+  const config: any = f.flow.nodes.find((n: any) => n.type === 'properties')!.config;
+  config.categoriesField = 'category';
+  delete config.mapping.category;
+  config.mappingOptions = { categoriesField: { multi: true } };
+  expect(f.run('preview').result.rows[0].basic.categories).toEqual(['人物', '科学家']);
+});
+
+test('category mapping splits consecutive spaces in values such as plot romance disaster', () => {
+  const f = fixture([{ id: '1', name: '电影', category: '剧情 爱情 灾难' }]);
+  const config: any = f.flow.nodes.find((n: any) => n.type === 'properties')!.config;
+  config.categoriesField = 'category';
+  delete config.mapping.category;
+  config.mappingOptions = { categoriesField: { multi: true, separator: ' ' } };
+  expect(f.run('preview').result.rows[0].basic.categories).toEqual(['剧情', '爱情', '灾难']);
 });
 
 test('preview processes at most 100 rows with zero knowledge mutations', () => {
@@ -162,6 +220,45 @@ test('basic metadata previews without writing and commits directly to entity fie
   expect(f.raw.query('SELECT name,aliases,description,tags FROM nodes').get()).toEqual({name:'张三',aliases:'["老张","张工"]',description:'人物介绍',tags:'["人物","工程师"]'});
   expect(f.raw.query('SELECT COUNT(*) AS n FROM attributes').get()).toEqual({n:0});
   expect(f.run().result.summary).toMatchObject({created:0,updated:0,failed:0});
+});
+
+test('mapping options split multi-value tags and properties with configured separators', () => {
+  const f = fixture([{ id: '1', name: '张三', tags: '人物|工程师', job: '工程师|科学家' }]);
+  const config: any = f.flow.nodes.find((n: any) => n.type === 'properties')!.config;
+  config.tagsField = 'tags';
+  config.mapping = { job: 'job' };
+  config.mappingOptions = {
+    tagsField: { multi: true, separator: '|' },
+    job: { multi: true, separator: '|' },
+  };
+  const preview = f.run('preview').result.rows[0];
+  expect(preview.basic.tags).toEqual(['人物', '工程师']);
+  expect(preview.mapped.job).toEqual(['工程师', '科学家']);
+  config.mappingOptions.tagsField.multi = false;
+  expect(f.run('preview').result.rows[0].basic.tags).toEqual(['人物|工程师']);
+});
+
+test('imports JSON-array tags as multiple entity tags and persists them', () => {
+  const f = fixture([{ id: '1', name: '张三', tags: '["人物","工程师","研究员"]' }]);
+  const config: any = f.flow.nodes.find((n: any) => n.type === 'properties')!.config;
+  config.tagsField = 'tags';
+  config.mapping = {};
+  config.mappingOptions = { tagsField: { multi: true } };
+  const preview = f.run('preview').result.rows[0];
+  expect(preview.basic.tags).toEqual(['人物', '工程师', '研究员']);
+  f.confirm(f.run().id);
+  expect(f.raw.query('SELECT tags FROM nodes WHERE name = ?').get('张三')).toEqual({
+    tags: '["人物","工程师","研究员"]',
+  });
+});
+
+test('property mapping defaults to single value and space separator', () => {
+  const f = fixture([{ id: '1', name: '张三', job: '工程师 科学家' }]);
+  const config: any = f.flow.nodes.find((n: any) => n.type === 'properties')!.config;
+  config.mapping = { job: 'job' };
+  expect(f.run('preview').result.rows[0].mapped.job).toEqual(['工程师 科学家']);
+  config.mappingOptions = { job: { multi: true } };
+  expect(f.run('preview').result.rows[0].mapped.job).toEqual(['工程师', '科学家']);
 });
 
 test('metadata fusion combines aliases and tags, handles description strategies and rejects duplicate base mapping', () => {

@@ -6,7 +6,7 @@ import { NODE_TYPES, PipelineStore, type EntityTable, type Flow } from './store.
 import { BASIC_FIELDS, inferBasicFields, basicText, basicList } from '../../../public/assets/scripts/pipeline-fields.js';
 import { normalizeEntityTaxonomy } from '../../shared/entity-taxonomy.ts';
 
-type Entity = { id: string; name: string; type: string; aliases: string[]; description: string; tags: string[]; attributes: Record<string, any[]>; original?: any; fresh: boolean };
+type Entity = { id: string; name: string; type: string; aliases: string[]; description: string; tags: string[]; categories: string[]; attributes: Record<string, any[]>; original?: any; fresh: boolean };
 type Decision = { action: 'link' | 'new' | 'skip'; entityId?: string };
 export function stable(value: any): string {
   return JSON.stringify(value && typeof value === 'object' ? Array.isArray(value) ? value.map(v => JSON.parse(stable(v))) : Object.fromEntries(Object.keys(value).sort().map(k => [k, JSON.parse(stable(value[k] ?? null))])) : value ?? null);
@@ -14,6 +14,26 @@ export function stable(value: any): string {
 const empty = (value: any) => value === null || value === undefined || (typeof value === 'string' && !value.trim());
 const key = (v: any) => v && typeof v === 'object' && v.id ? 'entity:' + v.id : stable(v);
 const unique = (values: any[]) => [...new Map(values.filter(v => !empty(v)).map(v => [key(v), v])).values()];
+function configuredList(raw: any, language: string, option: any = {}) {
+  if (raw === null || raw === undefined || raw === '') return [];
+  const multi = option.multi ?? option.defaultMulti ?? true;
+  if (typeof raw === 'string' && raw.trim().startsWith('[')) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) raw = parsed;
+    } catch {}
+  }
+  if (Array.isArray(raw)) return multi ? raw.map(v => basicText(v, language)).filter(Boolean) : [raw.map(v => basicText(v, language)).join(option.separator || ',')];
+  if (raw && typeof raw === 'object') {
+    const localized = raw[language] ?? raw[language.split('-')[0]] ?? raw.zh ?? raw.en;
+    if (Array.isArray(localized)) return multi ? localized.map(v => basicText(v, language)).filter(Boolean) : [localized.map(v => basicText(v, language)).join(option.separator || ',')];
+  }
+  const value = basicText(raw, language);
+  if (!multi) return value ? [value] : [];
+  const separator = String(option.separator ?? option.defaultSeparator ?? '');
+  if (separator === ' ') return value.split(/\s+/).map(v => v.trim()).filter(Boolean);
+  return (separator ? value.split(separator) : value.split(/[,，;；、|\n]+/)).map(v => v.trim()).filter(Boolean);
+}
 export function mergeValues(old: any[], incoming: any[], strategy: string) {
   old = unique(old); incoming = unique(incoming);
   const conflict = old.length > 0 && incoming.some(v => !old.some(o => key(o) === key(v)));
@@ -57,7 +77,7 @@ export class CleaningEngine {
     const language = String(basicConfig.language || 'zh');
     flow = structuredClone(flow);
     flow.nodes.find(n => n.type === 'properties')!.config = basicConfig;
-    if (!table.columns.includes(idField) || !table.columns.includes(nameField)) throw new Error('唯一标识或名称字段不存在');
+    if ((idField && !table.columns.includes(idField)) || !table.columns.includes(nameField)) throw new Error('名称字段不存在，或已选择的唯一标识字段不存在');
     const baseColumns = BASIC_FIELDS.map(f => basicConfig[f.key]).filter(Boolean);
     // Legacy flows can intentionally use their name as the source identifier.
     const distinctColumns = BASIC_FIELDS.filter(f => f.key !== 'idField' || idField !== nameField).map(f => basicConfig[f.key]).filter(Boolean);
@@ -80,7 +100,7 @@ export class CleaningEngine {
     for (const n of snapshot.nodes) {
       let aliases: string[] = [];
       try { aliases = JSON.parse(n.aliases || '[]'); } catch { aliases = String(n.aliases || '').split(/[,，;\n]+/).map(v => v.trim()).filter(Boolean); }
-      entities.set(n.id, { id: n.id, name: n.name || '', type: n.type, aliases: Array.isArray(aliases) ? aliases : [], description: n.description || '', tags: basicList(n.tags), attributes: {}, original: n, fresh: false });
+      entities.set(n.id, { id: n.id, name: n.name || '', type: n.type, aliases: Array.isArray(aliases) ? aliases : [], description: n.description || '', tags: basicList(n.tags), categories: [], attributes: {}, original: n, fresh: false });
     }
     for (const a of snapshot.attributes) {
       const entity = entities.get(a.node_id);
@@ -96,7 +116,7 @@ export class CleaningEngine {
     const create = (name: string, type: string) => {
       const id = 'clean-' + new Bun.CryptoHasher('sha256').update(stable([table.id, currentRow, type, name])).digest('hex').slice(0, 32);
       if (entities.has(id)) throw new Error('拟新增实体 ID 已存在，请重新录入实体表');
-      const n: Entity = { id, name, type, aliases: [], description: '', tags: [], attributes: {}, fresh: true };
+      const n: Entity = { id, name, type, aliases: [], description: '', tags: [], categories: [], attributes: {}, fresh: true };
       createdInRow.push(id);
       entities.set(n.id, n); return n;
     };
@@ -122,22 +142,23 @@ export class CleaningEngine {
       return normalizeValue(datatype, valueTypeFor(datatype) === 'string' ? typeof raw === 'object' ? JSON.stringify(raw) : String(raw) : raw);
     };
     for (let index = 0; index < summary.input; index++) {
-      const raw = table.rows[index]!, sourceId = String(raw[idField] ?? '').trim();
+      const raw = table.rows[index]!, sourceId = idField ? String(raw[idField] ?? '').trim() : '';
       let name = '';
       const detail: any = { index, raw, ontology: { id: ontology.id, name: ontology.name }, basic: {}, mapped: {}, status: '未对齐', candidates: [], action: '', strategy, conflicts: [], error: '' };
       // A bad row must not leave planned tail entities or partial attribute mutations.
       currentRow = index; createdInRow = [];
       let targetBefore: Entity | undefined;
       try {
-        if (raw[idField] !== null && typeof raw[idField] === 'object') throw new Error('唯一标识必须是单个文本或数值');
+        if (idField && raw[idField] !== null && typeof raw[idField] === 'object') throw new Error('唯一标识必须是单个文本或数值');
         name = basicText(raw[nameField], language);
         detail.basic = { id: sourceId, name };
-        if (basicConfig.aliasesField) detail.basic.aliases = basicList(raw[basicConfig.aliasesField], language);
+        if (basicConfig.aliasesField) detail.basic.aliases = configuredList(raw[basicConfig.aliasesField], language, basicConfig.mappingOptions?.aliasesField);
         if (basicConfig.descriptionField) detail.basic.description = basicText(raw[basicConfig.descriptionField], language);
-        if (basicConfig.tagsField) detail.basic.tags = normalizeEntityTaxonomy({ tags: basicList(raw[basicConfig.tagsField], language) }).tags;
-        if (!sourceId || !name) throw new Error('唯一标识和实体名称不能为空');
-        const sourceToken = stable([table.sourceKey, sourceId, ontologyId]);
-        const alignedId = sourceIndex.get(sourceToken);
+        if (basicConfig.tagsField) detail.basic.tags = normalizeEntityTaxonomy({ tags: configuredList(raw[basicConfig.tagsField], language, basicConfig.mappingOptions?.tagsField) }).tags;
+        if (basicConfig.categoriesField) detail.basic.categories = configuredList(raw[basicConfig.categoriesField], language, { ...basicConfig.mappingOptions?.categoriesField, defaultMulti: false, defaultSeparator: ' ' });
+        if (!name) throw new Error('实体名称不能为空');
+        const sourceToken = sourceId ? stable([table.sourceKey, sourceId, ontologyId]) : '';
+        const alignedId = sourceToken ? sourceIndex.get(sourceToken) : undefined;
         let target = alignedId ? entities.get(alignedId) : undefined;
         if (alignedId && !target) throw new Error('来源对应实体已不可访问，请检查知识权限');
         const candidates = target ? [] : [...entities.values()].filter(n => n.name === name && n.type === ontologyId);
@@ -159,7 +180,8 @@ export class CleaningEngine {
         for (const [field, pid] of Object.entries(mapping)) {
           if (!pid || empty(raw[field])) continue;
           const p = propertyMap.get(pid)!;
-          const values = Array.isArray(raw[field]) ? raw[field] : [raw[field]];
+          const option = basicConfig.mappingOptions?.[field] || {};
+          const values = Array.isArray(raw[field]) ? raw[field] : configuredList(raw[field], language, { ...option, defaultMulti: false, defaultSeparator: ' ' });
           detail.mapped[String(pid)] = unique([...(detail.mapped[String(pid)] || []), ...values.filter((v: any) => !empty(v)).map((v: any) => typedValue(v, p))]);
         }
         target ||= create(name, ontologyId);
@@ -168,6 +190,7 @@ export class CleaningEngine {
         detail.match = { id: target.id, name: target.name };
         if (detail.basic.aliases) target.aliases = [...new Set([...target.aliases, ...detail.basic.aliases])].filter(alias => alias !== target!.name);
         if (detail.basic.tags) target.tags = normalizeEntityTaxonomy({ tags: [...target.tags, ...detail.basic.tags] }).tags;
+        if (detail.basic.categories) target.categories = [...new Set([...target.categories, ...detail.basic.categories])];
         const description = detail.basic.description;
         if (description) {
           const old = target.description;
@@ -191,7 +214,7 @@ export class CleaningEngine {
         }
         summary.conflicts += detail.conflicts.length;
         sourceIndex.set(sourceToken, target.id);
-        bindings.push({ sourceKey: table.sourceKey, sourceId, ontologyId, nodeId: target.id });
+        if (sourceId) bindings.push({ sourceKey: table.sourceKey, sourceId, ontologyId, nodeId: target.id });
       } catch (error) {
         if (targetBefore) entities.set(targetBefore.id, targetBefore);
         for (const id of createdInRow) entities.delete(id);
@@ -247,6 +270,23 @@ export class CleaningEngine {
             this.knowledge.run('UPDATE attributes SET value = ?, datatype = ?, property_name_snapshot = ?, statement_json = ? WHERE id = ?', [serialized, storageType, property.name, JSON.stringify(statement), existing[0].id]);
             if (!preservesOld) for (const extra of existing.slice(1)) this.knowledge.run('DELETE FROM attributes WHERE id = ?', [extra.id]);
           } else this.knowledge.run('INSERT INTO attributes (id, node_id, key, value, datatype, property_name_snapshot, statement_json) VALUES (?, ?, ?, ?, ?, ?, ?)', [`attr/${crypto.randomUUID()}`, entity.id, pid, serialized, storageType, property.name, JSON.stringify(statement)]);
+        }
+      }
+      const classRows = this.knowledge.query('SELECT id, name, parent_id FROM classes WHERE project_id IS ?').all(this.store.projectId) as any[];
+      const classByName = new Map<string, string>();
+      for (const entity of plan.changes as Entity[]) {
+        for (const categoryName of entity.categories) {
+          let category = classRows.find(row => row.name === categoryName && !row.parent_id);
+        if (!category) {
+          category = { id: `class/${crypto.randomUUID()}` };
+          this.knowledge.run(
+            'INSERT INTO classes (id, name, description, parent_id, project_id, color, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [category.id, categoryName, '', null, this.store.projectId, null, null],
+          );
+          classRows.push({ id: category.id, name: categoryName, parent_id: null });
+        }
+        classByName.set(categoryName, category.id);
+        this.knowledge.run('INSERT OR IGNORE INTO entity_classes (entity_id, class_id) VALUES (?, ?)', [entity.id, category.id]);
         }
       }
       for (const b of plan.bindings) this.store.db.run('INSERT INTO cleaning_entity_sources (scope, source_key, source_id, ontology_id, node_id) VALUES (?, ?, ?, ?, ?) ON CONFLICT(scope, source_key, source_id, ontology_id) DO UPDATE SET node_id=excluded.node_id', [String(this.store.projectId ?? 'app'), b.sourceKey, b.sourceId, b.ontologyId, b.nodeId]);

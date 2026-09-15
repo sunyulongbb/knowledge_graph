@@ -90,8 +90,12 @@ export class PipelineStore {
   }
   saveRun(flowId: string, mode: string, result: any) {
     const id = crypto.randomUUID(), status = mode === 'preview' ? 'previewed' : 'pending';
-    this.db.run('INSERT INTO cleaning_runs (id, flow_id, project_id, owner_id, mode, status, result_json) VALUES (?, ?, ?, ?, ?, ?, ?)', [id, flowId, this.projectId, this.userId, mode, status, JSON.stringify(result)]);
-    return this.getRun(id);
+    // Row-level preview data is transient and can be very large. Keep it in the
+    // current response, but never persist it in the run history.
+    const persistedResult = { ...result };
+    delete persistedResult.rows;
+    this.db.run('INSERT INTO cleaning_runs (id, flow_id, project_id, owner_id, mode, status, result_json) VALUES (?, ?, ?, ?, ?, ?, ?)', [id, flowId, this.projectId, this.userId, mode, status, JSON.stringify(persistedResult)]);
+    return { ...this.getRun(id), result };
   }
   listRuns() { return (this.db.query('SELECT id, flow_id AS flowId, mode, status, created_at AS createdAt, result_json FROM cleaning_runs WHERE project_id IS ? AND owner_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 100').all(this.projectId, this.userId) as any[]).map(({ result_json, ...r }) => ({ ...r, summary: JSON.parse(result_json).summary })); }
   getRun(id: string): any {

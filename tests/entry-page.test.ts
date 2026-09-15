@@ -33,3 +33,15 @@ test('main page scripts remain valid after removing legacy entry initialization'
     }
   }
 });
+
+test('clear controls and scoped taxonomy clear endpoint are wired independently', async () => {
+  const response = await serveStaticRoute(new Request('http://localhost/kb?db=demo'), '/kb');
+  const html = await response!.text();
+  expect(html).toContain('id="btnClearAllNodes"');
+  expect(html).toContain('id="btnClearAllClasses"');
+  expect(readFileSync('src/server/routes/schema.ts', 'utf8')).toContain('url.pathname === "/api/kb/classes/clear" && method === "DELETE"');
+  const tableSelection = readFileSync('public/assets/scripts/table-selection.js', 'utf8');
+  const schemaPanel = readFileSync('public/assets/scripts/schema-panel.js', 'utf8');
+  expect(tableSelection).toContain('请再次确认：确定要永久删除当前应用的全部知识数据吗？');
+  expect(schemaPanel).toContain('请再次确认：确定要永久删除当前应用的全部分类吗？');
+});

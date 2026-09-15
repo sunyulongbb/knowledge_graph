@@ -6193,7 +6193,8 @@ function __kbInitTableSelection() {
   }
 
   async function clearAllNodes() {
-    if (!confirm("确定清空所有节点及其属性和关系？此操作不可恢复！")) return;
+    if (!window.confirm("确定清空当前应用所有节点及其属性和关系？此操作不可恢复！")) return;
+    if (!window.confirm("请再次确认：确定要永久删除当前应用的全部知识数据吗？")) return;
     try {
       const url = new URL("/api/kb/nodes/clear", window.location.origin);
       if (typeof window.appendCurrentDbParam === "function") {
