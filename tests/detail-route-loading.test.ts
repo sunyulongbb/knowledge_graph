@@ -89,3 +89,9 @@ test('deselecting invalidates pending entity hydration before clearing the edito
   );
   expect(resetBlock).toContain('window.kbCurrentNodePayload = null');
 });
+
+test('entity image deletion is staged and persisted by the normal save action', () => {
+  expect(indexSource).toContain('window.kbReplaceEntityImagesOnSave = true');
+  expect(indexSource).toContain("'已删除图片预览，点击保存后同步到知识。'");
+  expect(indexSource).toContain('? { images: pendingHeaderImages }');
+});

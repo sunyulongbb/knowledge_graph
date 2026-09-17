@@ -33,23 +33,6 @@
   };
   const labelOf = (node) =>
     String(node?.label_zh || node?.label || node?.name || "未命名实体").trim();
-  const aliasesOf = (node) => {
-    let values = node?.aliases_zh ?? node?.aliases ?? node?.alias ?? [];
-    if (typeof values === "string") {
-      try {
-        values = JSON.parse(values);
-      } catch {
-        /* Plain alias lists are also supported. */
-      }
-    }
-    if (!Array.isArray(values))
-      values = String(values ?? "").split(/[\n,，;；、]+/);
-    return [
-      ...new Set(
-        values.map((value) => String(value ?? "").trim()).filter(Boolean),
-      ),
-    ].join("、");
-  };
   const escapeHtml = (value) =>
     String(value ?? "")
       .replace(/&/g, "&amp;")
@@ -173,7 +156,6 @@
         id,
         select: "",
         name: labelOf(node),
-        aliases: aliasesOf(node) || "—",
         type: node.typeLabel || node.type || "—",
         category:
           (node.categoryLabels || []).join("、") || node.classLabel || "—",
@@ -208,13 +190,6 @@
             header: [{ text: "名称" }],
             minWidth: 180,
             gravity: 1.2,
-          },
-          {
-            id: "aliases",
-            header: [{ text: "别名" }],
-            minWidth: 180,
-            gravity: 1,
-            template: (value) => escapeHtml(value),
           },
           { id: "type", header: [{ text: "本体类型" }], width: 170 },
           {
