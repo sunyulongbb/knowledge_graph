@@ -1315,6 +1315,14 @@ body.global-page-active .header-bar::after { display: none !important; }
   min-height: 0;
 }
 .user-sidebar .project-entry.is-disabled-user { opacity:.52; filter:saturate(.55); }
+.user-sidebar-footer { margin-top: auto; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.user-sidebar-footer .btn { width: 36px; min-width: 36px; height: 32px; padding: 0; }
+.user-sidebar-logout { border-color: transparent; color: #e11d48; background: transparent; }
+.user-sidebar-logout:hover { border-color: color-mix(in srgb, #e11d48 30%, transparent); color: #fb7185; background: color-mix(in srgb, #e11d48 10%, transparent); }
+.user-sidebar-logout span { display: none; }
+.user-sidebar.hover-expanded .user-sidebar-footer { align-items: stretch; }
+.user-sidebar.hover-expanded .user-sidebar-footer .btn { width: 100%; gap: 8px; }
+.user-sidebar.hover-expanded .user-sidebar-logout span { display: inline; white-space: nowrap; }
 /* When hovering entries in the right sidebar, show labels to the left instead of to the right */
 .user-sidebar.hover-expanded .project-list .project-entry .project-entry-label {
   position: absolute;
@@ -10383,7 +10391,7 @@ body {
 .app-home-heading .btn.icon:hover { color: var(--accent); background: var(--surface-1); }
 .app-home-heading .btn.icon span { display: none; }
 .app-home-dashboard { display: grid; gap: 10px; width: 100%; }
-.app-home-quickbar { position: fixed; right: 18px; bottom: 48px; z-index: 1450; display: block; }
+.app-home-quickbar { position: fixed; right: calc(var(--user-sidebar-width, 0px) + 18px); bottom: 48px; z-index: 1450; display: block; transition: right var(--sidebar-transition); }
 .app-inspiration-trigger { width: 48px; height: 48px; padding: 0; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--border)); border-radius: 15px; color: var(--accent); background: color-mix(in srgb, var(--surface-0) 92%, transparent); cursor: pointer; box-shadow: 0 10px 30px rgba(0,0,0,.22); backdrop-filter: blur(10px); transition: transform 150ms ease, background 150ms ease, color 150ms ease; }
 .app-inspiration-trigger:hover { transform: translateY(-1px); color: var(--surface-0); background: var(--accent); }
 .app-inspiration-trigger i { font-size: 19px; }
@@ -10519,7 +10527,7 @@ body {
   .app-home-knowledge-grid { padding: 10px; }
   .app-home-knowledge-card { grid-template-columns: 88px minmax(0, 1fr); }
   .app-inspiration-modal { width: calc(100vw - 12px); max-height: calc(100vh - 12px); padding: 12px; border-radius: 13px; }
-  .app-home-quickbar { right: 10px; bottom: 42px; }
+  .app-home-quickbar { right: calc(var(--user-sidebar-width, 0px) + 10px); bottom: 42px; }
   .app-inspiration-trigger { width: 44px; height: 44px; border-radius: 14px; }
 }
 

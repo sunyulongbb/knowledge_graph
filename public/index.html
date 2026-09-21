@@ -48,7 +48,7 @@
     window["@tiptap/starter-kit"] =
       window["@tiptap/starter-kit"] || window.TiptapStarterKit;
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20260922-10" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20260922-12" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -2149,7 +2149,6 @@
             </div>
             <div id="profileError" class="profile-error" style="display:none;"></div>
             <div class="profile-dialog-actions">
-              <button id="btnLogout" class="btn profile-logout-btn" type="button"><i class="fa-solid fa-arrow-right-from-bracket"></i><span>退出登录</span></button>
               <button id="btnCancelProfile" class="btn" type="button">取消</button>
               <button id="btnSaveProfile" class="btn btn-primary" type="button">保存修改</button>
             </div>
@@ -2387,7 +2386,7 @@
         <div style="display:flex;flex-direction:column;gap:8px;align-items:center;margin-bottom:8px;"
           aria-hidden="true"></div>
         <div class="project-list" aria-live="polite"></div>
-        <div style="margin-top:auto;display:flex;flex-direction:column;gap:8px;align-items:center;">
+        <div class="user-sidebar-footer">
           <button id="btnCreateProjectSidebar" class="btn sm" title="新建项目" aria-label="新建项目">+</button>
           <button id="btnMoreProjects" class="btn sm" title="更多项目" aria-label="更多项目">•••</button>
           <a id="btnOpenAppLink" class="btn sm" title="访问应用" aria-label="访问应用" href="#" target="_blank" rel="noopener"><i
@@ -4796,6 +4795,7 @@
         <div style="margin-top:auto;display:flex;flex-direction:column;gap:8px;align-items:center;">
           <button id="btnOpenProfileSidebar" class="btn sm" type="button" title="个人详情" aria-label="个人详情"><i class="fa-solid fa-user-gear"></i></button>
           <a id="btnViewUsers" class="btn sm sidebar-management-link" href="#view=user_management" title="用户管理" aria-label="用户管理" style="display:none;"><i class="fa-solid fa-users-gear" aria-hidden="true"></i></a>
+          <button id="btnLogout" class="btn sm user-sidebar-logout" type="button" title="退出登录" aria-label="退出登录"><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i><span>退出登录</span></button>
         </div>
       </aside>
     </div>
@@ -6284,6 +6284,26 @@
         window.kbActiveVisNodeId = rawId;
       } catch {}
 
+      // Hash changes caused by switching views must not fetch and repaint the
+      // same editor payload again. Reusing the mounted form prevents visible
+      // title, image, and attribute flicker while keeping the selection.
+      const editorId = String(document.getElementById("fId")?.value || "").trim();
+      const editorPayload = window.kbCurrentNodePayload;
+      const editorPayloadId = String(
+        editorPayload?._id || editorPayload?.id || "",
+      ).trim();
+      if (
+        editorPayload &&
+        ensureEntityIdPrefix(editorId) === fullId &&
+        ensureEntityIdPrefix(editorPayloadId) === fullId
+      ) {
+        await ensureEntityRelationList(fullId);
+        if (opts.focusGraph) {
+          try { focusNode(fullId, { fit: false }); } catch {}
+        }
+        return true;
+      }
+
       try {
         const tableNodeMap = window.kbTableNodeMap;
         const cachedNode =
@@ -6424,6 +6444,21 @@
       }
     }
 
+    function ensureEntityRelationList(nodeId) {
+      const fullId = ensureEntityIdPrefix(String(nodeId || "").trim());
+      if (!fullId || typeof loadAttributes !== "function") return Promise.resolve();
+      const list = document.getElementById("attrList");
+      const panel = document.getElementById("attrPanel");
+      const expectedKey = `${window.authUser?.id || "anonymous"}:${new URLSearchParams(location.search).get("db") || ""}:${fullId}`;
+      const isCurrentList = list?.dataset.entityKey === expectedKey;
+      const hasRenderedContent = list?.dataset.loadState === "ready";
+      if (panel) panel.style.display = "";
+      if (isCurrentList && hasRenderedContent) return Promise.resolve();
+      return Promise.resolve(loadAttributes(fullId)).catch((err) => {
+        if (window.console && console.warn) console.warn("ensureEntityRelationList failed", err);
+      });
+    }
+
     function syncActiveEntityEditor(nodeId = "", options = {}) {
       const requestedId = String(
         nodeId ||
@@ -6446,6 +6481,10 @@
 
       // The editor is shared by every view. Pure view switches retain the
       // rendered state; explicit refreshes may reload dependent panels.
+      if (isCurrentNode && hasCurrentPayload && options.refreshCurrent === false) {
+        void ensureEntityRelationList(fullId);
+        return;
+      }
       if (!force && isCurrentNode && hasCurrentPayload) {
         if (options.refreshCurrent === false) return;
         Promise.allSettled([
@@ -17093,7 +17132,7 @@
   <script src="/assets/scripts/table-panel.js?v=20260914-7"></script>
   <script src="/assets/scripts/table-selection.js?v=20260916-2"></script>
   <script src="/assets/scripts/entity-manage-table.js?v=20260916-2"></script>
-  <script src="/assets/scripts/attr-panel.js?v=20260914-4"></script>
+  <script src="/assets/scripts/attr-panel.js?v=20260922-1"></script>
   <script src="/assets/scripts/entity-import.js?v=20260921-6"></script>
   <!-- relation-panel.js 已移除，使用 edgehandles 拖拽创建关系 -->
   <script src="/assets/scripts/schema-panel.js?v=20260915-7"></script>

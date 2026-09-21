@@ -76,6 +76,8 @@ test('anonymous users cannot expand application or user sidebars', () => {
   expect(sidebarPanel).toContain('applyUserSidebarCollapsed(true, true);');
   expect(sidebarPanel).toContain('headerLogo.addEventListener("click"');
   expect(sidebarPanel).toContain('if (!window.authUser) return;');
+  expect(page).toContain('class="btn sm user-sidebar-logout"');
+  expect(page.indexOf('id="btnLogout"')).toBeGreaterThan(page.indexOf('id="userSidebar"'));
 });
 
 test('application home provides inspiration draw, category tree, and knowledge cards', () => {
@@ -101,8 +103,22 @@ test('application home provides inspiration draw, category tree, and knowledge c
   expect(css).toContain('.app-category-tree');
   expect(css).toContain('.app-home-knowledge-card');
   expect(css).toContain('.app-home-heading { display: none; }');
-  expect(css).toContain('.app-home-quickbar { position: fixed; right: 18px; bottom: 48px;');
+  expect(css).toContain('right: calc(var(--user-sidebar-width, 0px) + 18px);');
   expect(css).toContain('height: calc(100dvh - 104px);');
+});
+
+test('view menu switches reuse the mounted entity editor without repainting it', () => {
+  const page = readFileSync('public/index.html', 'utf8');
+  expect(page).toContain('isCurrentNode && hasCurrentPayload && options.refreshCurrent === false');
+  expect(page).toContain('ensureEntityIdPrefix(editorPayloadId) === fullId');
+  expect(page).toContain('Hash changes caused by switching views must not fetch and repaint');
+  expect(page).toContain('function ensureEntityRelationList(nodeId)');
+  expect(page).toContain('void ensureEntityRelationList(fullId)');
+  expect(page).toContain('await ensureEntityRelationList(fullId)');
+  expect(page).toContain('/assets/scripts/attr-panel.js?v=20260922-1');
+  const attrPanel = readFileSync('public/assets/scripts/attr-panel.js', 'utf8');
+  expect(attrPanel).toContain("attrList.dataset.loadState = 'loading'");
+  expect(attrPanel).toContain("attrList.dataset.loadState = rendered ? 'ready' : 'error'");
 });
 
 test('entity editor uses the post-composer hierarchy without changing existing control ids', () => {
@@ -112,7 +128,7 @@ test('entity editor uses the post-composer hierarchy without changing existing c
   expect(page).toContain('id="btnCancelEdit"');
   expect(page).toContain('id="btnEntityImport"');
   expect(page).toContain('id="btnSubmit"');
-  expect(page).toContain('/assets/styles/app.css?v=20260922-10');
+  expect(page).toContain('/assets/styles/app.css?v=20260922-12');
   expect(css).toContain('/* Entity composer: compact post-editor layout */');
   expect(css).toContain('.editor-panel #entityDisplayImageWrap');
   expect(css).toContain('.entity-composer-titlebar');

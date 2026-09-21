@@ -2112,6 +2112,7 @@ if (btnAttrReset) {
     const state = { key, sequence: 0, promise: null };
     state.promise = performLoadAttributes(nodeId, options).catch((error) => {
       if (window.kbAttrLoadRequestSeq !== state.sequence) return;
+      attrList.dataset.loadState = 'error';
       const message = document.createElement('div'); message.className = 'relation-load-error muted'; message.setAttribute('role', 'status'); message.textContent = error.message;
       attrList.querySelector('.relation-load-error')?.remove();
       if (attrList._attrRenderedFirst !== attrList.firstChild) attrList.replaceChildren();
@@ -2143,6 +2144,7 @@ if (btnAttrReset) {
       } catch (e) {}
       attrList.innerHTML = "";
       delete attrList.dataset.entityKey;
+      delete attrList.dataset.loadState;
       attrPanel.style.display = "none";
       const badge = document.getElementById("attrCountBadge");
       if (badge) badge.textContent = "0";
@@ -2155,6 +2157,7 @@ if (btnAttrReset) {
       attrList.innerHTML = '<div class="muted">加载属性中…</div>';
       attrList.dataset.entityKey = entityKey;
     }
+    attrList.dataset.loadState = 'loading';
     attrPanel.style.display = "";
     attrList.setAttribute('aria-busy', 'true');
 
@@ -2182,11 +2185,14 @@ if (btnAttrReset) {
         resetAttrForm();
       } catch (e) {}
     }
+    let rendered = false;
     try {
       renderAttrList(attrList, items, fullId);
+      rendered = true;
     } catch (e) {
       console.error("renderAttrList failed", e);
     }
+    attrList.dataset.loadState = rendered ? 'ready' : 'error';
     // Update count badge
     try {
       const badge = document.getElementById("attrCountBadge");
