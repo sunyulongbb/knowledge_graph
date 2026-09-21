@@ -102,6 +102,7 @@ test('application home provides inspiration draw, category tree, and knowledge c
   expect(css).toContain('.app-home-knowledge-card');
   expect(css).toContain('.app-home-heading { display: none; }');
   expect(css).toContain('.app-home-quickbar { position: fixed; right: 18px; bottom: 48px;');
+  expect(css).toContain('height: calc(100dvh - 104px);');
 });
 
 test('entity editor uses the post-composer hierarchy without changing existing control ids', () => {
@@ -111,7 +112,7 @@ test('entity editor uses the post-composer hierarchy without changing existing c
   expect(page).toContain('id="btnCancelEdit"');
   expect(page).toContain('id="btnEntityImport"');
   expect(page).toContain('id="btnSubmit"');
-  expect(page).toContain('/assets/styles/app.css?v=20260922-9');
+  expect(page).toContain('/assets/styles/app.css?v=20260922-10');
   expect(css).toContain('/* Entity composer: compact post-editor layout */');
   expect(css).toContain('.editor-panel #entityDisplayImageWrap');
   expect(css).toContain('.entity-composer-titlebar');

@@ -10439,11 +10439,11 @@ body {
 .app-inspiration-link:hover { color: var(--accent); }
 .app-inspiration-empty { position: relative; min-height: 170px; display: grid; place-items: center; align-content: center; gap: 8px; border: 1px dashed var(--border); border-radius: 14px; color: var(--muted); }
 .app-inspiration-empty i { font-size: 30px; color: var(--accent); }
-.app-home-workspace { display: grid; grid-template-columns: minmax(210px, 250px) minmax(0, 1fr); gap: 10px; align-items: start; }
-.app-category-panel { position: sticky; top: 12px; overflow: hidden; }
+.app-home-workspace { display: grid; grid-template-columns: minmax(210px, 250px) minmax(0, 1fr); gap: 10px; align-items: stretch; min-height: calc(100dvh - 104px); }
+.app-category-panel { position: sticky; top: 0; height: calc(100dvh - 104px); min-height: 420px; display: flex; flex-direction: column; overflow: hidden; }
 .app-category-total,
 .app-list-count { color: var(--muted); font-size: 12px; }
-.app-category-panel nav { padding: 5px; max-height: min(68vh, 720px); overflow: auto; }
+.app-category-panel nav { min-height: 0; flex: 1 1 auto; padding: 5px; overflow: auto; }
 .app-category-panel ul { padding: 0; margin: 0; list-style: none; }
 .app-category-tree { display: grid; gap: 1px; }
 .app-category-item { width: 100%; min-height: 38px; padding: 7px 9px 7px calc(9px + var(--tree-depth, 0) * 16px); display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 8px; border: 0; border-radius: 8px; background: transparent; color: var(--fg); text-align: left; cursor: pointer; }
@@ -10505,7 +10505,8 @@ body {
   .app-inspiration-card, .app-home-workspace { grid-template-columns: minmax(0, 1fr); }
   .app-inspiration-card { height: auto; }
   .app-inspiration-visual { min-height: 190px; max-height: 260px; }
-  .app-category-panel { position: static; }
+  .app-home-workspace { min-height: 0; }
+  .app-category-panel { position: static; height: auto; min-height: 0; }
   .app-category-panel nav { max-height: 320px; }
   .app-home-section-heading { align-items: flex-start; }
 }
