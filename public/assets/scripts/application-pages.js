@@ -3,7 +3,7 @@
   const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   let homeVersion = 0, searchVersion = 0, typesVersion = 0, page = 1, total = 0;
   let currentHomeApplicationId = '';
-  let homeNodes = [], homeVisibleNodes = [], homeCategories = [], homeSelectedCategory = '', homeInspirationIndex = 0;
+  let homeNodes = [], homeVisibleNodes = [], homeCategories = [], homeSelectedCategory = '', homeInspirationIndex = 0, homeDrawCount = 1;
   const pageSize = 20;
   const fields = { q: 'appSearchQuery', type: 'appSearchType', property_id: 'appSearchProperty', property_value: 'appSearchValue', order: 'appSearchOrder' };
   async function api(path, params = {}) {
@@ -70,10 +70,19 @@
     if (!node) return '<div class="app-inspiration-empty"><i class="fa-regular fa-lightbulb" aria-hidden="true"></i><strong>等待第一条知识</strong><span>创建知识后，就可以从这里随机抽取灵感。</span></div>';
     const image = firstImage(node);
     const video = image ? '' : firstVideo(node);
-    return `<div class="app-inspiration-card" data-home-inspiration-card>
-      <div class="app-inspiration-visual${image || video ? '' : ' is-placeholder'}">${image ? `<img src="${escape(image)}" alt="" loading="eager">` : video ? `<video src="${escape(video)}" muted playsinline preload="metadata"></video>` : '<i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>'}<span>${video ? '<i class="fa-solid fa-play" aria-hidden="true"></i> 视频灵感' : '灵感卡'}</span></div>
-      <div class="app-inspiration-copy"><div class="app-inspiration-kicker"><i class="fa-solid fa-sparkles" aria-hidden="true"></i> 随机发现</div><h2>${escape(node.name || node.label || node.id)}</h2><p>${escape(node.description || node.desc_zh || '从知识库里重新发现一条值得关注的信息。')}</p><div class="app-inspiration-meta"><span>${escape(node.typeLabel || node.type || '知识实体')}</span><span>${escape(node.id || node._id || '')}</span></div><a href="${escape(nodeUrl(node))}" class="app-inspiration-link">打开知识 <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></a></div>
-    </div>`;
+    const media = image ? `<img src="${escape(image)}" alt="" loading="eager">` : video ? `<video src="${escape(video)}" muted playsinline preload="metadata" controls></video>` : '';
+    return `<article class="app-inspiration-card" data-home-inspiration-card>
+      <div class="app-inspiration-card-top"><span><i class="fa-regular fa-star" aria-hidden="true"></i> 潜力知识</span><small>${escape(shortDate(node.updated_at || node.created_at))}</small></div>
+      ${media ? `<div class="app-inspiration-media-stage">${media}<span><i class="fa-solid ${video ? 'fa-video' : 'fa-image'}" aria-hidden="true"></i> ${video ? '视频' : '图片'}</span></div>` : ''}
+      <div class="app-inspiration-identity">${media ? '' : '<div class="app-inspiration-visual is-placeholder"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i></div>'}<div><h2>${escape(node.name || node.label || node.id)}</h2><span>${escape(node.id || node._id || '')}</span></div></div>
+      <div class="app-inspiration-meta"><span>${escape(node.typeLabel || node.type || '知识实体')}</span>${video ? '<span>视频</span>' : image ? '<span>图片</span>' : ''}</div>
+      <p>${escape(node.description || node.desc_zh || '从知识库里重新发现一条值得关注的信息。')}</p>
+      <a href="${escape(nodeUrl(node))}" class="app-inspiration-link"><span>查看知识详情</span><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
+    </article>`;
+  }
+  function inspirationDrawContent(node) {
+    const drawStep = ((homeDrawCount - 1) % 10) + 1;
+    return `<div class="app-inspiration-progress"><div><span>第 <strong>${drawStep}</strong> 抽</span><small>${drawStep}/10</small></div><div class="app-inspiration-progress-track">${Array.from({ length: 10 }, (_, index) => `<i class="${index < drawStep ? 'is-active' : ''}"></i>`).join('')}</div></div>${inspirationCard(node)}<button type="button" class="btn app-inspiration-draw" data-home-inspire ${homeNodes.length ? '' : 'disabled'}><i class="fa-solid fa-rotate" aria-hidden="true"></i> ${homeDrawCount > 1 ? '再抽一张' : '抽取灵感'}</button>`;
   }
   function renderHome(nodes = homeVisibleNodes) {
     const content = byId('appHomeContent');
@@ -81,7 +90,8 @@
     content.classList.remove('is-filtering');
     const inspiration = homeNodes.length ? homeNodes[homeInspirationIndex % homeNodes.length] : null;
     const activeCategory = homeCategories.find((item) => item.id === homeSelectedCategory);
-    content.innerHTML = `<section class="app-inspiration-panel"><div class="app-home-section-heading"><div><span class="app-home-eyebrow">DISCOVER KNOWLEDGE</span><h2>抽取一张知识灵感</h2><p>从当前应用随机遇见一条知识，打开新的探索路径。</p></div><button type="button" class="btn app-inspiration-draw" data-home-inspire ${homeNodes.length ? '' : 'disabled'}><i class="fa-solid fa-shuffle" aria-hidden="true"></i> 抽取灵感</button></div>${inspirationCard(inspiration)}</section>
+    content.innerHTML = `<div class="app-home-quickbar"><button type="button" class="app-inspiration-trigger" data-home-inspiration-open aria-label="抽取知识灵感" title="抽取知识灵感"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i></button></div>
+      <dialog class="app-inspiration-modal" data-home-inspiration-modal aria-labelledby="appInspirationTitle"><div class="app-inspiration-modal-head"><div><span class="app-home-eyebrow"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> DISCOVERY</span><h2 id="appInspirationTitle">抽张知识灵感卡</h2><p>把熟悉的排序放一边，遇见一条可能没看过的知识。</p></div><button type="button" class="app-inspiration-close" data-home-inspiration-close aria-label="关闭"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div><div class="app-inspiration-draw-shell">${inspirationDrawContent(inspiration)}</div></dialog>
       <div class="app-home-workspace"><aside class="app-category-panel"><div class="app-home-section-heading compact"><div><span class="app-home-eyebrow">KNOWLEDGE MAP</span><h2>分类树</h2></div><span class="app-category-total">${homeCategories.length}</span></div><nav aria-label="知识分类"><button type="button" class="app-category-item${homeSelectedCategory ? '' : ' is-active'}" data-home-category=""><i class="fa-solid fa-layer-group" aria-hidden="true"></i><span>全部知识</span><small>${Number(byId('appHomeCount')?.dataset.total) || 0}</small></button><ul class="app-category-tree">${categoryTree(homeCategories)}</ul></nav></aside>
       <section class="app-knowledge-panel"><div class="app-home-section-heading compact"><div><span class="app-home-eyebrow">KNOWLEDGE LIBRARY</span><h2>${escape(activeCategory?.name || '知识列表')}</h2></div><span class="app-list-count">${nodes.length} 条</span></div><div class="app-home-knowledge-grid">${nodes.map(homeKnowledgeCard).join('') || '<div class="app-home-empty"><i class="fa-solid fa-inbox" aria-hidden="true"></i><strong>该分类暂无知识</strong><span>选择其他分类，或创建一条新知识。</span></div>'}</div></section></div>`;
   }
@@ -194,11 +204,17 @@
   byId('appSearchPrev').addEventListener('click', () => { if (page > 1) { page--; search(); } });
   byId('appSearchNext').addEventListener('click', () => { if (page * pageSize < total) { page++; search(); } });
   byId('appHomeContent').addEventListener('click', (event) => {
+    const modal = byId('appHomeContent').querySelector('[data-home-inspiration-modal]');
+    if (event.target.closest('[data-home-inspiration-open]')) { modal?.showModal(); return; }
+    if (event.target.closest('[data-home-inspiration-close]')) { modal?.close(); return; }
     const inspire = event.target.closest('[data-home-inspire]');
     if (inspire && homeNodes.length) {
       let next = homeInspirationIndex;
       if (homeNodes.length > 1) while (next === homeInspirationIndex) next = Math.floor(Math.random() * homeNodes.length);
-      homeInspirationIndex = next; renderHome(); return;
+      homeInspirationIndex = next; homeDrawCount += 1;
+      const shell = modal?.querySelector('.app-inspiration-draw-shell');
+      if (shell) shell.innerHTML = inspirationDrawContent(homeNodes[homeInspirationIndex]);
+      return;
     }
     const category = event.target.closest('[data-home-category]');
     if (category) {
@@ -211,6 +227,10 @@
       }).catch(() => { if (version === homeVersion) { homeVisibleNodes = []; renderHome(); } });
       return;
     }
+  });
+  byId('appHomeContent').addEventListener('click', (event) => {
+    const modal = event.target.closest('[data-home-inspiration-modal]');
+    if (modal && event.target === modal) modal.close();
   });
   byId('appSearchResults').addEventListener('click', (event) => { if (event.target.closest('[data-search-retry]')) search(); });
   const refresh = () => { homeVersion++; searchVersion++; if (window.kbViewMode === 'app_home') window.loadApplicationHome(); if (window.kbViewMode === 'app_search') window.loadApplicationSearch(); };

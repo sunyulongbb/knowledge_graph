@@ -64,7 +64,7 @@ test('anonymous users cannot expand application or user sidebars', () => {
   expect(page).toContain('/assets/scripts/auth-panel.js?v=20260921-3');
   expect(page).toContain('/assets/scripts/knowledge-access.js?v=20260921-3');
   expect(page).toContain('id="appHomeMaintenance"');
-  expect(page).toContain('/assets/scripts/application-pages.js?v=20260922-2');
+  expect(page).toContain('/assets/scripts/application-pages.js?v=20260922-6');
   expect(page).toContain('/assets/scripts/applications.js?v=20260921-1');
   expect(authPanel).toContain('if (authUser) window.toggleUserSidebar?.();\n      else openAuthModal(false);');
   expect(authPanel).toContain('defaultHome.searchParams.set("db", "default")');
@@ -91,10 +91,17 @@ test('application home provides inspiration draw, category tree, and knowledge c
   expect(script).toContain('app-home-knowledge-grid');
   expect(script).toContain('function firstVideo(node)');
   expect(script).toContain('preload="metadata"');
+  expect(script).toContain('app-inspiration-progress-track');
+  expect(script).toContain('再抽一张');
+  expect(script).toContain('data-home-inspiration-modal');
+  expect(script).toContain('modal?.showModal()');
+  expect(script).toContain('app-inspiration-media-stage');
+  expect(script).toContain('shell.innerHTML = inspirationDrawContent');
   expect(css).toContain('.app-inspiration-card');
   expect(css).toContain('.app-category-tree');
   expect(css).toContain('.app-home-knowledge-card');
   expect(css).toContain('.app-home-heading { display: none; }');
+  expect(css).toContain('.app-home-quickbar { position: fixed; right: 18px; bottom: 48px;');
 });
 
 test('entity editor uses the post-composer hierarchy without changing existing control ids', () => {
@@ -104,7 +111,7 @@ test('entity editor uses the post-composer hierarchy without changing existing c
   expect(page).toContain('id="btnCancelEdit"');
   expect(page).toContain('id="btnEntityImport"');
   expect(page).toContain('id="btnSubmit"');
-  expect(page).toContain('/assets/styles/app.css?v=20260922-5');
+  expect(page).toContain('/assets/styles/app.css?v=20260922-9');
   expect(css).toContain('/* Entity composer: compact post-editor layout */');
   expect(css).toContain('.editor-panel #entityDisplayImageWrap');
   expect(css).toContain('.entity-composer-titlebar');

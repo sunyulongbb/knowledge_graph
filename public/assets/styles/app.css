@@ -10383,6 +10383,19 @@ body {
 .app-home-heading .btn.icon:hover { color: var(--accent); background: var(--surface-1); }
 .app-home-heading .btn.icon span { display: none; }
 .app-home-dashboard { display: grid; gap: 10px; width: 100%; }
+.app-home-quickbar { position: fixed; right: 18px; bottom: 48px; z-index: 1450; display: block; }
+.app-inspiration-trigger { width: 48px; height: 48px; padding: 0; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--border)); border-radius: 15px; color: var(--accent); background: color-mix(in srgb, var(--surface-0) 92%, transparent); cursor: pointer; box-shadow: 0 10px 30px rgba(0,0,0,.22); backdrop-filter: blur(10px); transition: transform 150ms ease, background 150ms ease, color 150ms ease; }
+.app-inspiration-trigger:hover { transform: translateY(-1px); color: var(--surface-0); background: var(--accent); }
+.app-inspiration-trigger i { font-size: 19px; }
+.app-inspiration-modal { width: min(680px, calc(100vw - 24px)); max-height: calc(100vh - 32px); padding: 16px; box-sizing: border-box; overflow: auto; border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border)); border-radius: 16px; color: var(--fg); background: color-mix(in srgb, var(--surface-0) 96%, transparent); box-shadow: 0 28px 90px rgba(0,0,0,.36); }
+.app-inspiration-modal[open] { animation: app-inspiration-in 180ms cubic-bezier(.16,1,.3,1); }
+.app-inspiration-modal::backdrop { background: rgba(5,9,7,.62); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+.app-inspiration-modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 14px; }
+.app-inspiration-modal-head h2 { margin: 4px 0 0; font-size: 22px; letter-spacing: -.025em; }
+.app-inspiration-modal-head p { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+.app-inspiration-close { width: 34px; height: 34px; flex: 0 0 34px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--accent) 60%, var(--border)); border-radius: 10px; color: var(--muted); background: transparent; cursor: pointer; }
+.app-inspiration-close:hover { color: var(--fg); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+@keyframes app-inspiration-in { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
 .app-inspiration-panel,
 .app-category-panel,
 .app-knowledge-panel { border: 1px solid color-mix(in srgb, var(--border) 84%, transparent); border-radius: 16px; background: color-mix(in srgb, var(--surface-1) 92%, transparent); }
@@ -10394,21 +10407,35 @@ body {
 .app-home-section-heading.compact h2 { font-size: 17px; letter-spacing: 0; }
 .app-home-section-heading p { margin: 7px 0 0; color: var(--muted); }
 .app-home-eyebrow { color: var(--accent); font-size: 10px; font-weight: 750; letter-spacing: .15em; }
-.app-inspiration-draw { position: relative; min-height: 40px; padding-inline: 16px; border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface-1)); }
-.app-inspiration-card { position: relative; height: clamp(220px, 21vw, 270px); display: grid; grid-template-columns: minmax(190px, .68fr) minmax(0, 1.32fr); overflow: hidden; border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border)); border-radius: 12px; background: var(--surface-0); box-shadow: 0 12px 30px rgba(15, 23, 42, .08); }
-.app-inspiration-visual { position: relative; min-height: 0; overflow: hidden; background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 32%, var(--surface-1)), color-mix(in srgb, var(--surface-0) 80%, #101722)); }
-.app-inspiration-visual::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(8, 12, 18, .62), transparent 66%); }
-.app-inspiration-visual img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.app-inspiration-draw-shell { position: relative; width: min(100%, 660px); margin-inline: auto; display: grid; gap: 9px; }
+.app-inspiration-progress { padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border)); border-radius: 10px; background: color-mix(in srgb, var(--surface-0) 84%, transparent); }
+.app-inspiration-progress > div:first-child { display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 12px; }
+.app-inspiration-progress strong { color: var(--fg); font-size: 20px; }
+.app-inspiration-progress-track { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 5px; margin-top: 7px; }
+.app-inspiration-progress-track i { height: 4px; border-radius: 999px; background: var(--border); }
+.app-inspiration-progress-track i.is-active { background: color-mix(in srgb, var(--accent) 72%, #d9ff84); box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 34%, transparent); }
+.app-inspiration-draw { width: 100%; min-height: 42px; border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); color: color-mix(in srgb, var(--accent) 70%, var(--fg)); background: color-mix(in srgb, var(--accent) 18%, var(--surface-1)); font-weight: 700; }
+.app-inspiration-draw:hover { color: var(--surface-0); background: var(--accent); }
+.app-inspiration-card { position: relative; min-height: 250px; padding: 14px 14px 0; display: flex; flex-direction: column; overflow: hidden; border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border)); border-radius: 14px; background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 10%, var(--surface-0)), var(--surface-0) 60%); box-shadow: 0 14px 34px rgba(15, 23, 42, .1); }
+.app-inspiration-card-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 11px; }
+.app-inspiration-card-top > span { color: var(--accent); font-weight: 700; }
+.app-inspiration-media-stage { position: relative; width: 100%; height: clamp(190px, 34vh, 320px); margin-top: 11px; overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: #09090b; }
+.app-inspiration-media-stage img,
+.app-inspiration-media-stage video { width: 100%; height: 100%; display: block; object-fit: contain; background: #09090b; }
+.app-inspiration-media-stage > span { position: absolute; left: 9px; bottom: 9px; padding: 4px 8px; border-radius: 999px; color: #fff; background: rgba(9,9,11,.76); font-size: 10px; backdrop-filter: blur(8px); pointer-events: none; }
+.app-inspiration-identity { display: flex; align-items: center; gap: 13px; min-width: 0; margin-top: 13px; }
+.app-inspiration-identity > div:last-child { min-width: 0; }
+.app-inspiration-identity h2 { margin: 0 0 3px; color: var(--fg); font-size: clamp(21px, 2vw, 29px); line-height: 1.2; letter-spacing: -.03em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.app-inspiration-identity > div:last-child > span { color: var(--muted); font-size: 11px; }
+.app-inspiration-visual { position: relative; width: 54px; height: 54px; flex: 0 0 54px; display: grid; place-items: center; overflow: hidden; border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border)); border-radius: 11px; background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 24%, var(--surface-1)), var(--surface-1)); }
+.app-inspiration-visual img,
 .app-inspiration-visual video { width: 100%; height: 100%; object-fit: cover; display: block; background: #09090b; }
-.app-inspiration-visual > i { position: absolute; inset: 0; display: grid; place-items: center; font-size: 52px; color: color-mix(in srgb, var(--accent) 82%, white); }
-.app-inspiration-visual > span { position: absolute; z-index: 1; left: 16px; bottom: 14px; padding: 5px 9px; border: 1px solid rgba(255,255,255,.32); border-radius: 999px; color: #fff; background: rgba(8,12,18,.45); font-size: 11px; font-weight: 700; letter-spacing: .08em; backdrop-filter: blur(10px); }
-.app-inspiration-copy { min-width: 0; padding: clamp(16px, 2vw, 26px); display: flex; flex-direction: column; align-items: flex-start; justify-content: center; }
-.app-inspiration-kicker { color: var(--accent); font-size: 12px; font-weight: 650; }
-.app-inspiration-copy h2 { margin: 10px 0 8px; font-size: clamp(23px, 2.4vw, 32px); line-height: 1.18; letter-spacing: -.035em; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
-.app-inspiration-copy p { margin: 0; max-width: 720px; color: var(--muted); line-height: 1.75; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.app-inspiration-meta { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 15px; }
-.app-inspiration-meta span { padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; color: var(--muted); background: var(--surface-1); font-size: 11px; }
-.app-inspiration-link { margin-top: 18px; color: var(--fg); font-weight: 650; text-decoration: none; }
+.app-inspiration-visual > i { color: var(--accent); font-size: 22px; }
+.app-inspiration-visual > span { position: absolute; right: 4px; bottom: 4px; width: 17px; height: 17px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: rgba(9,9,11,.78); font-size: 7px; }
+.app-inspiration-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 15px; }
+.app-inspiration-meta span { padding: 3px 7px; border: 1px solid var(--border); border-radius: 5px; color: var(--muted); background: color-mix(in srgb, var(--surface-1) 75%, transparent); font-size: 10px; }
+.app-inspiration-card > p { margin: 11px 0 14px; color: var(--fg); font-size: 13px; line-height: 1.65; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.app-inspiration-link { min-height: 44px; margin-top: auto; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border); color: var(--fg); font-weight: 600; text-decoration: none; }
 .app-inspiration-link:hover { color: var(--accent); }
 .app-inspiration-empty { position: relative; min-height: 170px; display: grid; place-items: center; align-content: center; gap: 8px; border: 1px dashed var(--border); border-radius: 14px; color: var(--muted); }
 .app-inspiration-empty i { font-size: 30px; color: var(--accent); }
@@ -10490,6 +10517,9 @@ body {
   .app-inspiration-draw { width: 100%; }
   .app-home-knowledge-grid { padding: 10px; }
   .app-home-knowledge-card { grid-template-columns: 88px minmax(0, 1fr); }
+  .app-inspiration-modal { width: calc(100vw - 12px); max-height: calc(100vh - 12px); padding: 12px; border-radius: 13px; }
+  .app-home-quickbar { right: 10px; bottom: 42px; }
+  .app-inspiration-trigger { width: 44px; height: 44px; border-radius: 14px; }
 }
 
 /* Application home uses the full content canvas. */
