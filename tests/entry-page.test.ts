@@ -19,6 +19,16 @@ test('standalone SPARQL and legacy bookmarks preserve the selected knowledge bas
   }
 });
 
+test('main page selects the default application when no application is specified', async () => {
+  for (const path of ['/', '/kb']) {
+    const response = await serveStaticRoute(new Request(`http://localhost${path}`), path);
+    expect(response?.status).toBe(302);
+    expect(response?.headers.get('Location')).toBe(`http://localhost${path}?db=default`);
+  }
+  const selected = await serveStaticRoute(new Request('http://localhost/kb?db=demo'), '/kb');
+  expect(selected?.status).toBe(200);
+});
+
 test('main page scripts remain valid after removing legacy entry initialization', async () => {
   const response = await serveStaticRoute(new Request('http://localhost/kb?db=demo'), '/kb');
   const html = await response!.text();
@@ -44,4 +54,20 @@ test('clear controls and scoped taxonomy clear endpoint are wired independently'
   const schemaPanel = readFileSync('public/assets/scripts/schema-panel.js', 'utf8');
   expect(tableSelection).toContain('请再次确认：确定要永久删除当前应用的全部知识数据吗？');
   expect(schemaPanel).toContain('请再次确认：确定要永久删除当前应用的全部分类吗？');
+});
+
+test('anonymous users cannot expand application or user sidebars', () => {
+  const page = readFileSync('public/index.html', 'utf8');
+  const authPanel = readFileSync('public/assets/scripts/auth-panel.js', 'utf8');
+  const sidebarPanel = readFileSync('public/assets/scripts/sidebar-panel.js', 'utf8');
+  expect(page).toContain('/assets/scripts/sidebar-panel.js?v=20260921-2');
+  expect(page).toContain('/assets/scripts/auth-panel.js?v=20260921-2');
+  expect(page).toContain('/assets/scripts/knowledge-access.js?v=20260921-1');
+  expect(authPanel).toContain('if (authUser) window.toggleUserSidebar?.();\n      else openAuthModal(false);');
+  expect(sidebarPanel).toContain('if (!collapsed && !window.authUser) collapsed = true;');
+  expect(sidebarPanel).toContain('if (!window.authUser) {\n        applyUserSidebarCollapsed(true);');
+  expect(sidebarPanel).toContain("window.addEventListener('kb-auth-change'");
+  expect(sidebarPanel).toContain('applyUserSidebarCollapsed(true, true);');
+  expect(sidebarPanel).toContain('headerLogo.addEventListener("click"');
+  expect(sidebarPanel).toContain('if (!window.authUser) return;');
 });

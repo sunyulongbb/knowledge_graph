@@ -5,6 +5,7 @@ import { hasApplicationPermission } from './application-role-permissions.ts';
 export function ensureApplicationSchema(db: Database) {
   const columns = db.query('PRAGMA table_info(projects)').all() as any[];
   if (!columns.some((column) => column.name === 'owner_user_id')) db.run('ALTER TABLE projects ADD COLUMN owner_user_id INTEGER');
+  if (!columns.some((column) => column.name === 'is_default')) db.run('ALTER TABLE projects ADD COLUMN is_default INTEGER NOT NULL DEFAULT 0');
   db.run(`CREATE TABLE IF NOT EXISTS application_members (
     project_id INTEGER NOT NULL, user_id INTEGER NOT NULL, edit_settings INTEGER NOT NULL DEFAULT 0,
     review_requests INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -19,10 +20,25 @@ export function ensureApplicationSchema(db: Database) {
   db.run('CREATE INDEX IF NOT EXISTS notifications_user_read ON user_notifications(user_id,read_at,id)');
 }
 
+export function ensureDefaultApplication(db: Database) {
+  const projectCount = Number((db.query('SELECT COUNT(*) AS count FROM projects').get() as any)?.count || 0);
+  if (projectCount > 0) return null;
+  db.run(`INSERT INTO projects
+    (name,title,description,file,image,theme_color,tags,link,is_default)
+    VALUES ('default','默认应用','系统首次初始化创建的默认应用','app.sqlite','','#ff7a2b','[]','',1)`);
+  return db.query("SELECT * FROM projects WHERE name='default'").get() as any;
+}
+
 export function applicationPermissions(db: Database, user: KnowledgeUser | null, project: any) {
   const owner = !!user && Number(project?.owner_user_id) === user.id;
   const member = user && project ? db.query('SELECT * FROM application_members WHERE project_id=? AND user_id=?').get(project.id, user.id) as any : null;
-  return { owner, member: owner || !!member, editSettings: owner || !!member?.edit_settings, reviewRequests: owner || !!member?.review_requests };
+  const defaultAccess = Number(project?.is_default) === 1;
+  return {
+    owner,
+    member: owner || defaultAccess || !!member,
+    editSettings: owner || defaultAccess || !!member?.edit_settings,
+    reviewRequests: owner || defaultAccess || !!member?.review_requests,
+  };
 }
 
 export function createApplicationHandler(db: Database, getUser: (req: Request) => KnowledgeUser | null) {
@@ -33,11 +49,12 @@ export function createApplicationHandler(db: Database, getUser: (req: Request) =
   const notify = (userId: number, projectId: number, message: string) => db.run('INSERT INTO user_notifications(user_id,project_id,message) VALUES(?,?,?)', [userId, projectId, message]);
   const record = (project: any, user: KnowledgeUser | null) => {
     const access = applicationPermissions(db, user, project);
+    const defaultAccess = Number(project?.is_default) === 1;
     return { ...project, slug: project.name, name: project.title || project.name, ...access,
-      editSettings: access.editSettings && hasApplicationPermission(user, 'application:update'),
+      editSettings: access.editSettings && (defaultAccess || hasApplicationPermission(user, 'application:update')),
       deleteApplication: access.owner && hasApplicationPermission(user, 'application:delete'),
       manageMembers: access.owner && hasApplicationPermission(user, 'application:members'),
-      reviewRequests: access.reviewRequests && hasApplicationPermission(user, 'application:review'),
+      reviewRequests: access.reviewRequests && (defaultAccess || hasApplicationPermission(user, 'application:review')),
     };
   };
   const hasTable = (name: string) => !!db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name);

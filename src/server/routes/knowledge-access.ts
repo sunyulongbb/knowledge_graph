@@ -4,10 +4,20 @@ import { canAccessKnowledge, knowledgeId } from '../knowledge-access.ts';
 import { applicationPermissions } from '../application-access.ts';
 
 const response = (error: string, status: number) => Response.json({ error }, { status });
+const knowledgeUser = (req: Request) => {
+  const current = getCurrentUser(req);
+  if (current) return current;
+  try {
+    if (new URL(req.url).searchParams.get('db') === 'default') {
+      return { id: 0, username: 'anonymous', displayName: '匿名用户', role: 'admin', permissions: ['*'], anonymous: true };
+    }
+  } catch {}
+  return null;
+};
 
 export async function handleKnowledgeAccessRoutes(req: Request, url: URL, method: string) {
   if (!['/api/kb/knowledge-access', '/api/kb/knowledge-maintenance/request', '/api/kb/knowledge-maintenance/review', '/api/kb/knowledge-maintenance/remove'].includes(url.pathname)) return null;
-  const user = getCurrentUser(req);
+  const user = knowledgeUser(req);
   const body: any = method === 'POST' ? await req.json().catch(() => ({})) : {};
   const id = knowledgeId(body.id || url.searchParams.get('id'));
   if (!canAccessKnowledge(db, user, id)) return response('知识不存在或无权访问', 404);
@@ -51,7 +61,7 @@ export async function handleKnowledgeAccessRoutes(req: Request, url: URL, method
 }
 
 export async function guardKnowledgeRequest(req: Request, url: URL, method: string) {
-  const user = getCurrentUser(req);
+  const user = knowledgeUser(req);
   const path = url.pathname;
   const denied = (id: unknown, mode: 'read' | 'edit' | 'manage' = 'read') => !canAccessKnowledge(db, user, id, mode);
   const mediaPath = path.replace(/\/{2,}/g, '/');

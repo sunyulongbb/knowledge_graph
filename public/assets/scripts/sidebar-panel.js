@@ -260,6 +260,7 @@
     skipFocus = false,
     instant = false,
   ) {
+    if (!collapsed && !window.authUser) collapsed = true;
     const sidebarEl = document.getElementById("projectSidebar");
     const splitEl = document.querySelector(".kb-split");
     if (!sidebarEl) return;
@@ -449,6 +450,10 @@
     wrap.innerHTML = '<div class="muted">加载中…</div>';
     try {
       const resp = await fetch("/api/auth/users", { credentials: "include" });
+      if (resp.status === 401) {
+        wrap.innerHTML = '<div class="muted">登录后可查看用户</div>';
+        return;
+      }
       if (!resp.ok) throw new Error("HTTP " + resp.status);
       const data = await resp.json();
       const items = Array.isArray(data.users) ? data.users : [];
@@ -1581,8 +1586,13 @@
       if (splitLayout) splitLayout.style.setProperty("--user-sidebar-width", collapsed ? "0px" : "72px");
       if (persist) saveSidebarState();
     };
-    applyUserSidebarCollapsed(initialSidebarState.right, false);
+    applyUserSidebarCollapsed(window.authUser ? initialSidebarState.right : true, false);
     saveSidebarState();
+    window.addEventListener('kb-auth-change', (event) => {
+      if (event.detail?.user) return;
+      setSidebarCollapsed(true, true, true, true);
+      applyUserSidebarCollapsed(true, true);
+    });
     const restoreSidebarRoute = () => {
       const state = readSidebarState();
       const wasRightCollapsed = userSidebar?.classList.contains('is-collapsed');
@@ -1594,6 +1604,10 @@
     window.addEventListener('hashchange', restoreSidebarRoute);
     window.addEventListener('kb:url-param-changed', restoreSidebarRoute);
     window.toggleUserSidebar = () => {
+      if (!window.authUser) {
+        applyUserSidebarCollapsed(true);
+        return false;
+      }
       const collapsed = userSidebar.classList.contains("is-collapsed");
       applyUserSidebarCollapsed(!collapsed);
       if (collapsed) loadUsersToSidebar();
@@ -1642,6 +1656,7 @@
         headerLogo.addEventListener("click", (e) => {
           e.preventDefault();
           e.stopPropagation();
+          if (!window.authUser) return;
           const sidebarEl = document.getElementById("projectSidebar");
           if (!sidebarEl) return;
           (window.setSidebarCollapsed || setSidebarCollapsed)(

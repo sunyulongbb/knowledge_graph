@@ -3,13 +3,16 @@
   const normalizeId = (id) => String(id || '').replace(/^entity\//, '');
   const activeId = () => normalizeId(byId('detailPanel')?.dataset.entityId || window.kbActiveDetailNodeId);
   const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+  const hasAnonymousDefaultAccess = () => !window.authUser && new URLSearchParams(window.location.search).get('db') === 'default';
+  const hasKnowledgeAccess = () => !!window.authUser || hasAnonymousDefaultAccess();
+  const hasKnowledgeAdminAccess = () => window.authUser?.role === 'admin' || hasAnonymousDefaultAccess();
   let editorNode = null;
   let generation = 0;
-  const canCreate = () => !!window.authUser && (!window.kbApplicationScope || (window.kbApplicationProjects || []).some((project) => project.slug === window.kbApplicationScope && project.member));
-  const canEditCurrent = () => !!window.authUser && (byId('fId')?.value ? !!editorNode?.can_edit : canCreate());
+  const canCreate = () => hasKnowledgeAccess() && (!window.kbApplicationScope || (window.kbApplicationProjects || []).some((project) => project.slug === window.kbApplicationScope && project.member));
+  const canEditCurrent = () => hasKnowledgeAccess() && (byId('fId')?.value ? !!editorNode?.can_edit : canCreate());
   window.canEditCurrentKnowledge = canEditCurrent;
   const nodeForId = (id) => (window.kbTableNodes || []).find((node) => normalizeId(node.id || node._id) === normalizeId(id));
-  window.canOperateKnowledgeSelection = (ids, mode = 'edit') => !!window.authUser && ids.length > 0 && ids.every((id) => !!nodeForId(id)?.[mode === 'manage' ? 'can_manage' : 'can_edit']);
+  window.canOperateKnowledgeSelection = (ids, mode = 'edit') => hasKnowledgeAccess() && ids.length > 0 && ids.every((id) => !!nodeForId(id)?.[mode === 'manage' ? 'can_manage' : 'can_edit']);
   const editControls = '#btnAddOntologyChip,#composerTypeSelect,#btnEntityImageUpload,#btnEntityVideoUpload,#btnEntityPdfUpload,#btnShowAttrForm,#btnAttrEditSelected,#btnAttrDeleteSelected,#btnSubmit,.attr-row-del-btn,.attr-quick-add-btn';
   const adminControls = '#btnOntologyAddRoot,#btnOntologyImport,#btnPropertyAdd,#btnPropertyDeleteSelected,#btnClsAdd,#btnClsDelete,#btnClearAllClasses,#btnClassImport,#btnTagAdd,#btnTagImport,#btnSparqlConfirmImport,#btnSparqlImport,#btnClearAllNodes';
   const permissionDisabled = new WeakSet();
@@ -50,13 +53,13 @@
   function syncControls() {
     const allowed = canEditCurrent();
     document.querySelectorAll(`${editControls},#nodeForm input,#nodeForm textarea,#nodeForm select:not(#knowledgeVisibility),#nodeForm button:not(#btnCancelEdit):not(#btnKnowledgeVisibility),#attrForm input,#attrForm textarea,#attrForm select,#attrForm button:not(#btnAttrReset)`).forEach((element) => lock(element, !allowed));
-    if (byId('knowledgeVisibility')) lock(byId('knowledgeVisibility'), !window.authUser || (!!byId('fId')?.value && !editorNode?.can_manage));
+    if (byId('knowledgeVisibility')) lock(byId('knowledgeVisibility'), !hasKnowledgeAccess() || (!!byId('fId')?.value && !editorNode?.can_manage));
     syncVisibilityIcon();
     document.querySelectorAll('#entityDisplayName,#entityDisplayDesc,#entityDisplayAliases').forEach((element) => {
       if (!allowed && element.contentEditable !== 'false') element.contentEditable = 'false';
     });
     document.querySelectorAll('#btnTableAdd').forEach((element) => lock(element, !canCreate()));
-    document.querySelectorAll(adminControls).forEach((element) => lock(element, window.authUser?.role !== 'admin'));
+    document.querySelectorAll(adminControls).forEach((element) => lock(element, !hasKnowledgeAdminAccess()));
     window.ensureTableSelectedButtonsState?.();
   }
   for (const type of ['click', 'dblclick', 'beforeinput', 'paste', 'drop', 'submit']) {
@@ -66,7 +69,7 @@
       if (target.closest('#btnCancelEdit,#btnAttrReset')) return;
       const denied = (!canEditCurrent() && target.closest(`#nodeForm,#attrForm,${editControls}`)) ||
         (!canCreate() && target.closest('#btnTableAdd')) ||
-        (window.authUser?.role !== 'admin' && target.closest(adminControls));
+        (!hasKnowledgeAdminAccess() && target.closest(adminControls));
       if (denied) { event.preventDefault(); event.stopImmediatePropagation(); }
     }, true);
   }
@@ -87,11 +90,11 @@
   }
   function syncEditor(node) {
     editorNode = node;
-    const canEdit = !!window.authUser && (node ? !!node.can_edit : !byId('fId')?.value);
+    const canEdit = hasKnowledgeAccess() && (node ? !!node.can_edit : !byId('fId')?.value);
     const select = byId('knowledgeVisibility');
     if (select) {
       select.value = node?.visibility === 'private' ? 'private' : 'public';
-      select.disabled = node ? !node.can_manage : !window.authUser;
+      select.disabled = node ? !node.can_manage : !hasKnowledgeAccess();
       select.title = node && !node.can_manage ? '仅创建者可以修改访问级别' : '公开：所有人可读；私有：仅创建者和维护者可读';
     }
     if (byId('entityDisplayName')) byId('entityDisplayName').contentEditable = String(canEdit);

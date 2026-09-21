@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { test, expect } from 'bun:test';
-import { applicationPermissions, createApplicationHandler, ensureApplicationSchema } from '../src/server/application-access.ts';
+import { applicationPermissions, createApplicationHandler, ensureApplicationSchema, ensureDefaultApplication } from '../src/server/application-access.ts';
 import { ensureApplicationRolePermissions } from '../src/server/application-role-permissions.ts';
 
 function setup() {
@@ -20,6 +20,34 @@ function setup() {
   };
   return { db, call, users };
 }
+
+test('first initialization creates one default application with access for every signed-in user', async () => {
+  const { db, call } = setup();
+  try {
+    const created = ensureDefaultApplication(db);
+    expect(created).toMatchObject({ name: 'default', title: '默认应用', is_default: 1 });
+    expect(ensureDefaultApplication(db)).toBeNull();
+    expect(db.query('SELECT count(*) AS n FROM projects').get()).toEqual({ n: 1 });
+
+    for (const userId of [1, 2, 3]) {
+      const projects = (await (await call('/api/kb/list_projects', userId))!.json()).projects;
+      expect(projects).toHaveLength(1);
+      expect(projects[0]).toMatchObject({ slug: 'default', member: true, editSettings: true, reviewRequests: true });
+    }
+    const anonymousProjects = (await (await call('/api/kb/list_projects'))!.json()).projects;
+    expect(anonymousProjects).toHaveLength(1);
+    expect(anonymousProjects[0]).toMatchObject({ slug: 'default', member: true, editSettings: true, reviewRequests: true });
+  } finally { db.close(); }
+});
+
+test('default application is only created for an empty application database', () => {
+  const { db } = setup();
+  try {
+    db.run("INSERT INTO projects(name,title,file) VALUES('existing','Existing','app.sqlite')");
+    expect(ensureDefaultApplication(db)).toBeNull();
+    expect(db.query("SELECT count(*) AS n FROM projects WHERE name='default'").get()).toEqual({ n: 0 });
+  } finally { db.close(); }
+});
 
 test('application creation records owner, marketplace is public and sidebar lists only owned or maintained apps', async () => {
   const { db, call } = setup();

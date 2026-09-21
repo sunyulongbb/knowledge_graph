@@ -14,7 +14,7 @@ import { handleSparqlRoutes } from "./routes/sparql.ts";
 import { handleInteractionRoutes } from "./routes/interactions.ts";
 import { handleSystemAdminRoutes } from "./routes/system-admin.ts";
 import { handlePipelineRoutes } from './routes/pipeline.ts';
-import { getCurrentUser } from './auth-context.ts';
+import { getCurrentUser, getKnowledgeUser } from './auth-context.ts';
 import { knowledgeContext } from './knowledge-access.ts';
 import { guardKnowledgeRequest, handleKnowledgeAccessRoutes } from './routes/knowledge-access.ts';
 
@@ -61,7 +61,7 @@ const server = Bun.serve({
       }
 
       const requestUrl = url;
-      const response = await knowledgeContext.run({ user: getCurrentUser(req) }, async () => {
+      const response = await knowledgeContext.run({ user: getKnowledgeUser(req) }, async () => {
       const url = requestUrl;
       const profileResponse = await handleUserProfile(req, url, method);
       if (profileResponse) return profileResponse;

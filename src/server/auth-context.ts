@@ -17,6 +17,17 @@ export function getCurrentUser(req: Request): any | null {
   return { id: user.id, username: user.username, displayName: user.display_name || user.username, avatar: user.avatar || "", role: isSuper ? "admin" : "user", roles, permissions, dataScope: isSuper ? "all" : (roles.some((role) => role.data_scope === "all") ? "all" : "own"), status: user.status || "active", createdAt: user.created_at };
 }
 
+export function getKnowledgeUser(req: Request): any | null {
+  const current = getCurrentUser(req);
+  if (current) return current;
+  try {
+    if (new URL(req.url).searchParams.get("db") === "default") {
+      return { id: 0, username: "anonymous", displayName: "匿名用户", role: "admin", permissions: ["*"], dataScope: "all", anonymous: true };
+    }
+  } catch {}
+  return null;
+}
+
 export function isAdmin(user: any) {
   return user?.role === "admin";
 }

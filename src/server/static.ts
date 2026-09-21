@@ -63,6 +63,10 @@ export async function serveStaticRoute(req: Request, pathname: string) {
       url.searchParams.delete("tool");
       return Response.redirect(url.toString(), 302);
     }
+    if (!url.searchParams.has("db")) {
+      url.searchParams.set("db", "default");
+      return Response.redirect(url.toString(), 302);
+    }
     return new Response(PUBLIC_INDEX_FILE, { headers: { "Content-Type": "text/html; charset=utf-8" } });
   }
 

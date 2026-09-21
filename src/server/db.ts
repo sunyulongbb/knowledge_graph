@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from "fs";
 import { join, resolve } from "path";
 import { createKnowledgeDatabase, ensureKnowledgeAccessSchema } from './knowledge-access.ts';
-import { ensureApplicationSchema } from './application-access.ts';
+import { ensureApplicationSchema, ensureDefaultApplication } from './application-access.ts';
 import { ensureApplicationRolePermissions } from './application-role-permissions.ts';
 
 const KNOWLEDGE_GRAPH_ROOT = resolve(import.meta.dir, "..", "..");
@@ -1725,3 +1725,4 @@ export { APP_DB_FILENAME, getProjectByIdentifier };
 initializeKnowledgeBaseDatabase();
 ensureKnowledgeAccessSchema(appDb);
 ensureApplicationSchema(appDb);
+ensureDefaultApplication(appDb);

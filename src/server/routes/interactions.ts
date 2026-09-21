@@ -1,5 +1,5 @@
 import { db } from "../db.ts";
-import { getCurrentUser, isAdmin } from "../auth-context.ts";
+import { getKnowledgeUser, isAdmin } from "../auth-context.ts";
 
 const json = (body: any, status = 200) => Response.json(body, { status });
 const cleanKnowledgeId = (value: string) => decodeURIComponent(value || "").trim();
@@ -18,7 +18,7 @@ export async function handleInteractionRoutes(req: Request, url: URL, method: st
     const knowledgeId = cleanKnowledgeId(match[1] || "");
     const action = match[2] || "interaction";
     if (!knowledgeId) return json({ error: "知识 ID 不能为空" }, 400);
-    const user = getCurrentUser(req);
+    const user = getKnowledgeUser(req);
     if (action === "interaction" && method === "GET") return json(counts(knowledgeId, user?.id));
     if (action === "like" && method === "POST") {
       if (!user) return json({ error: "请先登录" }, 401);
@@ -54,7 +54,7 @@ export async function handleInteractionRoutes(req: Request, url: URL, method: st
   }
   const commentMatch = url.pathname.match(/^\/api\/comments\/(\d+)$/);
   if (commentMatch && method === "DELETE") {
-    const user = getCurrentUser(req);
+    const user = getKnowledgeUser(req);
     if (!user) return json({ error: "请先登录" }, 401);
     const comment = db.query("SELECT id, user_id, knowledge_id FROM knowledge_comments WHERE id = ?").get(Number(commentMatch[1])) as any;
     if (!comment) return json({ error: "评论不存在" }, 404);

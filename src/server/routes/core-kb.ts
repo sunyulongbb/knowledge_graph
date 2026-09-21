@@ -2,7 +2,7 @@ import { ontologyTypeFilterSql } from '../ontology-filter.ts';
 import { db, getProjectByIdentifier } from "../db.ts";
 import { normalizeDatatype, normalizeValue, normalizeStatement, valueTypeFor, uiDatatype } from '../../shared/wikidata.ts';
 import { normalizeEntityTaxonomy } from '../../shared/entity-taxonomy.ts';
-import { getCurrentUser, isAdmin } from "../auth-context.ts";
+import { getKnowledgeUser, isAdmin } from "../auth-context.ts";
 import { mkdirSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import { relationAttributeResponse, saveRelationOrder } from '../relation-order.ts';
@@ -3580,7 +3580,7 @@ export async function handleCoreKbRoutes(
   }
 
   if (url.pathname === "/api/kb/nodes" && method === "POST") {
-    if (!getCurrentUser(req)) {
+    if (!getKnowledgeUser(req)) {
       return Response.json({ error: "请先登录" }, { status: 401 });
     }
     try {
@@ -3674,7 +3674,7 @@ export async function handleCoreKbRoutes(
   }
 
   if (url.pathname === "/api/kb/nodes/update" && method === "POST") {
-    if (!getCurrentUser(req)) {
+    if (!getKnowledgeUser(req)) {
       return Response.json({ error: "请先登录" }, { status: 401 });
     }
     try {
@@ -3689,7 +3689,7 @@ export async function handleCoreKbRoutes(
       }
 
       const updates: string[] = ['updated_by_user_id = ?'];
-      const params: any[] = [getCurrentUser(req).id];
+      const params: any[] = [getKnowledgeUser(req).id];
       if (body.visibility !== undefined) {
         updates.push('visibility = ?');
         params.push(body.visibility === 'private' ? 'private' : 'public');
@@ -4110,7 +4110,7 @@ export async function handleCoreKbRoutes(
   }
 
   if (url.pathname === "/api/kb/nodes" && method === "DELETE") {
-    if (!getCurrentUser(req)) {
+    if (!getKnowledgeUser(req)) {
       return Response.json({ error: "请先登录" }, { status: 401 });
     }
     let idParam = url.searchParams.get("id");

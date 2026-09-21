@@ -919,15 +919,6 @@
       if (oldRefresh) oldRefresh.remove();
 
       try {
-        if (!getUrlParam("db")) {
-          if (!sessionStorage.getItem("kbDbSelectModalShown")) {
-            sessionStorage.setItem("kbDbSelectModalShown", "1");
-            showDbSelectModal();
-          }
-        }
-      } catch {}
-
-      try {
         const am = document.getElementById("authModal");
         if (am && am.parentElement !== document.body) {
           document.body.appendChild(am);
