@@ -7,6 +7,7 @@ import { mkdirSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import { relationAttributeResponse, saveRelationOrder } from '../relation-order.ts';
 import { knowledgeContext } from '../knowledge-access.ts';
+import { appendVideoCoverPairs } from '../video-cover-pairing.ts';
 import {
   formatNode,
   formatAttribute,
@@ -3773,6 +3774,54 @@ export async function handleCoreKbRoutes(
         updates.push("type = ?");
         params.push(taxonomy.typeId);
       }
+      let pairedVideoCoverAppendHandled = false;
+      if (
+        body.appendVideos === true &&
+        body.appendCovers === true &&
+        body.videos !== undefined &&
+        body.covers !== undefined
+      ) {
+        const incomingVideos = await prepareVideoValues(
+          normalizeMediaValues(body.videos, {
+            preserveEmptySlots: true,
+            dedupe: false,
+          }),
+          { preserveEmptySlots: true },
+        );
+        const incomingCovers = await prepareImageValues(
+          normalizeMediaValues(body.covers, {
+            preserveEmptySlots: true,
+            dedupe: false,
+          }),
+          { preserveEmptySlots: true },
+        );
+        // Read both columns after async media preparation, then merge and write
+        // them together so their positional relationship cannot drift.
+        const existingRow = hasProjectScope
+          ? (db
+              .query(
+                `SELECT videos, covers FROM nodes WHERE id = ? AND ${scopedClause()}`,
+              )
+              .get(id, scopedProjectId) as any)
+          : (db
+              .query("SELECT videos, covers FROM nodes WHERE id = ?")
+              .get(id) as any);
+        const paired = appendVideoCoverPairs(
+          normalizeMediaValues(existingRow?.videos, {
+            preserveEmptySlots: true,
+            dedupe: false,
+          }),
+          normalizeMediaValues(existingRow?.covers, {
+            preserveEmptySlots: true,
+            dedupe: false,
+          }),
+          incomingVideos,
+          incomingCovers,
+        );
+        updates.push("covers = ?", "videos = ?");
+        params.push(JSON.stringify(paired.covers), JSON.stringify(paired.videos));
+        pairedVideoCoverAppendHandled = true;
+      }
       if (body.images !== undefined) {
         let imageValues = await prepareImageValues(
           normalizeMediaValues(body.images),
@@ -3786,7 +3835,7 @@ export async function handleCoreKbRoutes(
         updates.push("images = ?");
         params.push(JSON.stringify(imageValues));
       }
-      if (body.covers !== undefined) {
+      if (body.covers !== undefined && !pairedVideoCoverAppendHandled) {
         let incomingCoverValues = Array.isArray(body.covers)
           ? normalizeMediaValues(body.covers, {
               preserveEmptySlots: true,
@@ -3832,7 +3881,7 @@ export async function handleCoreKbRoutes(
         updates.push("pdf = ?");
         params.push(normalizePdfValue(body.pdf));
       }
-      if (body.videos !== undefined) {
+      if (body.videos !== undefined && !pairedVideoCoverAppendHandled) {
         let incomingVideoValues = Array.isArray(body.videos)
           ? normalizeMediaValues(body.videos, {
               preserveEmptySlots: true,

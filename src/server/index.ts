@@ -1,4 +1,5 @@
-import { switchDatabase, adminDb } from "./db.ts";
+import { switchDatabase, adminDb, hashPassword } from "./db.ts";
+import { ensureInitialAdminAccount } from "./initial-admin.ts";
 import { createApplicationHandler } from './application-access.ts';
 import { createUserProfileHandler } from './user-profile.ts';
 import { handleCoreKbRoutes } from "./routes/core-kb.ts";
@@ -18,6 +19,15 @@ import { knowledgeContext } from './knowledge-access.ts';
 import { guardKnowledgeRequest, handleKnowledgeAccessRoutes } from './routes/knowledge-access.ts';
 
 const port = parseInt(process.env.PORT || "8080");
+const initialAdmin = await ensureInitialAdminAccount(adminDb, hashPassword);
+if (initialAdmin) {
+  console.log("\n============================================================");
+  console.log("首次运行：已自动创建系统管理员账号");
+  console.log(`管理员账号: ${initialAdmin.username}`);
+  console.log(`管理员密码: ${initialAdmin.password}`);
+  console.log("请登录后立即修改密码，并妥善保存该凭据。");
+  console.log("此密码只会在本次创建时显示。\n============================================================\n");
+}
 const handleApplications = createApplicationHandler(adminDb, getCurrentUser);
 const handleUserProfile = createUserProfileHandler(adminDb, getCurrentUser);
 

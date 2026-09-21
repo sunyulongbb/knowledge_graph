@@ -1143,9 +1143,24 @@
         ].filter((url, index, arr) => url && arr.indexOf(url) === index);
         if (videoUrls.length) {
           hasPriorityMedia = true;
-          const coverList = Array.isArray(doc?.covers)
-            ? doc.covers.map((item) => String(item || "").trim())
-            : normalizeMediaStringList(doc?.cover);
+          const normalizeDetailCoverSlots = (value) => {
+            let source = value;
+            if (typeof source === "string") {
+              const text = source.trim();
+              if (text.startsWith("[") && text.endsWith("]")) {
+                try {
+                  source = JSON.parse(text);
+                } catch {}
+              }
+            }
+            return Array.isArray(source)
+              ? source.map((item) => String(item || "").trim())
+              : [];
+          };
+          const coverList = normalizeDetailCoverSlots(doc?.covers);
+          if (!coverList.length) {
+            coverList.push(...normalizeMediaStringList(doc?.cover));
+          }
           const playlistItems = videoUrls.map((videoUrl, index) => {
             const resolvedUrl = (() => {
               try {
@@ -1182,6 +1197,93 @@
           let playlistNav = null;
           let currentPlayerEl = null;
           let activePlaylistIndex = 0;
+          let detailCoverSaveQueue = Promise.resolve();
+
+          const captureDetailVideoCover = (videoEl) => {
+            if (!(videoEl instanceof HTMLVideoElement)) return "";
+            const width = Number(videoEl.videoWidth || 0);
+            const height = Number(videoEl.videoHeight || 0);
+            if (!width || !height || videoEl.readyState < 2) return "";
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            const context = canvas.getContext("2d");
+            if (!context) return "";
+            context.drawImage(videoEl, 0, 0, width, height);
+            return canvas.toDataURL("image/jpeg", 0.82);
+          };
+
+          const updateDetailVideoCover = async (item, playerEl) => {
+            if (!item || item.coverValidationStarted) return;
+            item.coverValidationStarted = true;
+
+            // Vidstack mounts a native <video> below media-player. Give the
+            // provider a short window to finish mounting/loading after play.
+            let nativeVideo = null;
+            for (let attempt = 0; attempt < 8; attempt += 1) {
+              nativeVideo =
+                playerEl instanceof HTMLVideoElement
+                  ? playerEl
+                  : playerEl.querySelector?.("video") || null;
+              if (nativeVideo?.readyState >= 2 && nativeVideo.videoWidth) break;
+              await new Promise((resolve) => setTimeout(resolve, 125));
+            }
+
+            try {
+              const coverData = captureDetailVideoCover(nativeVideo);
+              if (!coverData) {
+                item.coverValidationStarted = false;
+                return;
+              }
+              const saveTask = detailCoverSaveQueue.then(async () => {
+                const nextCovers = [...coverList];
+                while (nextCovers.length < videoUrls.length) nextCovers.push("");
+                nextCovers[item.index] = coverData;
+                const updateUrl = new URL(
+                  "/api/kb/nodes/update",
+                  window.location.origin,
+                );
+                if (typeof window.appendCurrentDbParam === "function") {
+                  const scopedUrl = window.appendCurrentDbParam(updateUrl);
+                  if (scopedUrl instanceof URL) updateUrl.search = scopedUrl.search;
+                }
+                const response = await fetch(updateUrl.toString(), {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    id: String(doc?._id || doc?.id || fullId).replace(/^entity\//, ""),
+                    covers: nextCovers,
+                  }),
+                });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const result = await response.json();
+                if (result?.ok === false) {
+                  throw new Error(result.error || result.detail || "封面更新失败");
+                }
+                return { result, nextCovers };
+              });
+              detailCoverSaveQueue = saveTask.catch(() => null);
+              const { result, nextCovers } = await saveTask;
+              const savedCovers = normalizeDetailCoverSlots(result?.node?.covers);
+              const savedCover = savedCovers[item.index] || coverData;
+              coverList.splice(0, coverList.length, ...(savedCovers.length ? savedCovers : nextCovers));
+              item.poster = savedCover;
+              item.coverValidated = true;
+              try {
+                if (playerEl instanceof HTMLVideoElement) playerEl.poster = savedCover;
+                else playerEl.setAttribute("poster", savedCover);
+              } catch {}
+              const thumb = playlistNav?.querySelector(
+                `.detail-video-playlist-item:nth-child(${item.index + 1}) .detail-video-playlist-thumb`,
+              );
+              if (thumb) {
+                thumb.style.backgroundImage = `url("${savedCover.replace(/"/g, "%22")}")`;
+              }
+            } catch (error) {
+              item.coverValidationStarted = false;
+              console.warn("详情页视频封面自动校验失败", error);
+            }
+          };
 
           const updatePlaylistSelection = () => {
             if (!playlistNav) return;
@@ -1200,6 +1302,54 @@
                   : playlistItems[buttonIndex]?.type || "video";
               }
             });
+          };
+
+          const deleteDetailVideoAt = async (index, deleteButton) => {
+            const item = playlistItems[index];
+            if (!item) return;
+            if (!window.confirm(`确定删除视频 ${index + 1}？`)) return;
+            if (deleteButton) deleteButton.disabled = true;
+            try {
+              // Finish any cover correction first so it cannot write an old
+              // video/cover array back after this deletion.
+              await detailCoverSaveQueue.catch(() => null);
+              const nextVideos = videoUrls.filter((_, itemIndex) => itemIndex !== index);
+              const nextCovers = [...coverList];
+              while (nextCovers.length < videoUrls.length) nextCovers.push("");
+              nextCovers.splice(index, 1);
+              if (nextCovers.length > nextVideos.length) {
+                nextCovers.length = nextVideos.length;
+              }
+              const updateUrl = new URL(
+                "/api/kb/nodes/update",
+                window.location.origin,
+              );
+              if (typeof window.appendCurrentDbParam === "function") {
+                const scopedUrl = window.appendCurrentDbParam(updateUrl);
+                if (scopedUrl instanceof URL) updateUrl.search = scopedUrl.search;
+              }
+              const response = await fetch(updateUrl.toString(), {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  id: String(doc?._id || doc?.id || fullId).replace(/^entity\//, ""),
+                  videos: nextVideos,
+                  covers: nextCovers,
+                }),
+              });
+              if (!response.ok) throw new Error(`HTTP ${response.status}`);
+              const result = await response.json();
+              if (result?.ok === false) {
+                throw new Error(result.error || result.detail || "视频删除失败");
+              }
+              await showNodeDetailInline(routeId || fullId, {
+                preserveSidebarState,
+              });
+            } catch (error) {
+              if (deleteButton) deleteButton.disabled = false;
+              console.warn("详情页视频删除失败", error);
+              window.alert(`视频删除失败：${error?.message || error}`);
+            }
           };
 
           const renderPlayerAt = (nextIndex) => {
@@ -1279,18 +1429,22 @@
               playerMount.appendChild(fallback);
               syncDetailTopMediaStage();
             });
+            videoEl.addEventListener("play", () => {
+              void updateDetailVideoCover(item, videoEl);
+            });
             currentPlayerEl = videoEl;
             playerMount.appendChild(videoEl);
             updatePlaylistSelection();
           };
 
-          if (playlistItems.length > 1) {
+          if (playlistItems.length) {
             playlistNav = document.createElement("div");
             playlistNav.className = "detail-video-playlist";
             playlistItems.forEach((item, index) => {
-              const button = document.createElement("button");
-              button.type = "button";
+              const button = document.createElement("div");
               button.className = "detail-video-playlist-item";
+              button.setAttribute("role", "button");
+              button.tabIndex = 0;
               button.setAttribute("aria-label", `播放视频 ${index + 1}`);
               const thumb = document.createElement("span");
               thumb.className = "detail-video-playlist-thumb";
@@ -1308,16 +1462,47 @@
               const orderEl = document.createElement("span");
               orderEl.className = "detail-video-playlist-order";
               orderEl.textContent = String(index + 1).padStart(2, "0");
+              const deleteButton = document.createElement("button");
+              deleteButton.type = "button";
+              deleteButton.className = "detail-video-playlist-delete";
+              deleteButton.setAttribute("aria-label", `删除视频 ${index + 1}`);
+              deleteButton.title = "删除视频";
+              deleteButton.innerHTML = '<i class="fa-solid fa-trash-can"></i>';
               copy.appendChild(titleEl);
               copy.appendChild(subEl);
               button.appendChild(orderEl);
               button.appendChild(thumb);
               button.appendChild(copy);
+              button.appendChild(deleteButton);
               button.addEventListener("click", () => {
                 renderPlayerAt(index);
               });
+              button.addEventListener("keydown", (event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                renderPlayerAt(index);
+              });
+              deleteButton.addEventListener("click", (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void deleteDetailVideoAt(index, deleteButton);
+              });
               playlistNav.appendChild(button);
             });
+            playlistNav.addEventListener(
+              "wheel",
+              (event) => {
+                if (
+                  playlistNav.scrollWidth <= playlistNav.clientWidth ||
+                  Math.abs(event.deltaX) > Math.abs(event.deltaY)
+                ) {
+                  return;
+                }
+                event.preventDefault();
+                playlistNav.scrollLeft += event.deltaY;
+              },
+              { passive: false },
+            );
             playerShell.appendChild(playlistNav);
           }
 

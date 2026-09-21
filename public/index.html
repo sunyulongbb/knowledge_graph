@@ -14214,6 +14214,8 @@
     let composerOntologyTreeCache = null;
     let uploadedVideoUrl = "";
     let uploadedVideoPoster = "";
+    let videoUploadSequence = 0;
+    let videoSaveQueue = Promise.resolve();
     let uploadedPdfUrl = "";
     window.kbPendingEntityImageDataUrl = "";
     window.kbPendingEntityImages = [];
@@ -14224,8 +14226,8 @@
       // text notifications removed, progress bar only
     }
 
-    async function saveVideoToCurrentNode(videoUrl, posterData) {
-      const currentId = getCurrentNodeIdForLeftCard();
+    async function saveVideoToCurrentNode(videoUrl, posterData, targetNodeId = "") {
+      const currentId = String(targetNodeId || getCurrentNodeIdForLeftCard()).trim();
       if (!currentId) return null;
       const body = {
         id: currentId,
@@ -14236,7 +14238,13 @@
         body.covers = [posterData];
         body.appendCovers = true;
       }
-      return await apiPost("/api/kb/nodes/update", body);
+      // Appending reads the existing arrays before writing them. Serialize these
+      // updates so overlapping uploads cannot overwrite a sibling video's pair.
+      const saveTask = videoSaveQueue.then(() =>
+        apiPost("/api/kb/nodes/update", body)
+      );
+      videoSaveQueue = saveTask.catch(() => null);
+      return await saveTask;
     }
 
     function setVideoUploadProgress(percent, message) {
@@ -14369,6 +14377,11 @@
         if (!fVideo || !fVideo.files || !fVideo.files.length) return;
         const file = fVideo.files[0];
         if (!file) return;
+        // Keep all data for this upload in the same closure. Multiple change events
+        // can overlap, so the shared uploadedVideo* fields must not be used to pair
+        // a video with its poster or to decide which node receives the upload.
+        const uploadSequence = ++videoUploadSequence;
+        const targetNodeId = getCurrentNodeIdForLeftCard();
         try {
           const maxVideoSize = 5000 * 1024 * 1024;
           if (file.size > maxVideoSize) {
@@ -14377,9 +14390,15 @@
           const existingImageEl = document.getElementById("entityDisplayImage");
           const existingImage = existingImageEl?.getAttribute("src") || "";
           const existingImageVisible = existingImageEl && existingImageEl.style.display !== "none" && existingImage.trim();
-          uploadedVideoPoster = await captureVideoPoster(file);
-          if (uploadedVideoPoster && existingImageEl && !existingImageVisible) {
-            existingImageEl.src = uploadedVideoPoster;
+          const videoPoster = await captureVideoPoster(file);
+          if (
+            videoPoster &&
+            uploadSequence === videoUploadSequence &&
+            targetNodeId === getCurrentNodeIdForLeftCard() &&
+            existingImageEl &&
+            !existingImageVisible
+          ) {
+            existingImageEl.src = videoPoster;
             existingImageEl.style.display = "";
             const imageWrapEl = document.getElementById("entityDisplayImageWrap");
             if (imageWrapEl) imageWrapEl.classList.remove("empty");
@@ -14393,15 +14412,23 @@
             "/api/kb/upload-video",
             uploadForm,
             (percent) => {
-              setVideoUploadProgress(percent, "");
+              if (uploadSequence === videoUploadSequence) {
+                setVideoUploadProgress(percent, "");
+              }
             }
           );
           if (!uploadResp || !uploadResp.url) {
             throw new Error("视频上传失败");
           }
-          uploadedVideoUrl = uploadResp.url;
-          setVideoUploadProgress(100, "");
-          const saveResp = await saveVideoToCurrentNode(uploadedVideoUrl, uploadedVideoPoster);
+          const videoUrl = uploadResp.url;
+          if (uploadSequence === videoUploadSequence) {
+            uploadedVideoUrl = videoUrl;
+            uploadedVideoPoster = videoPoster;
+          }
+          if (uploadSequence === videoUploadSequence) {
+            setVideoUploadProgress(100, "");
+          }
+          const saveResp = await saveVideoToCurrentNode(videoUrl, videoPoster, targetNodeId);
           if (saveResp && saveResp.ok) {
             const updatedNode = saveResp.node && typeof saveResp.node === "object"
               ? saveResp.node
@@ -14424,7 +14451,11 @@
             if (typeof renderTableList === "function") {
               renderTableList();
             }
-            if (updatedNode && typeof setFormToEdit === "function") {
+            if (
+              updatedNode &&
+              typeof setFormToEdit === "function" &&
+              targetNodeId === getCurrentNodeIdForLeftCard()
+            ) {
               setFormToEdit(updatedNode);
             }
             if (addMsg) addMsg.textContent = "";
@@ -14434,9 +14465,13 @@
             if (addMsg) addMsg.textContent = "";
           }
         } catch (err) {
-          uploadedVideoUrl = "";
-          uploadedVideoPoster = "";
-          hideVideoUploadProgress();
+          if (uploadSequence === videoUploadSequence) {
+            uploadedVideoUrl = "";
+            uploadedVideoPoster = "";
+          }
+          if (uploadSequence === videoUploadSequence) {
+            hideVideoUploadProgress();
+          }
           console.error("视频上传错误", err);
         }
       });
