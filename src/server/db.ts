@@ -1142,11 +1142,18 @@ function migrateLegacyAnyStore() {
   const projectIdMap = new Map<number, number>();
 
   try {
-    const users = legacyAny
-      .query(
-        "SELECT id, username, password, avatar, is_admin, created_at FROM users",
-      )
-      .all() as any[];
+    const legacyTables = new Set(
+      (legacyAny
+        .query("SELECT name FROM sqlite_master WHERE type = 'table'")
+        .all() as Array<{ name: string }>).map((row) => row.name),
+    );
+    const readLegacyRows = (table: string, sql: string) =>
+      legacyTables.has(table) ? (legacyAny.query(sql).all() as any[]) : [];
+
+    const users = readLegacyRows(
+      "users",
+      "SELECT id, username, password, avatar, is_admin, created_at FROM users",
+    );
     for (const row of users) {
       const username = (row.username || "").toString().trim().toLowerCase();
       if (!username) continue;
@@ -1192,11 +1199,10 @@ function migrateLegacyAnyStore() {
       userIdMap.set(Number(row.id), Number(row.id));
     }
 
-    const products = legacyAny
-      .query(
-        "SELECT id, name, description, logo, theme_color, tags, created_at, updated_at FROM products",
-      )
-      .all() as any[];
+    const products = readLegacyRows(
+      "products",
+      "SELECT id, name, description, logo, theme_color, tags, created_at, updated_at FROM products",
+    );
     for (const row of products) {
       const title = (row.name || "").toString().trim();
       if (!title) continue;
@@ -1243,7 +1249,7 @@ function migrateLegacyAnyStore() {
       projectIdMap.set(Number(row.id), Number(row.id));
     }
 
-    const links = legacyAny.query("SELECT * FROM links").all() as any[];
+    const links = readLegacyRows("links", "SELECT * FROM links");
     for (const row of links) {
       appDb.run(
         "INSERT OR IGNORE INTO links (id, name, url, image, tags, description, owner_id, source, screenshots, short_description, first_comment, approved, approved_by, approved_at, featured, product_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -1274,7 +1280,7 @@ function migrateLegacyAnyStore() {
       );
     }
 
-    const comments = legacyAny.query("SELECT * FROM comments").all() as any[];
+    const comments = readLegacyRows("comments", "SELECT * FROM comments");
     for (const row of comments) {
       appDb.run(
         "INSERT OR IGNORE INTO comments (id, link_id, user_id, username, content, parent_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -1290,9 +1296,10 @@ function migrateLegacyAnyStore() {
       );
     }
 
-    const linkLikes = legacyAny
-      .query("SELECT link_id, user_id FROM link_likes")
-      .all() as any[];
+    const linkLikes = readLegacyRows(
+      "link_likes",
+      "SELECT link_id, user_id FROM link_likes",
+    );
     for (const row of linkLikes) {
       const userId = userIdMap.get(Number(row.user_id));
       if (!userId) continue;
@@ -1302,9 +1309,10 @@ function migrateLegacyAnyStore() {
       );
     }
 
-    const commentLikes = legacyAny
-      .query("SELECT comment_id, user_id FROM comment_likes")
-      .all() as any[];
+    const commentLikes = readLegacyRows(
+      "comment_likes",
+      "SELECT comment_id, user_id FROM comment_likes",
+    );
     for (const row of commentLikes) {
       const userId = userIdMap.get(Number(row.user_id));
       if (!userId) continue;
@@ -1314,9 +1322,10 @@ function migrateLegacyAnyStore() {
       );
     }
 
-    const sessions = legacyAny
-      .query("SELECT id, user_id, expires_at FROM sessions")
-      .all() as any[];
+    const sessions = readLegacyRows(
+      "sessions",
+      "SELECT id, user_id, expires_at FROM sessions",
+    );
     for (const row of sessions) {
       const userId = userIdMap.get(Number(row.user_id));
       if (!userId) continue;
@@ -1330,9 +1339,10 @@ function migrateLegacyAnyStore() {
       );
     }
 
-    const settingsRows = legacyAny
-      .query("SELECT key, value FROM settings")
-      .all() as any[];
+    const settingsRows = readLegacyRows(
+      "settings",
+      "SELECT key, value FROM settings",
+    );
     for (const row of settingsRows) {
       if (row.key === "currentProduct") {
         try {
