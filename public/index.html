@@ -48,7 +48,7 @@
     window["@tiptap/starter-kit"] =
       window["@tiptap/starter-kit"] || window.TiptapStarterKit;
   </script>
-    <link rel="stylesheet" href="/assets/styles/app.css?v=20260915-23" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20260922-5" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -2403,22 +2403,26 @@
         <div id="nodeFormSection" class="wd-section social-compose-form-shell">
           <form id="nodeForm" class="wd-form social-compose-form">
             <div id="entityHeader" class="wd-entity-header social-compose-card">
+              <div class="entity-composer-titlebar">
+                <button id="btnCancelEdit" class="entity-composer-close" type="button" title="清空当前编辑" aria-label="清空当前编辑"><i class="fa-solid fa-xmark"></i></button>
+                <strong class="entity-composer-title">知识实体</strong>
+                <div class="entity-composer-title-actions">
+                  <button id="btnEntityImport" type="button" class="entity-composer-title-action" title="导入单实体 JSON（右键查看格式说明）" aria-label="导入单实体 JSON"><i class="fa-regular fa-file-lines"></i></button>
+                  <a class="entity-composer-title-action" href="/examples/entity-import.json" download="entity-import.json" title="下载实体导入示例" aria-label="下载实体导入示例"><i class="fa-solid fa-ellipsis"></i></a>
+                </div>
+                <input id="entityImportFile" type="file" accept=".json,application/json" hidden />
+              </div>
               <div class="social-compose-top">
-                <div id="entityDisplayImageWrap" class="wd-entity-avatar-wrap empty social-avatar-wrap">
+                <div id="composerUserAvatar" class="composer-user-avatar" hidden aria-hidden="true">
+                  <img id="composerUserAvatarImage" alt="" hidden />
+                  <span id="composerUserAvatarFallback" aria-hidden="true"></span>
+                </div>
+                <div id="entityDisplayImageWrap" class="wd-entity-avatar-wrap empty social-avatar-wrap" hidden>
                   <img id="entityDisplayImage" alt="节点图像" style="display:none;" />
                   <button id="entityDisplayImageDeleteBtn" type="button" class="entity-img-delete-btn" title="删除图片" style="display:none;">×</button>
                 </div>
                 <div class="social-compose-main">
                   <div class="social-compose-meta-row">
-                    <div class="knowledge-visibility-control">
-                      <button id="btnKnowledgeVisibility" class="btn icon sm" type="button" title="公开，点击切换为私有" aria-label="公开，点击切换为私有" aria-pressed="false">
-                        <i id="knowledgeVisibilityIcon" class="fa-regular fa-eye" aria-hidden="true"></i>
-                      </button>
-                      <select id="knowledgeVisibility" hidden aria-label="知识访问级别">
-                        <option value="public">公开</option>
-                        <option value="private">私有</option>
-                      </select>
-                    </div>
                     <button id="btnAddOntologyChip" class="social-ontology-trigger" type="button"><i class="fa-solid fa-tag"></i> 添加本体</button>
                     <select id="composerTypeSelect" class="social-ontology-select" aria-label="添加本体" style="display:none;">
                       <option value="">请选择本体</option>
@@ -2437,24 +2441,34 @@
                 </div>
               </div>
               <div class="social-compose-toolbar">
-                <button id="btnEntityImageUpload" type="button" class="btn wd-btn-icon" title="上传图片">
+                <button id="btnEntityImageUpload" type="button" class="btn wd-btn-icon" title="上传图片" aria-label="上传图片">
                   <i class="fa-regular fa-image"></i>
                 </button>
-                <button id="btnEntityVideoUpload" type="button" class="btn wd-btn-icon" title="上传视频">
+                <button id="btnEntityVideoUpload" type="button" class="btn wd-btn-icon" title="上传视频" aria-label="上传视频">
                   <i class="fa-solid fa-video"></i>
                 </button>
-                <button id="btnEntityPdfUpload" type="button" class="btn wd-btn-icon" title="上传PDF">
+                <button id="btnEntityPdfUpload" type="button" class="btn wd-btn-icon" title="上传 PDF" aria-label="上传 PDF">
                   <i class="fa-regular fa-file-pdf"></i>
                 </button>
-                <button id="btnEntityLink" type="button" class="btn wd-btn-icon" title="设置外部链接">
+                <button id="btnEntityLink" type="button" class="btn wd-btn-icon" title="添加外部链接" aria-label="添加外部链接">
                   <i class="fa-solid fa-link"></i>
                 </button>
+              </div>
+              <div class="entity-composer-footer">
+                <div class="knowledge-visibility-control entity-composer-visibility">
+                  <button id="btnKnowledgeVisibility" class="entity-composer-option" type="button" title="公开，点击切换为私有" aria-label="公开，点击切换为私有" aria-pressed="false">
+                    <i id="knowledgeVisibilityIcon" class="fa-regular fa-eye" aria-hidden="true"></i>
+                    <span>公开可见</span>
+                  </button>
+                  <select id="knowledgeVisibility" hidden aria-label="知识访问级别">
+                    <option value="public">公开</option>
+                    <option value="private">私有</option>
+                  </select>
+                </div>
                 <span id="entityVideoUploadStatus" style="display:none;"></span>
                 <span id="addMsg" class="wd-msg"></span>
                 <span id="entityIdBadge" class="wd-entity-id-badge" style="display:none"></span>
-                <button id="btnSubmit" class="btn wd-btn-primary social-submit-btn" type="submit" title="发布实体" aria-label="发布实体">
-                  发布
-                </button>
+                <button id="btnSubmit" class="btn wd-btn-primary social-submit-btn" type="submit" title="发布实体" aria-label="发布实体"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i></button>
               </div>
               <div id="entityDraftImagePreview" style="display:none;flex-direction:column;gap:8px;margin-top:10px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface-1, rgba(0,0,0,.02));">
                 <div id="entityDraftImagePreviewList" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
@@ -3659,9 +3673,14 @@
             </div>
             <div id="wikiTop" class="detail-hero" style="display: none; margin-bottom: 8px">
               <div id="detailTopMediaStage" class="detail-top-media-stage" style="display:none;">
-                <div id="wikiTopPdf" style="display:none;"></div>
+                <div id="detailMediaTabs" class="detail-media-tabs" role="tablist" aria-label="媒体类型" style="display:none;">
+                  <button type="button" class="detail-media-tab" role="tab" data-media-tab="image" aria-controls="wikiTopMedia"><i class="fa-regular fa-image" aria-hidden="true"></i><span>图片</span></button>
+                  <button type="button" class="detail-media-tab" role="tab" data-media-tab="video" aria-controls="wikiTopVideo"><i class="fa-solid fa-video" aria-hidden="true"></i><span>视频</span></button>
+                  <button type="button" class="detail-media-tab" role="tab" data-media-tab="pdf" aria-controls="wikiTopPdf"><i class="fa-regular fa-file-pdf" aria-hidden="true"></i><span>PDF</span></button>
+                </div>
                 <div id="wikiTopMedia" style="display:none;"></div>
                 <div id="wikiTopVideo" style="display:none;"></div>
+                <div id="wikiTopPdf" style="display:none;"></div>
               </div>
               <div class="detail-topbar">
                 <div id="wikiTopTitle" class="title" style="font-size: 18px; font-weight: 700; white-space: pre-wrap; overflow-wrap: anywhere;"></div>
@@ -4705,9 +4724,9 @@
       <section id="knowledgeDetailPagePanel" class="knowledge-detail-page" style="display:none" aria-label="知识详情">
         <div id="knowledgeDetailPageHost" class="knowledge-detail-page__host"></div>
       </section>
-      <section id="applicationHomePanel" class="panel application-content-page" style="display:none">
-        <div class="app-page-heading"><div><h1 id="appHomeName">应用首页</h1><p id="appHomeCount" class="muted"></p></div><div class="app-page-actions"><button id="appHomeSearch" type="button" class="btn">搜索知识</button><button id="appHomeBrowse" type="button" class="btn">浏览知识</button></div></div>
-        <div id="appHomeContent" class="app-home-columns"></div>
+      <section id="applicationHomePanel" class="application-content-page" style="display:none">
+        <div class="app-page-heading app-home-heading"><div><h1 id="appHomeName">应用首页</h1><p id="appHomeCount" class="muted"></p></div><div class="app-page-actions"><button id="appHomeMaintenance" type="button" class="btn icon" title="应用维护" aria-label="应用维护" hidden><i class="fa-solid fa-user-gear" aria-hidden="true"></i><span>应用维护</span></button><button id="appHomeSearch" type="button" class="btn icon" title="搜索知识" aria-label="搜索知识"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><span>搜索知识</span></button><button id="appHomeBrowse" type="button" class="btn icon" title="浏览知识" aria-label="浏览知识"><i class="fa-solid fa-table-cells" aria-hidden="true"></i><span>浏览知识</span></button></div></div>
+        <div id="appHomeContent" class="app-home-dashboard"></div>
       </section>
       <section id="applicationSearchPanel" class="panel application-content-page" style="display:none">
         <div class="app-page-heading"><h1>搜索</h1><span class="muted">搜索当前应用中你有权访问的知识</span></div>
@@ -15147,7 +15166,7 @@
       if (fType) fType.value = "";
       if (composerTypeSelect) composerTypeSelect.value = "";
       try { syncComposerTypeOptions(); } catch { }
-      btnSubmit.textContent = '发布';
+      btnSubmit.innerHTML = '<i class="fa-solid fa-paper-plane" aria-hidden="true"></i>';
       btnSubmit.title = '发布实体';
       btnSubmit.setAttribute('aria-label', '发布实体');
       addMsg.textContent = "";
@@ -15348,7 +15367,7 @@
             .catch(() => {});
         }
       } catch {}
-      btnSubmit.textContent = '保存';
+      btnSubmit.innerHTML = '<i class="fa-regular fa-floppy-disk" aria-hidden="true"></i>';
       btnSubmit.title = '保存修改';
       btnSubmit.setAttribute('aria-label', '保存修改');
       // Update entity header
@@ -17075,17 +17094,18 @@
   <script src="/assets/scripts/table-selection.js?v=20260916-2"></script>
   <script src="/assets/scripts/entity-manage-table.js?v=20260916-2"></script>
   <script src="/assets/scripts/attr-panel.js?v=20260914-4"></script>
+  <script src="/assets/scripts/entity-import.js?v=20260921-6"></script>
   <!-- relation-panel.js 已移除，使用 edgehandles 拖拽创建关系 -->
   <script src="/assets/scripts/schema-panel.js?v=20260915-7"></script>
-  <script src="/assets/scripts/detail-panel.js?v=20260915-1"></script>
+  <script src="/assets/scripts/detail-panel.js?v=20260921-8"></script>
   <script src="/assets/scripts/knowledge-interactions.js?v=20260904-1"></script>
-  <script src="/assets/scripts/knowledge-access.js?v=20260921-1"></script>
-  <script src="/assets/scripts/applications.js?v=20260914-2"></script>
+  <script src="/assets/scripts/knowledge-access.js?v=20260921-3"></script>
+  <script src="/assets/scripts/applications.js?v=20260921-1"></script>
   <script src="/assets/scripts/user-management.js?v=20260915-1"></script>
-  <script src="/assets/scripts/application-pages.js?v=20260915-2"></script>
+  <script src="/assets/scripts/application-pages.js?v=20260922-2"></script>
   <script src="/assets/scripts/user-profile.js?v=20260915-1"></script>
   <script src="/assets/scripts/sidebar-panel.js?v=20260921-2"></script>
-  <script src="/assets/scripts/auth-panel.js?v=20260921-2"></script>
+  <script src="/assets/scripts/auth-panel.js?v=20260921-3"></script>
   <script src="/assets/scripts/db-modal.js?v=20260914-1"></script>
   <script>
     // The initial hash route is handled before these dependent sidebar scripts

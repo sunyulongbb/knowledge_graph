@@ -22,6 +22,12 @@
     const icon = byId('knowledgeVisibilityIcon');
     if (!select || !button || !icon) return;
     const isPrivate = select.value === 'private';
+    const label = button.querySelector('span');
+    const labelText = isPrivate ? '仅成员可见' : '公开可见';
+    // This function runs from a document-wide MutationObserver. Avoid writing
+    // identical text because replacing the text node would retrigger the
+    // observer indefinitely and pin the browser renderer at 100% CPU.
+    if (label && label.textContent !== labelText) label.textContent = labelText;
     icon.className = isPrivate ? '' : 'fa-regular fa-eye';
     if (icon.dataset.visibility !== select.value) {
       icon.dataset.visibility = select.value;

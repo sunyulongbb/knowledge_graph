@@ -21,8 +21,14 @@ export function ensureApplicationSchema(db: Database) {
 }
 
 export function ensureDefaultApplication(db: Database) {
-  const projectCount = Number((db.query('SELECT COUNT(*) AS count FROM projects').get() as any)?.count || 0);
-  if (projectCount > 0) return null;
+  const existing = db.query("SELECT * FROM projects WHERE name='default' LIMIT 1").get() as any;
+  if (existing) {
+    if (Number(existing.is_default) !== 1) {
+      db.run("UPDATE projects SET is_default=1, updated_at=CURRENT_TIMESTAMP WHERE id=?", [existing.id]);
+      return db.query('SELECT * FROM projects WHERE id=?').get(existing.id) as any;
+    }
+    return null;
+  }
   db.run(`INSERT INTO projects
     (name,title,description,file,image,theme_color,tags,link,is_default)
     VALUES ('default','默认应用','系统首次初始化创建的默认应用','app.sqlite','','#ff7a2b','[]','',1)`);

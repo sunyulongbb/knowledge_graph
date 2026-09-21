@@ -106,7 +106,7 @@ export async function serveStaticRoute(req: Request, pathname: string) {
     return null;
   }
 
-  if (["/examples/ontology-import.json", "/examples/ontology-import-format.md", "/examples/class-import.json", "/examples/class-import-format.md", "/examples/tag-import.json", "/examples/tag-import-format.md", "/examples/pipeline-people.csv", "/examples/pipeline-people-update.csv"].includes(pathname)) {
+  if (["/examples/ontology-import.json", "/examples/ontology-import-format.md", "/examples/entity-import.json", "/examples/entity-import-format.md", "/examples/class-import.json", "/examples/class-import-format.md", "/examples/tag-import.json", "/examples/tag-import-format.md", "/examples/pipeline-people.csv", "/examples/pipeline-people-update.csv"].includes(pathname)) {
     return makeResponse(Bun.file(`public${pathname}`));
   }
 

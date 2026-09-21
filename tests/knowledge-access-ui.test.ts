@@ -36,3 +36,9 @@ test('UI grants anonymous access only in the default application and rejects una
   window.kbApplicationProjects = [{ slug: 'restricted', member: true }];
   expect(window.canEditCurrentKnowledge()).toBe(true);
 });
+
+test('visibility label update does not retrigger the document mutation observer indefinitely', () => {
+  const script = readFileSync('public/assets/scripts/knowledge-access.js', 'utf8');
+  expect(script).toContain("if (label && label.textContent !== labelText) label.textContent = labelText;");
+  expect(script).not.toContain("if (label) label.textContent = isPrivate ? '仅成员可见' : '公开可见';");
+});

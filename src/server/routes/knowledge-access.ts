@@ -149,6 +149,11 @@ export async function guardKnowledgeRequest(req: Request, url: URL, method: stri
   }
   if (path === '/api/kb/nodes/engagement') return check(body.id, 'read');
   if (path === '/api/kb/entity/resolve') return null;
+  if (path === '/api/kb/entity/import') {
+    const appSlug = url.searchParams.get('db');
+    const project = appSlug ? getProjectByIdentifier(appSlug) : null;
+    return project && applicationPermissions(db, user, project).member ? null : response('仅应用成员可以导入实体', 403);
+  }
   // Schema changes, bulk import/cleanup and task execution remain administrative.
   if (user.role !== 'admin') return response('该操作需要管理员权限', 403);
   return null;

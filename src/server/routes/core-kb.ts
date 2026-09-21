@@ -8,6 +8,7 @@ import { resolve } from "path";
 import { relationAttributeResponse, saveRelationOrder } from '../relation-order.ts';
 import { knowledgeContext } from '../knowledge-access.ts';
 import { appendVideoCoverPairs } from '../video-cover-pairing.ts';
+import { importEntity, EntityImportError, localizeEntityImportMedia, cleanupLocalizedEntityImport } from '../entity-import.ts';
 import {
   formatNode,
   formatAttribute,
@@ -3576,6 +3577,24 @@ export async function handleCoreKbRoutes(
     } catch (e) {
       console.error(e);
       return new Response("Error uploading image", { status: 500 });
+    }
+  }
+
+  if (url.pathname === "/api/kb/entity/import" && method === "POST") {
+    let localizedFiles: string[] = [];
+    try {
+      const input = await req.json();
+      const localized = await localizeEntityImportMedia(input, scopedProjectId);
+      localizedFiles = localized.files;
+      const result = importEntity(db, localized.input, scopedProjectId);
+      return Response.json({ ok: true, ...result, filesLocalized: localizedFiles.length });
+    } catch (error) {
+      cleanupLocalizedEntityImport(localizedFiles);
+      if (error instanceof EntityImportError || error instanceof SyntaxError) {
+        return Response.json({ error: error.message || "JSON 文件格式无效" }, { status: 400 });
+      }
+      console.error("entity import failed", error);
+      return Response.json({ error: "实体导入失败" }, { status: 500 });
     }
   }
 

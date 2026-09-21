@@ -40,12 +40,23 @@ test('first initialization creates one default application with access for every
   } finally { db.close(); }
 });
 
-test('default application is only created for an empty application database', () => {
+test('default application is added when an existing application database does not have one', () => {
   const { db } = setup();
   try {
     db.run("INSERT INTO projects(name,title,file) VALUES('existing','Existing','app.sqlite')");
+    expect(ensureDefaultApplication(db)).toMatchObject({ name: 'default', title: '默认应用', is_default: 1 });
+    expect(db.query("SELECT count(*) AS n FROM projects WHERE name='default'").get()).toEqual({ n: 1 });
+    expect(db.query('SELECT count(*) AS n FROM projects').get()).toEqual({ n: 2 });
     expect(ensureDefaultApplication(db)).toBeNull();
-    expect(db.query("SELECT count(*) AS n FROM projects WHERE name='default'").get()).toEqual({ n: 0 });
+  } finally { db.close(); }
+});
+
+test('an existing canonical default application is promoted instead of duplicated', () => {
+  const { db } = setup();
+  try {
+    db.run("INSERT INTO projects(name,title,file,is_default) VALUES('default','已有默认应用','app.sqlite',0)");
+    expect(ensureDefaultApplication(db)).toMatchObject({ name: 'default', title: '已有默认应用', is_default: 1 });
+    expect(db.query('SELECT count(*) AS n FROM projects').get()).toEqual({ n: 1 });
   } finally { db.close(); }
 });
 

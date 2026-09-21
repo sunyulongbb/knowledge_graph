@@ -116,10 +116,11 @@
 
   async function logout() {
     try {
-      await fetch("/api/auth/logout", {
+      const response = await fetch("/api/auth/logout", {
         method: "POST",
         credentials: "include",
       });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       setAuthUser(null);
       try {
         closeProfileModal();
@@ -127,6 +128,10 @@
       try {
         showToast("已登出");
       } catch {}
+      const defaultHome = new URL(window.location.pathname || "/", window.location.origin);
+      defaultHome.searchParams.set("db", "default");
+      defaultHome.hash = "view=app_home";
+      window.location.assign(defaultHome.toString());
     } catch (e) {
       console.warn("logout failed", e);
       try {

@@ -15,6 +15,10 @@ test('detail video list is a single horizontal scroll row', () => {
   expect(styles).toMatch(/\.detail-video-playlist\s*\{[^}]*overflow-x:\s*auto;/s);
   expect(styles).toContain('scroll-snap-type: x proximity;');
   expect(script).toContain('playlistNav.scrollLeft += event.deltaY;');
+  expect(styles).toMatch(/\.detail-video-playlist-item\s*\{[^}]*flex:\s*0 0 144px;/s);
+  expect(styles).toMatch(/\.detail-video-playlist-thumb\s*\{[^}]*width:\s*100%;/s);
+  expect(script).not.toContain('detail-video-playlist-copy');
+  expect(script).not.toContain('detail-video-playlist-order');
 });
 
 test('detail video deletion removes the video and its cover at the same index', () => {

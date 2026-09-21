@@ -23,11 +23,14 @@
     renderSeq: 0,
     doc: null,
     url: "",
+    resizeObserver: null,
   };
 
   function resetDetailPdfViewer() {
     detailPdfViewerState.renderSeq += 1;
     detailPdfViewerState.url = "";
+    detailPdfViewerState.resizeObserver?.disconnect?.();
+    detailPdfViewerState.resizeObserver = null;
     if (
       detailPdfViewerState.doc &&
       typeof detailPdfViewerState.doc.destroy === "function"
@@ -271,10 +274,36 @@
   function syncDetailTopMediaStage() {
     const stage = document.getElementById("detailTopMediaStage");
     if (!stage) return;
-    const hasMedia = Array.from(stage.children || []).some((child) => {
-      if (!(child instanceof HTMLElement)) return false;
-      return child.style.display !== "none" && child.childElementCount > 0;
+    const media = [
+      { key: "image", panel: document.getElementById("wikiTopMedia") },
+      { key: "video", panel: document.getElementById("wikiTopVideo") },
+      { key: "pdf", panel: document.getElementById("wikiTopPdf") },
+    ];
+    const available = media.filter((item) => item.panel && item.panel.childElementCount > 0);
+    const hasMedia = available.length > 0;
+    let active = String(stage.dataset.activeMedia || "");
+    if (!available.some((item) => item.key === active)) active = available[0]?.key || "";
+    stage.dataset.activeMedia = active;
+    media.forEach((item) => {
+      if (item.panel) item.panel.style.display = item.key === active ? "block" : "none";
     });
+    const tabs = document.getElementById("detailMediaTabs");
+    if (tabs) {
+      tabs.style.display = available.length > 1 ? "flex" : "none";
+      tabs.querySelectorAll("[data-media-tab]").forEach((button) => {
+        const key = button.dataset.mediaTab || "";
+        const isAvailable = available.some((item) => item.key === key);
+        const isActive = key === active;
+        button.hidden = !isAvailable;
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-selected", isActive ? "true" : "false");
+        button.tabIndex = isActive ? 0 : -1;
+        button.onclick = () => {
+          stage.dataset.activeMedia = key;
+          syncDetailTopMediaStage();
+        };
+      });
+    }
     stage.style.display = hasMedia ? "" : "none";
     const hero = document.getElementById("wikiTop");
     if (hero) hero.classList.toggle("has-top-media", hasMedia);
@@ -360,7 +389,7 @@
     if ((!Array.isArray(items) || !items.length) && !entries.length) {
       topMedia.style.display = "none";
       syncDetailTopMediaStage();
-      return;
+      return false;
     }
 
     for (const it of Array.isArray(items) ? items : []) {
@@ -398,6 +427,7 @@
         if (val === null || typeof val === "undefined") continue;
         const stringValue = String(val).trim();
         if (!stringValue) continue;
+        if (isAnimatedImageVideoUrl(stringValue) || isPdfUrl(stringValue)) continue;
         try {
           const imgs = extractImageUrls(stringValue, true);
           if (imgs && imgs.length) {
@@ -497,6 +527,7 @@
     topMedia.style.display = "";
     requestAnimationFrame(() => updateTransform());
     syncDetailTopMediaStage();
+    return true;
   }
 
   function getAttributeLabel(attr) {
@@ -578,6 +609,8 @@
         pdfView.innerHTML = "";
         pdfView.style.display = "none";
       }
+      const mediaStage = document.getElementById("detailTopMediaStage");
+      if (mediaStage) delete mediaStage.dataset.activeMedia;
       const tagList = document.getElementById("detail_tagList");
       if (tagList) tagList.innerHTML = "";
       ["wikiTags", "wikiAliases"].forEach((id) => {
@@ -712,20 +745,56 @@
     status.textContent = "正在加载 PDF…";
     const toolbar = document.createElement("div");
     toolbar.className = "detail-pdf-toolbar";
+    const navigation = document.createElement("div");
+    navigation.className = "detail-pdf-toolbar-group";
     const prevButton = document.createElement("button");
     prevButton.type = "button";
-    prevButton.className = "btn sm";
-    prevButton.textContent = "上一页";
+    prevButton.className = "detail-pdf-tool-button";
+    prevButton.innerHTML = '<i class="fa-solid fa-chevron-left" aria-hidden="true"></i>';
+    prevButton.title = "上一页";
+    prevButton.setAttribute("aria-label", "上一页");
     prevButton.disabled = true;
     const pageIndicator = document.createElement("span");
     pageIndicator.className = "detail-pdf-page-indicator";
     pageIndicator.textContent = "加载中";
     const nextButton = document.createElement("button");
     nextButton.type = "button";
-    nextButton.className = "btn sm";
-    nextButton.textContent = "下一页";
+    nextButton.className = "detail-pdf-tool-button";
+    nextButton.innerHTML = '<i class="fa-solid fa-chevron-right" aria-hidden="true"></i>';
+    nextButton.title = "下一页";
+    nextButton.setAttribute("aria-label", "下一页");
     nextButton.disabled = true;
-    toolbar.append(prevButton, pageIndicator, nextButton);
+    navigation.append(prevButton, pageIndicator, nextButton);
+    const zoomTools = document.createElement("div");
+    zoomTools.className = "detail-pdf-toolbar-group";
+    const zoomOutButton = document.createElement("button");
+    zoomOutButton.type = "button";
+    zoomOutButton.className = "detail-pdf-tool-button";
+    zoomOutButton.innerHTML = '<i class="fa-solid fa-minus" aria-hidden="true"></i>';
+    zoomOutButton.title = "缩小";
+    zoomOutButton.setAttribute("aria-label", "缩小 PDF");
+    const zoomResetButton = document.createElement("button");
+    zoomResetButton.type = "button";
+    zoomResetButton.className = "detail-pdf-zoom-value";
+    zoomResetButton.textContent = "适合";
+    zoomResetButton.title = "适合窗口";
+    zoomResetButton.setAttribute("aria-label", "恢复适合窗口");
+    const zoomInButton = document.createElement("button");
+    zoomInButton.type = "button";
+    zoomInButton.className = "detail-pdf-tool-button";
+    zoomInButton.innerHTML = '<i class="fa-solid fa-plus" aria-hidden="true"></i>';
+    zoomInButton.title = "放大";
+    zoomInButton.setAttribute("aria-label", "放大 PDF");
+    const openLink = document.createElement("a");
+    openLink.className = "detail-pdf-tool-button";
+    openLink.href = resolvedUrl;
+    openLink.target = "_blank";
+    openLink.rel = "noopener noreferrer";
+    openLink.innerHTML = '<i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i>';
+    openLink.title = "在新窗口打开";
+    openLink.setAttribute("aria-label", "在新窗口打开 PDF");
+    zoomTools.append(zoomOutButton, zoomResetButton, zoomInButton, openLink);
+    toolbar.append(navigation, zoomTools);
     const pages = document.createElement("div");
     pages.className = "detail-pdf-pages";
     viewer.append(toolbar, pages);
@@ -742,6 +811,10 @@
         const loadingTask = pdfjsLib.getDocument({
           url: resolvedUrl,
           withCredentials: true,
+          wasmUrl: "/node_modules/pdfjs-dist/wasm/",
+          cMapUrl: "/node_modules/pdfjs-dist/cmaps/",
+          cMapPacked: true,
+          standardFontDataUrl: "/node_modules/pdfjs-dist/standard_fonts/",
         });
         const pdfDocument = await loadingTask.promise;
         if (detailPdfViewerState.renderSeq !== renderSeq) {
@@ -750,6 +823,7 @@
         }
         detailPdfViewerState.doc = pdfDocument;
         let currentPage = 1;
+        let zoomLevel = 1;
         let rendering = false;
         const renderPage = async (requestedPage) => {
           if (rendering || detailPdfViewerState.renderSeq !== renderSeq) return;
@@ -772,10 +846,10 @@
           const displayScale = Math.max(
             0.1,
             Math.min(
-              2,
+              4,
               availableWidth / baseViewport.width,
               availableHeight / baseViewport.height,
-            ),
+            ) * zoomLevel,
           );
           const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
           const renderViewport = page.getViewport({
@@ -802,7 +876,32 @@
         };
         prevButton.addEventListener("click", () => void renderPage(currentPage - 1));
         nextButton.addEventListener("click", () => void renderPage(currentPage + 1));
+        zoomOutButton.addEventListener("click", () => {
+          zoomLevel = Math.max(0.5, Number((zoomLevel - 0.25).toFixed(2)));
+          zoomResetButton.textContent = `${Math.round(zoomLevel * 100)}%`;
+          void renderPage(currentPage);
+        });
+        zoomInButton.addEventListener("click", () => {
+          zoomLevel = Math.min(3, Number((zoomLevel + 0.25).toFixed(2)));
+          zoomResetButton.textContent = `${Math.round(zoomLevel * 100)}%`;
+          void renderPage(currentPage);
+        });
+        zoomResetButton.addEventListener("click", () => {
+          zoomLevel = 1;
+          zoomResetButton.textContent = "适合";
+          void renderPage(currentPage);
+        });
         await renderPage(currentPage);
+        if (typeof ResizeObserver === "function") {
+          let observedWidth = pages.clientWidth;
+          detailPdfViewerState.resizeObserver = new ResizeObserver(() => {
+            const nextWidth = pages.clientWidth;
+            if (!nextWidth || Math.abs(nextWidth - observedWidth) < 4) return;
+            observedWidth = nextWidth;
+            void renderPage(currentPage);
+          });
+          detailPdfViewerState.resizeObserver.observe(pages);
+        }
       } catch (error) {
         if (detailPdfViewerState.renderSeq !== renderSeq) return;
         console.warn("PDF.js preview failed; falling back to native viewer", error);
@@ -1133,7 +1232,6 @@
           wikiAliases.style.display = "none";
         }
       }
-      let hasPriorityMedia = false;
       const wikiTopVideo = document.getElementById("wikiTopVideo");
       if (wikiTopVideo) {
         wikiTopVideo.innerHTML = "";
@@ -1142,7 +1240,6 @@
           ...normalizeMediaStringList(doc && doc.videos),
         ].filter((url, index, arr) => url && arr.indexOf(url) === index);
         if (videoUrls.length) {
-          hasPriorityMedia = true;
           const normalizeDetailCoverSlots = (value) => {
             let source = value;
             if (typeof source === "string") {
@@ -1293,14 +1390,6 @@
               const isActive = buttonIndex === activePlaylistIndex;
               button.classList.toggle("is-active", isActive);
               button.setAttribute("aria-pressed", isActive ? "true" : "false");
-              const subLabel = button.querySelector(
-                ".detail-video-playlist-sub",
-              );
-              if (subLabel) {
-                subLabel.textContent = isActive
-                  ? "当前播放"
-                  : playlistItems[buttonIndex]?.type || "video";
-              }
             });
           };
 
@@ -1451,28 +1540,13 @@
               if (item.poster) {
                 thumb.style.backgroundImage = `url("${item.poster.replace(/"/g, "%22")}")`;
               }
-              const copy = document.createElement("span");
-              copy.className = "detail-video-playlist-copy";
-              const titleEl = document.createElement("span");
-              titleEl.className = "detail-video-playlist-title";
-              titleEl.textContent = `视频 ${index + 1}`;
-              const subEl = document.createElement("span");
-              subEl.className = "detail-video-playlist-sub";
-              subEl.textContent = item.type || "video";
-              const orderEl = document.createElement("span");
-              orderEl.className = "detail-video-playlist-order";
-              orderEl.textContent = String(index + 1).padStart(2, "0");
               const deleteButton = document.createElement("button");
               deleteButton.type = "button";
               deleteButton.className = "detail-video-playlist-delete";
               deleteButton.setAttribute("aria-label", `删除视频 ${index + 1}`);
               deleteButton.title = "删除视频";
               deleteButton.innerHTML = '<i class="fa-solid fa-trash-can"></i>';
-              copy.appendChild(titleEl);
-              copy.appendChild(subEl);
-              button.appendChild(orderEl);
               button.appendChild(thumb);
-              button.appendChild(copy);
               button.appendChild(deleteButton);
               button.addEventListener("click", () => {
                 renderPlayerAt(index);
@@ -1519,7 +1593,6 @@
         wikiTopPdf.innerHTML = "";
         const pdfUrl = String((doc && doc.pdf) || "").trim();
         if (pdfUrl && isPdfUrl(pdfUrl)) {
-          hasPriorityMedia = true;
           const resolvedUrl = (() => {
             try {
               return new URL(pdfUrl, window.location.origin).toString();
@@ -1680,7 +1753,12 @@
                 pickLabelValue(it.description) ||
                 name;
               try {
-                const imgs = extractImageUrls(val, true);
+                // Wikidata time values contain a calendarmodel URL such as
+                // http://www.wikidata.org/entity/Q1985727. Treating every
+                // HTTP value as an image turns dates into broken carousel
+                // slides. Only explicit media properties may use loose URLs;
+                // ordinary attributes must resolve to an actual image URL.
+                const imgs = extractImageUrls(val, isMediaAttrItem(it));
                 if (imgs && imgs.length)
                   imgs.forEach((u) =>
                     addImageCandidate(
@@ -1825,11 +1903,18 @@
           }
         }
       }
-      if (hasPriorityMedia) {
-        renderWikiMediaGrid([], []);
-      } else {
-        renderWikiMediaGrid(detailMediaAttrItems, imageEntries);
-      }
+      // Media types use tabs. Select the first available type in priority
+      // order: image, video, then PDF.
+      const hasImageMedia = renderWikiMediaGrid(detailMediaAttrItems, imageEntries);
+      const mediaStage = document.getElementById("detailTopMediaStage");
+      if (mediaStage) mediaStage.dataset.activeMedia = hasImageMedia
+        ? "image"
+        : wikiTopVideo?.childElementCount
+          ? "video"
+          : wikiTopPdf?.childElementCount
+            ? "pdf"
+            : "";
+      syncDetailTopMediaStage();
       if (wikiTopDescEl) {
         const stage = document.getElementById("detailTopMediaStage");
         const hasMediaStage =

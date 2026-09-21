@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "entity": {
+    "id": "Q22686",
+    "name": "唐纳德·特朗普",
+    "description": "美国政治人物、企业家，曾任并现任美国总统。",
+    "aliases": ["Donald Trump", "Donald J. Trump", "特朗普"],
+    "tags": ["人物", "美国总统", "政治人物"],
+    "categories": [
+      {
+        "name": "人物",
+        "description": "现实世界中的人物",
+        "color": "#6366F1",
+        "tags": ["人物"],
+        "children": [
+          {
+            "name": "政治人物",
+            "description": "从事政治活动的人物",
+            "color": "#3B82F6",
+            "tags": ["政治人物"],
+            "children": [
+              {
+                "name": "美国总统",
+                "description": "担任过美国总统的人物",
+                "color": "#DC2626",
+                "tags": ["美国总统", "美国政治"]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "images": [
+      "https://www.whitehouse.gov/wp-content/uploads/2025/06/President-Donald-Trump-Official-Presidential-Portrait.png",
+      "https://www.whitehouse.gov/wp-content/uploads/2025/07/p20250721jb-0488_54675983592_o.jpg?w=1200"
+    ],
+    "videos": [
+      "https://d34w7g4gy10iej.cloudfront.net/video/2501/DOD_110775761/DOD_110775761.mp4"
+    ],
+    "pdf": "https://www.govinfo.gov/content/pkg/GPO-PICTDIR-115/pdf/GPO-PICTDIR-115-2.pdf",
+    "link": "https://www.whitehouse.gov/administration/donald-j-trump/",
+    "visibility": "public",
+    "type": {
+      "id": "ontology/person",
+      "name": "人物",
+      "description": "现实世界中的自然人"
+    },
+    "attributes": [
+      { "id": "P31", "name": "性质", "datatype": "wikibase-item", "value": { "id": "Q5", "label_zh": "人类" }, "description": "Wikidata：人类" },
+      { "id": "P21", "name": "性别", "datatype": "wikibase-item", "value": { "id": "Q6581097", "label_zh": "男性" }, "description": "Wikidata：男性" },
+      { "id": "P27", "name": "国籍", "datatype": "wikibase-item", "value": { "id": "Q30", "label_zh": "美国" }, "description": "Wikidata：美国" },
+      { "id": "P19", "name": "出生地", "datatype": "wikibase-item", "value": { "id": "Q60", "label_zh": "纽约市" }, "description": "Wikidata：纽约市" },
+      { "id": "P569", "name": "出生日期", "datatype": "time", "value": { "time": "+1946-06-14T00:00:00Z", "precision": 11 }, "description": "Wikidata 出生日期" },
+      { "id": "P106", "name": "职业", "datatype": "wikibase-item", "value": [{ "id": "Q82955", "label_zh": "政治家" }, { "id": "Q43845", "label_zh": "企业家" }], "description": "Wikidata：政治家、企业家" },
+      { "id": "P69", "name": "就读学校", "datatype": "wikibase-item", "value": { "id": "Q49117", "label_zh": "宾夕法尼亚大学" }, "description": "Wikidata：宾夕法尼亚大学" },
+      { "id": "P39", "name": "担任职务", "datatype": "wikibase-item", "value": { "id": "Q11696", "label_zh": "美国总统" }, "description": "Wikidata：美国总统" },
+      { "id": "P102", "name": "政党", "datatype": "wikibase-item", "value": { "id": "Q29468", "label_zh": "美国共和党" }, "description": "Wikidata：共和党" },
+      { "id": "P26", "name": "配偶", "datatype": "wikibase-item", "value": { "id": "Q432473", "label_zh": "梅拉尼娅·特朗普" }, "description": "Wikidata：梅拉尼娅·特朗普" },
+      { "id": "P1971", "name": "子女数", "datatype": "quantity", "value": { "amount": "5", "unit": "1" }, "description": "Wikidata 子女数量" },
+      { "id": "P2048", "name": "身高", "datatype": "quantity", "value": { "amount": "1.90", "unit": "http://www.wikidata.org/entity/Q11573" }, "description": "Wikidata：1.90 米" },
+      { "id": "P856", "name": "官方网站", "datatype": "url", "value": "https://donaldjtrump.com", "description": "Wikidata 官方网站声明" },
+      { "id": "P18", "name": "图像", "datatype": "commonsMedia", "value": "https://www.whitehouse.gov/wp-content/uploads/2025/06/President-Donald-Trump-Official-Presidential-Portrait.png", "description": "白宫官网官方总统肖像" },
+      { "id": "P1559", "name": "母语姓名", "datatype": "monolingualtext", "value": { "text": "Donald Trump", "language": "en-us" }, "description": "Wikidata 母语姓名" },
+      { "id": "P373", "name": "Commons 分类", "datatype": "string", "value": "Donald Trump", "description": "Wikimedia Commons 分类名称" },
+      { "id": "P345", "name": "IMDb 标识符", "datatype": "external-id", "value": "nm0874339", "description": "Wikidata IMDb ID" },
+      { "id": "P213", "name": "ISNI", "datatype": "external-id", "value": "0000000108986765", "description": "Wikidata ISNI" },
+      { "id": "P214", "name": "VIAF 标识符", "datatype": "external-id", "value": "49272447", "description": "Wikidata VIAF ID" }
+    ]
+  }
+}
