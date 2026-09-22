@@ -4,6 +4,8 @@
   let homeVersion = 0, searchVersion = 0, typesVersion = 0, page = 1, total = 0;
   let currentHomeApplicationId = '';
   let homeNodes = [], homeVisibleNodes = [], homeCategories = [], homeSelectedCategory = '', homeInspirationIndex = 0, homeDrawCount = 1;
+  const inspirationScoreCache = new Map();
+  let inspirationScoreVersion = 0;
   const pageSize = 20;
   const fields = { q: 'appSearchQuery', type: 'appSearchType', property_id: 'appSearchProperty', property_value: 'appSearchValue', order: 'appSearchOrder' };
   async function api(path, params = {}) {
@@ -71,14 +73,122 @@
     const image = firstImage(node);
     const video = image ? '' : firstVideo(node);
     const media = image ? `<img src="${escape(image)}" alt="" loading="eager">` : video ? `<video src="${escape(video)}" muted playsinline preload="metadata" controls></video>` : '';
+    const showJev = Boolean(node?.hasJevAnalysis || window.authUser?.hasJevApiKey);
     return `<article class="app-inspiration-card" data-home-inspiration-card>
       <div class="app-inspiration-card-top"><span><i class="fa-regular fa-star" aria-hidden="true"></i> 潜力知识</span><small>${escape(shortDate(node.updated_at || node.created_at))}</small></div>
       ${media ? `<div class="app-inspiration-media-stage">${media}<span><i class="fa-solid ${video ? 'fa-video' : 'fa-image'}" aria-hidden="true"></i> ${video ? '视频' : '图片'}</span></div>` : ''}
       <div class="app-inspiration-identity">${media ? '' : '<div class="app-inspiration-visual is-placeholder"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i></div>'}<div><h2>${escape(node.name || node.label || node.id)}</h2><span>${escape(node.id || node._id || '')}</span></div></div>
       <div class="app-inspiration-meta"><span>${escape(node.typeLabel || node.type || '知识实体')}</span>${video ? '<span>视频</span>' : image ? '<span>图片</span>' : ''}</div>
       <p>${escape(node.description || node.desc_zh || '从知识库里重新发现一条值得关注的信息。')}</p>
+      ${showJev ? `<section class="app-jev-rating is-loading" data-jev-rating data-node-id="${escape(node.id || node._id || '')}" aria-live="polite">
+        <div class="app-jev-rating-head"><span><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> JEV 知识评分</span><small data-jev-status>正在评分…</small></div>
+        <div class="app-jev-stars" data-jev-stars aria-label="JEV 正在评分">${Array.from({ length: 5 }, (_, index) => `<i class="fa-solid fa-star" style="--star-index:${index}" aria-hidden="true"></i>`).join('')}</div>
+        <button type="button" class="app-jev-retry" data-jev-retry hidden>重新评分</button>
+      </section>` : ''}
       <a href="${escape(nodeUrl(node))}" class="app-inspiration-link"><span>查看知识详情</span><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
     </article>`;
+  }
+  function revealJevScore(rating, result) {
+    if (!rating) return;
+    const score = Math.max(1, Math.min(5, Number(result.score) || 1));
+    const stars = Array.from(rating.querySelectorAll('[data-jev-stars] i'));
+    const starBox = rating.querySelector('[data-jev-stars]');
+    const confidence = Number(result.confidence);
+    rating.classList.remove('is-loading', 'is-error');
+    rating.querySelector('[data-jev-retry]').hidden = true;
+    rating.querySelector('[data-jev-status]').textContent = Number.isFinite(confidence) ? `${score}/5 · 置信度 ${Math.round(confidence * 100)}%` : `${score}/5 · JEV`;
+    starBox.setAttribute('aria-label', `JEV 知识评分 ${score} 星，共 5 星`);
+    stars.forEach((star) => star.classList.remove('is-filled', 'is-revealed'));
+    requestAnimationFrame(() => stars.forEach((star, index) => window.setTimeout(() => {
+      star.classList.toggle('is-filled', index < score);
+      star.classList.add('is-revealed');
+    }, index * 110)));
+    revealJevProfile(result.profiles || [], result);
+  }
+  function profileLoading() {
+    return Array.from({ length: 4 }, (_, index) => `<article class="app-profile-node is-loading" style="--profile-index:${index}"><div class="app-profile-card-head"><span>ANALYSIS 0${index + 1}</span><i></i></div><strong>读取分析角度</strong><p>正在关联知识属性与证据信息…</p><div class="app-profile-skeleton"></div></article>`).join('');
+  }
+  function revealJevProfile(profiles, meta = {}) {
+    const layer = byId('appHomeContent').querySelector('[data-jev-profile-layer]');
+    if (!layer) return;
+    layer.hidden = false;
+    const profileHeader = `<div class="app-profile-actions"><button type="button" data-jev-profile-refresh title="重新调用 JEV 更新画像" aria-label="刷新目标画像"><i class="fa-solid fa-rotate" aria-hidden="true"></i><span>刷新分析</span></button></div>`;
+    if (!profiles.length) {
+      layer.innerHTML = `${profileHeader}<div class="app-profile-empty">请先在知识所属分类中配置分析角度</div>`;
+      layer.classList.add('is-visible');
+      return;
+    }
+    const tone = (value) => value === '积极支持' ? 'positive' : value === '务实合作' ? 'cooperative' : value === '限制竞争' ? 'restrictive' : value === '信息不足' ? 'unknown' : 'neutral';
+    layer.innerHTML = `${profileHeader}${profiles.map((profile, index) => {
+      const evidenceList = Array.isArray(profile.evidence) ? profile.evidence : [];
+      const evidence = evidenceList[0] || '未命中明确属性证据';
+      const keywordEvidence = Array.isArray(profile.keywordEvidence) ? profile.keywordEvidence : [];
+      const relatedEvidence = Array.isArray(profile.relatedEvidence) ? profile.relatedEvidence : [];
+      const hitCount = keywordEvidence.filter((item) => item.matched).length;
+      const hitRate = keywordEvidence.length ? Math.round(hitCount / keywordEvidence.length * 100) : 0;
+      const confidence = Number.isFinite(Number(profile.confidence)) ? Math.round(Math.max(0, Math.min(1, Number(profile.confidence))) * 100) : 0;
+      const evidenceCount = evidenceList.length + relatedEvidence.length;
+      const evidenceStrength = Math.min(5, Math.max(1, hitCount + relatedEvidence.length));
+      return `<article class="app-profile-node is-${tone(profile.classification)}" style="--profile-index:${index};--confidence:${confidence};--hit-rate:${hitRate};--evidence-strength:${evidenceStrength}" title="${escape(evidenceList.join('\n') || evidence)}">
+        <div class="app-profile-card-head"><span>${escape(profile.category || '分类分析')} · 0${index + 1}</span><i></i></div>
+        <div class="app-profile-angle"><strong>${escape(profile.angle)}</strong></div>
+        <p>${escape(profile.content || '')}</p>
+        <div class="app-profile-verdict"><span>分析结论</span><strong>${escape(profile.classification)}</strong><small>${confidence ? `置信度 ${confidence}%` : '证据待补充'}</small></div>
+        <div class="app-profile-viz">
+          <div class="app-profile-confidence" aria-label="置信度 ${confidence}%"><span>${confidence}</span><small>%</small></div>
+          <div class="app-profile-metrics"><label><span>关键词命中</span><strong>${hitCount}/${keywordEvidence.length}</strong></label><div class="app-profile-meter"><i></i></div><label><span>证据强度</span><strong>${evidenceCount}</strong></label><div class="app-profile-signal">${Array.from({ length: 5 }, (_, level) => `<i class="${level < evidenceStrength ? 'is-on' : ''}" style="--signal-index:${level}"></i>`).join('')}</div></div>
+        </div>
+        <div class="app-profile-keywords">${keywordEvidence.slice(0, 8).map((item) => `<mark class="${item.matched ? 'is-hit' : ''}">${escape(item.keyword)}</mark>`).join('')}</div>
+        <div class="app-profile-evidence"><span><i class="fa-solid fa-link" aria-hidden="true"></i> 核心证据</span><p>${escape(evidence)}</p></div>
+        ${relatedEvidence.length ? `<div class="app-profile-related">${relatedEvidence.slice(0, 2).map((item) => `<span title="${escape(item.evidence)}"><i class="fa-solid fa-share-nodes" aria-hidden="true"></i> ${escape(item.sourceName)} <b>${escape(item.relation)}</b></span>`).join('')}</div>` : ''}
+      </article>`;
+    }).join('')}`;
+    layer.classList.add('is-visible');
+  }
+  async function scoreInspiration(node, force = false) {
+    if (!node) return;
+    const modal = byId('appHomeContent').querySelector('[data-home-inspiration-modal]');
+    const rating = modal?.querySelector(`[data-jev-rating][data-node-id="${CSS.escape(String(node.id || node._id || ''))}"]`);
+    const profileLayer = modal?.querySelector('[data-jev-profile-layer]');
+    if (!rating) {
+      if (profileLayer) { profileLayer.hidden = true; profileLayer.classList.remove('is-visible'); profileLayer.innerHTML = ''; }
+      return;
+    }
+    rating.hidden = false;
+    const database = new URLSearchParams(location.search).get('db') || 'default';
+    const cacheKey = `${database}:${node.id || node._id}`;
+    if (!force && inspirationScoreCache.has(cacheKey)) return revealJevScore(rating, inspirationScoreCache.get(cacheKey));
+    if (force) inspirationScoreCache.delete(cacheKey);
+    const version = ++inspirationScoreVersion;
+    rating.classList.add('is-loading'); rating.classList.remove('is-error');
+    if (profileLayer) { profileLayer.hidden = false; profileLayer.classList.remove('is-visible'); profileLayer.innerHTML = profileLoading(); }
+    rating.querySelector('[data-jev-status]').textContent = force ? '正在刷新分析…' : '正在评分…';
+    rating.querySelector('[data-jev-retry]').hidden = true;
+    try {
+      const url = new URL('/api/jev/score', location.origin);
+      if (database) url.searchParams.set('db', database);
+      const response = await fetch(url, { method: 'POST', cache: 'no-store', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: node.id || node._id, force }) });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const failure = new Error(result.error || `评分失败（${response.status}）`);
+        failure.code = result.code || '';
+        throw failure;
+      }
+      if (version !== inspirationScoreVersion || !rating.isConnected) return;
+      inspirationScoreCache.set(cacheKey, result);
+      revealJevScore(rating, result);
+    } catch (error) {
+      if (version !== inspirationScoreVersion || !rating.isConnected) return;
+      if (error?.code === 'JEV_NOT_CONFIGURED' || error?.code === 'JEV_LOGIN_REQUIRED') {
+        rating.hidden = true;
+        if (profileLayer) { profileLayer.hidden = true; profileLayer.classList.remove('is-visible'); profileLayer.innerHTML = ''; }
+        return;
+      }
+      rating.classList.remove('is-loading'); rating.classList.add('is-error');
+      rating.querySelector('[data-jev-status]').textContent = error.message || '评分暂不可用';
+      rating.querySelector('[data-jev-retry]').hidden = false;
+      if (profileLayer) { profileLayer.innerHTML = `<div class="app-profile-empty">${escape(error.message || '画像分析暂不可用')}</div>`; profileLayer.classList.add('is-visible'); }
+    }
   }
   function inspirationDrawContent(node) {
     const drawStep = ((homeDrawCount - 1) % 10) + 1;
@@ -89,9 +199,10 @@
     if (!content) return;
     content.classList.remove('is-filtering');
     const inspiration = homeNodes.length ? homeNodes[homeInspirationIndex % homeNodes.length] : null;
+    const showJev = Boolean(inspiration?.hasJevAnalysis || window.authUser?.hasJevApiKey);
     const activeCategory = homeCategories.find((item) => item.id === homeSelectedCategory);
     content.innerHTML = `<div class="app-home-quickbar"><button type="button" class="app-inspiration-trigger" data-home-inspiration-open aria-label="抽取知识灵感" title="抽取知识灵感"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i></button></div>
-      <dialog class="app-inspiration-modal" data-home-inspiration-modal aria-labelledby="appInspirationTitle"><div class="app-inspiration-modal-head"><div><span class="app-home-eyebrow"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> DISCOVERY</span><h2 id="appInspirationTitle">抽张知识灵感卡</h2><p>把熟悉的排序放一边，遇见一条可能没看过的知识。</p></div><button type="button" class="app-inspiration-close" data-home-inspiration-close aria-label="关闭"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div><div class="app-inspiration-draw-shell">${inspirationDrawContent(inspiration)}</div></dialog>
+      <dialog class="app-inspiration-modal" data-home-inspiration-modal aria-labelledby="appInspirationTitle"><div class="app-inspiration-profile-layer" data-jev-profile-layer ${showJev ? '' : 'hidden'}>${showJev ? profileLoading() : ''}</div><div class="app-inspiration-modal-core"><div class="app-inspiration-modal-head"><div><span class="app-home-eyebrow"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> DISCOVERY</span><h2 id="appInspirationTitle">抽张知识灵感卡</h2><p>把熟悉的排序放一边，遇见一条可能没看过的知识。</p></div><button type="button" class="app-inspiration-close" data-home-inspiration-close aria-label="关闭"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div><div class="app-inspiration-draw-shell">${inspirationDrawContent(inspiration)}</div></div></dialog>
       <div class="app-home-workspace"><aside class="app-category-panel"><div class="app-home-section-heading compact"><div><span class="app-home-eyebrow">KNOWLEDGE MAP</span><h2>分类树</h2></div><span class="app-category-total">${homeCategories.length}</span></div><nav aria-label="知识分类"><button type="button" class="app-category-item${homeSelectedCategory ? '' : ' is-active'}" data-home-category=""><i class="fa-solid fa-layer-group" aria-hidden="true"></i><span>全部知识</span><small>${Number(byId('appHomeCount')?.dataset.total) || 0}</small></button><ul class="app-category-tree">${categoryTree(homeCategories)}</ul></nav></aside>
       <section class="app-knowledge-panel"><div class="app-home-section-heading compact"><div><span class="app-home-eyebrow">KNOWLEDGE LIBRARY</span><h2>${escape(activeCategory?.name || '知识列表')}</h2></div><span class="app-list-count">${nodes.length} 条</span></div><div class="app-home-knowledge-grid">${nodes.map(homeKnowledgeCard).join('') || '<div class="app-home-empty"><i class="fa-solid fa-inbox" aria-hidden="true"></i><strong>该分类暂无知识</strong><span>选择其他分类，或创建一条新知识。</span></div>'}</div></section></div>`;
   }
@@ -135,7 +246,7 @@
     byId('appHomeContent').innerHTML = '<p class="muted">正在加载应用知识…</p>';
     homeSelectedCategory = '';
     const results = await Promise.allSettled([
-      api('/api/kb/entity_search', { order: 'modified_desc', limit: 24, hide_entity: '1' }),
+      api('/api/kb/entity_search', { order: 'modified_desc', limit: 24, hide_entity: '1', defined_class_only: '1' }),
       api('/api/kb/classes'),
     ]);
     if (version !== homeVersion) return;
@@ -205,8 +316,10 @@
   byId('appSearchNext').addEventListener('click', () => { if (page * pageSize < total) { page++; search(); } });
   byId('appHomeContent').addEventListener('click', (event) => {
     const modal = byId('appHomeContent').querySelector('[data-home-inspiration-modal]');
-    if (event.target.closest('[data-home-inspiration-open]')) { modal?.showModal(); return; }
+    if (event.target.closest('[data-home-inspiration-open]')) { modal?.showModal(); void scoreInspiration(homeNodes[homeInspirationIndex]); return; }
     if (event.target.closest('[data-home-inspiration-close]')) { modal?.close(); return; }
+    if (event.target.closest('[data-jev-profile-refresh]')) { void scoreInspiration(homeNodes[homeInspirationIndex], true); return; }
+    if (event.target.closest('[data-jev-retry]')) { void scoreInspiration(homeNodes[homeInspirationIndex], true); return; }
     const inspire = event.target.closest('[data-home-inspire]');
     if (inspire && homeNodes.length) {
       let next = homeInspirationIndex;
@@ -214,6 +327,7 @@
       homeInspirationIndex = next; homeDrawCount += 1;
       const shell = modal?.querySelector('.app-inspiration-draw-shell');
       if (shell) shell.innerHTML = inspirationDrawContent(homeNodes[homeInspirationIndex]);
+      void scoreInspiration(homeNodes[homeInspirationIndex]);
       return;
     }
     const category = event.target.closest('[data-home-category]');
@@ -221,7 +335,7 @@
       homeSelectedCategory = category.dataset.homeCategory || '';
       const version = ++homeVersion;
       byId('appHomeContent').classList.add('is-filtering');
-      api('/api/kb/entity_search', { order: 'modified_desc', limit: 24, class_id: homeSelectedCategory, hide_entity: '1' }).then((data) => {
+      api('/api/kb/entity_search', { order: 'modified_desc', limit: 24, class_id: homeSelectedCategory, hide_entity: '1', defined_class_only: '1' }).then((data) => {
         if (version !== homeVersion) return;
         homeVisibleNodes = data.nodes || []; renderHome();
       }).catch(() => { if (version === homeVersion) { homeVisibleNodes = []; renderHome(); } });

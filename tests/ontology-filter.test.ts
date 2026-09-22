@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { test, expect } from 'bun:test';
-import { ontologyTypeFilterSql } from '../src/server/ontology-filter.ts';
+import { definedClassEntityFilterSql, ontologyTypeFilterSql } from '../src/server/ontology-filter.ts';
 import { scopeKnowledgeSql } from '../src/server/knowledge-access.ts';
 
 test('ontology filter includes descendants at every depth with matching counts and scoped pagination', () => {
@@ -23,5 +23,21 @@ test('ontology filter includes descendants at every depth with matching counts a
     expect((db.query(scopeKnowledgeSql(`SELECT COUNT(DISTINCT n.id) AS total FROM nodes n ${where}`, user)).get('Root', 1) as any).total).toBe(3);
     db.run("UPDATE ontologies SET parent_id='Leaf' WHERE id='Root'");
     expect(ids('Root')).toEqual(['1','2']);
+  } finally { db.close(); }
+});
+
+test('application home only includes entities assigned to the current classification tree', () => {
+  const db = new Database(':memory:');
+  try {
+    db.exec(`
+      CREATE TABLE nodes(id TEXT PRIMARY KEY, name TEXT, project_id INTEGER);
+      CREATE TABLE classes(id TEXT PRIMARY KEY, name TEXT, project_id INTEGER);
+      CREATE TABLE entity_classes(entity_id TEXT, class_id TEXT);
+      INSERT INTO nodes VALUES ('valid', '有效分类知识', 1), ('uncategorized', '未分类知识', 1), ('foreign', '跨应用分类知识', 1), ('orphan', '失效分类知识', 1);
+      INSERT INTO classes VALUES ('class-local', '本地分类', 1), ('class-foreign', '其他应用分类', 2);
+      INSERT INTO entity_classes VALUES ('valid', 'class-local'), ('foreign', 'class-foreign'), ('orphan', 'missing-class');
+    `);
+    const rows = db.query(`SELECT n.id FROM nodes n WHERE ${definedClassEntityFilterSql} ORDER BY n.id`).all();
+    expect(rows).toEqual([{ id: 'valid' }]);
   } finally { db.close(); }
 });

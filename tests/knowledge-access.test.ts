@@ -49,6 +49,23 @@ test('login alone, including an administrator account, does not grant edits to a
   } finally { raw.close(); }
 });
 
+test('everyone can save classification changes in the default application', async () => {
+  const { raw } = setup();
+  const { guardKnowledgeRequest } = accessRoutes(raw);
+  try {
+    const call = async (user: string, body: any, db = 'default') => {
+      const url = new URL(`http://localhost/api/kb/classes/update?db=${db}`);
+      const req = new Request(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'test-user': user }, body: JSON.stringify(body) });
+      return guardKnowledgeRequest(req, url, 'POST');
+    };
+    const analyses = [{ angle: '经贸态度', content: '贸易政策', keywords: ['关税'] }];
+    expect(await call('', { id: 'class/politician', analyses })).toBeNull();
+    expect(await call('reader', { id: 'class/politician', analyses })).toBeNull();
+    expect(await call('reader', { id: 'class/politician', analyses, name: '允许改名' })).toBeNull();
+    expect((await call('reader', { id: 'class/politician', analyses }, 'private-app')).status).toBe(403);
+  } finally { raw.close(); }
+});
+
 test('public read, private isolation and maintainer access', () => {
   const { raw, db } = setup();
   try {
@@ -61,6 +78,17 @@ test('public read, private isolation and maintainer access', () => {
     expect(canAccessKnowledge(raw, reader, 'private', 'edit')).toBe(true);
     expect(canAccessKnowledge(raw, reader, 'private', 'manage')).toBe(false);
     expect(knowledgeContext.run({ user: reader }, () => db.query('SELECT id FROM nodes ORDER BY id').all())).toEqual([{ id: 'private' }, { id: 'public' }]);
+  } finally { raw.close(); }
+});
+
+test('default application full access bypasses ownership for every user', () => {
+  const { raw } = setup();
+  try {
+    const defaultUser = { ...reader, role: 'admin', fullAccess: true };
+    expect(canAccessKnowledge(raw, defaultUser, 'private', 'read')).toBe(true);
+    expect(canAccessKnowledge(raw, defaultUser, 'private', 'edit')).toBe(true);
+    expect(canAccessKnowledge(raw, defaultUser, 'private', 'manage')).toBe(true);
+    expect(canAccessKnowledge(raw, { id: 0, username: 'anonymous', fullAccess: true }, 'other', 'manage')).toBe(true);
   } finally { raw.close(); }
 });
 

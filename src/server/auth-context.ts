@@ -19,13 +19,14 @@ export function getCurrentUser(req: Request): any | null {
 
 export function getKnowledgeUser(req: Request): any | null {
   const current = getCurrentUser(req);
-  if (current) return current;
   try {
     if (new URL(req.url).searchParams.get("db") === "default") {
-      return { id: 0, username: "anonymous", displayName: "匿名用户", role: "admin", permissions: ["*"], dataScope: "all", anonymous: true };
+      return current
+        ? { ...current, role: "admin", permissions: ["*"], dataScope: "all", fullAccess: true }
+        : { id: 0, username: "anonymous", displayName: "匿名用户", role: "admin", permissions: ["*"], dataScope: "all", anonymous: true, fullAccess: true };
     }
   } catch {}
-  return null;
+  return current;
 }
 
 export function isAdmin(user: any) {

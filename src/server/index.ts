@@ -17,6 +17,7 @@ import { handlePipelineRoutes } from './routes/pipeline.ts';
 import { getCurrentUser, getKnowledgeUser } from './auth-context.ts';
 import { knowledgeContext } from './knowledge-access.ts';
 import { guardKnowledgeRequest, handleKnowledgeAccessRoutes } from './routes/knowledge-access.ts';
+import { handleJevRoutes } from './routes/jev.ts';
 
 const port = parseInt(process.env.PORT || "8080");
 const initialAdmin = await ensureInitialAdminAccount(adminDb, hashPassword);
@@ -71,6 +72,8 @@ const server = Bun.serve({
       if (guardResponse) return guardResponse;
       const accessResponse = await handleKnowledgeAccessRoutes(req, url, method);
       if (accessResponse) return accessResponse;
+      const jevResponse = await handleJevRoutes(req, url, method);
+      if (jevResponse) return jevResponse;
       const projectRes = await handleProjectRoutes(req, url, method);
       if (projectRes) return projectRes;
 

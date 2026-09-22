@@ -77,7 +77,7 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
 
       const u = adminDb
         .query(
-          "SELECT username, display_name, password_hash, password_salt, avatar, panel_state, role, status, is_admin FROM users WHERE username = ?"
+          "SELECT username, display_name, password_hash, password_salt, avatar, panel_state, role, status, is_admin, jev_api_key FROM users WHERE username = ?"
         )
         .get(username);
       if (!u) {
@@ -124,6 +124,7 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
             panelState: loginPanelState,
             role: u.role === "admin" || u.is_admin ? "admin" : "user",
             permissions: u.role === "admin" || u.is_admin ? ["*"] : [],
+            hasJevApiKey: Boolean(u.jev_api_key),
           },
         }),
         {
@@ -148,7 +149,7 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
       if (!s) return Response.json({ user: null });
 
       const u = adminDb
-        .query("SELECT username, display_name, avatar, panel_state, role, status, is_admin FROM users WHERE username = ?")
+        .query("SELECT username, display_name, avatar, panel_state, role, status, is_admin, jev_api_key FROM users WHERE username = ?")
         .get(s.username) as any;
       if (!u) return Response.json({ user: null });
       if (u.status === "disabled") return Response.json({ user: null });
@@ -170,6 +171,7 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
           roles: access?.roles || [],
           permissions: access?.permissions || [],
           dataScope: access?.dataScope || "own",
+          hasJevApiKey: Boolean(u.jev_api_key),
         },
       });
     } catch {
@@ -244,6 +246,10 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
       const displayName = body.displayName !== undefined ? (body.displayName || "").toString().trim() : undefined;
       const avatar = body.avatar !== undefined ? (body.avatar || "").toString().trim() : undefined;
       const panelState = body.panelState !== undefined ? JSON.stringify(body.panelState) : undefined;
+      const jevApiKey = body.jevApiKey !== undefined ? String(body.jevApiKey || "").trim() : undefined;
+      if (jevApiKey !== undefined && jevApiKey.length > 512) {
+        return Response.json({ success: false, message: "JEV API Key 长度无效" }, { status: 400 });
+      }
 
       try {
         const updates = [];
@@ -260,6 +266,10 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
           updates.push("panel_state = ?");
           params.push(panelState);
         }
+        if (jevApiKey !== undefined) {
+          updates.push("jev_api_key = ?");
+          params.push(jevApiKey);
+        }
         if (updates.length) {
           updates.push("updated_at = CURRENT_TIMESTAMP");
           adminDb.run(
@@ -270,7 +280,7 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
       } catch {}
 
       const u = adminDb
-        .query("SELECT username, display_name, avatar, panel_state FROM users WHERE username = ?")
+        .query("SELECT username, display_name, avatar, panel_state, jev_api_key FROM users WHERE username = ?")
         .get(s.username);
       let updatePanelState = null;
       try {
@@ -285,6 +295,7 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
           displayName: u.display_name,
           avatar: u.avatar,
           panelState: updatePanelState,
+          hasJevApiKey: Boolean(u.jev_api_key),
         },
       });
     } catch {

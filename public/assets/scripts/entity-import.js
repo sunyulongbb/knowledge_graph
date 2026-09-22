@@ -64,7 +64,9 @@
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result.error || '导入失败');
-      if (status) status.textContent = `导入成功：${result.attributesCreated} 个属性值`;
+      if (status) status.textContent = result.batch
+        ? `批量导入成功：新增 ${result.created} 个、更新 ${result.updated} 个实体，共 ${result.attributesCreated + result.attributesUpdated} 个属性值`
+        : `导入成功：${result.attributesCreated + result.attributesUpdated} 个属性值`;
       const next = new URL(window.location.href);
       next.searchParams.set('node', result.entityId);
       window.location.href = next.toString();

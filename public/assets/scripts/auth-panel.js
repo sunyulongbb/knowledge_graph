@@ -21,6 +21,9 @@
   const inputProfileDisplay = document.getElementById("inputProfileDisplay");
   const inputProfileAvatar = document.getElementById("inputProfileAvatar");
   const btnClearProfileAvatar = document.getElementById("btnClearProfileAvatar");
+  const inputProfileJevKey = document.getElementById("inputProfileJevKey");
+  const btnClearProfileJevKey = document.getElementById("btnClearProfileJevKey");
+  const profileJevKeyStatus = document.getElementById("profileJevKeyStatus");
   const profilePreview = document.getElementById("profilePreview");
   const profilePreviewImg = document.getElementById("profilePreviewImg");
   const profilePreviewStatus = document.getElementById("profilePreviewStatus");
@@ -240,6 +243,12 @@
       }
       if (inputProfileDisplay) inputProfileDisplay.value = authUser.displayName || "";
       if (inputProfileAvatar) inputProfileAvatar.value = authUser.avatar || "";
+      if (inputProfileJevKey) {
+        inputProfileJevKey.value = "";
+        inputProfileJevKey.dataset.clear = "false";
+        inputProfileJevKey.placeholder = authUser.hasJevApiKey ? "已配置，输入新 Key 可替换" : "输入 Key 后保存";
+      }
+      if (profileJevKeyStatus) profileJevKeyStatus.textContent = authUser.hasJevApiKey ? "已配置 JEV Key；出于安全原因不会显示原值。" : "尚未配置，用于灵感卡知识评分。";
       syncEmojiAvatarSelection(authUser.avatar || "");
       try {
         updateProfilePreview(authUser.avatar || "");
@@ -439,6 +448,19 @@
       } catch {}
     });
   }
+  if (btnClearProfileJevKey) {
+    btnClearProfileJevKey.addEventListener("click", () => {
+      if (!inputProfileJevKey) return;
+      inputProfileJevKey.value = "";
+      inputProfileJevKey.dataset.clear = "true";
+      inputProfileJevKey.placeholder = "保存后清除已配置的 Key";
+      if (profileJevKeyStatus) profileJevKeyStatus.textContent = "点击“保存修改”后清除 JEV Key。";
+    });
+  }
+  inputProfileJevKey?.addEventListener("input", () => {
+    inputProfileJevKey.dataset.clear = "false";
+    if (profileJevKeyStatus) profileJevKeyStatus.textContent = inputProfileJevKey.value ? "新 Key 将在保存后生效。" : (authUser?.hasJevApiKey ? "当前已配置的 Key 将保持不变。" : "尚未配置，用于灵感卡知识评分。");
+  });
   if (btnCloseProfile) btnCloseProfile.addEventListener("click", closeProfileModal);
   if (btnSubmitLogin) btnSubmitLogin.addEventListener("click", (e) => {
     e.preventDefault();
@@ -477,6 +499,7 @@
       try {
         const displayName = inputProfileDisplay ? inputProfileDisplay.value.trim() : "";
         const avatar = inputProfileAvatar ? inputProfileAvatar.value.trim() : "";
+        const jevApiKey = inputProfileJevKey ? inputProfileJevKey.value.trim() : "";
         try {
           if (avatar && !isEmojiAvatar(avatar)) new URL(avatar);
         } catch {
@@ -494,7 +517,7 @@
         const resp = await fetch("/api/auth/update_profile", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ displayName, avatar }),
+          body: JSON.stringify({ displayName, avatar, ...(jevApiKey || inputProfileJevKey?.dataset.clear === "true" ? { jevApiKey } : {}) }),
           credentials: "include",
         });
         const text = await resp.text();

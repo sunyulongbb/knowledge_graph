@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 
-test('UI grants anonymous access only in the default application and rejects unauthorized selections elsewhere', () => {
+test('UI grants every user full access in the default application and rejects unauthorized selections elsewhere', () => {
   const source = readFileSync(new URL('../public/assets/scripts/knowledge-access.js', import.meta.url), 'utf8');
-  const policy = source.slice(source.indexOf('  const hasAnonymousDefaultAccess'), source.indexOf('  const editControls')).replace('  let editorNode = null;\n', '');
+  const policy = source.slice(source.indexOf('  const hasDefaultApplicationAccess'), source.indexOf('  const editControls')).replace('  let editorNode = null;\n', '');
   const window: any = { authUser: null, location: { search: '?db=other' }, kbTableNodes: [
     { id: 'own', can_edit: true, can_manage: true },
     { id: 'maintained', can_edit: true, can_manage: false },
@@ -23,14 +23,15 @@ test('UI grants anonymous access only in the default application and rejects una
   expect(window.canEditCurrentKnowledge()).toBe(true);
   expect(window.canOperateKnowledgeSelection(['entity/own'], 'manage')).toBe(true);
   expect(window.canOperateKnowledgeSelection(['own', 'maintained'], 'edit')).toBe(true);
-  expect(window.canOperateKnowledgeSelection(['own', 'maintained'], 'manage')).toBe(false);
-  expect(window.canOperateKnowledgeSelection(['own', 'public'], 'edit')).toBe(false);
-  expect(window.canOperateKnowledgeSelection(['missing'], 'edit')).toBe(false);
+  expect(window.canOperateKnowledgeSelection(['own', 'maintained'], 'manage')).toBe(true);
+  expect(window.canOperateKnowledgeSelection(['own', 'public'], 'edit')).toBe(true);
+  expect(window.canOperateKnowledgeSelection(['missing'], 'edit')).toBe(true);
   expect(window.canOperateKnowledgeSelection([], 'manage')).toBe(false);
   field.value = 'public';
   editorNode.can_edit = false;
-  expect(window.canEditCurrentKnowledge()).toBe(false);
+  expect(window.canEditCurrentKnowledge()).toBe(true);
   field.value = '';
+  window.location.search = '?db=restricted';
   window.kbApplicationScope = 'restricted';
   expect(window.canEditCurrentKnowledge()).toBe(false);
   window.kbApplicationProjects = [{ slug: 'restricted', member: true }];

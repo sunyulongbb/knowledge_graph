@@ -81,8 +81,7 @@ export function cleanupLocalizedEntityImport(files: string[]) {
 }
 
 export async function localizeEntityImportMedia(input: unknown, projectId: number | null): Promise<LocalizedEntityImport> {
-  const root = structuredClone(object(input, '文件'));
-  const entity = object(root.entity, 'entity');
+  const root = structuredClone(input);
   const files: string[] = [];
   const localizedBySource = new Map<string, string>();
   const localize = async (value: unknown, kind: keyof typeof mediaKinds) => {
@@ -103,24 +102,27 @@ export async function localizeEntityImportMedia(input: unknown, projectId: numbe
     return saved.url;
   };
   try {
-    if (Array.isArray(entity.images)) {
-      const images: string[] = [];
-      for (const value of entity.images) images.push(await localize(value, 'image'));
-      entity.images = images;
-    }
-    if (Array.isArray(entity.videos)) {
-      const videos: string[] = [];
-      for (const value of entity.videos) videos.push(await localize(value, 'video'));
-      entity.videos = videos;
-    }
-    if (entity.pdf) entity.pdf = await localize(entity.pdf, 'pdf');
-    for (const attribute of Array.isArray(entity.attributes) ? entity.attributes : []) {
-      if (normalizeDatatype(attribute?.datatype) !== 'commonsMedia') continue;
-      if (Array.isArray(attribute.value)) {
-        const values: string[] = [];
-        for (const value of attribute.value) values.push(await localize(value, 'image'));
-        attribute.value = values;
-      } else attribute.value = await localize(attribute.value, 'image');
+    for (const document of entityImportDocuments(root)) {
+      const entity = object(document.entity, 'entity');
+      if (Array.isArray(entity.images)) {
+        const images: string[] = [];
+        for (const value of entity.images) images.push(await localize(value, 'image'));
+        entity.images = images;
+      }
+      if (Array.isArray(entity.videos)) {
+        const videos: string[] = [];
+        for (const value of entity.videos) videos.push(await localize(value, 'video'));
+        entity.videos = videos;
+      }
+      if (entity.pdf) entity.pdf = await localize(entity.pdf, 'pdf');
+      for (const attribute of Array.isArray(entity.attributes) ? entity.attributes : []) {
+        if (normalizeDatatype(attribute?.datatype) !== 'commonsMedia') continue;
+        if (Array.isArray(attribute.value)) {
+          const values: string[] = [];
+          for (const value of attribute.value) values.push(await localize(value, 'image'));
+          attribute.value = values;
+        } else attribute.value = await localize(attribute.value, 'image');
+      }
     }
     return { input: root, files };
   } catch (error) {
@@ -149,11 +151,35 @@ const strings = (value: unknown, path: string) => {
 };
 const normalizeImportedValue = (datatype: string, value: unknown): unknown => {
   if (Array.isArray(value)) return value.map((item) => normalizeImportedValue(datatype, item));
+  if (normalizeDatatype(datatype) === 'wikibase-item') {
+    if (typeof value === 'string' && value.trim()) return { label_zh: value.trim() };
+    if (value && typeof value === 'object') {
+      const item = value as Record<string, unknown>;
+      if (String(item.id || item.label_zh || item.entity_label_zh || item.label || item.name || '').trim()) return { ...item };
+    }
+    throw new Error('实体引用必须包含 id、中文标签或名称');
+  }
   if (normalizeDatatype(datatype) === 'time' && typeof value === 'string') {
     return normalizeValue(datatype, { date: value });
   }
   return normalizeValue(datatype, value);
 };
+
+function entityImportDocuments(input: unknown): Record<string, any>[] {
+  if (Array.isArray(input)) {
+    if (!input.length) throw new EntityImportError('导入数组不能为空');
+    return input.map((item, index) => {
+      const row = object(item, `文件[${index}]`);
+      return row.entity ? row : { version: 1, entity: row };
+    });
+  }
+  const root = object(input, '文件');
+  if (Array.isArray(root.entities)) {
+    if (!root.entities.length) throw new EntityImportError('entities 不能为空');
+    return root.entities.map((entity: unknown, index: number) => ({ version: root.version, entity: object(entity, `entities[${index}]`) }));
+  }
+  return [root];
+}
 
 export function parseEntityImport(input: unknown): ParsedEntity {
   const root = object(input, '文件');
@@ -197,9 +223,44 @@ export function parseEntityImport(input: unknown): ParsedEntity {
   };
 }
 
+export function parseEntityImports(input: unknown): ParsedEntity[] {
+  const documents = entityImportDocuments(input);
+  return documents.map((document, index) => {
+    try { return parseEntityImport(document); }
+    catch (error) {
+      if (documents.length === 1) throw error;
+      throw new EntityImportError(`第 ${index + 1} 个实体：${error instanceof Error ? error.message : '格式无效'}`);
+    }
+  });
+}
+
 export function importEntity(db: Database, input: unknown, projectId: number | null) {
-  const entity = parseEntityImport(input);
+  const entities = parseEntityImports(input);
   return db.transaction(() => {
+    const usedIds = new Set<string>();
+    for (const entity of entities) {
+      if (!entity.id) entity.id = String((db.query("SELECT COALESCE(MAX(CAST(id AS INTEGER)),0)+1 AS next FROM nodes WHERE id GLOB '[0-9]*'").get() as any).next + usedIds.size);
+      if (usedIds.has(entity.id)) throw new EntityImportError(`批量文件包含重复实体 ID：${entity.id}`);
+      usedIds.add(entity.id);
+    }
+    const incomingNames = new Map<string, ParsedEntity[]>();
+    for (const entity of entities) {
+      for (const label of [entity.id, entity.name, ...entity.aliases]) {
+        const key = label.trim().toLocaleLowerCase();
+        if (key) incomingNames.set(key, [...(incomingNames.get(key) || []), entity]);
+      }
+    }
+    const results = entities.map((entity) => importParsedEntity(db, entity, projectId, incomingNames));
+    if (results.length === 1) return results[0];
+    const totals = results.reduce((sum, result) => {
+      for (const key of ['propertiesCreated','attributesCreated','attributesUpdated','referencedEntitiesCreated','referencedEntitiesMatched','categoriesCreated','categoriesUpdated','categoriesLinked'] as const) sum[key] += Number(result[key] || 0);
+      return sum;
+    }, { propertiesCreated: 0, attributesCreated: 0, attributesUpdated: 0, referencedEntitiesCreated: 0, referencedEntitiesMatched: 0, categoriesCreated: 0, categoriesUpdated: 0, categoriesLinked: 0 });
+    return { batch: true, total: results.length, created: results.filter((item) => item.entityCreated).length, updated: results.filter((item) => item.entityUpdated).length, entityId: results[0]!.entityId, entityIds: results.map((item) => item.entityId), entities: results, ...totals };
+  })();
+}
+
+function importParsedEntity(db: Database, entity: ParsedEntity, projectId: number | null, incomingNames: Map<string, ParsedEntity[]>) {
     let ontology = entity.ontology.id ? db.query('SELECT id,name,status FROM ontologies WHERE id=? AND project_id IS ?').get(entity.ontology.id, projectId) as any : null;
     if (!ontology) ontology = db.query('SELECT id,name,status FROM ontologies WHERE lower(name)=lower(?) AND project_id IS ? LIMIT 1').get(entity.ontology.name, projectId) as any;
     let ontologyCreated = false;
@@ -242,7 +303,7 @@ export function importEntity(db: Database, input: unknown, projectId: number | n
     };
     for (const category of entity.categories) syncCategory(category, null);
     const mergedTags = [...new Map([...entity.tags, ...categoryTags].map((tag) => [tag.toLowerCase(), tag])).values()];
-    const nodeId = entity.id || String((db.query("SELECT COALESCE(MAX(CAST(id AS INTEGER)),0)+1 AS next FROM nodes WHERE id GLOB '[0-9]*'").get() as any).next);
+    const nodeId = entity.id;
     const existingNode = db.query('SELECT id,project_id FROM nodes WHERE id=? LIMIT 1').get(nodeId) as any;
     if (existingNode && (existingNode.project_id ?? null) !== projectId) {
       throw new EntityImportError(`实体 ID 已被其他应用使用：${nodeId}`);
@@ -261,6 +322,7 @@ export function importEntity(db: Database, input: unknown, projectId: number | n
     let attributesCreated = 0;
     let attributesUpdated = 0;
     let referencedEntitiesCreated = 0;
+    let referencedEntitiesMatched = 0;
     let referenceOntology: { id: string; name: string } | null = null;
     const ensureReferenceOntology = () => {
       if (referenceOntology) return referenceOntology;
@@ -277,17 +339,49 @@ export function importEntity(db: Database, input: unknown, projectId: number | n
       }
       return referenceOntology;
     };
-    const ensureReferencedEntities = (value: unknown) => {
-      for (const raw of Array.isArray(value) ? value : [value]) {
-        if (!raw || typeof raw !== 'object') continue;
-        const item = raw as Record<string, any>;
-        const id = String(item.id || '').replace(/^entity\//, '').trim();
-        if (!id || db.query('SELECT 1 FROM nodes WHERE id=? LIMIT 1').get(id)) continue;
-        const label = String(item.label_zh || item.entity_label_zh || item.label || item.name || id).trim() || id;
+    const existingNodes = () => db.query('SELECT id,name,aliases FROM nodes WHERE project_id IS ?').all(projectId) as any[];
+    const labelsOf = (item: Record<string, any>) => [item.label_zh, item.entity_label_zh, item.label, item.name].map((label) => String(label || '').trim()).filter(Boolean);
+    const resolveReferencedEntities = (value: unknown): unknown => {
+      if (Array.isArray(value)) return value.map(resolveReferencedEntities);
+      if (!value || typeof value !== 'object') return value;
+      const item = value as Record<string, any>;
+      let id = String(item.id || '').replace(/^entity\//, '').trim();
+      const labels = labelsOf(item);
+      let matched = id ? db.query('SELECT id,name FROM nodes WHERE id=? AND project_id IS ? LIMIT 1').get(id, projectId) as any : null;
+      if (!matched && id) {
+        const candidates = incomingNames.get(id.toLocaleLowerCase()) || [];
+        if (candidates.length === 1) matched = { id: candidates[0]!.id, name: candidates[0]!.name };
+      }
+      if (!matched && labels.length) {
+        const wanted = new Set(labels.map((label) => label.toLocaleLowerCase()));
+        matched = existingNodes().find((node) => {
+          let aliases: string[] = [];
+          try { aliases = JSON.parse(node.aliases || '[]'); } catch {}
+          return [node.name, ...aliases].some((label) => wanted.has(String(label || '').trim().toLocaleLowerCase()));
+        });
+      }
+      if (!matched && labels.length) {
+        const candidates = new Map<string, ParsedEntity>();
+        for (const label of labels) for (const candidate of incomingNames.get(label.toLocaleLowerCase()) || []) candidates.set(candidate.id, candidate);
+        if (candidates.size === 1) {
+          const candidate = [...candidates.values()][0]!;
+          matched = { id: candidate.id, name: candidate.name };
+        }
+      }
+      if (matched) {
+        referencedEntitiesMatched++;
+        return { ...item, id: matched.id, label_zh: item.label_zh || matched.name, 'entity-type': 'item' };
+      }
+      if (!id) id = `entity/${crypto.randomUUID()}`;
+      const globallyExisting = db.query('SELECT project_id FROM nodes WHERE id=? LIMIT 1').get(id) as any;
+      if (globallyExisting) throw new EntityImportError(`引用实体 ID 已被其他应用使用：${id}`);
+      const label = labels[0] || id;
+      if (!incomingNames.get(label.toLocaleLowerCase())?.some((candidate) => candidate.id === id)) {
         const refOntology = ensureReferenceOntology();
         db.run('INSERT INTO nodes(id,name,type,description,aliases,tags,images,videos,pdf,link,visibility,project_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', [id, label, refOntology.id, `由实体属性引用自动创建（${id}）`, '[]', '[]', '[]', '[]', '', `https://www.wikidata.org/wiki/${encodeURIComponent(id)}`, 'public', projectId]);
         referencedEntitiesCreated++;
       }
+      return { ...item, id, label_zh: item.label_zh || label, 'entity-type': 'item' };
     };
     for (const attribute of entity.attributes) {
       let property = attribute.id ? db.query('SELECT id,name,datatype,valuetype,status FROM properties WHERE id=? AND project_id IS ?').get(attribute.id, projectId) as any : null;
@@ -309,7 +403,7 @@ export function importEntity(db: Database, input: unknown, projectId: number | n
       }
       db.run('INSERT OR IGNORE INTO ontology_properties(ontology_id,property_id) VALUES(?,?)', [ontology.id, property.id]);
       const datatype = normalizeDatatype(property.datatype || attribute.datatype, property.valuetype);
-      if (datatype === 'wikibase-item') ensureReferencedEntities(attribute.value);
+      if (datatype === 'wikibase-item') attribute.value = resolveReferencedEntities(attribute.value);
       let value: unknown;
       try {
         value = normalizeValue(datatype, attribute.value);
@@ -323,6 +417,5 @@ export function importEntity(db: Database, input: unknown, projectId: number | n
       } else attributesCreated++;
       db.run('INSERT INTO attributes(id,node_id,key,value,datatype,property_name_snapshot,statement_json) VALUES(?,?,?,?,?,?,?)', [`attr/${crypto.randomUUID()}`, nodeId, property.id, typeof value === 'object' ? JSON.stringify(value) : String(value), uiDatatype(datatype), property.name, JSON.stringify({ property: property.id, datatype, snaktype: 'value', value })]);
     }
-    return { entityId: nodeId, entityCreated, entityUpdated: !entityCreated, ontologyId: ontology.id, ontologyCreated, propertiesCreated, attributesCreated, attributesUpdated, referencedEntitiesCreated, categoriesCreated, categoriesUpdated, categoriesLinked: categoryIds.length };
-  })();
+    return { entityId: nodeId, entityCreated, entityUpdated: !entityCreated, ontologyId: ontology.id, ontologyCreated, propertiesCreated, attributesCreated, attributesUpdated, referencedEntitiesCreated, referencedEntitiesMatched, categoriesCreated, categoriesUpdated, categoriesLinked: categoryIds.length };
 }

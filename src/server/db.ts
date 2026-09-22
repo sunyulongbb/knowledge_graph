@@ -201,6 +201,7 @@ function ensureSharedTables() {
   runSafe("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'");
   runSafe("ALTER TABLE users ADD COLUMN email TEXT");
   runSafe("ALTER TABLE users ADD COLUMN phone TEXT");
+  runSafe("ALTER TABLE users ADD COLUMN jev_api_key TEXT");
   runSafe("ALTER TABLE users ADD COLUMN last_login_at DATETIME");
   runSafe("UPDATE users SET role = CASE WHEN is_admin = 1 THEN 'admin' ELSE 'user' END WHERE role IS NULL OR role = ''");
   runSafe("UPDATE users SET status = 'active' WHERE status IS NULL OR status = ''");
@@ -365,6 +366,9 @@ function ensureSharedTables() {
       link TEXT,
       pdf TEXT,
       videos TEXT,
+      jev_analysis_json TEXT,
+      jev_analysis_signature TEXT,
+      jev_analysis_updated_at DATETIME,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
@@ -376,6 +380,9 @@ function ensureSharedTables() {
   runSafe("ALTER TABLE nodes ADD COLUMN link TEXT");
   runSafe("ALTER TABLE nodes ADD COLUMN pdf TEXT");
   runSafe("ALTER TABLE nodes ADD COLUMN videos TEXT");
+  runSafe("ALTER TABLE nodes ADD COLUMN jev_analysis_json TEXT");
+  runSafe("ALTER TABLE nodes ADD COLUMN jev_analysis_signature TEXT");
+  runSafe("ALTER TABLE nodes ADD COLUMN jev_analysis_updated_at DATETIME");
 
   appDb.run(`
     CREATE TABLE IF NOT EXISTS semantic_nodes (
@@ -469,6 +476,9 @@ function ensureSharedTables() {
         link TEXT,
         pdf TEXT,
         videos TEXT,
+        jev_analysis_json TEXT,
+        jev_analysis_signature TEXT,
+        jev_analysis_updated_at DATETIME,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         project_id INTEGER
@@ -488,6 +498,9 @@ function ensureSharedTables() {
         "link",
         "pdf",
         "videos",
+        "jev_analysis_json",
+        "jev_analysis_signature",
+        "jev_analysis_updated_at",
         "created_at",
         "updated_at",
         "project_id",
@@ -536,6 +549,9 @@ function ensureSharedTables() {
       runSafe("DROP TABLE IF EXISTS nodes_old");
     }
   }
+  runSafe("ALTER TABLE nodes ADD COLUMN jev_analysis_json TEXT");
+  runSafe("ALTER TABLE nodes ADD COLUMN jev_analysis_signature TEXT");
+  runSafe("ALTER TABLE nodes ADD COLUMN jev_analysis_updated_at DATETIME");
   runSafe(
     "CREATE INDEX IF NOT EXISTS idx_nodes_project_id ON nodes(project_id)",
   );
@@ -707,6 +723,7 @@ function ensureSharedTables() {
   runSafe("ALTER TABLE classes ADD COLUMN image TEXT");
   runSafe("ALTER TABLE classes ADD COLUMN sort_order INTEGER");
   runSafe("ALTER TABLE classes ADD COLUMN tags TEXT");
+  runSafe("ALTER TABLE classes ADD COLUMN analyses TEXT");
   runSafe("UPDATE classes SET sort_order = rowid WHERE sort_order IS NULL");
 
   appDb.run(`

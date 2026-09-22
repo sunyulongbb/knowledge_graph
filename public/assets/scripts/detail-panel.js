@@ -4,6 +4,12 @@
   const SHOW_DETAIL_ATTR_SECTION = false;
   const shared = window.kbApp || {};
   const state = shared.state || {};
+  const appendDetailDb = (url) => {
+    const db = new URLSearchParams(window.location.search).get("db");
+    if (db) url.searchParams.set("db", db);
+    return url;
+  };
+  const canEditDefaultApplication = () => new URLSearchParams(window.location.search).get("db") === "default";
   if (typeof state.bindAlias === "function") {
     state.bindAlias("kbActiveDetailNodeId", "activeDetailNodeId", "");
     state.bindAlias("kbActiveDetailRouteId", "activeDetailRouteId", "");
@@ -1942,7 +1948,7 @@
         try {
           const be = document.getElementById("btnEditWiki");
           if (be) {
-            be.style.display = doc?.can_edit ? "inline-flex" : "none";
+            be.style.display = doc?.can_edit || canEditDefaultApplication() ? "inline-flex" : "none";
             // inline edit click is handled by wired listener
           }
         } catch (e) {}
@@ -2182,7 +2188,7 @@
     const editButton = document.getElementById("btnEditWiki");
     const detailPanel = document.getElementById("detailPanel");
     if (editButton && detailPanel?.style.display !== "none") {
-      editButton.style.display = "none";
+      editButton.style.display = canEditDefaultApplication() ? "inline-flex" : "none";
     }
   });
 
@@ -2289,6 +2295,7 @@
           : "entity/" + entityId;
       }
       const url = new URL("/api/wiki/page", window.location.origin);
+      appendDetailDb(url);
       url.searchParams.set("entityId", entityId);
       url.searchParams.set("lang", lang);
       // do not auto-create wiki page from node metadata; avoid syncing node description into markdown
@@ -2485,7 +2492,8 @@
       state,
       updatedBy: "u:anonymous",
     };
-    const resp = await fetch("/api/wiki/page/save", {
+    const saveUrl = appendDetailDb(new URL("/api/wiki/page/save", window.location.origin));
+    const resp = await fetch(saveUrl.toString(), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -2507,6 +2515,7 @@
       const idPart = parts.length > 1 ? parts[1] : parts[0] || "";
       const key = idPart + ":" + lang;
       const url = new URL("/api/wiki/page/revisions", window.location.origin);
+      appendDetailDb(url);
       url.searchParams.set("key", key);
       const resp = await fetch(url);
       if (!resp.ok) return;

@@ -311,6 +311,8 @@ export function formatNode(row: any) {
     desc_zh: descZhFromExtra || row.description || "",
     created_at: row.created_at || null,
     updated_at: row.updated_at || null,
+    hasJevAnalysis: Boolean(String(row.jev_analysis_json || "").trim()),
+    jevAnalysisUpdatedAt: row.jev_analysis_updated_at || null,
     aliases: aliases.length ? aliases : aliasesFromExtra,
     aliases_zh: aliasesFromExtra.length ? aliasesFromExtra : aliases,
     tags: tags.length ? tags : tagsFromExtra,

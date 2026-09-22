@@ -8,6 +8,24 @@ import { mkdirSync, writeFileSync } from "fs";
 
 const UPLOADS_DIR = resolve(import.meta.dir, "..", "..", "..", "..", "uploads");
 
+function normalizeClassAnalyses(value: unknown) {
+  if (value == null) return [];
+  if (!Array.isArray(value)) throw new Error("分类分析必须是数组");
+  if (value.length > 20) throw new Error("每个分类最多添加 20 个分析角度");
+  return value.map((item: any, index) => {
+    const angle = String(item?.angle || "").trim();
+    const content = String(item?.content || "").trim();
+    const rawKeywords = Array.isArray(item?.keywords) ? item.keywords : String(item?.keywords || "").split(/[,，;；\n]+/);
+    const keywords: string[] = [...new Set<string>(rawKeywords.map((keyword: unknown) => String(keyword || "").trim()).filter((keyword: string) => Boolean(keyword)))];
+    if (!angle) throw new Error(`第 ${index + 1} 个分析角度不能为空`);
+    if (!content) throw new Error(`第 ${index + 1} 个分析内容不能为空`);
+    if (angle.length > 80 || content.length > 1000 || keywords.length > 100 || keywords.some((keyword) => keyword.length > 80)) {
+      throw new Error(`第 ${index + 1} 个分析配置内容过长`);
+    }
+    return { angle, content, keywords };
+  });
+}
+
 function resolveScopedProject(req: Request, url: URL) {
   const directDb = (url.searchParams.get("db") || "").trim();
   if (directDb && directDb !== "app") {
@@ -811,8 +829,12 @@ export async function handleSchemaRoutes(
       )
       .map((row: any) => {
         let rowTags: string[] = [];
+        let rowAnalyses: any[] = [];
         try {
           rowTags = JSON.parse(row.tags || "[]");
+        } catch {}
+        try {
+          rowAnalyses = normalizeClassAnalyses(JSON.parse(row.analyses || "[]"));
         } catch {}
         return {
           id: row.id,
@@ -827,6 +849,7 @@ export async function handleSchemaRoutes(
           sort_order: row.sort_order,
           instance_count: row.instance_count ?? 0,
           tags: rowTags,
+          analyses: rowAnalyses,
         };
       });
     return Response.json(classes);
@@ -979,6 +1002,10 @@ export async function handleSchemaRoutes(
             : null,
         );
       }
+      if (body.analyses !== undefined) {
+        updates.push("analyses = ?");
+        params.push(JSON.stringify(normalizeClassAnalyses(body.analyses)));
+      }
       if (hasProjectScope) {
         updates.push("project_id = COALESCE(project_id, ?)");
         params.push(scopedProjectId);
@@ -1008,8 +1035,12 @@ export async function handleSchemaRoutes(
       if (!updatedClass)
         return new Response("Class not found", { status: 404 });
       let updatedClassTags = [];
+      let updatedClassAnalyses: Array<{ angle: string; content: string; keywords: string[] }> = [];
       try {
         updatedClassTags = JSON.parse(updatedClass.tags || "[]");
+      } catch {}
+      try {
+        updatedClassAnalyses = normalizeClassAnalyses(JSON.parse(updatedClass.analyses || "[]"));
       } catch {}
       return Response.json({
         id: updatedClass.id,
@@ -1022,9 +1053,11 @@ export async function handleSchemaRoutes(
         image: updatedClass.image,
         sort_order: updatedClass.sort_order,
         tags: updatedClassTags,
+        analyses: updatedClassAnalyses,
       });
     } catch (e) {
       console.error(e);
+      if (e instanceof Error && /分析/.test(e.message)) return Response.json({ error: e.message }, { status: 400 });
       return new Response("Error updating class", { status: 500 });
     }
   }

@@ -1,4 +1,4 @@
-import { ontologyTypeFilterSql } from '../ontology-filter.ts';
+import { definedClassEntityFilterSql, ontologyTypeFilterSql } from '../ontology-filter.ts';
 import { db, getProjectByIdentifier } from "../db.ts";
 import { normalizeDatatype, normalizeValue, normalizeStatement, valueTypeFor, uiDatatype } from '../../shared/wikidata.ts';
 import { normalizeEntityTaxonomy } from '../../shared/entity-taxonomy.ts';
@@ -2091,6 +2091,12 @@ export async function handleCoreKbRoutes(
     const propertyId = (url.searchParams.get("property_id") || "").trim();
     const propertyValue = (url.searchParams.get("property_value") || "").trim();
     const hideEntity = (url.searchParams.get("hide_entity") || "").trim();
+    const definedTypeOnly = ["1", "true"].includes(
+      (url.searchParams.get("defined_type_only") || "").trim().toLowerCase(),
+    );
+    const definedClassOnly = ["1", "true"].includes(
+      (url.searchParams.get("defined_class_only") || "").trim().toLowerCase(),
+    );
     const hasImage = ["1", "true"].includes(
       (url.searchParams.get("has_image") || "").trim().toLowerCase(),
     );
@@ -2206,6 +2212,32 @@ export async function handleCoreKbRoutes(
               OR lower(COALESCE(hidden_default_ontology.description, '')) LIKE '%wikibase-item 属性值自动创建%'
             )
         )`;
+    }
+
+    // The application home represents the ontology/type tree. Only include
+    // knowledge whose type is an active ontology in the same application and
+    // would therefore actually be visible in that tree.
+    if (definedTypeOnly) {
+      whereClause += ` AND EXISTS (
+        SELECT 1 FROM ontologies defined_type
+        WHERE defined_type.id = n.type
+          AND defined_type.project_id IS n.project_id
+          AND (defined_type.status IS NULL OR defined_type.status = 'active')
+          AND lower(trim(COALESCE(defined_type.name, ''))) NOT IN ('实体条目', 'wikibase item')
+          AND NOT EXISTS (
+            SELECT 1
+            FROM json_each(CASE WHEN json_valid(defined_type.alias) THEN defined_type.alias ELSE '[]' END) defined_type_alias
+            WHERE lower(trim(COALESCE(defined_type_alias.value, ''))) = 'wikibase item'
+          )
+          AND lower(COALESCE(defined_type.description, '')) NOT LIKE '%wikibase-item 属性值自动创建%'
+      )`;
+    }
+
+    // Application-home knowledge must belong to at least one category that is
+    // still defined in this application's classification tree. Orphaned links,
+    // foreign categories and uncategorized entities are intentionally omitted.
+    if (definedClassOnly) {
+      whereClause += ` AND ${definedClassEntityFilterSql}`;
     }
 
     // Grid cards require visual media. Keep the legacy image-only filter while

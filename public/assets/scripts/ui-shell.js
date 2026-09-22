@@ -240,7 +240,9 @@
   function initClassModal() {
     document.addEventListener("DOMContentLoaded", () => {
       const btnClsAdd = document.getElementById("btnClsAdd");
-      if (btnClsAdd) {
+      const managedClassForm = document.getElementById("classForm");
+      const classModalManaged = managedClassForm?.dataset.classModalOwner === "schema-panel";
+      if (btnClsAdd && !classModalManaged) {
         btnClsAdd.addEventListener("click", () => {
           const form = document.getElementById("classForm");
           if (form) form.reset();
@@ -298,7 +300,7 @@
       }
 
       const classForm = document.getElementById("classForm");
-      if (classForm) {
+      if (classForm && !classModalManaged) {
         classForm.addEventListener("submit", async (e) => {
           e.preventDefault();
           const nameInput = document.getElementById("clsNameInput");

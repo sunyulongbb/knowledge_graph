@@ -21,6 +21,12 @@
   const schemaPropId = byId("schemaPropId");
   const btnAddSchema = byId("btnAddSchema");
   const btnRemoveSchemaSelected = byId("btnRemoveSchemaSelected");
+  const btnClsAnalysis = byId("btnClsAnalysis");
+  const classAnalysisModal = byId("classAnalysisModal");
+  const classAnalysisForm = byId("classAnalysisForm");
+  const classAnalysisRows = byId("classAnalysisRows");
+  const classAnalysisStatus = byId("classAnalysisStatus");
+  const classAnalysisClassName = byId("classAnalysisClassName");
   // Subclass editing removed per request
   // Create class/property controls
   // New-class selection element (only select; no free-text)
@@ -81,6 +87,7 @@
   let propRecommendActiveId = "";
   let classTreeController = null;
   let classTreeUpdateQueued = false;
+  if (classForm) classForm.dataset.classModalOwner = "schema-panel";
 
   // Local wrapper for pickUiDatatype (defined in attr-panel.js)
   function pickUiDatatype(item) {
@@ -391,17 +398,32 @@
     return url;
   }
 
-  function openClassModal() {
+  function openClassModal(options = {}) {
     if (!classModal) return;
-    if (classModalTitle) classModalTitle.textContent = "新增分类";
+    const classId = String(options.classId || "").trim();
+    const current = classId
+      ? (window.kbClasses || []).find((item) => String(item.id) === classId)
+      : null;
+    const isEdit = Boolean(current);
+    const parentId = isEdit
+      ? String(current.parent_id || current.parent || "")
+      : String(options.parentId || "");
+    if (classModalTitle) {
+      classModalTitle.textContent = isEdit
+        ? "编辑分类"
+        : parentId
+          ? "新增子分类"
+          : "新增分类";
+    }
     if (classForm) {
       try {
-        classForm.dataset.mode = "create";
-        classForm.dataset.parentId = "";
+        classForm.dataset.mode = isEdit ? "edit" : "create";
+        classForm.dataset.classId = isEdit ? classId : "";
+        classForm.dataset.parentId = parentId;
       } catch {}
     }
-    if (clsNameInput) clsNameInput.value = "";
-    if (clsDescInput) clsDescInput.value = "";
+    if (clsNameInput) clsNameInput.value = isEdit ? current.name || current.label || "" : "";
+    if (clsDescInput) clsDescInput.value = isEdit ? current.description || "" : "";
     classModal.style.display = "flex";
     classModal.setAttribute("aria-hidden", "false");
     try {
@@ -426,6 +448,22 @@
       body: JSON.stringify(payload || {}),
     });
     if (!resp.ok) throw new Error("HTTP " + resp.status);
+    return await resp.json();
+  }
+
+  async function updateClass(payload) {
+    const url = appendCurrentDbToUrl(
+      new URL("/api/kb/classes/update", window.location.origin),
+    );
+    const resp = await fetch(url.toString(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload || {}),
+    });
+    if (!resp.ok) {
+      const message = await resp.text().catch(() => "");
+      throw new Error(message || `HTTP ${resp.status}`);
+    }
     return await resp.json();
   }
 
@@ -615,6 +653,7 @@
                   document
                     .getElementById("btnClsImage")
                     ?.style.setProperty("display", "none");
+                  document.getElementById("btnClsAnalysis")?.style.setProperty("display", "none");
                   updateClassAssignmentActions();
                   return;
                 }
@@ -633,13 +672,14 @@
                   document
                     .getElementById("btnClsImage")
                     ?.style.setProperty("display", "inline-flex");
+                  document.getElementById("btnClsAnalysis")?.style.setProperty("display", "inline-flex");
                   void loadClassSchema(nextId);
                   void updatePropertyRecommendations();
                   updateClassAssignmentActions();
                 }
               },
-              onEdit: () => {},
-              onAddChild: () => {},
+              onEdit: (id) => openClassModal({ classId: id }),
+              onAddChild: (id) => openClassModal({ parentId: id }),
               onDelete: () => {},
               onReload: () => loadClasses(),
               onDoubleClick: (id) => {
@@ -1811,6 +1851,87 @@
   updateSchemaRemoveButtonState();
   // Removed subclass add/delete handlers
 
+  const US_POLITICS_ANALYSIS_EXAMPLE = [
+    { angle: "对华总体态度", content: "对中国及中美关系整体采取什么政策取向", keywords: ["中国", "中美关系", "合作", "竞争", "对话", "接触", "战略竞争", "去风险", "脱钩", "China", "cooperation", "competition", "engagement", "de-risking", "decoupling"] },
+    { angle: "经贸态度", content: "对中美贸易、中国商品、企业投资等政策主张", keywords: ["贸易", "关税", "进口", "出口", "投资", "市场准入", "贸易逆差", "供应链", "制造业", "tariff", "trade", "import", "export", "investment", "supply chain"] },
+    { angle: "科技态度", content: "对中国科技产业及中美科技往来的政策主张", keywords: ["芯片", "半导体", "人工智能", "先进技术", "出口管制", "技术合作", "研发", "实体清单", "semiconductor", "AI", "technology", "export control", "R&D"] },
+    { angle: "合作意愿", content: "是否主张在具体领域保持或扩大中美合作", keywords: ["合作", "对话", "谈判", "交流", "经贸合作", "科技合作", "气候合作", "教育交流", "访问", "协议", "cooperation", "dialogue", "negotiation", "exchange", "agreement"] },
+  ];
+
+  function addClassAnalysisRow(value = {}) {
+    if (!classAnalysisRows) return;
+    const row = document.createElement("article");
+    row.className = "class-analysis-row";
+    row.innerHTML = `<div class="class-analysis-row-head"><strong>分析角度</strong><button type="button" class="btn icon" data-analysis-remove aria-label="删除分析角度"><i class="fa-regular fa-trash-can"></i></button></div><label>角度名称<input class="kb-input" data-analysis-angle maxlength="80" placeholder="例如：对华总体态度"></label><label>分析内容<textarea class="kb-input" data-analysis-content maxlength="1000" placeholder="说明这个角度要分析什么"></textarea></label><label>关键词<textarea class="kb-input" data-analysis-keywords placeholder="关键词以逗号或换行分隔"></textarea></label>`;
+    row.querySelector('[data-analysis-angle]').value = value.angle || "";
+    row.querySelector('[data-analysis-content]').value = value.content || "";
+    row.querySelector('[data-analysis-keywords]').value = Array.isArray(value.keywords) ? value.keywords.join("、") : (value.keywords || "");
+    classAnalysisRows.appendChild(row);
+  }
+
+  function renderClassAnalyses(items) {
+    classAnalysisRows?.replaceChildren();
+    (Array.isArray(items) ? items : []).forEach(addClassAnalysisRow);
+    if (!classAnalysisRows?.children.length) addClassAnalysisRow();
+  }
+
+  function closeClassAnalysisModal() {
+    if (!classAnalysisModal) return;
+    classAnalysisModal.hidden = true;
+    classAnalysisModal.setAttribute("aria-hidden", "true");
+  }
+
+  function openClassAnalysisModal() {
+    const selected = (window.kbClasses || []).find((item) => item.id === window.kbSelectedClassId);
+    if (!selected || !classAnalysisModal) return;
+    if (classAnalysisClassName) classAnalysisClassName.textContent = selected.name || selected.label || selected.id;
+    if (classAnalysisStatus) classAnalysisStatus.textContent = "";
+    renderClassAnalyses(selected.analyses || []);
+    classAnalysisModal.hidden = false;
+    classAnalysisModal.setAttribute("aria-hidden", "false");
+    classAnalysisRows?.querySelector("input")?.focus();
+  }
+
+  btnClsAnalysis?.addEventListener("click", openClassAnalysisModal);
+  byId("btnClassAnalysisClose")?.addEventListener("click", closeClassAnalysisModal);
+  byId("btnClassAnalysisCancel")?.addEventListener("click", closeClassAnalysisModal);
+  byId("btnClassAnalysisAdd")?.addEventListener("click", () => addClassAnalysisRow());
+  byId("btnClassAnalysisExample")?.addEventListener("click", () => renderClassAnalyses(US_POLITICS_ANALYSIS_EXAMPLE));
+  classAnalysisModal?.addEventListener("click", (event) => { if (event.target === classAnalysisModal) closeClassAnalysisModal(); });
+  classAnalysisRows?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-analysis-remove]");
+    if (!button) return;
+    button.closest(".class-analysis-row")?.remove();
+    if (!classAnalysisRows.children.length) addClassAnalysisRow();
+  });
+  classAnalysisForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const classId = window.kbSelectedClassId;
+    if (!classId) return;
+    const analyses = Array.from(classAnalysisRows.querySelectorAll(".class-analysis-row")).map((row) => ({
+      angle: row.querySelector("[data-analysis-angle]").value.trim(),
+      content: row.querySelector("[data-analysis-content]").value.trim(),
+      keywords: row.querySelector("[data-analysis-keywords]").value.split(/[,，;；\n、]+/).map((item) => item.trim()).filter(Boolean),
+    })).filter((item) => item.angle || item.content || item.keywords.length);
+    const submit = classAnalysisForm.querySelector('button[type="submit"]');
+    try {
+      submit.disabled = true;
+      if (classAnalysisStatus) classAnalysisStatus.textContent = "正在保存…";
+      const url = appendCurrentDbToUrl(new URL("/api/kb/classes/update", window.location.origin));
+      const response = await fetch(url.toString(), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: classId, analyses }) });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+      const selected = (window.kbClasses || []).find((item) => item.id === classId);
+      if (selected) selected.analyses = result.analyses || analyses;
+      if (classAnalysisStatus) classAnalysisStatus.textContent = `已保存 ${analyses.length} 个分析角度`;
+      window.setTimeout(closeClassAnalysisModal, 450);
+    } catch (error) {
+      if (classAnalysisStatus) classAnalysisStatus.textContent = `保存失败：${error.message || error}`;
+    } finally {
+      submit.disabled = false;
+    }
+  });
+
   const clsColorPicker = document.getElementById("clsColorPicker");
   if (clsColorPicker) {
     clsColorPicker.addEventListener("change", async (e) => {
@@ -1963,6 +2084,8 @@
       const name = (clsNameInput?.value || "").trim();
       const description = (clsDescInput?.value || "").trim();
       const parentId = (classForm.dataset.parentId || "").trim();
+      const mode = classForm.dataset.mode === "edit" ? "edit" : "create";
+      const classId = (classForm.dataset.classId || "").trim();
       if (!name) {
         try {
           clsNameInput?.focus();
@@ -1982,32 +2105,34 @@
           description,
           parent_id: parentId || null,
         };
-        const created = await createClass(payload);
+        const saved = mode === "edit"
+          ? await updateClass({ id: classId, name, description })
+          : await createClass(payload);
         closeClassModal();
-        if (created?.id) {
-          mergeCreatedClassIntoLocalList(created, payload);
-          window.kbSelectedClassId = created.id;
-          expandClassAncestors(created.id);
+        if (saved?.id) {
+          mergeCreatedClassIntoLocalList(saved, payload);
+          window.kbSelectedClassId = saved.id;
+          expandClassAncestors(saved.id);
           try {
             renderClassTree(window.kbClasses || []);
           } catch {}
           revealSelectedClassInTree();
           try {
-            await loadClassSchema(created.id);
+            await loadClassSchema(saved.id);
           } catch {}
         }
-        await loadClasses(shouldResetSearch ? "" : currentSearch);
-        if (created?.id) {
-          window.kbSelectedClassId = created.id;
-          expandClassAncestors(created.id);
+        await loadClasses("");
+        if (saved?.id) {
+          window.kbSelectedClassId = saved.id;
+          expandClassAncestors(saved.id);
           try {
             renderClassTree(window.kbClasses || []);
           } catch {}
           revealSelectedClassInTree();
         }
       } catch (err) {
-        console.error("create class failed", err);
-        alert("新增分类失败: " + ((err && err.message) || err));
+        console.error("save class failed", err);
+        alert((mode === "edit" ? "编辑分类失败: " : "新增分类失败: ") + ((err && err.message) || err));
       } finally {
         window.kbClassCreateSubmitting = false;
         if (submitBtn) {

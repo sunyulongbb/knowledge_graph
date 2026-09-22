@@ -48,7 +48,7 @@
     window["@tiptap/starter-kit"] =
       window["@tiptap/starter-kit"] || window.TiptapStarterKit;
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20260922-12" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20260923-6" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -2147,6 +2147,14 @@
                 <button type="button" data-emoji-avatar="😀" title="😀">😀</button><button type="button" data-emoji-avatar="😎" title="😎">😎</button><button type="button" data-emoji-avatar="🤓" title="🤓">🤓</button><button type="button" data-emoji-avatar="😊" title="😊">😊</button><button type="button" data-emoji-avatar="🤖" title="🤖">🤖</button><button type="button" data-emoji-avatar="🐼" title="🐼">🐼</button><button type="button" data-emoji-avatar="🦊" title="🦊">🦊</button><button type="button" data-emoji-avatar="🐱" title="🐱">🐱</button><button type="button" data-emoji-avatar="🌟" title="🌟">🌟</button><button type="button" data-emoji-avatar="🚀" title="🚀">🚀</button>
               </div>
             </div>
+            <div class="profile-field profile-secret-field">
+              <label for="inputProfileJevKey">JEV API Key</label>
+              <div class="profile-avatar-input-row">
+                <input id="inputProfileJevKey" type="password" placeholder="输入 Key 后保存" autocomplete="new-password" spellcheck="false" />
+                <button id="btnClearProfileJevKey" class="btn" type="button">清除</button>
+              </div>
+              <small id="profileJevKeyStatus" class="muted">用于灵感卡知识评分，密钥不会回传到浏览器。</small>
+            </div>
             <div id="profileError" class="profile-error" style="display:none;"></div>
             <div class="profile-dialog-actions">
               <button id="btnCancelProfile" class="btn" type="button">取消</button>
@@ -2406,7 +2414,7 @@
                 <button id="btnCancelEdit" class="entity-composer-close" type="button" title="清空当前编辑" aria-label="清空当前编辑"><i class="fa-solid fa-xmark"></i></button>
                 <strong class="entity-composer-title">知识实体</strong>
                 <div class="entity-composer-title-actions">
-                  <button id="btnEntityImport" type="button" class="entity-composer-title-action" title="导入单实体 JSON（右键查看格式说明）" aria-label="导入单实体 JSON"><i class="fa-regular fa-file-lines"></i></button>
+                  <button id="btnEntityImport" type="button" class="entity-composer-title-action" title="导入实体 JSON，支持批量数组（右键查看格式说明）" aria-label="导入实体 JSON"><i class="fa-regular fa-file-lines"></i></button>
                   <a class="entity-composer-title-action" href="/examples/entity-import.json" download="entity-import.json" title="下载实体导入示例" aria-label="下载实体导入示例"><i class="fa-solid fa-ellipsis"></i></a>
                 </div>
                 <input id="entityImportFile" type="file" accept=".json,application/json" hidden />
@@ -4661,6 +4669,10 @@
                 <button class="btn icon" id="btnClsImage" type="button" title="设置分类图标" aria-label="设置分类图标"
                   style="display: none;">
                   <i class="fa-regular fa-image"></i>
+                </button>
+                <button class="btn icon" id="btnClsAnalysis" type="button" title="配置分类分析" aria-label="配置分类分析"
+                  style="display: none;">
+                  <i class="fa-solid fa-chart-column"></i>
                 </button>
               </div>
               <div class="module-title-actions taxonomy-tag-actions">
@@ -17095,6 +17107,14 @@
     </div>
   </div>
 
+  <div id="classAnalysisModal" class="modal-overlay class-analysis-overlay" hidden aria-hidden="true">
+    <section class="class-analysis-dialog" role="dialog" aria-modal="true" aria-labelledby="classAnalysisTitle">
+      <header class="class-analysis-head"><div><span class="app-home-eyebrow">CATEGORY ANALYSIS</span><h3 id="classAnalysisTitle">分类分析</h3><p id="classAnalysisClassName" class="muted"></p></div><button id="btnClassAnalysisClose" class="btn icon" type="button" aria-label="关闭"><i class="fa-solid fa-xmark"></i></button></header>
+      <div class="class-analysis-toolbar"><p>为该分类定义分析边界，关键词支持中文逗号、英文逗号或换行分隔。</p><div><button id="btnClassAnalysisExample" class="btn sm" type="button"><i class="fa-regular fa-lightbulb"></i> 美国政治人物示例</button><button id="btnClassAnalysisAdd" class="btn sm" type="button"><i class="fa-solid fa-plus"></i> 添加角度</button></div></div>
+      <form id="classAnalysisForm"><div id="classAnalysisRows" class="class-analysis-rows"></div><p id="classAnalysisStatus" class="muted" role="status"></p><footer><button id="btnClassAnalysisCancel" class="btn" type="button">取消</button><button class="btn primary" type="submit">保存分析</button></footer></form>
+    </section>
+  </div>
+
   <!-- 边属性选择模态框 -->
   <div id="edgePropertyModal" class="modal-overlay"
     style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 2000; align-items: center; justify-content: center;">
@@ -17135,16 +17155,16 @@
   <script src="/assets/scripts/attr-panel.js?v=20260922-1"></script>
   <script src="/assets/scripts/entity-import.js?v=20260921-6"></script>
   <!-- relation-panel.js 已移除，使用 edgehandles 拖拽创建关系 -->
-  <script src="/assets/scripts/schema-panel.js?v=20260915-7"></script>
-  <script src="/assets/scripts/detail-panel.js?v=20260921-8"></script>
+  <script src="/assets/scripts/schema-panel.js?v=20260923-2"></script>
+  <script src="/assets/scripts/detail-panel.js?v=20260922-9"></script>
   <script src="/assets/scripts/knowledge-interactions.js?v=20260904-1"></script>
-  <script src="/assets/scripts/knowledge-access.js?v=20260921-3"></script>
+  <script src="/assets/scripts/knowledge-access.js?v=20260922-4"></script>
   <script src="/assets/scripts/applications.js?v=20260921-1"></script>
   <script src="/assets/scripts/user-management.js?v=20260915-1"></script>
-  <script src="/assets/scripts/application-pages.js?v=20260922-7"></script>
+  <script src="/assets/scripts/application-pages.js?v=20260923-6"></script>
   <script src="/assets/scripts/user-profile.js?v=20260915-1"></script>
   <script src="/assets/scripts/sidebar-panel.js?v=20260921-2"></script>
-  <script src="/assets/scripts/auth-panel.js?v=20260921-3"></script>
+  <script src="/assets/scripts/auth-panel.js?v=20260922-4"></script>
   <script src="/assets/scripts/db-modal.js?v=20260914-1"></script>
   <script>
     // The initial hash route is handled before these dependent sidebar scripts

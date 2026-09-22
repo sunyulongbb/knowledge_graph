@@ -6,13 +6,14 @@ import { applicationPermissions } from '../application-access.ts';
 const response = (error: string, status: number) => Response.json({ error }, { status });
 const knowledgeUser = (req: Request) => {
   const current = getCurrentUser(req);
-  if (current) return current;
   try {
     if (new URL(req.url).searchParams.get('db') === 'default') {
-      return { id: 0, username: 'anonymous', displayName: '匿名用户', role: 'admin', permissions: ['*'], anonymous: true };
+      return current
+        ? { ...current, role: 'admin', permissions: ['*'], dataScope: 'all', fullAccess: true }
+        : { id: 0, username: 'anonymous', displayName: '匿名用户', role: 'admin', permissions: ['*'], dataScope: 'all', anonymous: true, fullAccess: true };
     }
   } catch {}
-  return null;
+  return current;
 };
 
 export async function handleKnowledgeAccessRoutes(req: Request, url: URL, method: string) {
@@ -86,10 +87,14 @@ export async function guardKnowledgeRequest(req: Request, url: URL, method: stri
     return null;
   }
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) || (!path.startsWith('/api/kb/') && !path.startsWith('/api/wiki/') && !path.startsWith('/api/sparql/import'))) return null;
+  const body: any = /application\/json/i.test(req.headers.get('content-type') || '') ? await req.clone().json().catch(() => ({})) : {};
+  if (path === '/api/kb/classes/update' && method === 'POST' && url.searchParams.get('db') === 'default') {
+    const keys = Object.keys(body || {});
+    if (keys.includes('id') && keys.includes('analyses') && keys.every((key) => key === 'id' || key === 'analyses')) return null;
+  }
   if (!user) return response('请先登录', 401);
   if (path.startsWith('/api/kb/knowledge-')) return null;
   if (path.startsWith('/api/kb/upload-')) return null;
-  const body: any = /application\/json/i.test(req.headers.get('content-type') || '') ? await req.clone().json().catch(() => ({})) : {};
   if (['/api/kb/update_project', '/api/kb/delete_project'].includes(path)) {
     const project = db.query('SELECT * FROM projects WHERE name=?').get(String(body.name || ''));
     const permission = applicationPermissions(db, user, project);

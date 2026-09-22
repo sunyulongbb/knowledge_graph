@@ -3,16 +3,17 @@
   const normalizeId = (id) => String(id || '').replace(/^entity\//, '');
   const activeId = () => normalizeId(byId('detailPanel')?.dataset.entityId || window.kbActiveDetailNodeId);
   const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-  const hasAnonymousDefaultAccess = () => !window.authUser && new URLSearchParams(window.location.search).get('db') === 'default';
-  const hasKnowledgeAccess = () => !!window.authUser || hasAnonymousDefaultAccess();
-  const hasKnowledgeAdminAccess = () => window.authUser?.role === 'admin' || hasAnonymousDefaultAccess();
+  const hasDefaultApplicationAccess = () => new URLSearchParams(window.location.search).get('db') === 'default';
+  const hasAnonymousDefaultAccess = () => !window.authUser && hasDefaultApplicationAccess();
+  const hasKnowledgeAccess = () => !!window.authUser || hasDefaultApplicationAccess();
+  const hasKnowledgeAdminAccess = () => window.authUser?.role === 'admin' || hasDefaultApplicationAccess();
   let editorNode = null;
   let generation = 0;
   const canCreate = () => hasKnowledgeAccess() && (!window.kbApplicationScope || (window.kbApplicationProjects || []).some((project) => project.slug === window.kbApplicationScope && project.member));
-  const canEditCurrent = () => hasKnowledgeAccess() && (byId('fId')?.value ? !!editorNode?.can_edit : canCreate());
+  const canEditCurrent = () => hasDefaultApplicationAccess() || (hasKnowledgeAccess() && (byId('fId')?.value ? !!editorNode?.can_edit : canCreate()));
   window.canEditCurrentKnowledge = canEditCurrent;
   const nodeForId = (id) => (window.kbTableNodes || []).find((node) => normalizeId(node.id || node._id) === normalizeId(id));
-  window.canOperateKnowledgeSelection = (ids, mode = 'edit') => hasKnowledgeAccess() && ids.length > 0 && ids.every((id) => !!nodeForId(id)?.[mode === 'manage' ? 'can_manage' : 'can_edit']);
+  window.canOperateKnowledgeSelection = (ids, mode = 'edit') => ids.length > 0 && (hasDefaultApplicationAccess() || (hasKnowledgeAccess() && ids.every((id) => !!nodeForId(id)?.[mode === 'manage' ? 'can_manage' : 'can_edit'])));
   const editControls = '#btnAddOntologyChip,#composerTypeSelect,#btnEntityImageUpload,#btnEntityVideoUpload,#btnEntityPdfUpload,#btnShowAttrForm,#btnAttrEditSelected,#btnAttrDeleteSelected,#btnSubmit,.attr-row-del-btn,.attr-quick-add-btn';
   const adminControls = '#btnOntologyAddRoot,#btnOntologyImport,#btnPropertyAdd,#btnPropertyDeleteSelected,#btnClsAdd,#btnClsDelete,#btnClearAllClasses,#btnClassImport,#btnTagAdd,#btnTagImport,#btnSparqlConfirmImport,#btnSparqlImport,#btnClearAllNodes';
   const permissionDisabled = new WeakSet();
@@ -96,7 +97,7 @@
   }
   function syncEditor(node) {
     editorNode = node;
-    const canEdit = hasKnowledgeAccess() && (node ? !!node.can_edit : !byId('fId')?.value);
+    const canEdit = hasDefaultApplicationAccess() || (hasKnowledgeAccess() && (node ? !!node.can_edit : !byId('fId')?.value));
     const select = byId('knowledgeVisibility');
     if (select) {
       select.value = node?.visibility === 'private' ? 'private' : 'public';

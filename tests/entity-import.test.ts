@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { EntityImportError, importEntity, localizeEntityImportMedia, parseEntityImport } from '../src/server/entity-import.ts';
+import { EntityImportError, importEntity, localizeEntityImportMedia, parseEntityImport, parseEntityImports } from '../src/server/entity-import.ts';
 
 function fixture() {
   const db = new Database(':memory:');
@@ -65,47 +65,89 @@ test('entity import upgrades and reactivates reused schema definitions', () => {
   } finally { db.close(); }
 });
 
-test('entity import rejects malformed and multi-entity documents before writing', () => {
+test('entity import rejects malformed and empty batch documents before writing', () => {
   expect(() => parseEntityImport({ version: 1, entities: [] })).toThrow(EntityImportError);
   expect(() => parseEntityImport({ version: 1, entity: { name: '无类型' } })).toThrow('entity.type');
+  expect(() => parseEntityImports([])).toThrow('导入数组不能为空');
 });
 
-test('downloadable Trump example imports media, PDF and real Wikidata claims', () => {
+test('batch entity import matches existing and incoming targets by Chinese label', () => {
+  const db = fixture();
+  try {
+    db.run("INSERT INTO ontologies VALUES('person','人物','[]','',NULL,1,NULL,'rectangle',1,'active')");
+    db.run("INSERT INTO nodes VALUES('existing-1','北京市','person','', '[\"北京\"]','[]','[]','[]','','','public',1,NULL)");
+    const result = importEntity(db, [
+      { version: 1, entity: { id: 'person-1', name: '张三', type: '人物', attributes: [
+        { name: '出生地', datatype: 'wikibase-item', value: { label_zh: '北京' } },
+        { name: '同事', datatype: 'wikibase-item', value: '李四' },
+        { name: '同事编号', datatype: 'wikibase-item', value: { id: 'person-2' } },
+      ] } },
+      { version: 1, entity: { id: 'person-2', name: '李四', type: '人物', attributes: [] } },
+    ], 1) as any;
+    expect(result).toMatchObject({ batch: true, total: 2, created: 2, updated: 0, referencedEntitiesCreated: 0, referencedEntitiesMatched: 3 });
+    expect(result.entityIds).toEqual(['person-1', 'person-2']);
+    const values = (db.query("SELECT value FROM attributes WHERE node_id='person-1' ORDER BY key").all() as any[]).map((row) => JSON.parse(row.value));
+    expect(values.map((value) => value.id).sort()).toEqual(['existing-1', 'person-2', 'person-2']);
+    expect(db.query("SELECT COUNT(*) AS count FROM nodes WHERE type='ontology/wikibase-item'").get()).toEqual({ count: 0 });
+  } finally { db.close(); }
+});
+
+test('batch entity import validates every entity before opening writes', () => {
+  const db = fixture();
+  try {
+    expect(() => importEntity(db, [
+      { version: 1, entity: { id: 'valid', name: '有效实体', type: '人物', attributes: [] } },
+      { version: 1, entity: { id: 'invalid', name: '', type: '人物', attributes: [] } },
+    ], 1)).toThrow('第 2 个实体');
+    expect(db.query('SELECT COUNT(*) AS count FROM nodes').get()).toEqual({ count: 0 });
+  } finally { db.close(); }
+});
+
+test('batch media localization accepts arrays and keeps local resources', async () => {
+  const input = [
+    { name: '甲', type: '人物', images: ['/static/uploads/node-images/a.jpg'] },
+    { version: 1, entity: { name: '乙', type: '人物', videos: ['/static/uploads/node-videos/b.mp4'] } },
+  ];
+  const localized = await localizeEntityImportMedia(input, 1);
+  expect(localized.files).toEqual([]);
+  expect(localized.input).toEqual(input);
+});
+
+test('downloadable placeholder template covers hierarchy, media and supported attribute shapes', () => {
   const db = fixture();
   try {
     const example = JSON.parse(readFileSync('public/examples/entity-import.json', 'utf8'));
     const parsed = parseEntityImport(example);
-    expect(parsed.name).toBe('唐纳德·特朗普');
-    expect(parsed.images.length).toBeGreaterThan(0);
-    expect(parsed.images.every((url) => url.startsWith('https://www.whitehouse.gov/'))).toBe(true);
+    expect(parsed.id).toBe('ENTITY_ID_PLACEHOLDER');
+    expect(parsed.name).toBe('实体名称示例');
+    expect(parsed.images).toHaveLength(2);
+    expect(parsed.images.every((url) => url.startsWith('https://example.com/images/'))).toBe(true);
     expect(parsed.videos[0]).toEndWith('.mp4');
-    expect(parsed.videos[0]).toStartWith('https://d34w7g4gy10iej.cloudfront.net/');
-    expect(JSON.stringify(example)).not.toContain('wikimedia.org');
     expect(parsed.pdf).toEndWith('.pdf');
-    expect(parsed.attributes.find((item) => item.id === 'P569')?.value).toMatchObject({ time: '+1946-06-14T00:00:00Z', precision: 11 });
-    expect(parsed.attributes.find((item) => item.id === 'P27')?.value).toMatchObject({ id: 'Q30' });
-    expect(parsed.attributes.find((item) => item.id === 'P345')?.value).toBe('nm0874339');
-    expect(parsed.attributes.every((item) => /^P\d+$/.test(item.id))).toBe(true);
+    expect(parsed.attributes).toHaveLength(10);
+    expect(parsed.attributes.find((item) => item.id === 'ATTRIBUTE_ID_TIME')?.value).toMatchObject({ time: '+2000-01-01T00:00:00Z', precision: 11 });
+    expect(parsed.attributes.find((item) => item.id === 'ATTRIBUTE_ID_ITEM_SINGLE')?.value).toMatchObject({ id: 'RELATED_ENTITY_ID_PLACEHOLDER', label_zh: '关联实体中文名称示例' });
+    expect(parsed.attributes.find((item) => item.id === 'ATTRIBUTE_ID_ITEM_MULTIPLE')?.value).toHaveLength(2);
+    expect(parsed.attributes.find((item) => item.id === 'ATTRIBUTE_ID_MONOLINGUAL_TEXT')?.value).toEqual({ text: 'Example text', language: 'en' });
     const result = importEntity(db, example, 1);
-    expect(result.entityId).toBe('Q22686');
+    expect(result.entityId).toBe('ENTITY_ID_PLACEHOLDER');
     expect(result.entityCreated).toBe(true);
-    expect(result.attributesCreated).toBe(19);
-    expect(result.referencedEntitiesCreated).toBe(10);
+    expect(result.attributesCreated).toBe(10);
+    expect(result.referencedEntitiesCreated).toBe(3);
     expect(result).toMatchObject({ categoriesCreated: 3, categoriesLinked: 3 });
     expect(db.query('SELECT pdf FROM nodes WHERE id=?').get(result.entityId)).toEqual({ pdf: parsed.pdf });
-    expect(db.query("SELECT name,type FROM nodes WHERE id='Q30'").get()).toMatchObject({ name: '美国' });
-    expect(db.query("SELECT name FROM nodes WHERE id='Q432473'").get()).toEqual({ name: '梅拉尼娅·特朗普' });
-    const citizenship = JSON.parse((db.query("SELECT value FROM attributes WHERE key='P27'").get() as any).value);
-    expect(citizenship).toMatchObject({ id: 'Q30', label_zh: '美国', 'entity-type': 'item' });
-    expect(db.query("SELECT COUNT(*) AS count FROM entity_classes WHERE entity_id='Q22686'").get()).toEqual({ count: 3 });
-    expect(db.query("SELECT parent_id FROM classes WHERE name='美国总统'").get()).toMatchObject({ parent_id: expect.any(String) });
-    expect(JSON.parse((db.query("SELECT tags FROM nodes WHERE id='Q22686'").get() as any).tags)).toContain('美国政治');
+    expect(db.query("SELECT name FROM nodes WHERE id='RELATED_ENTITY_ID_PLACEHOLDER'").get()).toEqual({ name: '关联实体中文名称示例' });
+    const linked = JSON.parse((db.query("SELECT value FROM attributes WHERE key='ATTRIBUTE_ID_ITEM_SINGLE'").get() as any).value);
+    expect(linked).toMatchObject({ id: 'RELATED_ENTITY_ID_PLACEHOLDER', label_zh: '关联实体中文名称示例', 'entity-type': 'item' });
+    expect(db.query("SELECT COUNT(*) AS count FROM entity_classes WHERE entity_id='ENTITY_ID_PLACEHOLDER'").get()).toEqual({ count: 3 });
+    expect(db.query("SELECT parent_id FROM classes WHERE name='三级分类名称示例'").get()).toMatchObject({ parent_id: expect.any(String) });
+    expect(JSON.parse((db.query("SELECT tags FROM nodes WHERE id='ENTITY_ID_PLACEHOLDER'").get() as any).tags)).toContain('三级分类标签示例一');
 
     example.entity.description = '更新后的真实人物资料';
     const updated = importEntity(db, example, 1);
-    expect(updated).toMatchObject({ entityId: 'Q22686', entityCreated: false, entityUpdated: true, attributesCreated: 0, attributesUpdated: 19, categoriesCreated: 0, categoriesUpdated: 3, categoriesLinked: 3 });
-    expect(db.query("SELECT description FROM nodes WHERE id='Q22686'").get()).toEqual({ description: '更新后的真实人物资料' });
-    expect(db.query("SELECT COUNT(*) AS count FROM attributes WHERE node_id='Q22686'").get()).toEqual({ count: 19 });
+    expect(updated).toMatchObject({ entityId: 'ENTITY_ID_PLACEHOLDER', entityCreated: false, entityUpdated: true, attributesCreated: 0, attributesUpdated: 10, categoriesCreated: 0, categoriesUpdated: 3, categoriesLinked: 3 });
+    expect(db.query("SELECT description FROM nodes WHERE id='ENTITY_ID_PLACEHOLDER'").get()).toEqual({ description: '更新后的真实人物资料' });
+    expect(db.query("SELECT COUNT(*) AS count FROM attributes WHERE node_id='ENTITY_ID_PLACEHOLDER'").get()).toEqual({ count: 10 });
   } finally { db.close(); }
 });
 
