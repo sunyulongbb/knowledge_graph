@@ -135,7 +135,7 @@
     byId('appHomeContent').innerHTML = '<p class="muted">正在加载应用知识…</p>';
     homeSelectedCategory = '';
     const results = await Promise.allSettled([
-      api('/api/kb/entity_search', { order: 'modified_desc', limit: 24 }),
+      api('/api/kb/entity_search', { order: 'modified_desc', limit: 24, hide_entity: '1' }),
       api('/api/kb/classes'),
     ]);
     if (version !== homeVersion) return;
@@ -160,7 +160,7 @@
   async function search() {
     const version = ++searchVersion;
     const params = Object.fromEntries(Object.entries(fields).map(([key, id]) => [key, byId(id).value.trim()]));
-    params.limit = pageSize; params.offset = (page - 1) * pageSize;
+    params.limit = pageSize; params.offset = (page - 1) * pageSize; params.hide_entity = '1';
     if (byId('appSearchImage').checked) params.has_image = '1';
     writeSearchRoute();
     byId('appSearchResults').innerHTML = '<p class="muted" role="status">正在搜索…</p>';
@@ -221,7 +221,7 @@
       homeSelectedCategory = category.dataset.homeCategory || '';
       const version = ++homeVersion;
       byId('appHomeContent').classList.add('is-filtering');
-      api('/api/kb/entity_search', { order: 'modified_desc', limit: 24, class_id: homeSelectedCategory }).then((data) => {
+      api('/api/kb/entity_search', { order: 'modified_desc', limit: 24, class_id: homeSelectedCategory, hide_entity: '1' }).then((data) => {
         if (version !== homeVersion) return;
         homeVisibleNodes = data.nodes || []; renderHome();
       }).catch(() => { if (version === homeVersion) { homeVisibleNodes = []; renderHome(); } });

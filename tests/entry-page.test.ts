@@ -64,7 +64,7 @@ test('anonymous users cannot expand application or user sidebars', () => {
   expect(page).toContain('/assets/scripts/auth-panel.js?v=20260921-3');
   expect(page).toContain('/assets/scripts/knowledge-access.js?v=20260921-3');
   expect(page).toContain('id="appHomeMaintenance"');
-  expect(page).toContain('/assets/scripts/application-pages.js?v=20260922-6');
+  expect(page).toContain('/assets/scripts/application-pages.js?v=20260922-7');
   expect(page).toContain('/assets/scripts/applications.js?v=20260921-1');
   expect(authPanel).toContain('if (authUser) window.toggleUserSidebar?.();\n      else openAuthModal(false);');
   expect(authPanel).toContain('defaultHome.searchParams.set("db", "default")');
@@ -119,6 +119,18 @@ test('view menu switches reuse the mounted entity editor without repainting it',
   const attrPanel = readFileSync('public/assets/scripts/attr-panel.js', 'utf8');
   expect(attrPanel).toContain("attrList.dataset.loadState = 'loading'");
   expect(attrPanel).toContain("attrList.dataset.loadState = rendered ? 'ready' : 'error'");
+});
+
+test('knowledge pages and ontology tree hide auto-created reference entities', () => {
+  const pageScript = readFileSync('public/assets/scripts/application-pages.js', 'utf8');
+  const tableScript = readFileSync('public/assets/scripts/table-panel.js', 'utf8');
+  const coreRoutes = readFileSync('src/server/routes/core-kb.ts', 'utf8');
+  const schemaRoutes = readFileSync('src/server/routes/schema.ts', 'utf8');
+  expect(tableScript).toContain('url.searchParams.set("hide_entity", "1")');
+  expect(pageScript).toContain("hide_entity: '1'");
+  expect(pageScript).toContain("params.hide_entity = '1'");
+  expect(coreRoutes).toContain('hidden_default_ontology.id = n.type');
+  expect(schemaRoutes).toContain('description.includes("wikibase-item 属性值自动创建")');
 });
 
 test('entity editor uses the post-composer hierarchy without changing existing control ids', () => {

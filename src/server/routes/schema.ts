@@ -311,7 +311,17 @@ export async function handleSchemaRoutes(
   if (url.pathname === "/api/kb/ontology/tree" && method === "GET") {
     const q = (url.searchParams.get("q") || "").trim();
     const status = (url.searchParams.get("status") || "active").trim();
-    const items = getScopedOntologies(q, status);
+    const items = getScopedOntologies(q, status).filter((item: any) => {
+      const name = String(item?.name || "").trim().toLowerCase();
+      const aliases = Array.isArray(item?.alias) ? item.alias : [];
+      const description = String(item?.description || "").toLowerCase();
+      return !(
+        name === "实体条目" ||
+        name === "wikibase item" ||
+        aliases.some((alias: any) => String(alias || "").trim().toLowerCase() === "wikibase item") ||
+        description.includes("wikibase-item 属性值自动创建")
+      );
+    });
     return Response.json({
       items: buildOntologyTree(items),
       flat: items,

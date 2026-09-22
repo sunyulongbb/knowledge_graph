@@ -2197,7 +2197,15 @@ export async function handleCoreKbRoutes(
     }
 
     if (hideEntity === "1" || hideEntity.toLowerCase() === "true") {
-      whereClause += " AND (n.type IS NULL OR lower(trim(n.type)) <> 'entity')";
+      whereClause += ` AND (n.type IS NULL OR lower(trim(n.type)) <> 'entity')
+        AND NOT EXISTS (
+          SELECT 1 FROM ontologies hidden_default_ontology
+          WHERE hidden_default_ontology.id = n.type
+            AND (
+              lower(trim(COALESCE(hidden_default_ontology.name, ''))) IN ('实体条目', 'wikibase item')
+              OR lower(COALESCE(hidden_default_ontology.description, '')) LIKE '%wikibase-item 属性值自动创建%'
+            )
+        )`;
     }
 
     // Grid cards require visual media. Keep the legacy image-only filter while
