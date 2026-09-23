@@ -10446,7 +10446,9 @@ body {
 .app-inspiration-modal[open] { animation: app-inspiration-in 180ms cubic-bezier(.16,1,.3,1); }
 .app-inspiration-modal::backdrop { background: var(--modal-overlay-bg); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
 .app-inspiration-modal-core { position: relative; z-index: 2; width: min(660px, 100%); margin-inline: auto; padding: 16px; box-sizing: border-box; border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border)); border-radius: 16px; background: color-mix(in srgb, var(--surface-0) 96%, transparent); box-shadow: 0 28px 90px rgba(0,0,0,.36); }
-.app-inspiration-modal-core.is-profile-swapped { z-index: 6; transform: translate(var(--profile-swap-x), var(--profile-swap-y)) scale(var(--profile-swap-scale)); transform-origin: center; opacity: .86; pointer-events: none; }
+.app-inspiration-modal-core.is-profile-swapped { z-index: 6; transform: translate(var(--profile-swap-x), var(--profile-swap-y)) scale(var(--profile-swap-scale)); transform-origin: center; opacity: .86; cursor: zoom-out; }
+.app-inspiration-modal-core.is-profile-swapped::after { content: "点击恢复"; position: absolute; right: 12px; top: 10px; padding: 4px 7px; border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border)); border-radius: 7px; color: var(--fg); background: color-mix(in srgb, var(--surface-0) 88%, transparent); font-size: 10px; pointer-events: none; }
+.app-inspiration-modal-core.is-profile-swapped:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .app-inspiration-profile-layer { position: absolute; z-index: 1; inset: 12px; pointer-events: none; opacity: .35; transition: opacity 320ms ease; }
 .app-inspiration-profile-layer.is-visible { opacity: 1; }
 .app-inspiration-profile-layer.has-selection { z-index: 7; }

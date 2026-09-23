@@ -169,12 +169,22 @@
     if (!selected) {
       card.classList.add('is-selected');
       card.setAttribute('aria-pressed', 'true');
-      core?.classList.add('is-profile-swapped');
+      if (core) {
+        core.classList.add('is-profile-swapped');
+        core.setAttribute('role', 'button');
+        core.setAttribute('tabindex', '0');
+        core.setAttribute('aria-label', '恢复灵感卡与分析卡位置');
+      }
       card.focus({ preventScroll: true });
     } else {
       card.classList.remove('is-selected');
       card.setAttribute('aria-pressed', 'false');
-      core?.classList.remove('is-profile-swapped');
+      if (core) {
+        core.classList.remove('is-profile-swapped');
+        core.removeAttribute('role');
+        core.removeAttribute('tabindex');
+        core.removeAttribute('aria-label');
+      }
     }
     if (typeof card.animate === 'function') {
       const cardEnd = card.getBoundingClientRect();
@@ -201,7 +211,11 @@
       item.classList.remove('is-selected');
       item.setAttribute('aria-pressed', 'false');
     });
-    modal?.querySelector('.app-inspiration-modal-core')?.classList.remove('is-profile-swapped');
+    const core = modal?.querySelector('.app-inspiration-modal-core');
+    core?.classList.remove('is-profile-swapped');
+    core?.removeAttribute('role');
+    core?.removeAttribute('tabindex');
+    core?.removeAttribute('aria-label');
   }
   async function scoreInspiration(node, force = false) {
     if (!node) return;
@@ -380,7 +394,8 @@
     if (event.target.closest('[data-jev-retry]')) { void scoreInspiration(homeNodes[homeInspirationIndex], true); return; }
     const profileCard = event.target.closest('.app-profile-node:not(.is-loading)');
     if (profileCard) { toggleProfileCard(profileCard); return; }
-    if (modal?.querySelector('[data-jev-profile-layer].has-selection') && event.target.closest('[data-home-inspiration-modal]')) clearProfileCardSelection(modal, true);
+    if (event.target.closest('.app-inspiration-modal-core.is-profile-swapped')) { clearProfileCardSelection(modal, true); return; }
+    if (modal?.querySelector('[data-jev-profile-layer].has-selection') && event.target.closest('[data-home-inspiration-modal]')) { clearProfileCardSelection(modal, true); return; }
     const inspire = event.target.closest('[data-home-inspire]');
     if (inspire && homeNodes.length) {
       let next = homeInspirationIndex;
@@ -409,6 +424,11 @@
     if (card && (event.key === 'Enter' || event.key === ' ')) {
       event.preventDefault();
       toggleProfileCard(card);
+      return;
+    }
+    if (event.target.closest?.('.app-inspiration-modal-core.is-profile-swapped') && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault();
+      clearProfileCardSelection(modal, true);
       return;
     }
     if (event.key === 'Escape' && modal?.querySelector('[data-jev-profile-layer].has-selection')) {

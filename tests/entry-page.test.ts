@@ -76,7 +76,7 @@ test('anonymous users cannot expand application or user sidebars', () => {
   expect(page).toContain('id="appHomeMaintenance"');
   expect(page).toContain('id="inputProfileJevKey"');
   expect(page).toContain('id="btnClearProfileJevKey"');
-  expect(page).toContain('/assets/scripts/application-pages.js?v=20260923-10');
+  expect(page).toContain('/assets/scripts/application-pages.js?v=20260923-11');
   expect(page).toContain('/assets/scripts/applications.js?v=20260921-1');
   expect(authPanel).toContain('if (authUser) window.toggleUserSidebar?.();\n      else openAuthModal(false);');
   expect(authPanel).toContain('defaultHome.searchParams.set("db", "default")');
@@ -181,12 +181,13 @@ test('entity editor uses the post-composer hierarchy without changing existing c
   expect(page).toContain('id="btnCancelEdit"');
   expect(page).toContain('id="btnEntityImport"');
   expect(page).toContain('id="btnSubmit"');
-  expect(page).toContain('/assets/styles/app.css?v=20260923-13');
+  expect(page).toContain('/assets/styles/app.css?v=20260923-14');
   expect(css).toContain('.app-profile-actions { position: fixed; top: 24px; right: 24px;');
   expect(css).toContain('.app-inspiration-profile-layer.has-selection { z-index: 7; }');
   expect(css).toContain('.app-profile-node.is-selected { position: absolute !important;');
   expect(readFileSync('public/assets/scripts/application-pages.js', 'utf8')).toContain("card.style.setProperty('--profile-focus-height'");
   expect(readFileSync('public/assets/scripts/application-pages.js', 'utf8')).toContain('function toggleProfileCard(card)');
+  expect(readFileSync('public/assets/scripts/application-pages.js', 'utf8')).toContain("event.target.closest('.app-inspiration-modal-core.is-profile-swapped')");
   expect(css).toContain('/* Entity composer: compact post-editor layout */');
   expect(css).toContain('.editor-panel #entityDisplayImageWrap');
   expect(css).toContain('.entity-composer-titlebar');
