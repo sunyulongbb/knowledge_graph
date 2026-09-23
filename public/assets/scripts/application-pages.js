@@ -111,6 +111,7 @@
   function revealJevProfile(profiles, meta = {}) {
     const layer = byId('appHomeContent').querySelector('[data-jev-profile-layer]');
     if (!layer) return;
+    layer.classList.remove('has-selection');
     layer.hidden = false;
     const profileHeader = `<div class="app-profile-actions"><button type="button" data-jev-profile-refresh title="重新调用 JEV 更新画像" aria-label="刷新目标画像"><i class="fa-solid fa-rotate" aria-hidden="true"></i><span>刷新分析</span></button></div>`;
     if (!profiles.length) {
@@ -129,7 +130,7 @@
       const confidence = Number.isFinite(Number(profile.confidence)) ? Math.round(Math.max(0, Math.min(1, Number(profile.confidence))) * 100) : 0;
       const evidenceCount = evidenceList.length + relatedEvidence.length;
       const evidenceStrength = Math.min(5, Math.max(1, hitCount + relatedEvidence.length));
-      return `<article class="app-profile-node is-${tone(profile.classification)}" style="--profile-index:${index};--confidence:${confidence};--hit-rate:${hitRate};--evidence-strength:${evidenceStrength}" title="${escape(evidenceList.join('\n') || evidence)}">
+      return `<article class="app-profile-node is-${tone(profile.classification)}" style="--profile-index:${index};--confidence:${confidence};--hit-rate:${hitRate};--evidence-strength:${evidenceStrength}" title="${escape(evidenceList.join('\n') || evidence)}" role="button" tabindex="0" aria-pressed="false" aria-label="放大查看${escape(profile.angle)}分析">
         <div class="app-profile-card-head"><span>${escape(profile.category || '分类分析')} · 0${index + 1}</span><i></i></div>
         <div class="app-profile-angle"><strong>${escape(profile.angle)}</strong></div>
         <p>${escape(profile.content || '')}</p>
@@ -138,12 +139,69 @@
           <div class="app-profile-confidence" aria-label="置信度 ${confidence}%"><span>${confidence}</span><small>%</small></div>
           <div class="app-profile-metrics"><label><span>关键词命中</span><strong>${hitCount}/${keywordEvidence.length}</strong></label><div class="app-profile-meter"><i></i></div><label><span>证据强度</span><strong>${evidenceCount}</strong></label><div class="app-profile-signal">${Array.from({ length: 5 }, (_, level) => `<i class="${level < evidenceStrength ? 'is-on' : ''}" style="--signal-index:${level}"></i>`).join('')}</div></div>
         </div>
-        <div class="app-profile-keywords">${keywordEvidence.slice(0, 8).map((item) => `<mark class="${item.matched ? 'is-hit' : ''}">${escape(item.keyword)}</mark>`).join('')}</div>
-        <div class="app-profile-evidence"><span><i class="fa-solid fa-link" aria-hidden="true"></i> 核心证据</span><p>${escape(evidence)}</p></div>
-        ${relatedEvidence.length ? `<div class="app-profile-related">${relatedEvidence.slice(0, 2).map((item) => `<span title="${escape(item.evidence)}"><i class="fa-solid fa-share-nodes" aria-hidden="true"></i> ${escape(item.sourceName)} <b>${escape(item.relation)}</b></span>`).join('')}</div>` : ''}
+        <div class="app-profile-keywords">${keywordEvidence.map((item) => `<mark class="${item.matched ? 'is-hit' : ''}">${escape(item.keyword)}</mark>`).join('')}</div>
+        <div class="app-profile-evidence"><span><i class="fa-solid fa-link" aria-hidden="true"></i> 核心证据 · ${evidenceList.length || 1}</span>${(evidenceList.length ? evidenceList : [evidence]).map((item) => `<p>${escape(item)}</p>`).join('')}</div>
+        ${relatedEvidence.length ? `<div class="app-profile-related">${relatedEvidence.map((item) => `<span title="${escape(item.evidence)}"><i class="fa-solid fa-share-nodes" aria-hidden="true"></i> ${escape(item.sourceName)} <b>${escape(item.relation)}</b><em>${item.evidence ? escape(item.evidence) : ''}</em></span>`).join('')}</div>` : ''}
       </article>`;
     }).join('')}`;
     layer.classList.add('is-visible');
+  }
+  function toggleProfileCard(card) {
+    const layer = card?.closest('[data-jev-profile-layer]');
+    if (!layer || card.classList.contains('is-loading')) return;
+    const selected = card.classList.contains('is-selected');
+    const modal = layer.closest('[data-home-inspiration-modal]');
+    const core = modal?.querySelector('.app-inspiration-modal-core');
+    const cardStart = card.getBoundingClientRect();
+    const coreStart = core?.getBoundingClientRect();
+    const layerRect = layer.getBoundingClientRect();
+    layer.querySelectorAll('.app-profile-node.is-selected').forEach((item) => { if (item !== card) { item.classList.remove('is-selected'); item.setAttribute('aria-pressed', 'false'); } });
+    if (!selected && core && coreStart) {
+      card.style.setProperty('--profile-focus-left', `${coreStart.left - layerRect.left}px`);
+      card.style.setProperty('--profile-focus-top', `${coreStart.top - layerRect.top}px`);
+      card.style.setProperty('--profile-focus-width', `${coreStart.width}px`);
+      card.style.setProperty('--profile-focus-height', `${coreStart.height}px`);
+      core.style.setProperty('--profile-swap-x', `${cardStart.left + cardStart.width / 2 - (coreStart.left + coreStart.width / 2)}px`);
+      core.style.setProperty('--profile-swap-y', `${cardStart.top + cardStart.height / 2 - (coreStart.top + coreStart.height / 2)}px`);
+      core.style.setProperty('--profile-swap-scale', String(Math.min(.72, cardStart.width / coreStart.width)));
+    }
+    layer.classList.toggle('has-selection', !selected);
+    if (!selected) {
+      card.classList.add('is-selected');
+      card.setAttribute('aria-pressed', 'true');
+      core?.classList.add('is-profile-swapped');
+      card.focus({ preventScroll: true });
+    } else {
+      card.classList.remove('is-selected');
+      card.setAttribute('aria-pressed', 'false');
+      core?.classList.remove('is-profile-swapped');
+    }
+    if (typeof card.animate === 'function') {
+      const cardEnd = card.getBoundingClientRect();
+      card.animate([
+        { transform: `translate(${cardStart.left - cardEnd.left}px, ${cardStart.top - cardEnd.top}px) scale(${cardStart.width / Math.max(cardEnd.width, 1)}, ${cardStart.height / Math.max(cardEnd.height, 1)})`, opacity: selected ? 1 : .72 },
+        { transform: 'none', opacity: 1 },
+      ], { duration: 480, easing: 'cubic-bezier(.16,1,.3,1)' });
+      if (core && coreStart) {
+        const coreEnd = core.getBoundingClientRect();
+        core.animate([
+          { transform: `translate(${coreStart.left - coreEnd.left}px, ${coreStart.top - coreEnd.top}px) scale(${coreStart.width / Math.max(coreEnd.width, 1)}, ${coreStart.height / Math.max(coreEnd.height, 1)})`, opacity: 1 },
+          { transform: getComputedStyle(core).transform, opacity: selected ? 1 : .86 },
+        ], { duration: 480, easing: 'cubic-bezier(.16,1,.3,1)' });
+      }
+    }
+  }
+  function clearProfileCardSelection(modal, animate = false) {
+    const layer = modal?.querySelector('[data-jev-profile-layer]');
+    if (!layer) return;
+    const selected = layer.querySelector('.app-profile-node.is-selected');
+    if (selected && animate) { toggleProfileCard(selected); return; }
+    layer.classList.remove('has-selection');
+    layer.querySelectorAll('.app-profile-node.is-selected').forEach((item) => {
+      item.classList.remove('is-selected');
+      item.setAttribute('aria-pressed', 'false');
+    });
+    modal?.querySelector('.app-inspiration-modal-core')?.classList.remove('is-profile-swapped');
   }
   async function scoreInspiration(node, force = false) {
     if (!node) return;
@@ -317,9 +375,12 @@
   byId('appHomeContent').addEventListener('click', (event) => {
     const modal = byId('appHomeContent').querySelector('[data-home-inspiration-modal]');
     if (event.target.closest('[data-home-inspiration-open]')) { modal?.showModal(); void scoreInspiration(homeNodes[homeInspirationIndex]); return; }
-    if (event.target.closest('[data-home-inspiration-close]')) { modal?.close(); return; }
+    if (event.target.closest('[data-home-inspiration-close]')) { clearProfileCardSelection(modal); modal?.close(); return; }
     if (event.target.closest('[data-jev-profile-refresh]')) { void scoreInspiration(homeNodes[homeInspirationIndex], true); return; }
     if (event.target.closest('[data-jev-retry]')) { void scoreInspiration(homeNodes[homeInspirationIndex], true); return; }
+    const profileCard = event.target.closest('.app-profile-node:not(.is-loading)');
+    if (profileCard) { toggleProfileCard(profileCard); return; }
+    if (modal?.querySelector('[data-jev-profile-layer].has-selection') && event.target.closest('[data-home-inspiration-modal]')) clearProfileCardSelection(modal, true);
     const inspire = event.target.closest('[data-home-inspire]');
     if (inspire && homeNodes.length) {
       let next = homeInspirationIndex;
@@ -340,6 +401,20 @@
         homeVisibleNodes = data.nodes || []; renderHome();
       }).catch(() => { if (version === homeVersion) { homeVisibleNodes = []; renderHome(); } });
       return;
+    }
+  });
+  byId('appHomeContent').addEventListener('keydown', (event) => {
+    const modal = byId('appHomeContent').querySelector('[data-home-inspiration-modal]');
+    const card = event.target.closest?.('.app-profile-node:not(.is-loading)');
+    if (card && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault();
+      toggleProfileCard(card);
+      return;
+    }
+    if (event.key === 'Escape' && modal?.querySelector('[data-jev-profile-layer].has-selection')) {
+      event.preventDefault();
+      event.stopPropagation();
+      clearProfileCardSelection(modal, true);
     }
   });
   byId('appHomeContent').addEventListener('click', (event) => {

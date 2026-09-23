@@ -52,6 +52,59 @@
   }
   // --- Project sidebar logic ---
   let projectListVersion = 0;
+  let projectContextMenu = null;
+  function hideProjectContextMenu() {
+    if (projectContextMenu) projectContextMenu.hidden = true;
+  }
+  function showProjectCloneMenu(event, project) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!projectContextMenu) {
+      projectContextMenu = document.createElement("div");
+      projectContextMenu.className = "project-context-menu";
+      projectContextMenu.hidden = true;
+      document.body.appendChild(projectContextMenu);
+      document.addEventListener("click", hideProjectContextMenu);
+      document.addEventListener("scroll", hideProjectContextMenu, true);
+      window.addEventListener("resize", hideProjectContextMenu, { passive: true });
+    }
+    projectContextMenu.replaceChildren();
+    const cloneButton = document.createElement("button");
+    cloneButton.type = "button";
+    cloneButton.textContent = "克隆应用";
+    cloneButton.addEventListener("click", async () => {
+      hideProjectContextMenu();
+      const sourceName = String(project.slug || project.name || "application");
+      const suggested = `${sourceName}-copy`;
+      const name = window.prompt("请输入新应用短名（字母、数字、短横线或下划线）", suggested)?.trim();
+      if (!name) return;
+      const title = window.prompt("请输入新应用名称", `${project.title || project.name || sourceName} 副本`)?.trim();
+      if (!title) return;
+      cloneButton.disabled = true;
+      try {
+        const sourceIdentifier = project.id ?? project.slug ?? sourceName;
+        const response = await fetch(`/api/applications/${encodeURIComponent(sourceIdentifier)}/clone`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, title }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || result.message || `HTTP ${response.status}`);
+        await loadProjectsToSidebar();
+        setUrlParam("db", result.project?.slug || name);
+      } catch (error) {
+        window.alert(`克隆失败：${error?.message || error}`);
+      } finally {
+        cloneButton.disabled = false;
+      }
+    });
+    projectContextMenu.appendChild(cloneButton);
+    projectContextMenu.hidden = false;
+    const width = 140;
+    const height = 44;
+    projectContextMenu.style.left = `${Math.max(8, Math.min(event.clientX, window.innerWidth - width - 8))}px`;
+    projectContextMenu.style.top = `${Math.max(8, Math.min(event.clientY, window.innerHeight - height - 8))}px`;
+  }
   function isSidebarAvatarImage(value) {
     const source = String(value || "").trim();
     return /^(?:data:|blob:|https?:|\/|\.\.?\/)/i.test(source) || source.includes("/") || /\.(?:avif|gif|jpe?g|png|svg|webp)(?:[?#].*)?$/i.test(source);
@@ -108,6 +161,12 @@
                 found.title || currentDb,
                 found.image || "",
               );
+              const headerAvatar = document.getElementById("headerProjectAvatar");
+              if (headerAvatar) {
+                headerAvatar.oncontextmenu = window.authUser && found.member
+                  ? (event) => showProjectCloneMenu(event, found)
+                  : null;
+              }
             } catch (e) {}
         } catch (e) {}
       }
@@ -207,6 +266,9 @@
             );
           } catch (err) {}
         });
+        if (window.authUser && it.member) {
+          entry.addEventListener("contextmenu", (event) => showProjectCloneMenu(event, it));
+        }
         entry.addEventListener("keydown", (e) => {
           const key = e.key || e.keyCode;
           if (key === "Enter" || key === 13) {

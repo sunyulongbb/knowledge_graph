@@ -1,6 +1,7 @@
 import type { Database } from 'bun:sqlite';
 import type { KnowledgeUser } from './knowledge-access.ts';
 import { hasApplicationPermission } from './application-role-permissions.ts';
+import { cloneApplicationData, removeClonedApplicationFiles } from './application-clone.ts';
 
 export function ensureApplicationSchema(db: Database) {
   const columns = db.query('PRAGMA table_info(projects)').all() as any[];
@@ -47,7 +48,7 @@ export function applicationPermissions(db: Database, user: KnowledgeUser | null,
   };
 }
 
-export function createApplicationHandler(db: Database, getUser: (req: Request) => KnowledgeUser | null) {
+export function createApplicationHandler(db: Database, getUser: (req: Request) => KnowledgeUser | null, cloneOptions: { uploadsRoot?: string } = {}) {
   const error = (message: string, status = 400) => Response.json({ error: message, message, success: false }, { status });
   const projectBy = (key: unknown, byId = false) => byId
     ? db.query('SELECT * FROM projects WHERE id=?').get(Number(key) || -1) as any
@@ -168,10 +169,43 @@ export function createApplicationHandler(db: Database, getUser: (req: Request) =
       db.run("INSERT INTO projects(name,title,description,file,image,theme_color,tags,link,owner_user_id) VALUES(?,?,?,'app.sqlite',?,'#ff7a2b','[]',?,?)", [name, title, description, String(body.image || ''), String(body.link || ''), user.id]);
       return Response.json({ success: true, project: record(projectBy(name), user) }, { status: 201 });
     }
-    const match = path.match(/^\/api\/applications\/([^/]+)(?:\/(details|access|request|review|member))?$/);
-    const project = projectBy(legacy ? body.name : match ? decodeURIComponent(match[1]!) : '', !legacy);
+    const match = path.match(/^\/api\/applications\/([^/]+)(?:\/(details|access|request|review|member|clone))?$/);
+    const projectKey = legacy ? String(body.name || '') : match ? decodeURIComponent(match[1]!) : '';
+    const project = legacy
+      ? projectBy(projectKey)
+      : /^\d+$/.test(projectKey)
+        ? projectBy(projectKey, true)
+        : projectBy(projectKey);
     if (!project) return error('应用不存在', 404);
     const permissions = record(project, user);
+    if (match?.[2] === 'clone' && method === 'POST') {
+      if (!user) return error('请先登录', 401);
+      if (!permissions.member) return error('无权读取并克隆此应用', 403);
+      if (!hasApplicationPermission(user, 'application:create')) return error('未获授权创建应用', 403);
+      const name = String(body.name || '').trim();
+      const title = String(body.title || `${project.title || project.name} 副本`).trim();
+      if (!/^[a-zA-Z0-9_-]{1,64}$/.test(name) || /^\d+$/.test(name) || ['app', 'shared', 'default'].includes(name.toLowerCase())) return error('新应用短名须为 1–64 位字母、数字、下划线或短横线，且不能使用保留名称');
+      if (!title || title.length > 100) return error('应用名称不能为空且最多 100 字');
+      if (projectBy(name)) return error('应用短名已存在', 409);
+      let cloned: any = null;
+      let clonedProjectId = 0;
+      try {
+        cloned = db.transaction(() => {
+          db.run("INSERT INTO projects(name,title,description,file,image,theme_color,tags,link,owner_user_id) VALUES(?,?,?,'app.sqlite',?,?,?,?,?)", [name, title, String(project.description || ''), String(project.image || ''), String(project.theme_color || '#ff7a2b'), String(project.tags || '[]'), String(project.link || ''), user.id]);
+          const target = projectBy(name);
+          clonedProjectId = Number(target.id);
+          cloneApplicationData(db, project, target, cloneOptions);
+          const clonedImage = String(project.image || '').replaceAll(`/uploads/${project.id}/`, `/uploads/${target.id}/`);
+          db.run('UPDATE projects SET image=? WHERE id=?', [clonedImage, target.id]);
+          return target;
+        })();
+        return Response.json({ success: true, project: record(cloned, user) }, { status: 201 });
+      } catch (cause) {
+        if (clonedProjectId) removeClonedApplicationFiles(clonedProjectId, cloneOptions);
+        console.error('clone application failed', cause);
+        return error(`克隆应用失败：${cause instanceof Error ? cause.message : String(cause)}`, 500);
+      }
+    }
     if (match?.[2] === 'details' && method === 'GET') {
       return Response.json(applicationDetails(project, user));
     }

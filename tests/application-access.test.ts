@@ -2,8 +2,11 @@ import { Database } from 'bun:sqlite';
 import { test, expect } from 'bun:test';
 import { applicationPermissions, createApplicationHandler, ensureApplicationSchema, ensureDefaultApplication } from '../src/server/application-access.ts';
 import { ensureApplicationRolePermissions } from '../src/server/application-role-permissions.ts';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
-function setup() {
+function setup(cloneOptions: { uploadsRoot?: string } = {}) {
   const db = new Database(':memory:');
   db.run('PRAGMA foreign_keys=ON');
   db.run("CREATE TABLE users(id INTEGER PRIMARY KEY,username TEXT,display_name TEXT,status TEXT DEFAULT 'active')");
@@ -12,7 +15,7 @@ function setup() {
   ensureApplicationSchema(db);
   const grants = ['application:create', 'application:update', 'application:delete', 'application:members', 'application:review'];
   const users = [null, ...['owner', 'member', 'other'].map((username, index) => ({ id: index + 1, username, permissions: [...grants] }))];
-  const handle = createApplicationHandler(db, (req) => users[Number(req.headers.get('test-user'))] || null);
+  const handle = createApplicationHandler(db, (req) => users[Number(req.headers.get('test-user'))] || null, cloneOptions);
   const call = async (path: string, user = 0, body?: any, method = 'POST') => {
     const url = new URL('http://localhost' + path);
     const req = new Request(url, { method: body === undefined ? 'GET' : method, headers: { 'test-user': String(user), 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
@@ -78,6 +81,39 @@ test('application creation records owner, marketplace is public and sidebar list
     ensureApplicationSchema(db);
     expect((db.query("SELECT owner_user_id FROM projects WHERE name='demo'").get() as any).owner_user_id).toBe(1);
   } finally { db.close(); }
+});
+
+test('an accessible application can be cloned with isolated knowledge identifiers', async () => {
+  const uploadsRoot = mkdtempSync(join(tmpdir(), 'knowledge-clone-'));
+  const { db, call } = setup({ uploadsRoot });
+  try {
+    db.run('CREATE TABLE ontologies(id TEXT PRIMARY KEY,name TEXT,parent_id TEXT,project_id INTEGER)');
+    db.run('CREATE TABLE properties(id TEXT PRIMARY KEY,name TEXT,project_id INTEGER)');
+    db.run('CREATE TABLE classes(id TEXT PRIMARY KEY,name TEXT,parent_id TEXT,project_id INTEGER)');
+    db.run('CREATE TABLE nodes(id TEXT PRIMARY KEY,name TEXT,type TEXT,images TEXT,project_id INTEGER)');
+    db.run('CREATE TABLE attributes(id TEXT PRIMARY KEY,node_id TEXT,key TEXT,value TEXT,statement_json TEXT)');
+    await call('/api/applications', 1, { name: 'source', title: 'Source' });
+    mkdirSync(join(uploadsRoot, '1', 'node-images'), { recursive: true });
+    writeFileSync(join(uploadsRoot, '1', 'node-images', 'a.png'), 'image');
+    db.run("INSERT INTO ontologies VALUES('ontology/person','Person',NULL,1)");
+    db.run("INSERT INTO properties VALUES('property/birth','Birth',1)");
+    db.run("INSERT INTO nodes VALUES('Q1','Alice','ontology/person','[\"/uploads/1/node-images/a.png\"]',1)");
+    db.run("INSERT INTO attributes VALUES('A1','Q1','property/birth','Q1','{\"id\":\"Q1\"}')");
+
+    const response = await call('/api/applications/source/clone', 1, { name: 'copy', title: 'Copy' });
+    expect(response!.status).toBe(201);
+    const cloned = (await response!.json()).project;
+    expect(cloned).toMatchObject({ slug: 'copy', name: 'Copy', owner: true });
+    const node = db.query('SELECT * FROM nodes WHERE project_id=?').get(cloned.id) as any;
+    expect(node.id).not.toBe('Q1');
+    expect(node.type).not.toBe('ontology/person');
+    expect(node.images).toContain(`/uploads/${cloned.id}/node-images/a.png`);
+    const attribute = db.query('SELECT * FROM attributes WHERE node_id=?').get(node.id) as any;
+    expect(attribute.id).not.toBe('A1');
+    expect(attribute.value).toBe(node.id);
+    expect(attribute.statement_json).toContain(node.id);
+    expect(existsSync(join(uploadsRoot, String(cloned.id), 'node-images', 'a.png'))).toBe(true);
+  } finally { db.close(); rmSync(uploadsRoot, { recursive: true, force: true }); }
 });
 
 test('maintenance lifecycle, delegated permissions, notification isolation and revocation', async () => {
