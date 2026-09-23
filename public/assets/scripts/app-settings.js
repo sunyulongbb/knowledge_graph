@@ -7,11 +7,62 @@
     return /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : fallback;
   }
 
+  function hexToRgb(color) {
+    const value = normalizeThemeColor(color).slice(1);
+    return [0, 2, 4].map((offset) => Number.parseInt(value.slice(offset, offset + 2), 16));
+  }
+
+  function rgbToHex(rgb) {
+    return `#${rgb.map((channel) => Math.round(channel).toString(16).padStart(2, '0')).join('')}`;
+  }
+
+  function relativeLuminance(rgb) {
+    const channels = rgb.map((channel) => {
+      const value = channel / 255;
+      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    });
+    return (0.2126 * channels[0]) + (0.7152 * channels[1]) + (0.0722 * channels[2]);
+  }
+
+  function contrastRatio(first, second) {
+    const lighter = Math.max(relativeLuminance(first), relativeLuminance(second));
+    const darker = Math.min(relativeLuminance(first), relativeLuminance(second));
+    return (lighter + 0.05) / (darker + 0.05);
+  }
+
+  function mixRgb(source, target, amount) {
+    return source.map((channel, index) => channel + ((target[index] - channel) * amount));
+  }
+
+  function createContrastingAccent(color, isDark) {
+    const source = hexToRgb(color);
+    const surface = hexToRgb(isDark ? '#202023' : '#ffffff');
+    const target = isDark ? [255, 255, 255] : [0, 0, 0];
+    let adjusted = source;
+    for (let amount = 0; amount <= 1 && contrastRatio(adjusted, surface) < 4.5; amount += 0.025) {
+      adjusted = mixRgb(source, target, amount);
+    }
+    return rgbToHex(adjusted);
+  }
+
+  function getAccentTextColor(accent) {
+    const rgb = hexToRgb(accent);
+    return contrastRatio(rgb, [255, 255, 255]) >= contrastRatio(rgb, [15, 23, 42])
+      ? '#ffffff'
+      : '#0f172a';
+  }
+
   function applyAppThemeColor(color) {
     const normalized = normalizeThemeColor(color);
-    document.documentElement.style.setProperty('--accent', normalized);
+    const isDark = document.documentElement.dataset.theme === 'dark';
+    const accent = createContrastingAccent(normalized, isDark);
+    document.documentElement.style.setProperty('--accent-base', normalized);
+    document.documentElement.style.setProperty('--accent', accent);
+    document.documentElement.style.setProperty('--accent-contrast', getAccentTextColor(accent));
     document.documentElement.dataset.appThemeColor = normalized;
-    window.dispatchEvent(new CustomEvent('kb-app-theme-change', { detail: { color: normalized } }));
+    window.dispatchEvent(new CustomEvent('kb-app-theme-change', {
+      detail: { color: accent, baseColor: normalized, theme: isDark ? 'dark' : 'light' },
+    }));
     return normalized;
   }
 
@@ -257,6 +308,11 @@
 
   window.openAppSettingsModal = openAppSettingsModal;
   window.applyAppThemeColor = applyAppThemeColor;
+
+  new MutationObserver((mutations) => {
+    if (!mutations.some((mutation) => mutation.attributeName === 'data-theme')) return;
+    applyAppThemeColor(document.documentElement.dataset.appThemeColor || DEFAULT_THEME_COLOR);
+  }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
   function initCurrentProjectTheme() {
     fetchCurrentProjectInfo().then((project) => {

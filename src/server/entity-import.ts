@@ -238,14 +238,25 @@ export function importEntity(db: Database, input: unknown, projectId: number | n
   const entities = parseEntityImports(input);
   return db.transaction(() => {
     const usedIds = new Set<string>();
+    const requestedIds = new Set<string>();
+    const originalIds = new Map<ParsedEntity, string>();
     for (const entity of entities) {
       if (!entity.id) entity.id = String((db.query("SELECT COALESCE(MAX(CAST(id AS INTEGER)),0)+1 AS next FROM nodes WHERE id GLOB '[0-9]*'").get() as any).next + usedIds.size);
+      const requestedId = entity.id;
+      if (requestedIds.has(requestedId)) throw new EntityImportError(`批量文件包含重复实体 ID：${requestedId}`);
+      requestedIds.add(requestedId);
+      originalIds.set(entity, requestedId);
+      const occupied = db.query('SELECT project_id FROM nodes WHERE id=? LIMIT 1').get(requestedId) as any;
+      if (occupied && (occupied.project_id ?? null) !== projectId) {
+        entity.id = `${requestedId}--copy-${crypto.randomUUID().slice(0, 8)}`;
+      }
       if (usedIds.has(entity.id)) throw new EntityImportError(`批量文件包含重复实体 ID：${entity.id}`);
       usedIds.add(entity.id);
     }
     const incomingNames = new Map<string, ParsedEntity[]>();
     for (const entity of entities) {
-      for (const label of [entity.id, entity.name, ...entity.aliases]) {
+      for (const label of new Set([originalIds.get(entity), entity.id, entity.name, ...entity.aliases])) {
+        if (!label) continue;
         const key = label.trim().toLocaleLowerCase();
         if (key) incomingNames.set(key, [...(incomingNames.get(key) || []), entity]);
       }
@@ -265,7 +276,10 @@ function importParsedEntity(db: Database, entity: ParsedEntity, projectId: numbe
     if (!ontology) ontology = db.query('SELECT id,name,status FROM ontologies WHERE lower(name)=lower(?) AND project_id IS ? LIMIT 1').get(entity.ontology.name, projectId) as any;
     let ontologyCreated = false;
     if (!ontology) {
-      const id = entity.ontology.id || `ontology/${crypto.randomUUID()}`;
+      const preferredId = entity.ontology.id || `ontology/${crypto.randomUUID()}`;
+      const id = db.query('SELECT 1 FROM ontologies WHERE id=? LIMIT 1').get(preferredId)
+        ? `ontology/${crypto.randomUUID()}`
+        : preferredId;
       const order = db.query('SELECT COALESCE(MAX(sort_order),0)+1 AS next FROM ontologies WHERE parent_id IS NULL AND project_id IS ?').get(projectId) as any;
       db.run('INSERT INTO ontologies(id,name,alias,description,parent_id,project_id,display_shape,sort_order,status) VALUES(?,?,?,?,NULL,?,\'rectangle\',?,\'active\')', [id, entity.ontology.name, JSON.stringify([entity.ontology.name]), entity.ontology.description, projectId, order.next]);
       ontology = { id, name: entity.ontology.name }; ontologyCreated = true;
@@ -305,9 +319,6 @@ function importParsedEntity(db: Database, entity: ParsedEntity, projectId: numbe
     const mergedTags = [...new Map([...entity.tags, ...categoryTags].map((tag) => [tag.toLowerCase(), tag])).values()];
     const nodeId = entity.id;
     const existingNode = db.query('SELECT id,project_id FROM nodes WHERE id=? LIMIT 1').get(nodeId) as any;
-    if (existingNode && (existingNode.project_id ?? null) !== projectId) {
-      throw new EntityImportError(`实体 ID 已被其他应用使用：${nodeId}`);
-    }
     const entityCreated = !existingNode;
     if (existingNode) {
       db.run('UPDATE nodes SET name=?,type=?,description=?,aliases=?,tags=?,images=?,videos=?,pdf=?,link=?,visibility=?,updated_at=CURRENT_TIMESTAMP WHERE id=?', [entity.name, ontology.id, entity.description, JSON.stringify(entity.aliases), JSON.stringify(mergedTags), JSON.stringify(entity.images), JSON.stringify(entity.videos), entity.pdf, entity.link, entity.visibility, nodeId]);
@@ -372,9 +383,9 @@ function importParsedEntity(db: Database, entity: ParsedEntity, projectId: numbe
         referencedEntitiesMatched++;
         return { ...item, id: matched.id, label_zh: item.label_zh || matched.name, 'entity-type': 'item' };
       }
-      if (!id) id = `entity/${crypto.randomUUID()}`;
+      if (!id) id = `reference-${crypto.randomUUID()}`;
       const globallyExisting = db.query('SELECT project_id FROM nodes WHERE id=? LIMIT 1').get(id) as any;
-      if (globallyExisting) throw new EntityImportError(`引用实体 ID 已被其他应用使用：${id}`);
+      if (globallyExisting && (globallyExisting.project_id ?? null) !== projectId) id = `${id}--copy-${crypto.randomUUID().slice(0, 8)}`;
       const label = labels[0] || id;
       if (!incomingNames.get(label.toLocaleLowerCase())?.some((candidate) => candidate.id === id)) {
         const refOntology = ensureReferenceOntology();
@@ -387,7 +398,10 @@ function importParsedEntity(db: Database, entity: ParsedEntity, projectId: numbe
       let property = attribute.id ? db.query('SELECT id,name,datatype,valuetype,status FROM properties WHERE id=? AND project_id IS ?').get(attribute.id, projectId) as any : null;
       if (!property) property = db.query('SELECT id,name,datatype,valuetype,status FROM properties WHERE lower(name)=lower(?) AND project_id IS ? LIMIT 1').get(attribute.name, projectId) as any;
       if (!property) {
-        const id = attribute.id || `property/${crypto.randomUUID()}`;
+        const preferredId = attribute.id || `property/${crypto.randomUUID()}`;
+        const id = db.query('SELECT 1 FROM properties WHERE id=? LIMIT 1').get(preferredId)
+          ? `property/${crypto.randomUUID()}`
+          : preferredId;
         db.run("INSERT INTO properties(id,name,alias,status,datatype,valuetype,description,project_id) VALUES(?,?,?,'active',?,?,?,?)", [id, attribute.name, JSON.stringify([attribute.name]), attribute.datatype, valueTypeFor(attribute.datatype), attribute.description, projectId]);
         property = { id, name: attribute.name, datatype: attribute.datatype, valuetype: valueTypeFor(attribute.datatype) }; propertiesCreated++;
       } else {

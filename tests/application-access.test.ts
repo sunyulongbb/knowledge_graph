@@ -106,6 +106,7 @@ test('an accessible application can be cloned with isolated knowledge identifier
     expect(cloned).toMatchObject({ slug: 'copy', name: 'Copy', owner: true });
     const node = db.query('SELECT * FROM nodes WHERE project_id=?').get(cloned.id) as any;
     expect(node.id).not.toBe('Q1');
+    expect(node.id).toStartWith('clone-');
     expect(node.type).not.toBe('ontology/person');
     expect(node.images).toContain(`/uploads/${cloned.id}/node-images/a.png`);
     const attribute = db.query('SELECT * FROM attributes WHERE node_id=?').get(node.id) as any;

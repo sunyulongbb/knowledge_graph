@@ -48,6 +48,25 @@ test('entity import reuses same-project ontology and property definitions', () =
   } finally { db.close(); }
 });
 
+test('the same external IDs import into different applications with isolated remapped references', () => {
+  const db = fixture();
+  try {
+    const document = { version: 1, entity: {
+      id: 'HEGSETH-CHINA-NEWS-001', name: '同一来源数据',
+      type: { id: 'ontology/news', name: '新闻' },
+      attributes: [{ id: 'property/related', name: '关联目标', datatype: 'wikibase-item', value: { id: 'HEGSETH-CHINA-NEWS-001', label_zh: '同一来源数据' } }],
+    } };
+    const first = importEntity(db, structuredClone(document), 1) as any;
+    const second = importEntity(db, structuredClone(document), 2) as any;
+    expect(first.entityId).toBe('HEGSETH-CHINA-NEWS-001');
+    expect(second.entityId).toStartWith('HEGSETH-CHINA-NEWS-001--copy-');
+    expect(db.query('SELECT COUNT(*) AS count FROM nodes').get()).toEqual({ count: 2 });
+    const secondAttribute = db.query('SELECT value FROM attributes WHERE node_id=?').get(second.entityId) as any;
+    expect(JSON.parse(secondAttribute.value).id).toBe(second.entityId);
+    expect((db.query('SELECT type FROM nodes WHERE id=?').get(second.entityId) as any).type).not.toBe((db.query('SELECT type FROM nodes WHERE id=?').get(first.entityId) as any).type);
+  } finally { db.close(); }
+});
+
 test('entity import upgrades and reactivates reused schema definitions', () => {
   const db = fixture();
   try {

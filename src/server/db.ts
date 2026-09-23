@@ -4,6 +4,7 @@ import { join, resolve } from "path";
 import { createKnowledgeDatabase, ensureKnowledgeAccessSchema } from './knowledge-access.ts';
 import { ensureApplicationSchema, ensureDefaultApplication } from './application-access.ts';
 import { ensureApplicationRolePermissions } from './application-role-permissions.ts';
+import { repairLegacyClonedEntityIds } from './application-clone.ts';
 
 const KNOWLEDGE_GRAPH_ROOT = resolve(import.meta.dir, "..", "..");
 const WORKSPACE_ROOT = resolve(KNOWLEDGE_GRAPH_ROOT, "..");
@@ -1729,6 +1730,7 @@ export function initializeKnowledgeBaseDatabase() {
   importLegacyProjectKnowledge();
   migrateLegacyUploads();
   cleanupPlaceholderProjects();
+  repairLegacyClonedEntityIds(appDb);
 }
 
 export function switchDatabase(_filename: string) {

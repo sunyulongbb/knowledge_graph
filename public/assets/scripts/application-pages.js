@@ -108,6 +108,36 @@
   function profileLoading() {
     return Array.from({ length: 4 }, (_, index) => `<article class="app-profile-node is-loading" style="--profile-index:${index}"><div class="app-profile-card-head"><span>ANALYSIS 0${index + 1}</span><i></i></div><strong>读取分析角度</strong><p>正在关联知识属性与证据信息…</p><div class="app-profile-skeleton"></div></article>`).join('');
   }
+  function readableProfileValue(value) {
+    if (value == null) return '';
+    if (Array.isArray(value)) return value.map(readableProfileValue).filter(Boolean).join('；');
+    if (typeof value !== 'object') return String(value);
+    if (value.datavalue?.value !== undefined) return readableProfileValue(value.datavalue.value);
+    const id = String(value.id || value['entity-id'] || value.entity_id || value.target || '').replace(/^entity\//, '');
+    const label = String(value.label_zh || value.entity_label_zh || value.label || value.name || '').trim();
+    if (id) return label ? `${label}（${id}）` : id;
+    if (typeof value.text === 'string') return `${value.text}${value.language ? `（${value.language}）` : ''}`;
+    if (value.time) return String(value.time).replace(/^\+/, '').replace(/T00:00:00Z$/, '');
+    if (value.amount != null) return `${value.amount}${value.unit && value.unit !== '1' ? ` ${value.unit}` : ''}`;
+    if (value.latitude != null && value.longitude != null) return `${value.latitude}, ${value.longitude}`;
+    const ignored = new Set(['precision', 'calendar', 'calendarmodel', 'globe', 'entity-type', 'numeric-id']);
+    return Object.entries(value).filter(([key, nested]) => !ignored.has(key.toLowerCase()) && nested != null && nested !== '').map(([key, nested]) => `${key}：${readableProfileValue(nested)}`).join('；');
+  }
+  function formatProfileEvidence(value) {
+    const text = String(value || '').trim();
+    if (!text) return '未提供明确证据';
+    const candidates = [0, text.indexOf('：') + 1, text.indexOf(':') + 1].filter((index, position, values) => index >= 0 && values.indexOf(index) === position);
+    for (const start of candidates) {
+      const source = text.slice(start).trim();
+      if (!source || !['{', '['].includes(source[0])) continue;
+      try {
+        const readable = readableProfileValue(JSON.parse(source));
+        if (readable) return `${text.slice(0, start)}${readable}`;
+      } catch {}
+    }
+    if (/(?:^|：|:)\s*[{[]/.test(text)) return text.replace(/\\?"(?:entity-type|numeric-id|precision|calendarmodel|globe)\\?"\s*:\s*[^,}\]]+,?/gi, '').replace(/[{}\[\]"]/g, '').replace(/\s*,\s*/g, '；').replace(/\s*:\s*/g, '：');
+    return text;
+  }
   function revealJevProfile(profiles, meta = {}) {
     const layer = byId('appHomeContent').querySelector('[data-jev-profile-layer]');
     if (!layer) return;
@@ -121,10 +151,11 @@
     }
     const tone = (value) => value === '积极支持' ? 'positive' : value === '务实合作' ? 'cooperative' : value === '限制竞争' ? 'restrictive' : value === '信息不足' ? 'unknown' : 'neutral';
     layer.innerHTML = `${profileHeader}${profiles.map((profile, index) => {
-      const evidenceList = Array.isArray(profile.evidence) ? profile.evidence : [];
+      const evidenceList = Array.isArray(profile.evidence) ? profile.evidence.map(formatProfileEvidence) : [];
       const evidence = evidenceList[0] || '未命中明确属性证据';
       const keywordEvidence = Array.isArray(profile.keywordEvidence) ? profile.keywordEvidence : [];
-      const relatedEvidence = Array.isArray(profile.relatedEvidence) ? profile.relatedEvidence : [];
+      const orderedKeywords = [...keywordEvidence].sort((left, right) => Number(Boolean(right.matched)) - Number(Boolean(left.matched)));
+      const relatedEvidence = Array.isArray(profile.relatedEvidence) ? profile.relatedEvidence.map((item) => ({ ...item, evidence: formatProfileEvidence(item?.evidence) })) : [];
       const hitCount = keywordEvidence.filter((item) => item.matched).length;
       const hitRate = keywordEvidence.length ? Math.round(hitCount / keywordEvidence.length * 100) : 0;
       const confidence = Number.isFinite(Number(profile.confidence)) ? Math.round(Math.max(0, Math.min(1, Number(profile.confidence))) * 100) : 0;
@@ -139,9 +170,9 @@
           <div class="app-profile-confidence" aria-label="置信度 ${confidence}%"><span>${confidence}</span><small>%</small></div>
           <div class="app-profile-metrics"><label><span>关键词命中</span><strong>${hitCount}/${keywordEvidence.length}</strong></label><div class="app-profile-meter"><i></i></div><label><span>证据强度</span><strong>${evidenceCount}</strong></label><div class="app-profile-signal">${Array.from({ length: 5 }, (_, level) => `<i class="${level < evidenceStrength ? 'is-on' : ''}" style="--signal-index:${level}"></i>`).join('')}</div></div>
         </div>
-        <div class="app-profile-keywords">${keywordEvidence.map((item) => `<mark class="${item.matched ? 'is-hit' : ''}">${escape(item.keyword)}</mark>`).join('')}</div>
-        <div class="app-profile-evidence"><span><i class="fa-solid fa-link" aria-hidden="true"></i> 核心证据 · ${evidenceList.length || 1}</span>${(evidenceList.length ? evidenceList : [evidence]).map((item) => `<p>${escape(item)}</p>`).join('')}</div>
-        ${relatedEvidence.length ? `<div class="app-profile-related">${relatedEvidence.map((item) => `<span title="${escape(item.evidence)}"><i class="fa-solid fa-share-nodes" aria-hidden="true"></i> ${escape(item.sourceName)} <b>${escape(item.relation)}</b><em>${item.evidence ? escape(item.evidence) : ''}</em></span>`).join('')}</div>` : ''}
+        <div class="app-profile-keywords">${orderedKeywords.map((item) => `<mark class="${item.matched ? 'is-hit' : ''}">${escape(item.keyword)}</mark>`).join('')}</div>
+        <div class="app-profile-evidence"><span><i class="fa-solid fa-link" aria-hidden="true"></i> 核心证据 <small>${evidenceList.length || 1} 条</small></span>${(evidenceList.length ? evidenceList : [evidence]).map((item, evidenceIndex) => `<p title="${escape(item)}"><b>${String(evidenceIndex + 1).padStart(2, '0')}</b><span>${escape(item)}</span></p>`).join('')}</div>
+        ${relatedEvidence.length ? `<div class="app-profile-related"><div><i class="fa-solid fa-share-nodes" aria-hidden="true"></i> 关联知识 <small>${relatedEvidence.length} 条</small></div>${relatedEvidence.map((item) => `<span title="${escape(item.evidence)}"><i class="fa-solid fa-arrow-turn-up" aria-hidden="true"></i><strong>${escape(item.sourceName)}</strong><b>${escape(item.relation)}</b><em>${item.evidence ? escape(item.evidence) : ''}</em></span>`).join('')}</div>` : ''}
       </article>`;
     }).join('')}`;
     layer.classList.add('is-visible');

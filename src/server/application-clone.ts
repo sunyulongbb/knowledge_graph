@@ -20,15 +20,19 @@ function insertRow(db: Database, table: string, row: any, values: Record<string,
 
 function replaceReferences(value: unknown, ids: Map<string, string>, sourceProjectId: number, targetProjectId: number): unknown {
   if (typeof value !== "string" || !value) return value;
-  let output = value.replaceAll(`/uploads/${sourceProjectId}/`, `/uploads/${targetProjectId}/`);
-  for (const [before, after] of ids) output = output.replaceAll(before, after);
-  return output;
+  const mapValue = (item: any): any => {
+    if (typeof item === "string") return ids.get(item) || item.replaceAll(`/uploads/${sourceProjectId}/`, `/uploads/${targetProjectId}/`);
+    if (Array.isArray(item)) return item.map(mapValue);
+    if (item && typeof item === "object") return Object.fromEntries(Object.entries(item).map(([key, nested]) => [key, mapValue(nested)]));
+    return item;
+  };
+  try { return JSON.stringify(mapValue(JSON.parse(value))); } catch { return mapValue(value); }
 }
 
 function cloneMappedTable(db: Database, table: string, projectId: number, targetProjectId: number, prefix: string, ids: Map<string, string>) {
   if (!tableExists(db, table)) return;
   const rows = db.query(`SELECT * FROM ${table} WHERE project_id=?`).all(projectId) as any[];
-  for (const row of rows) ids.set(String(row.id), `${prefix}/${crypto.randomUUID()}`);
+  for (const row of rows) ids.set(String(row.id), prefix ? `${prefix}/${crypto.randomUUID()}` : `clone-${crypto.randomUUID()}`);
   for (const row of rows) {
     const mapped: Record<string, unknown> = { id: ids.get(String(row.id)), project_id: targetProjectId };
     for (const [key, value] of Object.entries(row)) {
@@ -46,7 +50,7 @@ export function cloneApplicationData(db: Database, sourceProject: any, targetPro
   cloneMappedTable(db, "ontologies", sourceId, targetId, "ontology", ids);
   cloneMappedTable(db, "properties", sourceId, targetId, "property", ids);
   cloneMappedTable(db, "classes", sourceId, targetId, "class", ids);
-  cloneMappedTable(db, "nodes", sourceId, targetId, "entity", ids);
+  cloneMappedTable(db, "nodes", sourceId, targetId, "", ids);
 
   // Parent/type/tail and JSON fields can only be fully rewritten after every map exists.
   for (const table of ["ontologies", "properties", "classes", "nodes"]) {
@@ -100,4 +104,35 @@ export function removeClonedApplicationFiles(projectId: number, options: CloneOp
   const uploadsRoot = options.uploadsRoot || resolve(import.meta.dir, "..", "..", "uploads");
   const targetDir = resolve(uploadsRoot, String(projectId));
   if (existsSync(targetDir)) rmSync(targetDir, { recursive: true, force: true });
+}
+
+export function repairLegacyClonedEntityIds(db: Database) {
+  if (!tableExists(db, "nodes")) return 0;
+  const rows = db.query("SELECT * FROM nodes WHERE id GLOB 'entity/????????-????-????-????-????????????'").all() as any[];
+  if (!rows.length) return 0;
+  const nodeColumns = columns(db, "nodes");
+  return db.transaction(() => {
+    let repaired = 0;
+    for (const row of rows) {
+      const oldId = String(row.id);
+      const nextId = `clone-${oldId.slice('entity/'.length)}`;
+      if (db.query("SELECT 1 FROM nodes WHERE id=?").get(nextId)) continue;
+      insertRow(db, "nodes", row, { id: nextId });
+      if (tableExists(db, "attributes")) {
+        db.run("UPDATE attributes SET node_id=? WHERE node_id=?", [nextId, oldId]);
+        db.run("UPDATE attributes SET value=REPLACE(value,?,?), statement_json=REPLACE(statement_json,?,?) WHERE value LIKE ? OR statement_json LIKE ?", [oldId, nextId, oldId, nextId, `%${oldId}%`, `%${oldId}%`]);
+      }
+      if (tableExists(db, "entity_classes")) db.run("UPDATE entity_classes SET entity_id=? WHERE entity_id=?", [nextId, oldId]);
+      if (tableExists(db, "cleaning_entity_sources")) db.run("UPDATE cleaning_entity_sources SET node_id=? WHERE node_id=?", [nextId, oldId]);
+      for (const table of ["knowledge_likes", "knowledge_comments", "knowledge_shares", "knowledge_favorites"]) {
+        if (tableExists(db, table) && columns(db, table).includes("knowledge_id")) db.run(`UPDATE OR IGNORE ${table} SET knowledge_id=? WHERE knowledge_id=?`, [nextId, oldId]);
+      }
+      for (const column of ["data", "relation_order", "jev_analysis_json", "jev_analysis_signature"]) {
+        if (nodeColumns.includes(column)) db.run(`UPDATE nodes SET ${column}=REPLACE(${column},?,?) WHERE ${column} LIKE ?`, [oldId, nextId, `%${oldId}%`]);
+      }
+      db.run("DELETE FROM nodes WHERE id=?", [oldId]);
+      repaired++;
+    }
+    return repaired;
+  })();
 }

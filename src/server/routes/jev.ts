@@ -67,13 +67,22 @@ function readableValue(value: any, entityNames: Map<string, string>): string {
     const id = text.replace(/^entity\//, "");
     return entityNames.has(id) ? `${entityNames.get(id)}（${id}）` : text;
   }
+  if (value.datavalue && typeof value.datavalue === "object") return readableValue(value.datavalue.value, entityNames);
+  if (Object.prototype.hasOwnProperty.call(value, "value") && Object.keys(value).every((key) => ["value", "type", "datatype"].includes(key))) return readableValue(value.value, entityNames);
   const entityId = String(value.id ?? value["entity-id"] ?? value.entity_id ?? value.target ?? "").replace(/^entity\//, "");
-  if (entityId && entityNames.has(entityId)) return `${value.label || entityNames.get(entityId)}（${entityId}）`;
+  const entityLabel = String(value.label_zh ?? value.entity_label_zh ?? value.label ?? value.name ?? entityNames.get(entityId) ?? "").trim();
+  if (entityId) return entityLabel ? `${entityLabel}（${entityId}）` : entityId;
   if (typeof value.text === "string") return `${value.text}${value.language ? `（${value.language}）` : ""}`;
-  if (value.time) return `${value.time}${value.precision != null ? `，精度 ${value.precision}` : ""}`;
+  if (value.time) return String(value.time).replace(/^\+/, "").replace(/T00:00:00Z$/, "");
   if (value.amount != null) return `${value.amount}${value.unit && value.unit !== "1" ? ` ${value.unit}` : ""}`;
   if (value.latitude != null && value.longitude != null) return `${value.latitude}, ${value.longitude}`;
-  return textValue(value);
+  if (value.url) return String(value.url);
+  const ignored = new Set(["precision", "calendar", "calendarmodel", "globe", "entity-type", "numeric-id"]);
+  const parts = Object.entries(value)
+    .filter(([key, nested]) => !ignored.has(key.toLowerCase()) && nested != null && nested !== "")
+    .map(([key, nested]) => `${key}：${readableValue(nested, entityNames)}`)
+    .filter((item) => !item.endsWith("："));
+  return parts.join("；") || "未提供可读值";
 }
 
 function evidenceSnippet(text: string, keyword: string, label: string) {

@@ -76,7 +76,7 @@ test('anonymous users cannot expand application or user sidebars', () => {
   expect(page).toContain('id="appHomeMaintenance"');
   expect(page).toContain('id="inputProfileJevKey"');
   expect(page).toContain('id="btnClearProfileJevKey"');
-  expect(page).toContain('/assets/scripts/application-pages.js?v=20260923-11');
+  expect(page).toContain('/assets/scripts/application-pages.js?v=20260923-13');
   expect(page).toContain('/assets/scripts/applications.js?v=20260921-1');
   expect(authPanel).toContain('if (authUser) window.toggleUserSidebar?.();\n      else openAuthModal(false);');
   expect(authPanel).toContain('defaultHome.searchParams.set("db", "default")');
@@ -90,6 +90,20 @@ test('anonymous users cannot expand application or user sidebars', () => {
   expect(sidebarPanel).toContain('if (!window.authUser) return;');
   expect(page).toContain('class="btn sm user-sidebar-logout"');
   expect(page.indexOf('id="btnLogout"')).toBeGreaterThan(page.indexOf('id="userSidebar"'));
+});
+
+test('application theme color keeps contrast in light and dark modes', () => {
+  const page = readFileSync('public/index.html', 'utf8');
+  const script = readFileSync('public/assets/scripts/app-settings.js', 'utf8');
+  const css = readFileSync('public/assets/styles/app.css', 'utf8');
+  expect(page).toContain('/assets/scripts/app-settings.js?v=20260923-1');
+  expect(script).toContain('function createContrastingAccent(color, isDark)');
+  expect(script).toContain('contrastRatio(adjusted, surface) < 4.5');
+  expect(script).toContain("attributeFilter: ['data-theme']");
+  expect(script).toContain("style.setProperty('--accent-contrast'");
+  expect(css).toContain('--accent-base: #4f46e5;');
+  expect(css).toContain('--accent-contrast: #0f172a;');
+  expect(css).toContain('color: var(--accent-contrast, #fff);');
 });
 
 test('application home provides inspiration draw, category tree, and knowledge cards', () => {
@@ -181,7 +195,7 @@ test('entity editor uses the post-composer hierarchy without changing existing c
   expect(page).toContain('id="btnCancelEdit"');
   expect(page).toContain('id="btnEntityImport"');
   expect(page).toContain('id="btnSubmit"');
-  expect(page).toContain('/assets/styles/app.css?v=20260923-14');
+  expect(page).toContain('/assets/styles/app.css?v=20260923-18');
   expect(css).toContain('.app-profile-actions { position: fixed; top: 24px; right: 24px;');
   expect(css).toContain('.app-inspiration-profile-layer.has-selection { z-index: 7; }');
   expect(css).toContain('.app-profile-node.is-selected { position: absolute !important;');
