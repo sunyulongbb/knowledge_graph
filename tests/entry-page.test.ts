@@ -106,6 +106,21 @@ test('application theme color keeps contrast in light and dark modes', () => {
   expect(css).toContain('color: var(--accent-contrast, #fff);');
 });
 
+test('collapsed editor and classification panels restore before first paint', () => {
+  const page = readFileSync('public/index.html', 'utf8');
+  const earlyRestore = page.indexOf('localStorage.getItem("kb-panel-state")');
+  const stylesheet = page.indexOf('/assets/styles/app.css');
+  expect(earlyRestore).toBeGreaterThan(0);
+  expect(earlyRestore).toBeLessThan(stylesheet);
+  expect(page).toContain('data-kb-editor-left');
+  expect(page).toContain('data-kb-editor-right');
+  expect(page).toContain('html[data-kb-editor-left="closed"] .kb-split');
+  expect(page.match(/var\(--user-sidebar-width, 0px\)/g)?.length).toBeGreaterThanOrEqual(6);
+  expect(page).not.toContain('var(--user-sidebar-width, 72px)');
+  expect(page).toContain("const stored = window.localStorage.getItem('kb-panel-state')");
+  expect(page).toContain("document.documentElement.classList.remove('kb-panel-state-restoring')");
+});
+
 test('knowledge reports replace the legacy dashboard with title and keyword generation', () => {
   const page = readFileSync('public/index.html', 'utf8');
   const css = readFileSync('public/assets/styles/app.css', 'utf8');
@@ -216,7 +231,7 @@ test('entity editor uses the post-composer hierarchy without changing existing c
   expect(page).toContain('id="btnCancelEdit"');
   expect(page).toContain('id="btnEntityImport"');
   expect(page).toContain('id="btnSubmit"');
-  expect(page).toContain('/assets/styles/app.css?v=20260924-4');
+  expect(page).toContain('/assets/styles/app.css?v=20260924-7');
   expect(css).toContain('.app-profile-actions { position: fixed; top: 24px; right: 24px;');
   expect(css).toContain('.app-inspiration-profile-layer.has-selection { z-index: 7; }');
   expect(css).toContain('.app-profile-node.is-selected { position: absolute !important;');
@@ -230,7 +245,7 @@ test('entity editor uses the post-composer hierarchy without changing existing c
   expect(page).toContain('id="entityDisplayImageWrap" class="wd-entity-avatar-wrap empty social-avatar-wrap" hidden');
   expect(page).toContain('id="composerUserAvatar" class="composer-user-avatar" hidden');
   expect(page).toContain('/assets/scripts/entity-import.js?v=20260921-6');
-  expect(page).toContain('/assets/scripts/detail-panel.js?v=20260922-9');
+  expect(page).toContain('/assets/scripts/detail-panel.js?v=20260924-4');
   expect(readFileSync('public/assets/scripts/entity-import.js', 'utf8')).toContain("window.addEventListener('kb-auth-change'");
   expect(readFileSync('public/assets/scripts/entity-import.js', 'utf8')).toContain("document.getElementById('composerUserAvatar')");
   expect(readFileSync('public/assets/scripts/detail-panel.js', 'utf8')).toContain('extractImageUrls(val, isMediaAttrItem(it))');
@@ -241,6 +256,12 @@ test('entity editor uses the post-composer hierarchy without changing existing c
   expect(detailPanel).toContain('const hasImageMedia = renderWikiMediaGrid(detailMediaAttrItems, imageEntries)');
   expect(detailPanel).toContain('stage.dataset.activeMedia = key');
   expect(page).toContain('id="detailMediaTabs" class="detail-media-tabs"');
+  expect(page).toContain('id="detailIncomingRelations" class="detail-related-section"');
+  expect(detailPanel).toContain('function renderIncomingRelations(relations)');
+  expect(detailPanel).toContain('items.slice(0, 5).forEach');
+  expect(detailPanel).toContain('`显示 5 / ${items.length} 条`');
+  expect(detailPanel).toContain('source.typeLabel || source.ontology?.name || source.classLabel');
+  expect(css).toContain('.detail-related-list { display:block; }');
   expect(detailPanel).toContain('zoomResetButton.textContent = "适合"');
   expect(detailPanel).toContain('openLink.setAttribute("aria-label", "在新窗口打开 PDF")');
   expect(detailPanel).toContain('wasmUrl: "/node_modules/pdfjs-dist/wasm/"');

@@ -610,6 +610,12 @@
       if (attrSection) attrSection.style.display = "none";
       const wikiView = document.getElementById("wikiView");
       if (wikiView) wikiView.innerHTML = "";
+      const relatedSection = document.getElementById("detailIncomingRelations");
+      const relatedGroups = document.getElementById("detailIncomingRelationGroups");
+      const relatedCount = document.getElementById("detailIncomingRelationCount");
+      if (relatedSection) relatedSection.hidden = true;
+      if (relatedGroups) relatedGroups.replaceChildren();
+      if (relatedCount) relatedCount.textContent = "";
       const pdfView = document.getElementById("wikiTopPdf");
       if (pdfView) {
         pdfView.innerHTML = "";
@@ -635,6 +641,83 @@
         }
       } catch {}
     } catch {}
+  }
+
+  function renderIncomingRelations(relations) {
+    const section = document.getElementById("detailIncomingRelations");
+    const host = document.getElementById("detailIncomingRelationGroups");
+    const count = document.getElementById("detailIncomingRelationCount");
+    if (!section || !host) return;
+    host.replaceChildren();
+    const candidates = [];
+    const seen = new Set();
+    for (const relation of Array.isArray(relations) ? relations : []) {
+      const source = relation?.source || {};
+      const sourceId = String(source.id || source._id || source._key || "").trim();
+      if (!sourceId) continue;
+      if (seen.has(sourceId)) continue;
+      seen.add(sourceId);
+      const typeName = String(
+        source.typeLabel || source.ontology?.name || source.classLabel || source.type || "未分类",
+      ).trim() || "未分类";
+      candidates.push({ source, sourceId, typeName });
+    }
+    candidates.sort((left, right) =>
+      left.typeName.localeCompare(right.typeName, "zh-CN") ||
+      String(left.source.name || left.source.label_zh || left.sourceId).localeCompare(String(right.source.name || right.source.label_zh || right.sourceId), "zh-CN"),
+    );
+    const groups = new Map();
+    candidates.forEach((item) => {
+      if (!groups.has(item.typeName)) groups.set(item.typeName, []);
+      groups.get(item.typeName).push(item);
+    });
+    const sortedGroups = Array.from(groups.entries()).sort(([left], [right]) =>
+      left.localeCompare(right, "zh-CN"),
+    );
+    for (const [typeName, items] of sortedGroups) {
+      const group = document.createElement("section");
+      group.className = "detail-related-group";
+      const heading = document.createElement("h3");
+      heading.className = "detail-related-group-heading";
+      const title = document.createElement("strong");
+      title.textContent = typeName;
+      const total = document.createElement("small");
+      total.textContent = items.length > 5 ? `显示 5 / ${items.length} 条` : `${items.length} 条`;
+      heading.append(title, total);
+      const list = document.createElement("div");
+      list.className = "detail-related-list";
+      items.slice(0, 5).forEach(({ source, sourceId }) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "detail-related-item";
+          const marker = document.createElement("span");
+          marker.className = "detail-related-marker";
+          button.style.setProperty("--detail-related-color", source.ontology?.color || source.color || "var(--accent)");
+          const body = document.createElement("span");
+          body.className = "detail-related-item-body";
+          const name = document.createElement("strong");
+          name.textContent = source.name || source.label_zh || source.label || source.title || sourceId;
+          body.append(name);
+          const arrow = document.createElement("i");
+          arrow.className = "fa-solid fa-arrow-right";
+          arrow.setAttribute("aria-hidden", "true");
+          button.append(marker, body, arrow);
+          button.addEventListener("click", () => {
+            const nextView = window.kbViewMode === "knowledge_detail" ? "knowledge_detail" : "detail";
+            if (typeof window.setViewMode === "function") {
+              window.setViewMode(nextView, { targetNodeId: sourceId, focusDetailOnly: nextView === "knowledge_detail" });
+            } else {
+              showNodeDetailInline(sourceId);
+            }
+          });
+          list.appendChild(button);
+        });
+      group.append(heading, list);
+      host.appendChild(group);
+    }
+    const total = seen.size;
+    section.hidden = total === 0;
+    if (count) count.textContent = total ? `${total} 条指向当前知识` : "";
   }
 
   function renderNativePdfFallback(root, resolvedUrl, message = "") {
@@ -994,6 +1077,7 @@
           '<div class="muted">未找到详情</div>';
         return;
       }
+      renderIncomingRelations(data && data.incomingRelations);
       // prefer authoritative id from doc if available
       try {
         const canonicalIdRaw =

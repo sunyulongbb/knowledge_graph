@@ -58,6 +58,25 @@ test('editing a saved entity retains tags independently from its description', (
   expect(fields.fTags.value).toBe('科学, 知识');
 });
 
+test('saved tags containing spaces remain one tag in the composer', () => {
+  const fields = { entityDisplayName: { innerText: '', querySelectorAll: () => [] }, fName: { value: '标题' }, fDesc: { value: '描述' }, fAliases: { value: '' }, fTags: { value: '皮特·赫格塞思, Pete Hegseth, 中国' } };
+  const extractStart = html.indexOf('    function extractComposerList(');
+  const { refresh, sync } = new Function('fields', `
+    const { entityDisplayName, fName, fDesc, fAliases, fTags } = fields;
+    const document = { activeElement: null };
+    const updateEntityDisplayName = (el, text) => { el.innerText = text; };
+    const parseComposerMentionTokens = () => [];
+    ${html.slice(extractStart, start)}
+    ${source}
+    return {refresh: refreshComposerFromHiddenFields, sync: syncComposerToHiddenFields};
+  `)(fields);
+  refresh();
+  expect(fields.entityDisplayName.innerText).toContain('#Pete Hegseth');
+  sync();
+  expect(fields.fTags.value).toBe('皮特·赫格塞思, Pete Hegseth, 中国');
+  expect(fields.fDesc.value).toBe('描述');
+});
+
 test('composer input updates saved fields and clears removed aliases', () => {
   const fields = { entityDisplayName: { innerText: '标题（别名）\n\n描述 #标签' }, fName: { value: '' }, fDesc: { value: '' }, fAliases: { value: '' }, fTags: { value: '' } };
   const sync = new Function('fields', `const { entityDisplayName, fName, fDesc, fAliases, fTags } = fields;

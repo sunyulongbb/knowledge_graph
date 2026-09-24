@@ -6,7 +6,7 @@ import { getKnowledgeUser, isAdmin } from "../auth-context.ts";
 import { mkdirSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import { relationAttributeResponse, saveRelationOrder } from '../relation-order.ts';
-import { knowledgeContext } from '../knowledge-access.ts';
+import { canAccessKnowledge, knowledgeContext } from '../knowledge-access.ts';
 import { appendVideoCoverPairs } from '../video-cover-pairing.ts';
 import { importEntity, EntityImportError, localizeEntityImportMedia, cleanupLocalizedEntityImport } from '../entity-import.ts';
 import {
@@ -4982,9 +4982,10 @@ export async function handleCoreKbRoutes(
 
     const incomingAttrs = db
       .query(
-        "SELECT node_id, value FROM attributes WHERE datatype = 'wikibase-entityid' AND value LIKE ?",
+        "SELECT node_id, key, value, property_name_snapshot FROM attributes WHERE datatype IN ('wikibase-entityid', 'wikibase-item') AND value LIKE ?",
       )
       .all(`%${id}%`) as any[];
+    const matchingIncomingAttrs: any[] = [];
     incomingAttrs.forEach((attr) => {
       try {
         const vals = JSON.parse(attr.value);
@@ -4995,13 +4996,18 @@ export async function handleCoreKbRoutes(
             tid = tid.replace("entity/", "");
           return tid === id;
         });
-        if (pointsToId) neighborIds.add(attr.node_id);
+        if (pointsToId) {
+          neighborIds.add(attr.node_id);
+          matchingIncomingAttrs.push(attr);
+        }
       } catch {}
     });
 
     const neighbors = [];
+    const incomingRelations: any[] = [];
     if (neighborIds.size > 0) {
-      const neighborNodes = db
+      const requestUser = knowledgeContext.getStore()?.user || getKnowledgeUser(req);
+      const neighborRows = db
         .query(
           `SELECT * FROM nodes WHERE id IN (${Array.from(neighborIds)
             .map(() => "?")
@@ -5010,12 +5016,32 @@ export async function handleCoreKbRoutes(
         .all(
           ...Array.from(neighborIds),
           ...(hasProjectScope ? [scopedProjectId] : []),
-        )
-        .map(formatNode);
+        ) as any[];
+      const accessibleRows = neighborRows.filter((row) =>
+        canAccessKnowledge(db, requestUser, row.id),
+      );
+      const neighborNodes = accessibleRows.map(formatNode);
       neighbors.push(...neighborNodes);
+      const nodeById = new Map(neighborNodes.map((item: any) => [String(item?.id || item?._id || '').replace(/^entity\//, ''), item]));
+      const propertyNames = new Map<string, string>();
+      for (const attr of matchingIncomingAttrs) {
+        const sourceId = String(attr.node_id || '').replace(/^entity\//, '');
+        const source = nodeById.get(sourceId);
+        if (!source) continue;
+        const propertyId = String(attr.key || '').trim();
+        let propertyName = String(attr.property_name_snapshot || '').trim();
+        if (!propertyName && propertyId) {
+          if (!propertyNames.has(propertyId)) {
+            const property = db.query('SELECT name FROM properties WHERE id = ? LIMIT 1').get(propertyId) as any;
+            propertyNames.set(propertyId, String(property?.name || propertyId));
+          }
+          propertyName = propertyNames.get(propertyId) || propertyId;
+        }
+        incomingRelations.push({ source, propertyId, propertyName: propertyName || '关联' });
+      }
     }
 
-    return Response.json({ node: formatNode(node), neighbors });
+    return Response.json({ node: formatNode(node), neighbors, incomingRelations });
   }
 
   if (url.pathname === '/api/kb/node/relation-order' && method === 'POST') {

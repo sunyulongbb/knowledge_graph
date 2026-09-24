@@ -8,13 +8,26 @@
 
   <script>
     // Restore the theme before styles and page content can paint.
+    const kbDocumentRoot = document.documentElement;
     try {
-      document.documentElement.setAttribute(
+      kbDocumentRoot.setAttribute(
         "data-theme",
         localStorage.getItem("theme") === "dark" ? "dark" : "light"
       );
     } catch {
-      document.documentElement.setAttribute("data-theme", "light");
+      kbDocumentRoot.setAttribute("data-theme", "light");
+    }
+    // Restore the inner editor/classification panels before the first paint.
+    // Waiting for DOMContentLoaded or /whoami makes collapsed panels flash open.
+    try {
+      const savedPanelState = JSON.parse(localStorage.getItem("kb-panel-state") || "null");
+      if (savedPanelState && typeof savedPanelState === "object") {
+        kbDocumentRoot.classList.add("kb-panel-state-restoring");
+        if (savedPanelState.hideLeft) kbDocumentRoot.setAttribute("data-kb-editor-left", "closed");
+        if (savedPanelState.hideRight) kbDocumentRoot.setAttribute("data-kb-editor-right", "closed");
+      }
+    } catch {
+      // Invalid or unavailable local state is resolved by the authenticated profile.
     }
   </script>
 
@@ -38,7 +51,7 @@
       customElements.whenDefined("media-video-layout"),
     ]).then(() => true);
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20260924-4" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20260924-7" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -1741,17 +1754,17 @@
 
     .kb-split.hide-left {
       grid-template-columns: var(--sidebar-width, 72px) 0 minmax(420px, 4fr) minmax(220px, 1fr)
-        var(--sidebar-width, 72px);
+        var(--user-sidebar-width, 0px);
     }
 
     .kb-split.hide-right {
       grid-template-columns: var(--sidebar-width, 72px) minmax(220px, 1fr) minmax(420px, 4fr) 0
-        var(--sidebar-width, 72px);
+        var(--user-sidebar-width, 0px);
     }
 
     .kb-split.hide-left.hide-right {
       grid-template-columns: var(--sidebar-width, 72px) 0 minmax(420px, 5fr) 0
-        var(--sidebar-width, 72px);
+        var(--user-sidebar-width, 0px);
     }
 
     .kb-split.hide-left .editor-panel,
@@ -1770,6 +1783,45 @@
     .kb-split.hide-right .class-panel > * {
       display: none !important;
     }
+
+    html[data-kb-editor-left="closed"] .kb-split {
+      grid-template-columns: var(--sidebar-width, 72px) 0 minmax(420px, 4fr) minmax(220px, 1fr)
+        var(--user-sidebar-width, 0px);
+    }
+
+    html[data-kb-editor-right="closed"] .kb-split {
+      grid-template-columns: var(--sidebar-width, 72px) minmax(220px, 1fr) minmax(420px, 4fr) 0
+        var(--user-sidebar-width, 0px);
+    }
+
+    html[data-kb-editor-left="closed"][data-kb-editor-right="closed"] .kb-split {
+      grid-template-columns: var(--sidebar-width, 72px) 0 minmax(420px, 5fr) 0
+        var(--user-sidebar-width, 0px);
+    }
+
+    html[data-kb-editor-left="closed"] .editor-panel,
+    html[data-kb-editor-right="closed"] .class-panel {
+      visibility: hidden;
+      width: 0 !important;
+      min-width: 0 !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      border: 0 !important;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    html[data-kb-editor-left="closed"] .editor-panel > *,
+    html[data-kb-editor-right="closed"] .class-panel > * {
+      display: none !important;
+    }
+
+    html.kb-panel-state-restoring .kb-split,
+    html.kb-panel-state-restoring .kb-split * {
+      transition: none !important;
+      animation-duration: 0s !important;
+    }
+
   </style>
 
   <!-- DB Project Card Styles -->
@@ -3639,6 +3691,13 @@
                   <div id="wikiView" style="font-size: 14px; line-height: 1.6">
                     加载详情中…
                   </div>
+                </section>
+                <section id="detailIncomingRelations" class="detail-related-section" hidden>
+                  <div class="detail-related-heading">
+                    <div class="detail-attr-title">关联信息</div>
+                    <span id="detailIncomingRelationCount"></span>
+                  </div>
+                  <div id="detailIncomingRelationGroups" class="detail-related-groups"></div>
                 </section>
                 <section id="knowledgeComments" class="knowledge-comments" aria-label="评论区">
                   <div class="detail-attr-title">评论</div>
@@ -14792,6 +14851,25 @@
         ...token,
       }));
       const tagTokens = [];
+      const occupiedTagRanges = [];
+      const knownTags = String(document.getElementById('fTags')?.value || '')
+        .split(/[,，;；、\n]+/)
+        .map((tag) => tag.trim())
+        .filter(Boolean)
+        .sort((left, right) => right.length - left.length);
+      knownTags.forEach((label) => {
+        const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const knownRegex = new RegExp(`#${escaped}(?=$|[\\s，,。.!！？；;：:）)\\]}>》」』】]+#|[，,。.!！？；;：:）)\\]}>》」』】])`, 'gi');
+        let knownMatch;
+        while ((knownMatch = knownRegex.exec(src)) !== null) {
+          const start = knownMatch.index;
+          const end = start + knownMatch[0].length;
+          const overlaps = occupiedTagRanges.some(([rangeStart, rangeEnd]) => !(end <= rangeStart || start >= rangeEnd));
+          if (overlaps) continue;
+          occupiedTagRanges.push([start, end]);
+          tagTokens.push({ type: 'tag', full: knownMatch[0], label, start, end });
+        }
+      });
       const tagRegex = /#([^\s#@，,。.!！？；;：:）)\]}>》」』】]+)/g;
       let tm;
       while ((tm = tagRegex.exec(src)) !== null) {
@@ -14800,6 +14878,8 @@
         if (!full || !label) continue;
         const start = tm.index;
         const end = start + full.length;
+        const overlapTag = occupiedTagRanges.some(([rangeStart, rangeEnd]) => !(end <= rangeStart || start >= rangeEnd));
+        if (overlapTag) continue;
         const overlapMention = mentionTokens.some((token) => !(end <= token.start || start >= token.end));
         if (overlapMention) continue;
         tagTokens.push({ type: 'tag', full, label, start, end });
@@ -15622,6 +15702,42 @@
 
     function extractComposerList(rawText, prefix) {
       const text = (rawText || '').toString();
+      if (prefix === '#') {
+        const matches = [];
+        const occupied = [];
+        const knownTags = String(fTags?.value || '')
+          .split(/[,，;；、\n]+/)
+          .map((tag) => tag.trim())
+          .filter(Boolean)
+          .sort((left, right) => right.length - left.length);
+        entityDisplayName?.querySelectorAll?.('.composer-tag-chip[data-tag-label]')?.forEach((chip) => {
+          const label = String(chip.dataset.tagLabel || '').trim();
+          if (label && !knownTags.includes(label)) knownTags.push(label);
+        });
+        knownTags.forEach((label) => {
+          const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const regex = new RegExp(`#${escaped}(?=$|[\\s，,。.!！？；;：:）)\\]}>》」』】]+#|[，,。.!！？；;：:）)\\]}>》」』】])`, 'gi');
+          let match;
+          while ((match = regex.exec(text)) !== null) {
+            const start = match.index;
+            const end = start + match[0].length;
+            if (occupied.some(([rangeStart, rangeEnd]) => !(end <= rangeStart || start >= rangeEnd))) continue;
+            occupied.push([start, end]);
+            matches.push({ label, start });
+          }
+        });
+        const fallback = /(^|\s)#([^\s#@，,。.!！？；;：:）)\]}>》」』】]+)/g;
+        let match;
+        while ((match = fallback.exec(text)) !== null) {
+          const start = match.index + match[1].length;
+          const end = start + 1 + String(match[2] || '').length;
+          if (occupied.some(([rangeStart, rangeEnd]) => !(end <= rangeStart || start >= rangeEnd))) continue;
+          const label = String(match[2] || '').trim();
+          if (label) matches.push({ label, start });
+        }
+        matches.sort((left, right) => left.start - right.start);
+        return Array.from(new Set(matches.map((item) => item.label)));
+      }
       const regex = new RegExp(`(^|\\s)\\${prefix}([^\\s#@]+)`, 'g');
       const result = [];
       let match;
@@ -15646,7 +15762,15 @@
         aliases.push(...items);
         return '';
       }).replace(/\s+/g, ' ').trim();
-      const description = paragraphs.join('\n\n')
+      let description = paragraphs.join('\n\n');
+      const knownTags = typeof fTags !== 'undefined'
+        ? String(fTags?.value || '').split(/[,，;；、\n]+/).map((tag) => tag.trim()).filter(Boolean).sort((left, right) => right.length - left.length)
+        : [];
+      knownTags.forEach((tag) => {
+        const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        description = description.replace(new RegExp(`(^|\\s)#${escaped}(?=$|[\\s，,。.!！？；;：:）)\\]}>》」』】]+#|[，,。.!！？；;：:）)\\]}>》」』】])`, 'gi'), '$1');
+      });
+      description = description
         .replace(/(^|\s)#[^\s#@]+/g, '$1')
         .replace(/[\t ]+$/gm, '')
         .replace(/\n{3,}/g, '\n\n')
@@ -16959,7 +17083,7 @@
   <script src="/assets/scripts/entity-import.js?v=20260921-6"></script>
   <!-- relation-panel.js 已移除，使用 edgehandles 拖拽创建关系 -->
   <script src="/assets/scripts/schema-panel.js?v=20260923-2"></script>
-  <script src="/assets/scripts/detail-panel.js?v=20260922-9"></script>
+  <script src="/assets/scripts/detail-panel.js?v=20260924-4"></script>
   <script src="/assets/scripts/knowledge-interactions.js?v=20260904-1"></script>
   <script src="/assets/scripts/knowledge-access.js?v=20260922-4"></script>
   <script src="/assets/scripts/applications.js?v=20260921-1"></script>
@@ -17025,6 +17149,8 @@
         if (!state || typeof state !== 'object') return;
         split.classList.toggle('hide-left', !!state.hideLeft);
         split.classList.toggle('hide-right', !!state.hideRight);
+        document.documentElement.removeAttribute('data-kb-editor-left');
+        document.documentElement.removeAttribute('data-kb-editor-right');
       };
       window.applyUserPanelState = applyPanelState;
 
@@ -17060,29 +17186,30 @@
       const loadPanelState = async () => {
         let loaded = false;
         try {
+          const stored = window.localStorage.getItem('kb-panel-state');
+          if (stored) {
+            const state = JSON.parse(stored);
+            applyPanelState(state);
+            loaded = true;
+          }
+        } catch {
+          /* ignore */
+        }
+        try {
           const resp = await fetch('/api/auth/whoami', { credentials: 'include' });
           if (resp.ok) {
             const data = await resp.json();
             const state = data?.user?.panelState;
             if (state && typeof state === 'object') {
               applyPanelState(state);
+              savePanelStateToLocal(state);
               loaded = true;
             }
           }
         } catch {
           /* ignore */
         }
-        if (!loaded) {
-          try {
-            const stored = window.localStorage.getItem('kb-panel-state');
-            if (stored) {
-              const state = JSON.parse(stored);
-              applyPanelState(state);
-            }
-          } catch {
-            /* ignore */
-          }
-        }
+        return loaded;
       };
 
       btnLeft.addEventListener('click', () => {
@@ -17098,7 +17225,12 @@
       });
 
       window.addEventListener('pagehide', persistPanelState);
-      loadPanelState().finally(refreshToggleState);
+      loadPanelState().finally(() => {
+        refreshToggleState();
+        requestAnimationFrame(() => {
+          document.documentElement.classList.remove('kb-panel-state-restoring');
+        });
+      });
 
       // LIVE 图：悬停自动播放，移出暂停并回到首帧
       const getLiveVideoFromEvent = (event) => {
