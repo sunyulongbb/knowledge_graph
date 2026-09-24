@@ -66,6 +66,23 @@
     return normalized;
   }
 
+  function cacheAppThemeColor(color) {
+    const normalized = normalizeThemeColor(color);
+    const light = createContrastingAccent(normalized, false);
+    const dark = createContrastingAccent(normalized, true);
+    const scope = getCurrentDbSlug() || 'default';
+    try {
+      localStorage.setItem(`kb-app-theme:${scope}`, JSON.stringify({
+        base: normalized,
+        light,
+        dark,
+        lightContrast: getAccentTextColor(light),
+        darkContrast: getAccentTextColor(dark),
+      }));
+    } catch {}
+    return normalized;
+  }
+
   function restoreSavedThemeColor(modal) {
     applyAppThemeColor(modal?.dataset.initialThemeColor || DEFAULT_THEME_COLOR);
   }
@@ -259,7 +276,8 @@
       if (window.updateProjectEntryInUI) {
         window.updateProjectEntryInUI(currentDb, project.title || name, project.description || desc, project.image || image, project.link || link);
       }
-      const savedThemeColor = applyAppThemeColor(project.theme_color || themeColor);
+      const savedThemeColor = cacheAppThemeColor(project.theme_color || themeColor);
+      applyAppThemeColor(savedThemeColor);
       const modal = document.getElementById('appSettingsModal');
       if (modal) modal.dataset.initialThemeColor = savedThemeColor;
       return true;
@@ -316,7 +334,8 @@
 
   function initCurrentProjectTheme() {
     fetchCurrentProjectInfo().then((project) => {
-      applyAppThemeColor(project?.theme_color || DEFAULT_THEME_COLOR);
+      const color = cacheAppThemeColor(project?.theme_color || DEFAULT_THEME_COLOR);
+      applyAppThemeColor(color);
     });
   }
 

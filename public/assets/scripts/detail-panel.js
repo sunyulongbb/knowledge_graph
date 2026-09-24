@@ -1162,6 +1162,12 @@
           wikiTopTitleEl.appendChild(linkEl);
         }
       }
+      if (typeof window.updateDetailBreadcrumbCurrent === "function") {
+        window.updateDetailBreadcrumbCurrent(
+          (doc && (doc._id || doc.id || doc._key)) || routeId || fullId,
+          title,
+        );
+      }
 
       // Render classes as tags
       const wikiClasses = document.getElementById("wikiClasses");
