@@ -353,6 +353,22 @@ function ensureSharedTables() {
   `);
 
   appDb.run(`
+    CREATE TABLE IF NOT EXISTS knowledge_reports (
+      id TEXT PRIMARY KEY,
+      project_id INTEGER,
+      owner_user_id INTEGER,
+      title TEXT NOT NULL,
+      keywords_json TEXT NOT NULL DEFAULT '[]',
+      summary TEXT NOT NULL DEFAULT '',
+      sections_json TEXT NOT NULL DEFAULT '[]',
+      sources_json TEXT NOT NULL DEFAULT '[]',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  runSafe("CREATE INDEX IF NOT EXISTS idx_knowledge_reports_project_updated ON knowledge_reports(project_id, updated_at DESC)");
+
+  appDb.run(`
     CREATE TABLE IF NOT EXISTS nodes (
       id TEXT PRIMARY KEY,
       name TEXT,

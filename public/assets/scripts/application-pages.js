@@ -468,10 +468,6 @@
       clearProfileCardSelection(modal, true);
     }
   });
-  byId('appHomeContent').addEventListener('click', (event) => {
-    const modal = event.target.closest('[data-home-inspiration-modal]');
-    if (modal && event.target === modal) modal.close();
-  });
   byId('appSearchResults').addEventListener('click', (event) => { if (event.target.closest('[data-search-retry]')) search(); });
   const refresh = () => { homeVersion++; searchVersion++; if (window.kbViewMode === 'app_home') window.loadApplicationHome(); if (window.kbViewMode === 'app_search') window.loadApplicationSearch(); };
   window.addEventListener('kb-auth-change', refresh);

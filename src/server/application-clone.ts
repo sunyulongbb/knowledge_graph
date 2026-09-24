@@ -89,6 +89,7 @@ export function cloneApplicationData(db: Database, sourceProject: any, targetPro
   cloneRelations("ontology_properties", "SELECT op.* FROM ontology_properties op JOIN ontologies o ON o.id=op.ontology_id WHERE o.project_id=?", { ontology_id: "ontology_id", property_id: "property_id" });
 
   if (tableExists(db, "entry_tasks")) cloneMappedTable(db, "entry_tasks", sourceId, targetId, "entry-task", ids);
+  if (tableExists(db, "knowledge_reports")) cloneMappedTable(db, "knowledge_reports", sourceId, targetId, "report", ids);
 
   const uploadsRoot = options.uploadsRoot || resolve(import.meta.dir, "..", "..", "uploads");
   const sourceDir = resolve(uploadsRoot, String(sourceId));

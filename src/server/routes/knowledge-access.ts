@@ -93,6 +93,7 @@ export async function guardKnowledgeRequest(req: Request, url: URL, method: stri
     if (keys.includes('id') && keys.includes('analyses') && keys.every((key) => key === 'id' || key === 'analyses')) return null;
   }
   if (!user) return response('请先登录', 401);
+  if (path.startsWith('/api/kb/reports')) return null;
   if (path.startsWith('/api/kb/knowledge-')) return null;
   if (path.startsWith('/api/kb/upload-')) return null;
   if (['/api/kb/update_project', '/api/kb/delete_project'].includes(path)) {

@@ -3,6 +3,7 @@ import { ensureInitialAdminAccount } from "./initial-admin.ts";
 import { createApplicationHandler } from './application-access.ts';
 import { createUserProfileHandler } from './user-profile.ts';
 import { handleCoreKbRoutes } from "./routes/core-kb.ts";
+import { handleReportRoutes } from "./routes/reports.ts";
 import { handleAuthRoutes } from "./routes/auth.ts";
 import { handleProjectRoutes } from "./routes/projects.ts";
 import { handleSchemaRoutes } from "./routes/schema.ts";
@@ -95,6 +96,9 @@ const server = Bun.serve({
 
       const sparqlRes = await handleSparqlRoutes(req, url, method);
       if (sparqlRes) return sparqlRes;
+
+      const reportRes = await handleReportRoutes(req, url, method);
+      if (reportRes) return reportRes;
 
       const staticResponse = await serveStaticRoute(req, url.pathname);
       if (staticResponse) return staticResponse;

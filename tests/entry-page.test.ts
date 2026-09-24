@@ -106,6 +106,24 @@ test('application theme color keeps contrast in light and dark modes', () => {
   expect(css).toContain('color: var(--accent-contrast, #fff);');
 });
 
+test('knowledge reports replace the legacy dashboard with title and keyword generation', () => {
+  const page = readFileSync('public/index.html', 'utf8');
+  const css = readFileSync('public/assets/styles/app.css', 'utf8');
+  const routes = readFileSync('src/server/routes/reports.ts', 'utf8');
+  const database = readFileSync('src/server/db.ts', 'utf8');
+  expect(page).toContain('<span class="nav-label">报告</span>');
+  expect(page).toContain('id="knowledgeReportForm"');
+  expect(page).toContain('id="reportKeywordChips"');
+  expect(page).toContain("requestJson(reportApiUrl(), { method: 'POST'");
+  expect(page).toContain("/${encodeURIComponent(currentReportDetailId)}/regenerate");
+  expect(page).toContain("method: 'DELETE'");
+  expect(page).toContain('class="knowledge-report-document"');
+  expect(page).not.toContain('id="reportTemplatePanel"');
+  expect(css).toContain('.knowledge-report-document-header');
+  expect(routes).toContain("url.pathname.startsWith('/api/kb/reports')");
+  expect(database).toContain('CREATE TABLE IF NOT EXISTS knowledge_reports');
+});
+
 test('application home provides inspiration draw, category tree, and knowledge cards', () => {
   const page = readFileSync('public/index.html', 'utf8');
   const script = readFileSync('public/assets/scripts/application-pages.js', 'utf8');
@@ -123,6 +141,7 @@ test('application home provides inspiration draw, category tree, and knowledge c
   expect(script).toContain('再抽一张');
   expect(script).toContain('data-home-inspiration-modal');
   expect(script).toContain('modal?.showModal()');
+  expect(script).not.toContain('event.target === modal) modal.close()');
   expect(script).toContain('app-inspiration-media-stage');
   expect(script).toContain('shell.innerHTML = inspirationDrawContent');
   expect(script).toContain("fetch(url, { method: 'POST'");
@@ -143,6 +162,8 @@ test('application home provides inspiration draw, category tree, and knowledge c
   expect(css).toContain('.app-inspiration-card');
   expect(css).toContain('@keyframes app-profile-grow');
   expect(css).toContain('@keyframes app-profile-ring');
+  expect(css).toContain('grid-template-rows: auto auto auto auto auto minmax(0, 174px) minmax(76px, 1fr)');
+  expect(css).toContain('.app-profile-node.is-selected .app-profile-related { min-height: 0; height: 100%; max-height: none;');
   expect(css).toContain(':root[data-theme="dark"] .app-inspiration-modal');
   expect(css).toContain('background: var(--modal-overlay-bg)');
   expect(css).toContain('color: var(--fg); font-size: 17px');
@@ -195,7 +216,7 @@ test('entity editor uses the post-composer hierarchy without changing existing c
   expect(page).toContain('id="btnCancelEdit"');
   expect(page).toContain('id="btnEntityImport"');
   expect(page).toContain('id="btnSubmit"');
-  expect(page).toContain('/assets/styles/app.css?v=20260923-18');
+  expect(page).toContain('/assets/styles/app.css?v=20260924-4');
   expect(css).toContain('.app-profile-actions { position: fixed; top: 24px; right: 24px;');
   expect(css).toContain('.app-inspiration-profile-layer.has-selection { z-index: 7; }');
   expect(css).toContain('.app-profile-node.is-selected { position: absolute !important;');

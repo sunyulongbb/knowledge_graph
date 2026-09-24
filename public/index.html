@@ -38,17 +38,7 @@
       customElements.whenDefined("media-video-layout"),
     ]).then(() => true);
   </script>
-  <script src="https://unpkg.com/@tiptap/core@2.0.0-beta.141/dist/tiptap-core.umd.js"></script>
-  <script>
-    window.TiptapCore = window.TiptapCore || window["@tiptap/core"];
-  </script>
-  <script src="https://unpkg.com/@tiptap/starter-kit@2.0.0-beta.141/dist/tiptap-starter-kit.umd.js"></script>
-  <script>
-    window["@tiptap/core"] = window["@tiptap/core"] || window.TiptapCore;
-    window["@tiptap/starter-kit"] =
-      window["@tiptap/starter-kit"] || window.TiptapStarterKit;
-  </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20260923-18" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20260924-4" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -2003,8 +1993,8 @@
             href="#"><span class="nav-label">关联</span></a>
           <a id="btnViewChat" class="nav-item" role="tab" aria-selected="false" title="智能聊天" aria-label="智能聊天"
             href="#"><span class="nav-label">智能体</span></a>
-          <a id="btnViewReportHome" class="nav-item" role="tab" aria-selected="false" title="报表中心" aria-label="报表中心"
-            href="#"><span class="nav-label">报表</span></a>
+          <a id="btnViewReportHome" class="nav-item" role="tab" aria-selected="false" title="知识报告" aria-label="知识报告"
+            href="#"><span class="nav-label">报告</span></a>
           <div class="nav-underline" aria-hidden="true"></div>
         </nav>
       </div>
@@ -2720,154 +2710,74 @@
             </select>
           </div>
         </div>
-        <div id="reportHomePanel" class="panel" style="display:none; padding: 12px;">
-          <div class="panel-header report-home-header">
-            <div class="panel-title">
-              <h1>生成报告</h1>
-              <span class="panel-subtitle">选择模板开始生成报表，或进入模板编辑。</span>
-            </div>
-            <div class="panel-actions report-home-actions">
-              <button id="btnReportQuickGenerate" class="btn accent" type="button">生成报告</button>
-              <button id="btnReportQuickTemplate" class="btn" type="button">编辑模板</button>
-            </div>
+        <div id="reportHomePanel" class="panel knowledge-report-page" style="display:none;">
+          <div class="knowledge-report-toolbar">
+            <div><h1>知识报告</h1><p>从当前知识库检索、关联并整理主题知识。</p></div>
+            <button id="btnReportQuickGenerate" class="btn btn-primary" type="button"><i class="fa-solid fa-plus"></i> 新建报告</button>
           </div>
-          <div class="report-template-scroll">
-            <button class="report-template-card" type="button" data-template="monthly_summary">
-              <div class="template-preview"></div>
-              <div class="template-details">
-                <strong>月度总结模板</strong>
-                <div class="template-description">适合月度经营成果与数据分析。</div>
-              </div>
-            </button>
-            <button class="report-template-card" type="button" data-template="weekly_highlight">
-              <div class="template-preview"></div>
-              <div class="template-details">
-                <strong>周报亮点模板</strong>
-                <div class="template-description">适合团队周报与关键事件总结。</div>
-              </div>
-            </button>
-            <button class="report-template-card" type="button" data-template="daily_digest">
-              <div class="template-preview"></div>
-              <div class="template-details">
-                <strong>日报摘要模板</strong>
-                <div class="template-description">适合每日运营数据与任务进展。</div>
-              </div>
-            </button>
-            <button class="report-template-card" type="button" data-template="sales_analysis">
-              <div class="template-preview"></div>
-              <div class="template-details">
-                <strong>销售分析模板</strong>
-                <div class="template-description">适合销售趋势与业绩汇总。</div>
-              </div>
-            </button>
-            <button class="report-template-card" type="button" data-template="ops_insight">
-              <div class="template-preview"></div>
-              <div class="template-details">
-                <strong>运营洞察模板</strong>
-                <div class="template-description">适合运营指标与洞察汇总。</div>
-              </div>
-            </button>
+          <div id="reportListState" class="muted" role="status"></div>
+          <div id="recentReportsList" class="knowledge-report-list"></div>
+        </div>
+        <div id="reportGeneratePanel" class="panel knowledge-report-page" style="display:none;">
+          <div class="knowledge-report-toolbar knowledge-report-create-toolbar">
+            <div class="knowledge-report-toolbar-title">
+              <span class="knowledge-report-toolbar-icon" aria-hidden="true"><i class="fa-regular fa-file-lines"></i></span>
+              <div><h1>新建报告</h1><p>从当前应用的知识中检索、关联并整理内容</p></div>
+            </div>
+            <button id="btnReportGenerateBack" class="btn knowledge-report-back" type="button"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> 返回列表</button>
           </div>
-          <div class="report-recent-panel">
-            <h3>最近生成</h3>
-            <ul class="report-recent-list" id="recentReportsList">
-                <li class="report-recent-item" data-report-id="report_monthly_sales"><span>月度销售分析</span><span class="muted">3天前</span></li>
-              <li class="report-recent-item" data-report-id="report_weekly_summary"><span>周报摘要</span><span class="muted">6天前</span></li>
-              <li class="report-recent-item" data-report-id="report_daily_metrics"><span>日度指标</span><span class="muted">昨天</span></li>
-            </ul>
+          <div class="knowledge-report-create-stage">
+            <form id="knowledgeReportForm" class="knowledge-report-form">
+              <div class="knowledge-report-form-heading">
+                <span>报告信息</span>
+                <small>只需填写标题和关键词，其余内容将自动整理</small>
+              </div>
+              <div class="knowledge-report-field">
+                <label for="reportGenerateTitle"><span>报告标题</span><em>必填</em></label>
+                <input id="reportGenerateTitle" type="text" class="kb-input" maxlength="160" placeholder="例如：美国政治人物对华政策分析" required />
+                <small>使用清晰、具体的主题名称，可获得更准确的内容结构。</small>
+              </div>
+              <div class="knowledge-report-field">
+                <label for="reportKeywordInput"><span>关键词</span><em>至少 1 个</em></label>
+                <div class="knowledge-report-keyword-box">
+                  <div id="reportKeywordChips" class="knowledge-report-keywords"></div>
+                  <div class="knowledge-report-keyword-entry">
+                    <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                    <input id="reportKeywordInput" type="text" maxlength="60" placeholder="输入关键词，按回车添加" />
+                    <button id="btnReportAddKeyword" class="btn" type="button"><i class="fa-solid fa-plus" aria-hidden="true"></i> 添加</button>
+                  </div>
+                </div>
+                <small>建议添加 2–5 个关键词，用于划分章节并扩展相关知识。</small>
+              </div>
+              <input id="reportGenerateKeywords" type="hidden" />
+              <div class="knowledge-report-form-actions">
+                <span id="reportGenerateStatus" class="muted" role="status"></span>
+                <button id="btnReportGenerateRun" class="btn btn-primary" type="submit"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> 生成报告</button>
+              </div>
+            </form>
+            <aside class="knowledge-report-create-note" aria-label="生成说明">
+              <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+              <div><strong>报告将如何生成</strong><p>系统优先匹配知识名称、标签和描述，再补充一层相关内容，自动去重并按关键词形成章节。</p></div>
+            </aside>
           </div>
         </div>
-        <div id="reportGeneratePanel" class="panel" style="display:none; padding: 12px;">
-          <div class="panel-header">
-            <div class="panel-title">
-              <span>报表生成</span>
-              <span class="panel-subtitle">按时间周期生成定期报表</span>
+        <div id="reportDetailPanel" class="panel knowledge-report-page" style="display:none;">
+          <div class="knowledge-report-detail-actions">
+            <button id="btnReportDetailBack" class="btn" type="button"><i class="fa-solid fa-arrow-left"></i> 返回</button>
+            <div>
+              <button id="btnReportDetailEdit" class="btn" type="button">编辑</button>
+              <button id="btnReportDetailRegenerate" class="btn" type="button">重新生成</button>
+              <button id="btnReportDetailDelete" class="btn danger" type="button">删除</button>
             </div>
           </div>
-          <div class="report-panel-row">
-            <label><input type="radio" name="reportGenerateType" value="monthly" checked> 月度</label>
-            <label><input type="radio" name="reportGenerateType" value="weekly"> 周度</label>
-            <label><input type="radio" name="reportGenerateType" value="daily"> 日度</label>
-            <label><input type="radio" name="reportGenerateType" value="custom"> 自定义</label>
-          </div>
-          <div id="reportGeneratePeriods" style="display:grid; gap:10px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-bottom:12px;">
-            <div class="field" id="reportGenerateMonthly"><label>选择月份</label><input id="reportGenerateMonth" type="month" class="kb-input" style="width:100%;" /></div>
-            <div class="field" id="reportGenerateWeekly" style="display:none;"><label>选择周</label><input id="reportGenerateWeek" type="week" class="kb-input" style="width:100%;" /></div>
-            <div class="field" id="reportGenerateDaily" style="display:none;"><label>选择日期</label><input id="reportGenerateDate" type="date" class="kb-input" style="width:100%;" /></div>
-            <div class="field" id="reportGenerateCustom" style="display:none;">
-              <label>开始 / 结束</label>
-              <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                <input id="reportGenerateStart" type="date" class="kb-input" style="flex:1; min-width:120px;" />
-                <input id="reportGenerateEnd" type="date" class="kb-input" style="flex:1; min-width:120px;" />
-              </div>
-            </div>
-          </div>
-          <div class="field" style="margin-bottom:12px;">
-            <label>报表标题</label>
-            <input id="reportGenerateTitle" type="text" class="kb-input" placeholder="请输入报表标题" style="width:100%;" />
-          </div>
-          <div class="field" style="margin-bottom:12px;">
-            <label>报表说明（可选）</label>
-            <textarea id="reportGenerateNotes" class="kb-input" rows="3" placeholder="说明报表内容或筛选条件"></textarea>
-          </div>
-          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
-            <button id="btnReportGenerateRun" class="btn accent" type="button">生成报告</button>
-            <span id="reportGenerateStatus" class="muted">可选择周期并生成预览结果。</span>
-          </div>
-          <div id="reportGenerateResult" class="panel" style="display:none; padding:14px; border:1px solid var(--border); background:var(--surface-0); border-radius:12px;">
-            <div style="font-weight:700; margin-bottom:8px;">生成结果</div>
-            <div id="reportGenerateResultContent" style="white-space:pre-wrap; word-break:break-word; color:var(--fg);"></div>
-          </div>
-        </div>
-        <div id="reportDetailPanel" class="panel" style="display:none; padding: 12px;">
-          <div class="panel-header">
-            <div class="panel-title">
-              <span>报告详情</span>
-              <span class="panel-subtitle" id="reportDetailSubtitle">查看生成报告的详细信息</span>
-            </div>
-            <div class="panel-actions">
-              <button id="btnReportDetailExport" class="btn sm" type="button">导出报表</button>
-            </div>
-          </div>
-          <div id="reportDetailContent" class="report-detail-content" style="margin-top:16px; display:grid; gap:14px;">
-            <div class="report-detail-meta"></div>
-            <div class="report-detail-body"></div>
-          </div>
-        </div>
-        <div id="reportTemplatePanel" class="panel" style="display:none; padding: 12px;">
-          <div class="panel-header">
-            <div class="panel-title">
-              <span>模板编辑</span>
-              <span class="panel-subtitle">使用富文本模板并绑定动态变量</span>
-            </div>
-          </div>
-          <div class="report-template-meta">
-            <div style="display:flex; align-items:center; gap:8px;">
-              <label for="reportTemplateSelect">模板:</label>
-              <select id="reportTemplateSelect" class="kb-select">
-                <option value="monthly_summary">月度总结模板</option>
-                <option value="weekly_highlight">周报亮点模板</option>
-                <option value="daily_digest">日报摘要模板</option>
-              </select>
-            </div>
-            <button id="btnReportTemplateSave" class="btn sm accent" type="button">保存模板</button>
-            <button id="btnReportTemplateClear" class="btn sm" type="button">清空</button>
-            <button id="btnReportTemplatePreview" class="btn sm" type="button">预览</button>
-          </div>
-          <div class="report-variables" id="reportTemplateVariableList">
-            <div class="report-variable" draggable="true" data-variable="{{date}}">{{date}}</div>
-            <div class="report-variable" draggable="true" data-variable="{{start_date}}">{{start_date}}</div>
-            <div class="report-variable" draggable="true" data-variable="{{end_date}}">{{end_date}}</div>
-            <div class="report-variable" draggable="true" data-variable="{{report_title}}">{{report_title}}</div>
-            <div class="report-variable" draggable="true" data-variable="{{sql_condition}}">{{sql_condition}}</div>
-          </div>
-          <div class="report-template-editor-shell">
-            <div id="reportTemplateEditor" style="min-height:260px;"></div>
-          </div>
-          <div id="reportTemplatePreview" class="panel" style="display:none; padding:14px; margin-top:12px; border:1px solid var(--border); background:var(--surface-0); border-radius:12px;">
-            <div style="font-weight:700; margin-bottom:8px;">预览</div>
-            <div id="reportTemplatePreviewContent" style="white-space:pre-wrap; word-break:break-word;"></div>
-          </div>
+          <form id="reportEditForm" class="knowledge-report-edit" hidden>
+            <label>报告标题<input id="reportEditTitle" class="kb-input" type="text" maxlength="160" /></label>
+            <label>关键词<input id="reportEditKeywords" class="kb-input" type="text" placeholder="使用逗号分隔" /></label>
+            <label>概述<textarea id="reportEditSummary" class="kb-input" rows="4"></textarea></label>
+            <div id="reportEditSections" class="knowledge-report-edit-sections"></div>
+            <div><button class="btn btn-primary" type="submit">保存修改</button><button id="btnReportEditCancel" class="btn" type="button">取消</button></div>
+          </form>
+          <article id="reportDetailContent" class="knowledge-report-document" aria-live="polite"></article>
         </div>
         <div id="shortsPanel" class="panel" style="display:none; padding: 0">
           <div class="shorts-shell">
@@ -5589,7 +5499,6 @@
     const btnViewClean = document.getElementById("btnViewClean");
     const btnViewReportHome = document.getElementById("btnViewReportHome");
     const btnViewReportGenerate = document.getElementById("btnViewReportGenerate");
-    const btnViewReportTemplate = document.getElementById("btnViewReportTemplate");
     const btnViewDetail = document.getElementById("btnViewDetail");
     const btnViewChat = document.getElementById("btnViewChat");
     const btnViewUsers = document.getElementById("btnViewUsers");
@@ -5603,22 +5512,10 @@
     const tbAttrControls = document.getElementById("tbAttrControls");
     const reportHomePanel = document.getElementById("reportHomePanel");
     const reportGeneratePanel = document.getElementById("reportGeneratePanel");
-    const reportTemplatePanel = document.getElementById("reportTemplatePanel");
     const reportDetailPanel = document.getElementById("reportDetailPanel");
     const reportDetailContent = document.getElementById("reportDetailContent");
-    const reportDetailSubtitle = document.getElementById("reportDetailSubtitle");
-    const reportTemplateEditorHost = document.getElementById("reportTemplateEditor");
-    const reportTemplatePreview = document.getElementById("reportTemplatePreview");
-    const reportTemplatePreviewContent = document.getElementById("reportTemplatePreviewContent");
     const btnReportQuickGenerate = document.getElementById("btnReportQuickGenerate");
-    const btnReportQuickTemplate = document.getElementById("btnReportQuickTemplate");
     const btnReportGenerateRun = document.getElementById("btnReportGenerateRun");
-    const btnReportTemplateSave = document.getElementById("btnReportTemplateSave");
-    const btnReportTemplateClear = document.getElementById("btnReportTemplateClear");
-    const btnReportTemplatePreview = document.getElementById("btnReportTemplatePreview");
-    const reportTemplateSelect = document.getElementById("reportTemplateSelect");
-    const reportTemplateVariableList = document.getElementById("reportTemplateVariableList");
-    const btnReportDetailExport = document.getElementById("btnReportDetailExport");
     const tbCleanControls = document.getElementById("tbCleanControls");
     const tbDetailControls = document.getElementById("tbDetailControls");
     const headerTableContextTargets = [
@@ -5742,14 +5639,6 @@
 
     window.kbCleanTasks = [];
 
-    let reportTemplateEditorInstance = null;
-    const REPORT_TEMPLATE_STORE_KEY = 'kb_report_templates';
-    const DEFAULT_REPORT_TEMPLATES = {
-      monthly_summary: '<p><strong>{{report_title}}</strong></p><p>报告周期：{{date}}</p><p>数据说明：{{sql_condition}}</p><p>请根据以下内容补充分析数据结果。</p>',
-      weekly_highlight: '<p><strong>{{report_title}}</strong></p><p>时间范围：{{start_date}} 至 {{end_date}}</p><p>关键指标：请补充关键变化、异常与趋势。</p>',
-      daily_digest: '<p><strong>{{report_title}}</strong></p><p>日期：{{date}}</p><p>当日要点概述：</p><ul><li>指标变化</li><li>用户趋势</li><li>运营建议</li></ul>',
-    };
-
     const KB_VIEW_MODES = new Set([
       "app_home",
       "app_search",
@@ -5763,7 +5652,6 @@
       "chat",
       "report_home",
       "report_generate",
-      "report_template",
       "report_detail",
       "shorts",
       "gallery",
@@ -5831,259 +5719,140 @@
       return view;
     }
 
-    function loadSavedReportTemplates() {
-      try {
-        const raw = window.localStorage.getItem(REPORT_TEMPLATE_STORE_KEY);
-        return raw ? JSON.parse(raw) : {};
-      } catch {
-        return {};
-      }
-    }
-
-    function saveReportTemplateStore(store) {
-      try {
-        window.localStorage.setItem(REPORT_TEMPLATE_STORE_KEY, JSON.stringify(store));
-      } catch {
-        // ignore
-      }
-    }
-
-    function getSelectedTemplateName() {
-      return reportTemplateSelect?.value || 'monthly_summary';
-    }
-
-    function setReportTemplateContent(html) {
-      if (!reportTemplateEditorInstance) return;
-      try {
-        reportTemplateEditorInstance.commands.setContent(html, false);
-        if (reportTemplatePreview) reportTemplatePreview.style.display = 'none';
-      } catch { }
-    }
-
-    function loadSelectedReportTemplate() {
-      if (!reportTemplateEditorHost) return;
-      const name = getSelectedTemplateName();
-      const store = loadSavedReportTemplates();
-      const html = store[name] || DEFAULT_REPORT_TEMPLATES[name] || '';
-      setReportTemplateContent(html);
-    }
-
-    function initReportTemplateEditor() {
-      if (!reportTemplateEditorHost) return;
-      if (reportTemplateEditorInstance) return;
-      const core = window['@tiptap/core'];
-      const starter = window['@tiptap/starter-kit'];
-      const EditorClass = core?.Editor;
-      const StarterKit = starter?.default || starter;
-      if (!EditorClass || !StarterKit) {
-        setTimeout(initReportTemplateEditor, 120);
-        return;
-      }
-      reportTemplateEditorInstance = new EditorClass({
-        element: reportTemplateEditorHost,
-        extensions: [StarterKit],
-        content: DEFAULT_REPORT_TEMPLATES[getSelectedTemplateName()] || '<p>请输入报表模板内容……</p>',
-      });
-      loadSelectedReportTemplate();
-    }
-
-    function insertReportVariable(variable) {
-      if (!reportTemplateEditorInstance) return;
-      try {
-        reportTemplateEditorInstance.commands.insertContent(variable);
-        reportTemplateEditorInstance.commands.focus();
-      } catch { }
-    }
-
-    function clearReportTemplate() {
-      setReportTemplateContent('<p></p>');
-    }
-
-    function saveCurrentReportTemplate() {
-      if (!reportTemplateEditorInstance) return;
-      const name = getSelectedTemplateName();
-      const store = loadSavedReportTemplates();
-      store[name] = reportTemplateEditorInstance.getHTML();
-      saveReportTemplateStore(store);
-      if (reportGenerateStatus) reportGenerateStatus.textContent = `已保存模板：${name}`;
-    }
-
-    function previewReportTemplate() {
-      if (!reportTemplateEditorInstance || !reportTemplatePreviewContent) return;
-      reportTemplatePreviewContent.innerHTML = reportTemplateEditorInstance.getHTML();
-      if (reportTemplatePreview) reportTemplatePreview.style.display = '';
-    }
-
     let currentReportDetailId = "";
+    let currentReportDetail = null;
+    let reportKeywords = [];
+
+    function reportApiUrl(path = '') {
+      const api = new URL(`/api/kb/reports${path}`, window.location.origin);
+      const dbName = new URL(window.location.href).searchParams.get('db');
+      if (dbName) api.searchParams.set('db', dbName);
+      return `${api.pathname}${api.search}`;
+    }
+
+    function reportDate(value) {
+      if (!value) return '';
+      try { return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)); }
+      catch { return String(value); }
+    }
+
+    function safeReportExternalUrl(value) {
+      try {
+        const parsed = new URL(String(value || ''), window.location.origin);
+        return ['http:', 'https:'].includes(parsed.protocol) ? parsed.href : '';
+      } catch { return ''; }
+    }
 
     async function fetchReportDetail(reportId) {
-      if (!reportId) {
-        throw new Error("Missing report id");
-      }
-      return await requestJson(
-        `/api/kb/report/detail?id=${encodeURIComponent(reportId)}`,
-      );
-    }
-
-    function getReportDetailData(reportId) {
-      const data = {
-        report_monthly_sales: {
-          id: 'report_monthly_sales',
-          title: '月度销售分析',
-          subtitle: '已生成：3天前',
-          description: '本报告汇总了本月销售趋势、渠道分布和业绩完成情况。',
-          content: '<p>周期：2025年11月</p><p>关键指标：销售额 1,280 万，环比 +12%。</p><p>数据亮点：电商渠道贡献增长，线下门店成交额稳步上升。</p>',
-        },
-        report_weekly_summary: {
-          id: 'report_weekly_summary',
-          title: '周报摘要',
-          subtitle: '已生成：6天前',
-          description: '本周重点覆盖运营、市场和产品迭代进展。',
-          content: '<p>本周主要事项：完成 A 项目上线，B 活动投放启动。</p><p>问题及建议：优化转化漏斗和用户留存。</p>',
-        },
-        report_daily_metrics: {
-          id: 'report_daily_metrics',
-          title: '日度指标',
-          subtitle: '已生成：昨天',
-          description: '本日报表展示主要运营指标与异常趋势。',
-          content: '<p>今日活跃用户：8,120，新增用户：512。</p><p>留存率：次日 36%，需继续关注付费转化。</p>',
-        },
-      };
-      return data[reportId] || {
-        id: reportId,
-        title: '报告详情',
-        subtitle: '暂无更多信息',
-        description: '该报告暂无详细数据展示。',
-        content: '<p>请稍后查看或生成新的报告。</p>',
-      };
+      if (!reportId) throw new Error('报告 ID 不能为空');
+      return requestJson(reportApiUrl(`/${encodeURIComponent(reportId)}`));
     }
 
     function renderReportDetailFromData(detail) {
       if (!reportDetailContent) return;
-      if (reportDetailSubtitle)
-        reportDetailSubtitle.textContent =
-          detail.subtitle || '查看生成报告的详细信息';
-      const metaHtml = `<div style="display:flex; flex-direction:column; gap:8px;"><strong style="font-size:18px;">${detail.title || '报告详情'}</strong><div class="muted">${detail.description || ''}</div></div>`;
-      const bodyHtml = `<div style="padding:16px; border:1px solid var(--border); border-radius:14px; background:var(--surface-1);">${detail.content || '<p>暂无数据展示。</p>'}</div>`;
-      const metaEl = reportDetailContent.querySelector('.report-detail-meta');
-      const bodyEl = reportDetailContent.querySelector('.report-detail-body');
-      if (metaEl) metaEl.innerHTML = metaHtml;
-      if (bodyEl) bodyEl.innerHTML = bodyHtml;
-    }
-
-    function renderReportDetailFallback(reportId) {
-      renderReportDetailFromData(getReportDetailData(reportId));
+      currentReportDetail = detail;
+      const keywords = Array.isArray(detail.keywords) ? detail.keywords : [];
+      const sections = Array.isArray(detail.sections) ? detail.sections : [];
+      const sources = Array.isArray(detail.sources) ? detail.sources : [];
+      const sectionHtml = sections.map((section, sectionIndex) => {
+        const items = Array.isArray(section.items) ? section.items : [];
+        const primary = items.filter((item) => !item.related);
+        const related = items.filter((item) => item.related);
+        const renderItems = (list) => list.map((item) => `
+          <div class="knowledge-report-item">
+            <h3><button type="button" data-report-source-id="${escapeHtml(item.id || '')}">${escapeHtml(item.name || '未命名知识')}</button></h3>
+            <p>${escapeHtml(item.description || '暂无内容摘要。')}</p>
+            ${item.tags?.length ? `<div class="knowledge-report-item-tags">${item.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join('')}</div>` : ''}
+            ${item.relation ? `<small>关联依据：${escapeHtml(item.relation)}</small>` : ''}
+          </div>`).join('');
+        return `<section class="knowledge-report-section" data-section-index="${sectionIndex}">
+          <h2>${sectionIndex + 1}. ${escapeHtml(section.title || section.keyword || '相关内容')}</h2>
+          <p class="knowledge-report-section-intro">${escapeHtml(section.introduction || '')}</p>
+          <div class="knowledge-report-items">${renderItems(primary)}</div>
+          ${related.length ? `<h3 class="knowledge-report-related-title">相关内容</h3><div class="knowledge-report-items related">${renderItems(related)}</div>` : ''}
+        </section>`;
+      }).join('');
+      reportDetailContent.innerHTML = `
+        <header class="knowledge-report-document-header">
+          <div class="knowledge-report-kicker">知识报告</div>
+          <h1>${escapeHtml(detail.title || '未命名报告')}</h1>
+          <div class="knowledge-report-document-meta"><span>更新于 ${escapeHtml(reportDate(detail.updatedAt))}</span>${keywords.map((keyword) => `<span>${escapeHtml(keyword)}</span>`).join('')}</div>
+        </header>
+        <section class="knowledge-report-summary"><h2>概述</h2><p>${escapeHtml(detail.summary || '')}</p></section>
+        ${sectionHtml || '<p class="knowledge-report-empty">暂无可整理的知识内容。</p>'}
+        <footer class="knowledge-report-sources"><h2>资料来源</h2><ol>${sources.map((source) => { const sourceUrl = safeReportExternalUrl(source.link); return `<li><button type="button" data-report-source-id="${escapeHtml(source.id || '')}">${escapeHtml(source.name || source.id || '')}</button>${sourceUrl ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener">原始链接</a>` : ''}</li>`; }).join('')}</ol></footer>`;
     }
 
     async function renderReportDetail(reportId) {
       currentReportDetailId = String(reportId || '');
+      reportDetailContent.innerHTML = '<p class="muted">正在加载报告…</p>';
       try {
         const result = await fetchReportDetail(reportId);
-        if (result && result.report) {
-          renderReportDetailFromData(result.report);
-          return;
-        }
+        renderReportDetailFromData(result.report || {});
       } catch (err) {
-        console.warn('Load report detail failed', err);
+        reportDetailContent.innerHTML = `<p class="knowledge-report-error">${escapeHtml(err?.message || '报告加载失败')}</p>`;
       }
-      renderReportDetailFallback(reportId);
     }
 
-    function getDownloadFilename(response, fallbackId) {
-      const disposition = response.headers.get('Content-Disposition') || '';
-      const match = disposition.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
-      if (match && match[1]) {
-        return decodeURIComponent(match[1]);
+    function renderReportKeywordChips() {
+      const host = document.getElementById('reportKeywordChips');
+      const hidden = document.getElementById('reportGenerateKeywords');
+      if (hidden) hidden.value = JSON.stringify(reportKeywords);
+      if (!host) return;
+      host.innerHTML = reportKeywords.map((keyword, index) => `<button type="button" data-remove-report-keyword="${index}">${escapeHtml(keyword)} <i class="fa-solid fa-xmark"></i></button>`).join('');
+    }
+
+    function addReportKeyword(value) {
+      String(value || '').split(/[,，、;；\n]+/).map((item) => item.trim()).filter(Boolean).forEach((keyword) => {
+        if (!reportKeywords.includes(keyword) && reportKeywords.length < 12) reportKeywords.push(keyword);
+      });
+      renderReportKeywordChips();
+    }
+
+    async function renderReportHome() {
+      const host = document.getElementById('recentReportsList');
+      const state = document.getElementById('reportListState');
+      if (!host) return;
+      if (state) state.textContent = '正在加载报告…';
+      try {
+        const result = await requestJson(reportApiUrl());
+        const reports = Array.isArray(result.reports) ? result.reports : [];
+        if (state) state.textContent = reports.length ? `共 ${reports.length} 份报告` : '';
+        host.innerHTML = reports.length ? reports.map((report) => `
+          <button class="knowledge-report-list-item" type="button" data-report-id="${escapeHtml(report.id)}">
+            <span><strong>${escapeHtml(report.title || '未命名报告')}</strong><small>${escapeHtml(report.summary || '')}</small></span>
+            <span class="knowledge-report-list-meta">${(report.keywords || []).map((keyword) => `<em>${escapeHtml(keyword)}</em>`).join('')}<time>${escapeHtml(reportDate(report.updatedAt))}</time></span>
+          </button>`).join('') : '<div class="knowledge-report-empty"><i class="fa-regular fa-file-lines"></i><strong>还没有知识报告</strong><span>填写标题和关键词即可生成第一份报告。</span></div>';
+      } catch (err) {
+        if (state) state.textContent = `加载失败：${err?.message || err}`;
       }
-      return `${fallbackId || 'report'}.html`;
-    }
-
-    async function downloadReportExport(reportId) {
-      if (!reportId) {
-        throw new Error('Missing report id');
-      }
-      const response = await fetch(
-        `/api/kb/report/export?id=${encodeURIComponent(reportId)}`,
-      );
-      if (!response.ok) {
-        const text = await response.text().catch(() => '');
-        throw new Error(text || `HTTP ${response.status}`);
-      }
-      const blob = await response.blob();
-      const filename = getDownloadFilename(response, reportId);
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(link.href);
-    }
-
-    function getActiveReportGenerateType() {
-      const radio = document.querySelector('input[name="reportGenerateType"]:checked');
-      return radio ? radio.value : 'monthly';
-    }
-
-    function updateReportGenerateControls() {
-      const type = getActiveReportGenerateType();
-      const monthly = document.getElementById('reportGenerateMonthly');
-      const weekly = document.getElementById('reportGenerateWeekly');
-      const daily = document.getElementById('reportGenerateDaily');
-      const custom = document.getElementById('reportGenerateCustom');
-      if (monthly) monthly.style.display = type === 'monthly' ? '' : 'none';
-      if (weekly) weekly.style.display = type === 'weekly' ? '' : 'none';
-      if (daily) daily.style.display = type === 'daily' ? '' : 'none';
-      if (custom) custom.style.display = type === 'custom' ? '' : 'none';
-      if (reportGenerateStatus) reportGenerateStatus.textContent = '请选择时间范围并生成报表。';
-      if (reportGenerateResult) reportGenerateResult.style.display = 'none';
-    }
-
-    function renderReportHome() {
-      // placeholder for live report data after backend integration
     }
 
     function renderReportGenerate() {
-      updateReportGenerateControls();
-      const radios = document.querySelectorAll('input[name="reportGenerateType"]');
-      radios.forEach((radio) => {
-        radio.addEventListener('change', updateReportGenerateControls);
-      });
+      reportKeywords = [];
+      renderReportKeywordChips();
+      if (reportGenerateStatus) reportGenerateStatus.textContent = '';
     }
 
-    function handleReportGenerate() {
-      const type = getActiveReportGenerateType();
-      const title = document.getElementById('reportGenerateTitle')?.value || '';
-      const notes = document.getElementById('reportGenerateNotes')?.value || '';
-      let rangeLabel = '';
-      let sqlCondition = '';
-      if (type === 'monthly') {
-        const month = document.getElementById('reportGenerateMonth')?.value || '';
-        rangeLabel = month ? `月份 ${month}` : '未选择月份';
-        sqlCondition = month ? `date_format(order_date, '%Y-%m') = '${month}'` : '';
-      } else if (type === 'weekly') {
-        const week = document.getElementById('reportGenerateWeek')?.value || '';
-        rangeLabel = week ? `周 ${week}` : '未选择周';
-        sqlCondition = week ? `YEARWEEK(order_date, 1) = YEARWEEK('${week}-1', 1)` : '';
-      } else if (type === 'daily') {
-        const date = document.getElementById('reportGenerateDate')?.value || '';
-        rangeLabel = date ? `日期 ${date}` : '未选择日期';
-        sqlCondition = date ? `DATE(order_date) = '${date}'` : '';
-      } else {
-        const start = document.getElementById('reportGenerateStart')?.value || '';
-        const end = document.getElementById('reportGenerateEnd')?.value || '';
-        rangeLabel = start && end ? `${start} 至 ${end}` : '未选择区间';
-        sqlCondition = start && end ? `order_date BETWEEN '${start}' AND '${end}'` : '';
+    async function handleReportGenerate() {
+      const title = document.getElementById('reportGenerateTitle')?.value?.trim() || '';
+      if (!title || !reportKeywords.length) {
+        if (reportGenerateStatus) reportGenerateStatus.textContent = title ? '请至少添加一个关键词。' : '请填写报告标题。';
+        return;
       }
-      const resultText = `报告标题：${title || '未填写'}\n周期：${rangeLabel}\n筛选条件：${sqlCondition || '无'}\n说明：${notes || '无'}\n\n[此处显示报表预览结果，后端数据待接入]`;
-      if (reportGenerateStatus) reportGenerateStatus.textContent = '已生成报表预览';
-      if (reportGenerateResultContent) reportGenerateResultContent.textContent = resultText;
-      if (reportGenerateResult) reportGenerateResult.style.display = '';
-    }
-
-    function getTemplateHtmlForPreview(name) {
-      const store = loadSavedReportTemplates();
-      return store[name] || DEFAULT_REPORT_TEMPLATES[name] || '';
+      const button = document.getElementById('btnReportGenerateRun');
+      if (button) button.disabled = true;
+      if (reportGenerateStatus) reportGenerateStatus.textContent = '正在检索并整理知识…';
+      try {
+        const result = await requestJson(reportApiUrl(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, keywords: reportKeywords }) });
+        const report = result.report;
+        if (!report?.id) throw new Error('报告生成结果无效');
+        setViewMode('report_detail', { targetNodeId: report.id });
+      } catch (err) {
+        if (reportGenerateStatus) reportGenerateStatus.textContent = `生成失败：${err?.message || err}`;
+      } finally {
+        if (button) button.disabled = false;
+      }
     }
 
     function syncHashForView(
@@ -7008,6 +6777,13 @@
 
     function setViewMode(mode, options = {}) {
       const normalized = normalizeViewModeInput(mode) || "table";
+      const usesEntityRouteNode = [
+        "entry",
+        "table",
+        "detail",
+        "knowledge_detail",
+        "vis",
+      ].includes(normalized);
       const preservedEditorNode = captureCurrentEditorNodeState();
       const skipRouteUpdate = options.skipRouteUpdate === true;
       const replaceRoute = options.replaceRoute === true;
@@ -7079,11 +6855,13 @@
         }
       };
       if (kbViewModeInitialized && previousMode === normalized) {
-        syncActiveEntityEditor(targetNodeIdRaw, {
-          force: hasTargetNode,
-          skipGraphFocus: normalized !== "vis",
-          refreshCurrent: false,
-        });
+        if (usesEntityRouteNode) {
+          syncActiveEntityEditor(targetNodeIdRaw, {
+            force: hasTargetNode,
+            skipGraphFocus: normalized !== "vis",
+            refreshCurrent: false,
+          });
+        }
         if ((normalized === "detail" || normalized === "knowledge_detail") && hasTargetNode) {
           try {
             showNodeDetailInline(targetNodeIdRaw, {
@@ -7188,7 +6966,6 @@
       const isChat = normalized === "chat";
       const isReportHome = normalized === "report_home";
       const isReportGenerate = normalized === "report_generate";
-      const isReportTemplate = normalized === "report_template";
       const isReportDetail = normalized === "report_detail";
       const isShorts = normalized === "shorts";
       const isGallery = normalized === "gallery";
@@ -7252,10 +7029,6 @@
         btnViewReportGenerate.classList.toggle("active", isReportGenerate);
         btnViewReportGenerate.setAttribute("aria-selected", String(isReportGenerate));
       }
-      if (btnViewReportTemplate) {
-        btnViewReportTemplate.classList.toggle("active", isReportTemplate);
-        btnViewReportTemplate.setAttribute("aria-selected", String(isReportTemplate));
-      }
       if (btnViewChat) {
         btnViewChat.classList.toggle("active", isChat);
         btnViewChat.setAttribute("aria-selected", String(isChat));
@@ -7293,7 +7066,8 @@
       if (reportHomePanel) reportHomePanel.style.display = isReportHome ? "" : "none";
       if (reportGeneratePanel) reportGeneratePanel.style.display = isReportGenerate ? "" : "none";
       if (reportDetailPanel) reportDetailPanel.style.display = isReportDetail ? "" : "none";
-      if (reportTemplatePanel) reportTemplatePanel.style.display = isReportTemplate ? "" : "none";
+      if (isReportHome) renderReportHome();
+      if (isReportGenerate) renderReportGenerate();
       mountDetailPanelStandalone(isStandaloneDetail);
       if (detailPanel) detailPanel.style.display = isAnyDetail ? "" : "none";
       if (chatPanel) chatPanel.style.display = isChat ? "" : "none";
@@ -7443,26 +7217,32 @@
         applyTableSelectionTarget();
       }
 
-      syncActiveEntityEditor(targetNodeIdRaw, {
-        force: hasTargetNode,
-        skipGraphFocus: !isVis,
-        refreshCurrent: false,
-      });
+      if (usesEntityRouteNode) {
+        syncActiveEntityEditor(targetNodeIdRaw, {
+          force: hasTargetNode,
+          skipGraphFocus: !isVis,
+          refreshCurrent: false,
+        });
+      }
 
       // 新增：所有页面都带选中节点参数
       if (!skipRouteUpdate) {
         let routeNode = "";
         let includeNode = false;
-        routeNode =
-          targetNodeIdRaw ||
-          (window.kbSelectedRowId || "").trim() ||
-          (document.getElementById("fId")?.value || "").trim() ||
-          String(getRouteStateFromHash()?.node || "").trim();
+        routeNode = usesEntityRouteNode
+          ? targetNodeIdRaw ||
+            (window.kbSelectedRowId || "").trim() ||
+            (document.getElementById("fId")?.value || "").trim() ||
+            String(getRouteStateFromHash()?.node || "").trim()
+          : normalized === "report_detail"
+            ? targetNodeIdRaw
+            : "";
         includeNode = Boolean(routeNode);
         syncHashForView(normalized, {
           replace: replaceRoute,
           nodeId: routeNode,
           includeNode,
+          clearNode: !includeNode,
         });
       }
       if (!hasTargetNode && preservedEditorNode) {
@@ -7566,34 +7346,14 @@
       btnViewReportHome.addEventListener("click", (e) => { e.preventDefault(); setViewMode("report_home"); });
     if (btnViewReportGenerate)
       btnViewReportGenerate.addEventListener("click", (e) => { e.preventDefault(); setViewMode("report_generate"); });
-    if (btnViewReportTemplate)
-      btnViewReportTemplate.addEventListener("click", (e) => { e.preventDefault(); setViewMode("report_template"); });
     if (btnReportQuickGenerate)
       btnReportQuickGenerate.addEventListener("click", (e) => { e.preventDefault(); setViewMode("report_generate"); });
-    if (btnReportQuickTemplate)
-      btnReportQuickTemplate.addEventListener("click", (e) => { e.preventDefault(); setViewMode("report_template"); });
     if (btnReportGenerateRun)
       btnReportGenerateRun.addEventListener("click", (e) => { e.preventDefault(); handleReportGenerate(); });
-    if (reportTemplateSelect)
-      reportTemplateSelect.addEventListener("change", () => loadSelectedReportTemplate());
-    const reportTemplateScroll = document.querySelector('.report-template-scroll');
-    if (reportTemplateScroll)
-      reportTemplateScroll.addEventListener('click', (event) => {
-        const target = event.target instanceof Element ? event.target : event.target.parentElement;
-        const card = target?.closest('.report-template-card');
-        if (!card) return;
-        const template = card.dataset.template;
-        if (!template) return;
-        if (reportTemplateSelect) {
-          reportTemplateSelect.value = template;
-          loadSelectedReportTemplate();
-        }
-        setViewMode('report_template');
-      });
     const recentReportsList = document.getElementById('recentReportsList');
     const handleRecentReportClick = (event) => {
       const target = event.target instanceof Element ? event.target : event.target?.parentElement;
-      const item = target?.closest('.report-recent-item');
+      const item = target?.closest('[data-report-id]');
       if (!item) return;
       const reportId = item.dataset.reportId;
       if (!reportId) return;
@@ -7601,58 +7361,92 @@
     };
     if (recentReportsList) {
       recentReportsList.addEventListener('click', handleRecentReportClick);
-      const recentItems = Array.from(recentReportsList.querySelectorAll('.report-recent-item'));
-      recentItems.forEach((item) => {
-        item.addEventListener('click', handleRecentReportClick);
-      });
     }
-    if (btnReportTemplateSave)
-      btnReportTemplateSave.addEventListener("click", (e) => { e.preventDefault(); saveCurrentReportTemplate(); });
-    if (btnReportTemplateClear)
-      btnReportTemplateClear.addEventListener("click", (e) => { e.preventDefault(); clearReportTemplate(); });
-    if (btnReportTemplatePreview)
-      btnReportTemplatePreview.addEventListener("click", (e) => { e.preventDefault(); previewReportTemplate(); });
-    if (btnReportDetailExport)
-      btnReportDetailExport.addEventListener("click", async (e) => {
-        e.preventDefault();
-        if (!currentReportDetailId) {
-          setStatus(false, "请选择一个报告后再导出。");
-          return;
-        }
-        try {
-          await downloadReportExport(currentReportDetailId);
-          setStatus(true, "报表导出已开始。");
-        } catch (err) {
-          console.error(err);
-          setStatus(false, `导出失败：${err?.message || err}`);
-        }
+    const reportKeywordInput = document.getElementById('reportKeywordInput');
+    document.getElementById('btnReportAddKeyword')?.addEventListener('click', () => {
+      addReportKeyword(reportKeywordInput?.value || '');
+      if (reportKeywordInput) reportKeywordInput.value = '';
+      reportKeywordInput?.focus();
+    });
+    reportKeywordInput?.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ',') return;
+      event.preventDefault();
+      addReportKeyword(reportKeywordInput.value);
+      reportKeywordInput.value = '';
+    });
+    document.getElementById('reportKeywordChips')?.addEventListener('click', (event) => {
+      const button = event.target instanceof Element ? event.target.closest('[data-remove-report-keyword]') : null;
+      if (!button) return;
+      reportKeywords.splice(Number(button.dataset.removeReportKeyword), 1);
+      renderReportKeywordChips();
+    });
+    document.getElementById('knowledgeReportForm')?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      handleReportGenerate();
+    });
+    document.getElementById('btnReportGenerateBack')?.addEventListener('click', () => setViewMode('report_home'));
+    document.getElementById('btnReportDetailBack')?.addEventListener('click', () => setViewMode('report_home'));
+    reportDetailContent?.addEventListener('click', (event) => {
+      const source = event.target instanceof Element ? event.target.closest('[data-report-source-id]') : null;
+      const id = source?.dataset.reportSourceId;
+      if (id) setViewMode('knowledge_detail', { targetNodeId: id });
+    });
+    document.getElementById('btnReportDetailEdit')?.addEventListener('click', () => {
+      if (!currentReportDetail) return;
+      const form = document.getElementById('reportEditForm');
+      document.getElementById('reportEditTitle').value = currentReportDetail.title || '';
+      document.getElementById('reportEditKeywords').value = (currentReportDetail.keywords || []).join('，');
+      document.getElementById('reportEditSummary').value = currentReportDetail.summary || '';
+      const sectionsHost = document.getElementById('reportEditSections');
+      if (sectionsHost) sectionsHost.innerHTML = (currentReportDetail.sections || []).map((section, index) => `<label>${escapeHtml(section.title || `章节 ${index + 1}`)}<textarea class="kb-input" rows="3" data-report-section-intro="${index}">${escapeHtml(section.introduction || '')}</textarea></label>`).join('');
+      if (form) form.hidden = false;
+      if (reportDetailContent) reportDetailContent.hidden = true;
+    });
+    document.getElementById('btnReportEditCancel')?.addEventListener('click', () => {
+      document.getElementById('reportEditForm').hidden = true;
+      if (reportDetailContent) reportDetailContent.hidden = false;
+    });
+    document.getElementById('reportEditForm')?.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (!currentReportDetailId || !currentReportDetail) return;
+      const sections = structuredClone(currentReportDetail.sections || []);
+      document.querySelectorAll('[data-report-section-intro]').forEach((field) => {
+        const index = Number(field.dataset.reportSectionIntro);
+        if (sections[index]) sections[index].introduction = field.value.trim();
       });
-    if (reportTemplateVariableList)
-      reportTemplateVariableList.addEventListener('click', (event) => {
-        const target = event.target.closest('.report-variable');
-        if (!target) return;
-        const variable = target.dataset.variable;
-        if (!variable) return;
-        insertReportVariable(variable);
-      });
-    if (reportTemplateVariableList)
-      reportTemplateVariableList.addEventListener('dragstart', (event) => {
-        const target = event.target.closest('.report-variable');
-        if (!target) return;
-        const variable = target.dataset.variable;
-        if (!variable) return;
-        event.dataTransfer?.setData('text/plain', variable);
-      });
-    if (reportTemplateEditorHost) {
-      reportTemplateEditorHost.addEventListener('dragover', (event) => {
-        event.preventDefault();
-      });
-      reportTemplateEditorHost.addEventListener('drop', (event) => {
-        event.preventDefault();
-        const variable = event.dataTransfer?.getData('text/plain');
-        if (variable) insertReportVariable(variable);
-      });
-    }
+      try {
+        const result = await requestJson(reportApiUrl(`/${encodeURIComponent(currentReportDetailId)}`), {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+            title: document.getElementById('reportEditTitle').value,
+            keywords: document.getElementById('reportEditKeywords').value,
+            summary: document.getElementById('reportEditSummary').value,
+            sections,
+          }),
+        });
+        document.getElementById('reportEditForm').hidden = true;
+        reportDetailContent.hidden = false;
+        renderReportDetailFromData(result.report);
+      } catch (err) { alert(`保存失败：${err?.message || err}`); }
+    });
+    document.getElementById('btnReportDetailRegenerate')?.addEventListener('click', async () => {
+      if (!currentReportDetailId || !currentReportDetail) return;
+      try {
+        const result = await requestJson(reportApiUrl(`/${encodeURIComponent(currentReportDetailId)}/regenerate`), {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: currentReportDetail.title, keywords: currentReportDetail.keywords }),
+        });
+        renderReportDetailFromData(result.report);
+      } catch (err) { alert(`重新生成失败：${err?.message || err}`); }
+    });
+    document.getElementById('btnReportDetailDelete')?.addEventListener('click', async () => {
+      if (!currentReportDetailId || !confirm('确定删除这份报告吗？')) return;
+      try {
+        await requestJson(reportApiUrl(`/${encodeURIComponent(currentReportDetailId)}`), { method: 'DELETE' });
+        currentReportDetailId = '';
+        currentReportDetail = null;
+        setViewMode('report_home');
+      } catch (err) { alert(`删除失败：${err?.message || err}`); }
+    });
 
     function updateNavUnderline() {
       try {
@@ -7701,7 +7495,6 @@
       btnViewUsers.addEventListener("click", (e) => { e.preventDefault(); setViewMode("user_management"); });
     attachNavKeyActivation(btnViewReportHome, () => setViewMode('report_home'));
     attachNavKeyActivation(btnViewReportGenerate, () => setViewMode('report_generate'));
-    attachNavKeyActivation(btnViewReportTemplate, () => setViewMode('report_template'));
     attachNavKeyActivation(btnViewChat, () => { setViewMode('chat'); });
     attachNavKeyActivation(btnViewUsers, () => { setViewMode('user_management'); });
 
@@ -8480,13 +8273,14 @@
       } = getRouteStateFromHash();
       const hasValidHash = Boolean(modeFromHash);
       const next = hasValidHash ? modeFromHash : "table";
+      const usesEntityRouteNode = ["entry", "table", "detail", "knowledge_detail", "vis"].includes(next);
       const options = { skipRouteUpdate: hasValidHash };
       if (next !== "vis") {
         try {
           clearRouteNodeCenterLock();
         } catch { }
       }
-      if (nodeFromHash) {
+      if (nodeFromHash && usesEntityRouteNode) {
         options.targetNodeId = nodeFromHash;
         // 自动同步选中节点
         window.kbSelectedRowId = nodeFromHash;
@@ -8509,7 +8303,10 @@
           stripEntityIdPrefix(nodeFromHash) || nodeFromHash;
       }
       setViewMode(next, options);
-      if (nodeFromHash) {
+      if (nodeFromHash && !usesEntityRouteNode && next !== "report_detail") {
+        syncHashForView(next, { replace: true, clearNode: true });
+      }
+      if (nodeFromHash && usesEntityRouteNode) {
         Promise.resolve().then(() =>
           enforceRouteNodeSelectionAndEdit({
             nodeId: nodeFromHash,
@@ -13793,11 +13590,12 @@
       const queryParams = getUrlParams();
       const queryMode = normalizeViewModeInput(queryParams.view);
       const initialMode = hashMode || queryMode || "app_home";
+      const usesEntityRouteNode = ["entry", "table", "detail", "knowledge_detail", "vis"].includes(initialMode);
       const skipRouteUpdate = Boolean(hashMode);
       const replaceRoute = !hashMode && Boolean(queryMode);
       const initialNodeId = hashNode || queryParams.node || "";
       // 自动同步选中节点
-      if (initialNodeId) {
+      if (initialNodeId && usesEntityRouteNode) {
         window.kbSelectedRowId = initialNodeId;
         window.kbSelectedRowIds = new Set([initialNodeId]);
         window.kbLastAnchorRowId = initialNodeId;
@@ -13809,16 +13607,21 @@
         replaceRoute,
         targetNodeId: initialNodeId,
       });
+      if (initialNodeId && !usesEntityRouteNode && initialMode !== "report_detail") {
+        syncHashForView(initialMode, { replace: true, clearNode: true });
+      }
       if (initialMode !== "vis") {
         try {
           clearRouteNodeCenterLock();
         } catch { }
       }
-      restoreKnowledgeRouteState({
-        view: initialMode,
-        nodeId: initialNodeId,
-      });
-      if (initialNodeId) {
+      if (usesEntityRouteNode) {
+        restoreKnowledgeRouteState({
+          view: initialMode,
+          nodeId: initialNodeId,
+        });
+      }
+      if (initialNodeId && usesEntityRouteNode) {
         Promise.resolve().then(() =>
           enforceRouteNodeSelectionAndEdit({
             nodeId: initialNodeId,
