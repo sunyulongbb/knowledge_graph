@@ -317,7 +317,7 @@
   bindAlias("kbSchemaRemovalSelection", "schemaRemovalSelection", () => new Set());
   bindAlias("kbSchemaRemovalLastIndex", "schemaRemovalLastIndex", -1);
   bindAlias("kbCollapsedClassIds", "collapsedClassIds", () => new Set());
-  bindAlias("kbClassTreeInitiallyCollapsed", "classTreeInitiallyCollapsed", true);
+  bindAlias("kbClassTreeInitiallyCollapsed", "classTreeInitiallyCollapsed", false);
   bindAlias("kbClassMeta", "classMeta", null);
   bindAlias("kbClassDragSourceId", "classDragSourceId", null);
   bindAlias("kbPropertyRecommendationsCache", "propertyRecommendationsCache", () => new Map());

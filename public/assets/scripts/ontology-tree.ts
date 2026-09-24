@@ -29,6 +29,7 @@ export type OntologyTreeControllerOptions = {
   nodeIcon?: "dot" | "folder";
   nodeIconFilled?: (id: string) => boolean;
   onNodeIconClick?: (id: string) => void | Promise<void>;
+  defaultExpandAll?: boolean;
 };
 
 const STORAGE_KEY = "kb:ontology-tree-state";
@@ -111,11 +112,19 @@ export class OntologyTreeController {
       }, true);
     }
     this.container.appendChild(host);
+    const hasSavedState = Object.keys(oldState).length > 0;
     const openedIds = new Set(
       Object.entries(oldState)
         .filter(([, value]) => value.open)
         .map(([id]) => id),
     );
+    if (!hasSavedState && this.options.defaultExpandAll) {
+      for (const record of this.records) {
+        if (Array.isArray(record.children) && record.children.length) {
+          openedIds.add(String(record.id));
+        }
+      }
+    }
     this.tree = new Tree(host, {
       dragMode: this.options.enableDrag === false ? undefined : "both",
       dropBehaviour: this.options.enableDrag === false ? undefined : "complex",

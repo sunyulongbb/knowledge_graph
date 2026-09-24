@@ -73,7 +73,7 @@
     state.bindAlias(
       "kbClassTreeInitiallyCollapsed",
       "classTreeInitiallyCollapsed",
-      true,
+      false,
     );
     state.bindAlias("kbClassMeta", "classMeta", null);
     state.bindAlias("kbClassDragSourceId", "classDragSourceId", null);
@@ -378,7 +378,7 @@
   // Collapsed state for class tree
   if (!window.kbCollapsedClassIds) {
     window.kbCollapsedClassIds = new Set();
-    window.kbClassTreeInitiallyCollapsed = true;
+    window.kbClassTreeInitiallyCollapsed = false;
   }
   const CLASS_TREE_ROOT_KEY = "__kb_class_root__";
   window.kbClassMeta = null;
@@ -625,7 +625,8 @@
               showAllButton: false,
               enableDrag: false,
               toggleSelection: true,
-              storageKey: "kb:ontology-tree-state:class-manager",
+              storageKey: "kb:ontology-tree-state:class-manager:v2",
+              defaultExpandAll: true,
               nodeIcon: "dot",
               nodeIconFilled: (id) =>
                 Array.isArray(window.kbEntityClasses) &&

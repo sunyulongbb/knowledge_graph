@@ -56,7 +56,7 @@ test('clear controls and scoped taxonomy clear endpoint are wired independently'
   expect(schemaPanel).toContain('请再次确认：确定要永久删除当前应用的全部分类吗？');
   expect(html).toContain('id="btnClsAnalysis"');
   expect(html).toContain('id="classAnalysisModal"');
-  expect(html).toContain('/assets/scripts/schema-panel.js?v=20260923-2');
+  expect(html).toContain('/assets/scripts/schema-panel.js?v=20260924-3');
   expect(schemaPanel).toContain('US_POLITICS_ANALYSIS_EXAMPLE');
   expect(schemaPanel).toContain('body: JSON.stringify({ id: classId, analyses })');
   expect(schemaPanel).toContain('onEdit: (id) => openClassModal({ classId: id })');
@@ -215,6 +215,9 @@ test('view menu switches reuse the mounted entity editor without repainting it',
   expect(page).toContain('button.dataset.detailBreadcrumbIndex = String(index)');
   expect(readFileSync('public/assets/scripts/detail-panel.js', 'utf8')).toContain('window.updateDetailBreadcrumbCurrent(');
   expect(readFileSync('public/assets/styles/app.css', 'utf8')).toContain('.detail-breadcrumbs {');
+  expect(readFileSync('public/assets/scripts/schema-panel.js', 'utf8')).toContain('defaultExpandAll: true');
+  expect(readFileSync('public/assets/scripts/schema-panel.js', 'utf8')).toContain('kb:ontology-tree-state:class-manager:v2');
+  expect(readFileSync('public/assets/scripts/ontology-tree.ts', 'utf8')).toContain('!hasSavedState && this.options.defaultExpandAll');
   expect(page).toContain('void ensureEntityRelationList(fullId)');
   expect(page).toContain('await ensureEntityRelationList(fullId)');
   expect(page).toContain('/assets/scripts/attr-panel.js?v=20260922-1');
