@@ -1,5 +1,7 @@
 import { adminDb, hashPassword } from "../db.ts";
 import { getCurrentUser, isAdmin } from "../auth-context.ts";
+import { mkdirSync, writeFileSync } from "fs";
+import { resolve } from "path";
 
 function getSessionToken(req: Request) {
   const cookie = req.headers.get("cookie") || "";
@@ -7,6 +9,40 @@ function getSessionToken(req: Request) {
 }
 
 export async function handleAuthRoutes(req: Request, url: URL, method: string) {
+  if (url.pathname === "/api/auth/upload-avatar" && method === "POST") {
+    const token = getSessionToken(req);
+    if (!token) return Response.json({ success: false, message: "未登录" }, { status: 401 });
+    const session = adminDb.query("SELECT username FROM sessions WHERE token = ? OR id = ?").get(token, token) as any;
+    if (!session?.username) return Response.json({ success: false, message: "未登录" }, { status: 401 });
+    try {
+      const formData = await req.formData();
+      const file = formData.get("file");
+      if (!(file instanceof File) || !file.size) {
+        return Response.json({ success: false, message: "请选择头像图片" }, { status: 400 });
+      }
+      const extensionByType: Record<string, string> = {
+        "image/jpeg": "jpg",
+        "image/png": "png",
+        "image/webp": "webp",
+        "image/gif": "gif",
+        "image/avif": "avif",
+      };
+      const ext = extensionByType[String(file.type || "").toLowerCase()];
+      if (!ext) return Response.json({ success: false, message: "仅支持 JPG、PNG、WebP、GIF 或 AVIF 图片" }, { status: 400 });
+      if (file.size > 5 * 1024 * 1024) {
+        return Response.json({ success: false, message: "头像图片不能超过 5MB" }, { status: 413 });
+      }
+      const avatarDir = resolve(import.meta.dir, "..", "..", "..", "uploads", "avatars");
+      mkdirSync(avatarDir, { recursive: true });
+      const filename = `${crypto.randomUUID()}.${ext}`;
+      writeFileSync(resolve(avatarDir, filename), Buffer.from(await file.arrayBuffer()));
+      return Response.json({ success: true, url: `/static/uploads/avatars/${filename}` });
+    } catch (error) {
+      console.error("avatar upload failed", error);
+      return Response.json({ success: false, message: "头像上传失败" }, { status: 500 });
+    }
+  }
+
   if (url.pathname === "/api/auth/register" && method === "POST") {
     try {
       const body: any = await req.json();

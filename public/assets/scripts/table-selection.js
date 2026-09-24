@@ -3081,24 +3081,23 @@ function __kbInitTableSelection() {
       const header = document.createElement("div");
       header.className = "table-feed-header";
 
-      // 列表布局以文本信息为主，不渲染头像占位。
+      // 只有实体确实包含可用图片时才显示缩略图，不渲染首字母占位。
       if (isGridLayout || isTableLayout) {
+        const avatarImage = imageList.length ? resolveMediaUrl(imageList[imageList.length - 1]) : "";
+        if (avatarImage && !isAnimatedImageVideoUrl(avatarImage)) {
         const avatar = document.createElement("div");
         avatar.className = "table-feed-avatar";
         avatar.title = label || nodeId || "实体";
         avatar.setAttribute("aria-label", "选中实体");
-        const avatarImage = imageList.length ? resolveMediaUrl(imageList[imageList.length - 1]) : "";
-        if (avatarImage && !isAnimatedImageVideoUrl(avatarImage)) {
-          const avatarImg = document.createElement("img");
-          avatarImg.src = avatarImage;
-          avatarImg.alt = label || "实体";
-          avatarImg.loading = "lazy";
-          avatarImg.decoding = "async";
-          avatar.appendChild(avatarImg);
-        } else {
-          avatar.textContent = (label || nodeId || "?").trim().charAt(0) || "?";
-        }
+        const avatarImg = document.createElement("img");
+        avatarImg.src = avatarImage;
+        avatarImg.alt = label || "实体";
+        avatarImg.loading = "lazy";
+        avatarImg.decoding = "async";
+        avatarImg.addEventListener("error", () => avatar.remove(), { once: true });
+        avatar.appendChild(avatarImg);
         header.appendChild(avatar);
+        }
       }
 
       const meta = document.createElement("div");

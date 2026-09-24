@@ -3,6 +3,7 @@
   const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   let homeVersion = 0, searchVersion = 0, typesVersion = 0, page = 1, total = 0;
   let currentHomeApplicationId = '';
+  let homeApplication = null;
   let homeNodes = [], homeVisibleNodes = [], homeCategories = [], homeSelectedCategory = '', homeInspirationIndex = 0, homeDrawCount = 1;
   const inspirationScoreCache = new Map();
   let inspirationScoreVersion = 0;
@@ -50,6 +51,17 @@
       <a class="app-home-card-media${image || video ? '' : ' is-placeholder'}" href="${escape(nodeUrl(node))}" aria-label="查看 ${escape(title)}">${image ? `<img src="${escape(image)}" alt="" loading="lazy">` : video ? `<video src="${escape(video)}" muted playsinline preload="metadata"></video><span class="app-media-type"><i class="fa-solid fa-play" aria-hidden="true"></i> 视频</span>` : '<i class="fa-solid fa-lightbulb" aria-hidden="true"></i>'}</a>
       <div class="app-home-card-body"><div class="app-home-card-meta"><span>${escape(node.typeLabel || node.type || '知识实体')}</span><time>${escape(shortDate(node.updated_at || node.created_at))}</time></div><a class="app-home-card-title" href="${escape(nodeUrl(node))}">${escape(title)}</a><p>${escape(node.description || node.desc_zh || '等待补充更多知识描述。')}</p><div class="app-home-card-footer"><span class="app-home-card-id">${escape(node.id || node._id || '')}</span><span>查看详情 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span></div></div>
     </article>`;
+  }
+  function applicationBanner() {
+    const project = homeApplication || {};
+    const name = String(project.title || project.name || byId('headerProjectName')?.textContent || '应用首页').trim();
+    const description = String(project.description || '').trim();
+    const initials = (name || '应用').replace(/\s+/g, '').slice(0, 2).toUpperCase();
+    const image = typeof project.image === 'string' && /^(https?:\/\/|\/(?!\/)|data:image\/)/i.test(project.image.trim()) ? project.image.trim() : '';
+    return `<section class="app-home-banner" aria-label="当前应用">
+      <div class="app-home-banner-logo"><span aria-hidden="true">${escape(initials)}</span>${image ? `<img src="${escape(image)}" alt="${escape(name)} Logo" loading="eager" onerror="this.remove()">` : ''}</div>
+      <div class="app-home-banner-content"><h1>${escape(name)}</h1>${description ? `<p>${escape(description)}</p>` : ''}</div>
+    </section>`;
   }
   function categoryTree(items) {
     const byParent = new Map();
@@ -306,8 +318,8 @@
     const activeCategory = homeCategories.find((item) => item.id === homeSelectedCategory);
     content.innerHTML = `<div class="app-home-quickbar"><button type="button" class="app-inspiration-trigger" data-home-inspiration-open aria-label="抽取知识灵感" title="抽取知识灵感"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i></button></div>
       <dialog class="app-inspiration-modal" data-home-inspiration-modal aria-labelledby="appInspirationTitle"><div class="app-inspiration-profile-layer" data-jev-profile-layer ${showJev ? '' : 'hidden'}>${showJev ? profileLoading() : ''}</div><div class="app-inspiration-modal-core"><div class="app-inspiration-modal-head"><div><span class="app-home-eyebrow"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> DISCOVERY</span><h2 id="appInspirationTitle">抽张知识灵感卡</h2><p>把熟悉的排序放一边，遇见一条可能没看过的知识。</p></div><button type="button" class="app-inspiration-close" data-home-inspiration-close aria-label="关闭"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div><div class="app-inspiration-draw-shell">${inspirationDrawContent(inspiration)}</div></div></dialog>
-      <div class="app-home-workspace"><aside class="app-category-panel"><div class="app-home-section-heading compact"><div><span class="app-home-eyebrow">KNOWLEDGE MAP</span><h2>分类树</h2></div><span class="app-category-total">${homeCategories.length}</span></div><nav aria-label="知识分类"><button type="button" class="app-category-item${homeSelectedCategory ? '' : ' is-active'}" data-home-category=""><i class="fa-solid fa-layer-group" aria-hidden="true"></i><span>全部知识</span><small>${Number(byId('appHomeCount')?.dataset.total) || 0}</small></button><ul class="app-category-tree">${categoryTree(homeCategories)}</ul></nav></aside>
-      <section class="app-knowledge-panel"><div class="app-home-section-heading compact"><div><span class="app-home-eyebrow">KNOWLEDGE LIBRARY</span><h2>${escape(activeCategory?.name || '知识列表')}</h2></div><span class="app-list-count">${nodes.length} 条</span></div><div class="app-home-knowledge-grid">${nodes.map(homeKnowledgeCard).join('') || '<div class="app-home-empty"><i class="fa-solid fa-inbox" aria-hidden="true"></i><strong>该分类暂无知识</strong><span>选择其他分类，或创建一条新知识。</span></div>'}</div></section></div>`;
+      <div class="app-home-workspace"><aside class="app-category-panel"><div class="app-home-section-heading compact"><div><h2>分类树</h2></div><span class="app-category-total">${homeCategories.length}</span></div><nav aria-label="知识分类"><button type="button" class="app-category-item${homeSelectedCategory ? '' : ' is-active'}" data-home-category=""><i class="fa-solid fa-layer-group" aria-hidden="true"></i><span>全部知识</span><small>${Number(byId('appHomeCount')?.dataset.total) || 0}</small></button><ul class="app-category-tree">${categoryTree(homeCategories)}</ul></nav></aside>
+      <section class="app-knowledge-panel">${applicationBanner()}<div class="app-home-section-heading compact"><div><h2>${escape(activeCategory?.name || '知识列表')}</h2></div><span class="app-list-count">${nodes.length} 条</span></div><div class="app-home-knowledge-grid">${nodes.map(homeKnowledgeCard).join('') || '<div class="app-home-empty"><i class="fa-solid fa-inbox" aria-hidden="true"></i><strong>该分类暂无知识</strong><span>选择其他分类，或创建一条新知识。</span></div>'}</div></section></div>`;
   }
   function flatten(items, depth = 0) {
     return (items || []).flatMap((item) => [{ id: item.id, name: `${'　'.repeat(depth)}${item.name || item.id}` }, ...flatten(item.children, depth + 1)]);
@@ -351,11 +363,16 @@
     const results = await Promise.allSettled([
       api('/api/kb/entity_search', { order: 'modified_desc', limit: 24, hide_entity: '1', defined_class_only: '1' }),
       api('/api/kb/classes'),
+      api('/api/applications', { scope: 'market' }),
     ]);
     if (version !== homeVersion) return;
     homeNodes = results[0].status === 'fulfilled' ? results[0].value.nodes || [] : [];
     homeVisibleNodes = homeNodes;
     homeCategories = results[1].status === 'fulfilled' ? results[1].value || [] : [];
+    const currentSlug = new URLSearchParams(location.search).get('db') || 'default';
+    homeApplication = results[2].status === 'fulfilled'
+      ? (results[2].value.projects || []).find((project) => project.slug === currentSlug) || null
+      : null;
     homeInspirationIndex = Math.floor(Math.random() * Math.max(homeNodes.length, 1));
     const total = results[0].status === 'fulfilled' ? Number(results[0].value.total) || 0 : 0;
     byId('appHomeCount').textContent = results[0].status === 'fulfilled' ? `${total} 条知识 · ${homeCategories.length} 个分类` : '知识加载失败，请稍后重试';

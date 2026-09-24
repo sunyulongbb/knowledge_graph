@@ -526,13 +526,20 @@
       }
       items.forEach((it) => {
         const username = it.username || "";
+        const isCurrentUser = Boolean(window.authUser) && (
+          Number(it.id) === Number(window.authUser.id) ||
+          username === String(window.authUser.username || "")
+        );
         const entry = document.createElement("a");
         entry.className = "project-entry";
+        entry.classList.toggle("is-current-user", isCurrentUser);
         entry.href = "#";
         entry.setAttribute("data-username", username);
         entry.setAttribute("data-image", it.avatar || "");
         entry.setAttribute("data-title", it.displayName || username || "");
         entry.setAttribute("data-status", it.status || "active");
+        entry.setAttribute("aria-label", isCurrentUser ? `打开我的个人详情：${it.displayName || username}` : `选择用户：${it.displayName || username}`);
+        if (isCurrentUser && window.kbViewMode === "profile") entry.setAttribute("aria-current", "page");
         entry.classList.toggle("is-disabled-user", it.status === "disabled");
         entry.tabIndex = 0;
         entry.appendChild(createSidebarAvatar(it.avatar, it.displayName || username));
@@ -544,6 +551,10 @@
         entry.appendChild(label);
         entry.addEventListener("click", (e) => {
           e.preventDefault();
+          if (isCurrentUser) {
+            window.setViewMode?.("profile");
+            return;
+          }
           try {
             const prev = wrap.querySelector(".project-entry.selected");
             if (prev && prev !== entry) prev.classList.remove("selected");

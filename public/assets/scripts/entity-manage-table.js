@@ -28,8 +28,8 @@
   const imageCell = (node) => {
     const url = imageOf(node);
     return url
-      ? `<img class="entity-manage-image" src="${escapeHtml(url)}" alt="" loading="lazy">`
-      : '<span class="entity-manage-image entity-manage-image--empty"><i class="fa-regular fa-image"></i></span>';
+      ? `<img class="entity-manage-image" src="${escapeHtml(url)}" alt="" loading="lazy" onerror="this.remove()">`
+      : "";
   };
   const labelOf = (node) =>
     String(node?.label_zh || node?.label || node?.name || "未命名实体").trim();

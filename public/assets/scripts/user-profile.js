@@ -30,15 +30,52 @@
     const [module, action] = permission.code.split(':');
     return `${actions[action] || action || ''}${modules[module] || module || ''}`;
   }
+  function contributionHeatmap(activity = {}) {
+    const year = Number(activity.year) || new Date().getFullYear();
+    const countsByDate = new Map((activity.days || []).map((item) => [item.date, Number(item.count) || 0]));
+    const start = new Date(Date.UTC(year, 0, 1));
+    const end = new Date(Date.UTC(year, 11, 31));
+    const gridStart = new Date(start); gridStart.setUTCDate(start.getUTCDate() - start.getUTCDay());
+    const cells = [];
+    const months = [];
+    let lastMonth = -1, maxCount = 0;
+    countsByDate.forEach((count) => { maxCount = Math.max(maxCount, count); });
+    for (let cursor = new Date(gridStart), index = 0; cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1), index++) {
+      const inYear = cursor.getUTCFullYear() === year;
+      const date = cursor.toISOString().slice(0, 10);
+      const count = inYear ? countsByDate.get(date) || 0 : 0;
+      const level = count ? Math.max(1, Math.min(4, Math.ceil((count / Math.max(maxCount, 1)) * 4))) : 0;
+      const week = Math.floor(index / 7) + 1;
+      if (inYear && cursor.getUTCMonth() !== lastMonth) {
+        lastMonth = cursor.getUTCMonth();
+        months.push(`<span style="grid-column:${week}">${cursor.toLocaleDateString('zh-CN', { month: 'short', timeZone: 'UTC' })}</span>`);
+      }
+      cells.push(`<i class="${inYear ? '' : 'is-outside'}" data-level="${level}" style="grid-column:${week};grid-row:${cursor.getUTCDay() + 1}" title="${inYear ? `${date}：${count} 次活动` : ''}"></i>`);
+    }
+    return `<section class="account-contribution"><div class="account-contribution-head"><h3>${Number(activity.total) || 0} 次活动 · ${year}</h3><span>年度活动</span></div><div class="account-contribution-scroll"><div class="account-contribution-chart"><div class="account-contribution-months">${months.join('')}</div><div class="account-contribution-body"><div class="account-contribution-weekdays"><span>周一</span><span>周三</span><span>周五</span></div><div class="account-contribution-grid">${cells.join('')}</div></div><div class="account-contribution-foot"><span>根据知识维护与互动记录统计</span><span class="account-contribution-legend">少 ${[0,1,2,3,4].map((level) => `<i data-level="${level}"></i>`).join('')} 多</span></div></div></div></section>`;
+  }
+  function applicationTile(item, index) {
+    const title = String(item.title || item.slug || '未命名应用').trim();
+    const initials = Array.from(title.replace(/\s+/g, '') || '应用').slice(0, 2).join('').toUpperCase();
+    const image = String(item.image || item.logo || '').trim();
+    const imageUrl = /^data:image\/(?:avif|gif|jpeg|jpg|png|svg\+xml|webp);/i.test(image)
+      ? image
+      : /^https?:\/\//i.test(image)
+        ? image
+        : /^\/(?:static\/)?uploads\//i.test(image)
+          ? image
+          : /^(?:static\/)?uploads\//i.test(image)
+            ? `/${image}`
+            : '';
+    return `<button class="account-application-tile${imageUrl ? ' has-image' : ''}" type="button" data-profile-app="${Number(item.id)}" aria-label="打开应用 ${escape(title)}">
+      <span class="account-application-logo"><b aria-hidden="true">${escape(initials)}</b>${imageUrl ? `<img src="${escape(imageUrl)}" alt="${escape(title)} Logo" loading="eager" decoding="async">` : ''}</span>
+      <span class="account-application-copy"><span class="account-application-role">${item.relationship === 'owner' ? '我创建的' : '参与维护'}</span><strong>${escape(title)}</strong><small>${escape(item.description || '暂无应用描述')}</small><em>${escape(item.slug || '')}</em></span>
+      <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i>
+    </button>`;
+  }
   function renderSummary(data) {
     const user = data.user;
-    const groups = new Map();
-    data.permissions.forEach((permission) => { const key = permission.module || 'other'; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(permission); });
-    const fields = [['用户名', user.username], ['邮箱', user.email || '未填写'], ['手机号', user.phone || '未填写'], ['账号状态', user.status === 'active' ? '正常' : user.status], ['注册时间', user.createdAt || '暂无记录'], ['最近登录', user.lastLoginAt || '暂无记录']];
-    byId('accountSummary').innerHTML = `<div class="account-identity"><div class="account-avatar">${avatar(user)}</div><div><h2>${escape(user.displayName)}</h2><p class="muted">@${escape(user.username)} · ${user.role === 'admin' ? '管理员' : '普通用户'}</p></div></div>
-      <div class="account-statistics">${Object.entries(sections).map(([key, label]) => `<button type="button" class="account-stat" data-profile-section="${key}"><strong>${Number(data.counts[key] || 0)}</strong><span>${label}</span></button>`).join('')}</div>
-      <div class="account-info-grid"><section class="account-info-card"><h3>基本信息</h3><dl>${fields.map(([label, value]) => `<div><dt>${label}</dt><dd>${escape(value)}</dd></div>`).join('')}</dl></section>
-      <section class="account-info-card"><h3>权限信息</h3><div class="account-role-list">${data.roles.map((role) => `<span class="knowledge-role" title="${escape(role.code)}">${escape(role.name || role.code)}</span>`).join('') || '<span class="muted">未分配角色</span>'}</div><p class="muted">数据范围：${user.dataScope === 'all' ? '全部数据' : '本人数据'}${data.unrestricted ? ' · 管理员功能权限' : ''}</p><p class="muted">应用操作和知识编辑仍受创建者及维护授权限制。</p><details class="account-permissions"><summary>功能权限（${data.permissions.length} 项）</summary>${[...groups].map(([key, permissions]) => `<div class="account-permission-group"><h4>${escape(modules[key] || key)}</h4><div>${permissions.map((permission) => `<span title="${escape(permission.code)}">${escape(permissionName(permission))}</span>`).join('')}</div></div>`).join('') || '<p class="muted">暂无功能权限</p>'}</details></section></div>`;
+    byId('accountSummary').innerHTML = `<div class="account-profile-overview"><div class="account-identity"><div class="account-avatar">${avatar(user)}</div><div><h2>${escape(user.displayName)}</h2><p class="muted">@${escape(user.username)} · ${user.role === 'admin' ? '管理员' : '普通用户'}</p></div></div><div class="account-statistics">${Object.entries(sections).map(([key, label]) => `<button type="button" class="account-stat" data-profile-section="${key}"><strong>${Number(data.counts[key] || 0)}</strong><span>${label}</span></button>`).join('')}</div></div>${contributionHeatmap(data.activity)}`;
   }
   function renderTabs() {
     byId('accountTabs').innerHTML = Object.entries(sections).map(([key, label]) => `<button id="accountTab-${key}" type="button" role="tab" aria-controls="accountActivity" aria-selected="${key === currentSection}" tabindex="${key === currentSection ? 0 : -1}" class="${key === currentSection ? 'active' : ''}" data-profile-section="${key}">${label} <span>${Number(counts[key] || 0)}</span></button>`).join('');
@@ -57,14 +94,15 @@
   async function loadRecords() {
     const token = ++listVersion, section = currentSection;
     busy = true; syncPagination(); renderTabs();
+    byId('accountActivity').classList.toggle('is-application-wall', section === 'applications');
     byId('accountActivity').innerHTML = '<div class="account-empty muted">正在加载记录…</div>';
     byId('accountPageInfo').textContent = '';
     try {
       const data = await api(section, page);
       if (token !== listVersion) return;
       page = data.page; totalPages = Math.max(1, Math.ceil(data.total / data.pageSize)); counts[section] = data.total;
-      byId('accountActivity').innerHTML = data.items.map((item) => {
-        if (section === 'applications') return `<article class="account-record"><div><strong>${escape(item.title || item.slug)}</strong><p class="muted">${escape(item.description || '暂无描述')}</p><small>${item.relationship === 'owner' ? '我创建的' : '参与维护'} · ${escape(item.slug)}</small></div><button class="btn sm" type="button" data-profile-app="${Number(item.id)}">查看应用</button></article>`;
+      byId('accountActivity').innerHTML = data.items.map((item, index) => {
+        if (section === 'applications') return applicationTile(item, index);
         const available = item.id !== null && item.id !== undefined;
         return `<article class="account-record"><div><strong>${available ? escape(item.name || item.id) : '知识已删除或无权访问'}</strong>${section === 'comments' && available ? `<p class="account-comment">${escape(item.content)}</p>` : ''}<small>${section === 'knowledge' ? `${item.relationship === 'owner' ? '我创建的' : '参与维护'} · ${item.visibility === 'private' ? '私有' : '公开'} · ` : ''}${available ? `${escape(item.project_title || item.project_slug || '未归属应用')} · ` : ''}${date(item.created_at || item.updated_at)}</small></div>${available ? `<button type="button" class="btn sm" data-profile-node="${escape(item.id)}" data-project-slug="${escape(item.project_slug || '')}">查看知识</button>` : ''}</article>`;
       }).join('') || `<div class="account-empty muted">暂无${sections[section]}</div>`;
@@ -113,6 +151,7 @@
     if (!next) return; event.preventDefault(); currentSection = next; page = 1; writeRoute(); loadRecords(); byId(`accountTab-${next}`)?.focus();
   });
   byId('accountSummary').addEventListener('error', (event) => { if (event.target instanceof HTMLImageElement) event.target.remove(); }, true);
+  byId('accountActivity').addEventListener('error', (event) => { if (event.target instanceof HTMLImageElement) event.target.remove(); }, true);
   window.addEventListener('kb-auth-change', () => {
     summaryVersion++; listVersion++; byId('accountSummary').replaceChildren(); byId('accountActivity').replaceChildren(); byId('accountRecords').hidden = true; byId('btnProfileEdit').disabled = true;
     if (window.kbViewMode === 'profile') loadUserProfile();

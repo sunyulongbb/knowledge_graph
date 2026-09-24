@@ -68,7 +68,7 @@
       customElements.whenDefined("media-video-layout"),
     ]).then(() => true);
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20260924-10" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20260924-20" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -2201,6 +2201,13 @@
                 <input id="inputProfileAvatar" type="text" placeholder="https://..." autocomplete="off" />
                 <button id="btnClearProfileAvatar" class="btn" type="button" title="清除头像">清除</button>
               </div>
+              <input id="inputProfileAvatarFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" hidden />
+              <div id="profileAvatarUpload" class="profile-avatar-upload" role="button" tabindex="0" aria-label="上传或粘贴头像图片">
+                <i class="fa-regular fa-image" aria-hidden="true"></i>
+                <span><strong>上传头像</strong><small>选择文件，或直接粘贴剪贴板图片</small></span>
+                <button id="btnUploadProfileAvatar" class="btn sm" type="button">选择图片</button>
+              </div>
+              <div id="profileAvatarUploadStatus" class="profile-avatar-upload-status muted" role="status"></div>
               <div class="profile-emoji-avatar-picker" aria-label="选择内置 Emoji 头像">
                 <span class="muted">内置头像</span>
                 <button type="button" data-emoji-avatar="😀" title="😀">😀</button><button type="button" data-emoji-avatar="😎" title="😎">😎</button><button type="button" data-emoji-avatar="🤓" title="🤓">🤓</button><button type="button" data-emoji-avatar="😊" title="😊">😊</button><button type="button" data-emoji-avatar="🤖" title="🤖">🤖</button><button type="button" data-emoji-avatar="🐼" title="🐼">🐼</button><button type="button" data-emoji-avatar="🦊" title="🦊">🦊</button><button type="button" data-emoji-avatar="🐱" title="🐱">🐱</button><button type="button" data-emoji-avatar="🌟" title="🌟">🌟</button><button type="button" data-emoji-avatar="🚀" title="🚀">🚀</button>
@@ -4793,10 +4800,9 @@
       <aside id="userSidebar" class="project-sidebar user-sidebar is-collapsed" role="navigation" aria-label="所有用户"
         aria-expanded="false" aria-hidden="false">
         <div class="project-list user-list" aria-live="polite"></div>
-        <div style="margin-top:auto;display:flex;flex-direction:column;gap:8px;align-items:center;">
-          <button id="btnOpenProfileSidebar" class="btn sm" type="button" title="个人详情" aria-label="个人详情"><i class="fa-solid fa-user-gear"></i></button>
+        <div class="user-sidebar-footer">
           <a id="btnViewUsers" class="btn sm sidebar-management-link" href="#view=user_management" title="用户管理" aria-label="用户管理" style="display:none;"><i class="fa-solid fa-users-gear" aria-hidden="true"></i></a>
-          <button id="btnLogout" class="btn sm user-sidebar-logout" type="button" title="退出登录" aria-label="退出登录"><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i><span>退出登录</span></button>
+          <button id="btnLogout" class="btn sm user-sidebar-logout" type="button" title="退出登录" aria-label="退出登录"><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i></button>
         </div>
       </aside>
     </div>
@@ -7171,7 +7177,7 @@
       if (isAppSearch) window.loadApplicationSearch?.();
       const userProfilePanel = document.getElementById('userProfilePanel');
       if (userProfilePanel) userProfilePanel.style.display = isProfile ? '' : 'none';
-      const profileEntry = document.getElementById('btnOpenProfileSidebar');
+      const profileEntry = document.querySelector('.user-list .is-current-user');
       if (isProfile) profileEntry?.setAttribute('aria-current', 'page');
       else profileEntry?.removeAttribute('aria-current');
       if (isProfile) window.loadUserProfile?.();
@@ -17243,8 +17249,8 @@
   </script>
   <script src="/assets/scripts/property-panel.js?v=20260915-1"></script>
   <script src="/assets/scripts/table-panel.js?v=20260914-7"></script>
-  <script src="/assets/scripts/table-selection.js?v=20260916-2"></script>
-  <script src="/assets/scripts/entity-manage-table.js?v=20260916-2"></script>
+  <script src="/assets/scripts/table-selection.js?v=20260924-6"></script>
+  <script src="/assets/scripts/entity-manage-table.js?v=20260924-3"></script>
   <script src="/assets/scripts/attr-panel.js?v=20260922-1"></script>
   <script src="/assets/scripts/entity-import.js?v=20260921-6"></script>
   <!-- relation-panel.js 已移除，使用 edgehandles 拖拽创建关系 -->
@@ -17254,10 +17260,10 @@
   <script src="/assets/scripts/knowledge-access.js?v=20260922-4"></script>
   <script src="/assets/scripts/applications.js?v=20260921-1"></script>
   <script src="/assets/scripts/user-management.js?v=20260915-1"></script>
-  <script src="/assets/scripts/application-pages.js?v=20260923-13"></script>
-  <script src="/assets/scripts/user-profile.js?v=20260915-1"></script>
-  <script src="/assets/scripts/sidebar-panel.js?v=20260923-3"></script>
-  <script src="/assets/scripts/auth-panel.js?v=20260922-4"></script>
+  <script src="/assets/scripts/application-pages.js?v=20260924-14"></script>
+  <script src="/assets/scripts/user-profile.js?v=20260924-5"></script>
+  <script src="/assets/scripts/sidebar-panel.js?v=20260924-4"></script>
+  <script src="/assets/scripts/auth-panel.js?v=20260924-7"></script>
   <script src="/assets/scripts/db-modal.js?v=20260914-1"></script>
   <script>
     // The initial hash route is handled before these dependent sidebar scripts

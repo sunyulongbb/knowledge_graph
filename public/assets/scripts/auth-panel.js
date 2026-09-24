@@ -21,6 +21,10 @@
   const inputProfileDisplay = document.getElementById("inputProfileDisplay");
   const inputProfileAvatar = document.getElementById("inputProfileAvatar");
   const btnClearProfileAvatar = document.getElementById("btnClearProfileAvatar");
+  const inputProfileAvatarFile = document.getElementById("inputProfileAvatarFile");
+  const profileAvatarUpload = document.getElementById("profileAvatarUpload");
+  const btnUploadProfileAvatar = document.getElementById("btnUploadProfileAvatar");
+  const profileAvatarUploadStatus = document.getElementById("profileAvatarUploadStatus");
   const inputProfileJevKey = document.getElementById("inputProfileJevKey");
   const btnClearProfileJevKey = document.getElementById("btnClearProfileJevKey");
   const profileJevKeyStatus = document.getElementById("profileJevKeyStatus");
@@ -38,7 +42,10 @@
   const btnUserManagerRefresh = document.getElementById("btnUserManagerRefresh");
 
   let authUser = null;
-  const isEmojiAvatar = (value) => Boolean(String(value || "").trim()) && !/^https?:\/\//i.test(String(value || "").trim());
+  const isEmojiAvatar = (value) => {
+    const normalized = String(value || "").trim();
+    return Boolean(normalized) && !/^(?:https?:\/\/|\/|data:image\/|blob:)/i.test(normalized);
+  };
 
   function syncEmojiAvatarSelection(value) {
     document.querySelectorAll("[data-emoji-avatar]").forEach((button) => {
@@ -54,10 +61,10 @@
     if (btnAuth) {
       try {
         if (authUser && authUser.avatar && isEmojiAvatar(authUser.avatar)) {
-          btnAuth.innerHTML = `<span style="width:24px;height:24px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;background:var(--surface-1);border:1px solid var(--border);font-size:16px;line-height:1;">${authUser.avatar}</span>`;
+          btnAuth.innerHTML = `<span class="header-user-avatar is-emoji">${authUser.avatar}</span>`;
           btnAuth.title = authUser.displayName || authUser.username || "用户";
         } else if (authUser && authUser.avatar) {
-          btnAuth.innerHTML = `<span style="width:24px;height:24px;border-radius:6px;display:inline-block;background-image:url(${authUser.avatar});background-position:center;background-size:cover;border:1px solid var(--border);"></span>`;
+          btnAuth.innerHTML = `<span class="header-user-avatar is-image" style="background-image:url(${authUser.avatar})"></span>`;
           btnAuth.title = authUser.displayName || authUser.username || "用户";
         } else if (authUser) {
           const initials = (authUser.displayName ||
@@ -67,7 +74,7 @@
             .replace(/\s+/g, "")
             .slice(0, 2)
             .toUpperCase();
-          btnAuth.innerHTML = `<span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;background:linear-gradient(135deg,var(--accent),#7c5cff);color:#fff;font-weight:600">${initials}</span>`;
+          btnAuth.innerHTML = `<span class="header-user-avatar is-initials">${initials}</span>`;
           btnAuth.title = authUser.displayName || authUser.username || "用户";
         } else {
           btnAuth.innerHTML = '<i class="fa-regular fa-user"></i>';
@@ -234,6 +241,7 @@
       profileModal.style.zIndex = "99999";
     } catch {}
     profileModal.style.display = "flex";
+    if (profileAvatarUploadStatus) profileAvatarUploadStatus.textContent = "";
     if (authUser?.role === "admin") loadUserManager();
     if (authUser) {
       if (profileAccountMeta) {
@@ -262,6 +270,44 @@
   function closeProfileModal() {
     if (!profileModal) return;
     profileModal.style.display = "none";
+  }
+
+  async function uploadProfileAvatar(file) {
+    if (!(file instanceof File) || !file.type.startsWith("image/")) {
+      if (profileAvatarUploadStatus) profileAvatarUploadStatus.textContent = "请选择有效的图片文件";
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      if (profileAvatarUploadStatus) profileAvatarUploadStatus.textContent = "头像图片不能超过 5MB";
+      return;
+    }
+    try {
+      if (profileError) profileError.style.display = "none";
+      if (profileAvatarUploadStatus) profileAvatarUploadStatus.textContent = "正在上传头像…";
+      profileAvatarUpload?.setAttribute("aria-busy", "true");
+      if (btnUploadProfileAvatar) btnUploadProfileAvatar.disabled = true;
+      const formData = new FormData();
+      formData.append("file", file, file.name || "pasted-avatar.png");
+      const response = await fetch("/api/auth/upload-avatar", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.url) throw new Error(data.message || "头像上传失败");
+      if (inputProfileAvatar) {
+        inputProfileAvatar.value = data.url;
+        updateProfilePreview(data.url);
+        syncEmojiAvatarSelection("");
+      }
+      if (profileAvatarUploadStatus) profileAvatarUploadStatus.textContent = "上传完成，点击“保存修改”后生效";
+    } catch (error) {
+      if (profileAvatarUploadStatus) profileAvatarUploadStatus.textContent = error.message || "头像上传失败";
+    } finally {
+      profileAvatarUpload?.removeAttribute("aria-busy");
+      if (btnUploadProfileAvatar) btnUploadProfileAvatar.disabled = false;
+      if (inputProfileAvatarFile) inputProfileAvatarFile.value = "";
+    }
   }
 
   async function submitLogin() {
@@ -416,10 +462,6 @@
       else openAuthModal(false);
     });
   }
-  document.getElementById("btnOpenProfileSidebar")?.addEventListener("click", () => {
-    if (authUser) window.setViewMode?.('profile');
-    else openAuthModal(false);
-  });
   if (btnCloseAuthModal) btnCloseAuthModal.addEventListener("click", closeAuthModal);
   if (authModal) {
     authModal.addEventListener("click", (e) => {
@@ -448,6 +490,47 @@
       } catch {}
     });
   }
+  btnUploadProfileAvatar?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    inputProfileAvatarFile?.click();
+  });
+  inputProfileAvatarFile?.addEventListener("change", () => {
+    const file = inputProfileAvatarFile.files?.[0];
+    if (file) void uploadProfileAvatar(file);
+  });
+  profileAvatarUpload?.addEventListener("click", (event) => {
+    if (event.target instanceof Element && event.target.closest("button")) return;
+    inputProfileAvatarFile?.click();
+  });
+  profileAvatarUpload?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    inputProfileAvatarFile?.click();
+  });
+  for (const eventName of ["dragenter", "dragover"]) {
+    profileAvatarUpload?.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      profileAvatarUpload.classList.add("is-dragover");
+    });
+  }
+  for (const eventName of ["dragleave", "drop"]) {
+    profileAvatarUpload?.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      profileAvatarUpload.classList.remove("is-dragover");
+      if (eventName === "drop") {
+        const file = event.dataTransfer?.files?.[0];
+        if (file) void uploadProfileAvatar(file);
+      }
+    });
+  }
+  profileModal?.addEventListener("paste", (event) => {
+    const file = Array.from(event.clipboardData?.items || [])
+      .find((item) => item.kind === "file" && item.type.startsWith("image/"))
+      ?.getAsFile();
+    if (!file) return;
+    event.preventDefault();
+    void uploadProfileAvatar(file);
+  });
   if (btnClearProfileJevKey) {
     btnClearProfileJevKey.addEventListener("click", () => {
       if (!inputProfileJevKey) return;
@@ -501,7 +584,7 @@
         const avatar = inputProfileAvatar ? inputProfileAvatar.value.trim() : "";
         const jevApiKey = inputProfileJevKey ? inputProfileJevKey.value.trim() : "";
         try {
-          if (avatar && !isEmojiAvatar(avatar)) new URL(avatar);
+          if (avatar && !isEmojiAvatar(avatar)) new URL(avatar, window.location.origin);
         } catch {
           if (profileError) {
             profileError.textContent = "头像 URL 格式不正确";

@@ -70,13 +70,18 @@ test('anonymous users cannot expand application or user sidebars', () => {
   const page = readFileSync('public/index.html', 'utf8');
   const authPanel = readFileSync('public/assets/scripts/auth-panel.js', 'utf8');
   const sidebarPanel = readFileSync('public/assets/scripts/sidebar-panel.js', 'utf8');
-  expect(page).toContain('/assets/scripts/sidebar-panel.js?v=20260923-3');
-  expect(page).toContain('/assets/scripts/auth-panel.js?v=20260922-4');
+  expect(page).toContain('/assets/scripts/sidebar-panel.js?v=20260924-4');
+  expect(page).toContain('/assets/scripts/auth-panel.js?v=20260924-7');
   expect(page).toContain('/assets/scripts/knowledge-access.js?v=20260922-4');
   expect(page).toContain('id="appHomeMaintenance"');
   expect(page).toContain('id="inputProfileJevKey"');
   expect(page).toContain('id="btnClearProfileJevKey"');
-  expect(page).toContain('/assets/scripts/application-pages.js?v=20260923-13');
+  expect(page).toContain('id="inputProfileAvatarFile"');
+  expect(page).toContain('id="profileAvatarUpload"');
+  expect(authPanel).toContain('/api/auth/upload-avatar');
+  expect(authPanel).toContain('event.clipboardData?.items');
+  expect(readFileSync('src/server/routes/auth.ts', 'utf8')).toContain('url.pathname === "/api/auth/upload-avatar"');
+  expect(page).toContain('/assets/scripts/application-pages.js?v=20260924-14');
   expect(page).toContain('/assets/scripts/applications.js?v=20260921-1');
   expect(authPanel).toContain('if (authUser) window.toggleUserSidebar?.();\n      else openAuthModal(false);');
   expect(authPanel).toContain('defaultHome.searchParams.set("db", "default")');
@@ -89,6 +94,8 @@ test('anonymous users cannot expand application or user sidebars', () => {
   expect(sidebarPanel).toContain('headerLogo.addEventListener("click"');
   expect(sidebarPanel).toContain('if (!window.authUser) return;');
   expect(page).toContain('class="btn sm user-sidebar-logout"');
+  expect(page).not.toContain('id="btnOpenProfileSidebar"');
+  expect(sidebarPanel).toContain('window.setViewMode?.("profile")');
   expect(page.indexOf('id="btnLogout"')).toBeGreaterThan(page.indexOf('id="userSidebar"'));
 });
 
@@ -253,7 +260,7 @@ test('entity editor uses the post-composer hierarchy without changing existing c
   expect(page).toContain('id="btnCancelEdit"');
   expect(page).toContain('id="btnEntityImport"');
   expect(page).toContain('id="btnSubmit"');
-  expect(page).toContain('/assets/styles/app.css?v=20260924-10');
+  expect(page).toContain('/assets/styles/app.css?v=20260924-20');
   expect(css).toContain('.app-profile-actions { position: fixed; top: 24px; right: 24px;');
   expect(css).toContain('.app-inspiration-profile-layer.has-selection { z-index: 7; }');
   expect(css).toContain('.app-profile-node.is-selected { position: absolute !important;');
