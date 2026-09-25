@@ -623,7 +623,25 @@
             classTreeController = new module.OntologyTreeController(clsTree, {
               allLabel: "全部分类",
               showAllButton: false,
-              enableDrag: false,
+              enableDrag: true,
+              nodeLabel: '分类',
+              onMove: async (_id, items) => {
+                const url = appendCurrentDbToUrl(new URL('/api/kb/classes/reorder', window.location.origin));
+                setStatus(true, '正在保存分类位置…');
+                try {
+                  const response = await fetch(url, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ updates: items.map((item) => ({
+                      id: item.id, parent_id: item.parentId, sort_order: item.sortOrder,
+                    })) }),
+                  });
+                  if (!response.ok) throw new Error((await response.text()) || '分类移动失败');
+                  setStatus(false, '分类位置已保存');
+                } catch (error) {
+                  setStatus(false, '分类移动失败，正在恢复原结构');
+                  throw error;
+                }
+              },
               toggleSelection: true,
               storageKey: "kb:ontology-tree-state:class-manager:v2",
               defaultExpandAll: true,
@@ -1668,6 +1686,7 @@
   }
 
   function setSelectedSchemaProp(pid, label) {
+    window.clearEntitySearchState?.();
     window.kbSelectedSchemaPropId = pid || "";
     window.kbSelectedSchemaPropLabel = label || pid || "";
     try {
@@ -1703,6 +1722,9 @@
       );
       if (attrEntitySearchResultsWrapEl)
         attrEntitySearchResultsWrapEl.style.display = "none";
+      if (dtype === 'wikibase-entityid' || dtype === 'wikibase-item') {
+        void window.loadEntitySuggestionsForProperty?.(pid);
+      }
     } catch (err) {
       console.error("setSelectedSchemaProp suggestions failed", err);
     }
@@ -2530,6 +2552,7 @@
       if (found && (!attrPropLabel.value || !attrPropLabel.value.trim())) {
         attrPropLabel.value = found.label || "";
       }
+      if (found) setSelectedSchemaProp(v, found.label || v);
     } catch {}
   });
   // Also rebuild datalist on focus to keep in sync
@@ -2895,6 +2918,7 @@
         if (attrTypeEl) attrTypeEl.value = uiType;
       } catch {}
       // setSelectedSchemaProp 放在后面，且不让其内部再覆盖已设置的 dtype UI
+      window.clearEntitySearchState?.();
       window.kbSelectedSchemaPropId = propId;
       window.kbSelectedSchemaPropLabel = label;
       try {
@@ -2930,6 +2954,10 @@
         if (statusEl) statusEl.textContent = "";
         const wrapEl = document.getElementById("attrEntitySearchResultsWrap");
         if (wrapEl) wrapEl.style.display = "none";
+        if (uiType === "wikibase-entityid" || uiType === "wikibase-item") {
+          window.clearEntitySearchState?.();
+          void window.loadEntitySuggestionsForProperty?.(propId);
+        }
         if (attrValueQualifier && attrValueQualifier.parentElement) {
           const qualifierTypes = [
             "wikibase-entityid",

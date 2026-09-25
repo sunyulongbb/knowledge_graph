@@ -640,6 +640,8 @@ if (btnAttrReset) {
     );
   }
   let attrEntitySearchItems = [];
+  let entitySuggestionVersion = 0;
+  let activeTailOntology = null;
 
   function mapDatatypeToUi(datatype, datavalueType) {
     return window.KbWikidata.uiDatatype(datatype, datavalueType);
@@ -1782,6 +1784,10 @@ if (btnAttrReset) {
 
   async function searchEntitiesByKeyword(keyword) {
     const term = (keyword || "").trim();
+    const propertyId = attrProp?.value || window.kbSelectedSchemaPropId || '';
+    if (propertyId && (activeTailOntology || !term)) return loadEntitySuggestionsForProperty(propertyId, { query: term });
+    const version = ++entitySuggestionVersion;
+
     if (!term) {
       if (attrEntitySearchStatus)
         attrEntitySearchStatus.textContent = "请输入检索关键词";
@@ -1804,6 +1810,7 @@ if (btnAttrReset) {
       if (!resp.ok) throw new Error("HTTP " + resp.status);
       const data = await resp.json();
       const items = Array.isArray(data?.nodes) ? data.nodes : [];
+      if (version !== entitySuggestionVersion) return;
       renderEntitySearchResults(items);
       if (!items.length) {
         attrEntitySearchStatus.textContent = "未找到匹配实体";
@@ -1812,6 +1819,7 @@ if (btnAttrReset) {
         if (attrEntitySearchResults) attrEntitySearchResults.focus();
       }
     } catch (err) {
+      if (version !== entitySuggestionVersion) return;
       console.error("entity search failed", err);
       attrEntitySearchStatus.textContent = "检索失败";
       renderEntitySearchResults([]);
@@ -1819,72 +1827,46 @@ if (btnAttrReset) {
   }
 
   async function loadEntitySuggestionsForProperty(propertyId, options = {}) {
-    const prop = (propertyId || "").trim();
+    const prop = String(propertyId || '').trim();
+    const version = ++entitySuggestionVersion;
+    activeTailOntology = null;
+    renderEntitySearchResults([]);
     if (!prop) return;
-    const limit = Number(options.limit || 100);
-    const cacheKey = `${prop}::${limit}`;
-    const now = Date.now();
+    const url = new URL('/api/kb/property/value_suggestions', window.location.origin);
+    if (typeof window.appendCurrentDbParam === 'function') {
+      const scoped = window.appendCurrentDbParam(url);
+      if (scoped instanceof URL) url.search = scoped.search;
+    }
+    const scope = url.searchParams.get('db');
+    url.searchParams.set('property', prop);
+    url.searchParams.set('limit', String(Number(options.limit) || 100));
+    if (options.query) url.searchParams.set('q', options.query);
+    const entityId = document.getElementById('fId')?.value || window.kbSelectedRowId || '';
+    if (entityId) url.searchParams.set('entity_id', entityId);
+    const isCurrent = () => {
+      const currentUrl = new URL('/api/kb/property/value_suggestions', window.location.origin);
+      const scoped = window.appendCurrentDbParam?.(currentUrl) || currentUrl;
+      return version === entitySuggestionVersion && scoped.searchParams.get('db') === scope;
+    };
+    if (attrEntitySearchStatus) attrEntitySearchStatus.textContent = '正在加载属性对应的对象知识…';
     try {
-      const cached = window.kbPropertySuggestionCache.get(cacheKey);
-      if (cached && now - cached.ts < PROPERTY_SUGGESTION_TTL) {
-        renderEntitySearchResults(cached.items);
-        if (attrEntitySearchStatus) {
-          attrEntitySearchStatus.textContent = cached.items.length
-            ? `推荐属性值（${cached.items.length} 条）`
-            : "暂无推荐属性值";
-        }
-        return;
-      }
-    } catch {}
-    if (attrEntitySearchStatus)
-      attrEntitySearchStatus.textContent = "加载推荐属性值…";
-    try {
-      const url = new URL(
-        "/api/kb/property/value_suggestions",
-        window.location.origin,
-      );
-      if (typeof window.appendCurrentDbParam === "function") {
-        const scopedUrl = window.appendCurrentDbParam(url);
-        if (scopedUrl instanceof URL) {
-          url.search = scopedUrl.search;
-        }
-      }
-      url.searchParams.set("property", prop);
-      const currentEntityId = window.kbSelectedRowId || "";
-      if (currentEntityId) {
-        url.searchParams.set("entity_id", currentEntityId);
-      }
-      if (limit && Number.isFinite(limit))
-        url.searchParams.set("limit", String(limit));
-      const resp = await fetch(url.toString());
-      if (!resp.ok) throw new Error("HTTP " + resp.status);
-      const data = await resp.json();
-      const items = Array.isArray(data?.items) ? data.items : [];
-      try {
-        window.kbPropertySuggestionCache.set(cacheKey, {
-          ts: now,
-          items,
-        });
-      } catch {}
-      const currentProp = (window.kbSelectedSchemaPropId || "").trim();
-      const currentInput = (attrProp?.value || "").trim();
-      if (
-        currentProp &&
-        !samePropertyId(currentProp, prop) &&
-        (!currentInput || !samePropertyId(currentInput, prop))
-      ) {
-        return;
-      }
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const data = await response.json();
+      if (!isCurrent()) return;
+      const items = Array.isArray(data.items) ? data.items : [];
+      activeTailOntology = data.source === 'tail_ontology' ? data.tailOntology : null;
       renderEntitySearchResults(items);
       if (attrEntitySearchStatus) {
-        attrEntitySearchStatus.textContent = items.length
-          ? `推荐属性值（${items.length} 条）`
-          : "暂无推荐属性值";
+        const typeName = activeTailOntology?.name || activeTailOntology?.id;
+        attrEntitySearchStatus.textContent = typeName
+          ? (items.length ? `推荐「${typeName}」及其子本体的对象知识（${items.length} 条）` : `「${typeName}」及其子本体下暂无匹配的对象知识`)
+          : (items.length ? `历史属性值推荐（${items.length} 条）` : '该属性未定义尾实体本体，暂无历史推荐，可输入关键词搜索');
       }
-    } catch (err) {
-      console.error("loadEntitySuggestionsForProperty failed", err);
-      if (attrEntitySearchStatus)
-        attrEntitySearchStatus.textContent = "推荐加载失败";
+    } catch (error) {
+      if (!isCurrent()) return;
+      console.error('loadEntitySuggestionsForProperty failed', error);
+      if (attrEntitySearchStatus) attrEntitySearchStatus.textContent = '对象知识推荐加载失败，请重新选择属性或搜索';
     }
   }
 
@@ -1893,6 +1875,8 @@ if (btnAttrReset) {
   }
 
   function clearEntitySearchState() {
+    entitySuggestionVersion++;
+    activeTailOntology = null;
     attrEntitySearchItems = [];
     if (attrEntitySearchResults) {
       attrEntitySearchResults.innerHTML = "";
@@ -2760,6 +2744,7 @@ if (btnAttrReset) {
       if (attrValueQualifier) attrValueQualifier.value = "";
       clearImageUpload();
       clearEntitySearchState();
+      if (dtype === 'wikibase-entityid' || dtype === 'wikibase-item') void loadEntitySuggestionsForProperty(propertyId);
       if (attrMsg) attrMsg.textContent = "";
     } catch {}
 

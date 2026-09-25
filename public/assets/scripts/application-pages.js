@@ -43,25 +43,98 @@
     const date = String(value || '').slice(0, 10);
     return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date.replace(/-/g, '.') : '最近更新';
   }
+  let homeDetailDrawer = null;
+  let homeDetailMount = null;
+  function restoreHomeDetailPanel() {
+    const saved = homeDetailMount;
+    homeDetailMount = null;
+    if (!saved) return;
+    saved.panel.querySelectorAll('video,audio,media-player').forEach((media) => { try { media.pause?.(); } catch {} });
+    if (saved.panel.parentNode === homeDetailDrawer) {
+      saved.marker.replaceWith(saved.panel);
+      saved.panel.style.display = saved.display;
+      saved.panel.classList.remove('app-home-detail-open');
+    } else saved.marker.remove();
+    if (saved.focus?.isConnected) saved.focus.focus({ preventScroll: true });
+  }
+  function closeHomeDetailDrawer() {
+    if (homeDetailDrawer?.open) homeDetailDrawer.close();
+    restoreHomeDetailPanel();
+  }
+  function openHomeDetailDrawer(id) {
+    const panel = byId('detailPanel');
+    if (!panel || typeof window.showNodeDetailInline !== 'function') return false;
+    if (!homeDetailDrawer) {
+      homeDetailDrawer = document.createElement('dialog');
+      homeDetailDrawer.id = 'homeKnowledgeDrawer';
+      homeDetailDrawer.className = 'home-knowledge-drawer';
+      homeDetailDrawer.setAttribute('aria-label', '知识详情');
+      homeDetailDrawer.innerHTML = '<div class="home-knowledge-drawer-header"><div class="home-drawer-brand"><span class="home-drawer-mark" aria-hidden="true"><i class="fa-solid fa-bolt"></i></span><div><strong>知识 · 发现</strong><small>探索每一条知识背后的故事</small></div></div><button type="button" class="btn" data-close-home-detail aria-label="关闭知识详情"><span aria-hidden="true">×</span></button></div>';
+      document.body.appendChild(homeDetailDrawer);
+      homeDetailDrawer.addEventListener('close', () => { if (!homeDetailDrawer.open) restoreHomeDetailPanel(); });
+      homeDetailDrawer.addEventListener('click', (event) => {
+        if (event.target === homeDetailDrawer) {
+          const rect = homeDetailDrawer.getBoundingClientRect();
+          if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closeHomeDetailDrawer();
+        }
+      });
+      homeDetailDrawer.addEventListener('click', (event) => {
+        if (event.target.closest('[data-close-home-detail],#btnDetailBack')) {
+          event.preventDefault(); event.stopImmediatePropagation(); closeHomeDetailDrawer();
+        }
+      }, true);
+    }
+    if (!homeDetailMount) {
+      const marker = document.createComment('home detail panel original position');
+      panel.before(marker);
+      homeDetailMount = { panel, marker, display: panel.style.display, focus: document.activeElement };
+      homeDetailDrawer.appendChild(panel);
+    }
+    panel.style.display = 'flex';
+    if (!homeDetailDrawer.open) homeDetailDrawer.showModal();
+    void window.showNodeDetailInline(id, { preserveSidebarState: true });
+    return true;
+  }
+
+  function openHomeNodeDetail(node) {
+    const id = node?.id || node?._id;
+    if (!id) return;
+    if (openHomeDetailDrawer(id)) return;
+    if (typeof window.setViewMode === 'function') {
+      window.setViewMode('detail', { targetNodeId: id, focusDetailOnly: true, skipRouteUpdate: true });
+      return;
+    }
+    const url = new URL(location.href);
+    url.searchParams.delete('node'); url.searchParams.delete('view');
+    url.hash = new URLSearchParams({ view: 'knowledge_detail', node: id });
+    location.hash = url.hash;
+  }
   function homeKnowledgeCard(node) {
     const image = firstImage(node);
     const video = image ? '' : firstVideo(node);
     const title = node.name || node.label || node.id;
-    return `<article class="app-home-knowledge-card">
-      <a class="app-home-card-media${image || video ? '' : ' is-placeholder'}" href="${escape(nodeUrl(node))}" aria-label="查看 ${escape(title)}">${image ? `<img src="${escape(image)}" alt="" loading="lazy">` : video ? `<video src="${escape(video)}" muted playsinline preload="metadata"></video><span class="app-media-type"><i class="fa-solid fa-play" aria-hidden="true"></i> 视频</span>` : '<i class="fa-solid fa-lightbulb" aria-hidden="true"></i>'}</a>
-      <div class="app-home-card-body"><div class="app-home-card-meta"><span>${escape(node.typeLabel || node.type || '知识实体')}</span><time>${escape(shortDate(node.updated_at || node.created_at))}</time></div><a class="app-home-card-title" href="${escape(nodeUrl(node))}">${escape(title)}</a><p>${escape(node.description || node.desc_zh || '等待补充更多知识描述。')}</p><div class="app-home-card-footer"><span class="app-home-card-id">${escape(node.id || node._id || '')}</span><span>查看详情 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span></div></div>
+    const id = node.id || node._id || '';
+    return `<article class="app-home-knowledge-card" data-home-node-id="${escape(id)}">
+      <button type="button" class="app-home-card-media${image || video ? '' : ' is-placeholder'}" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}">${image ? `<img src="${escape(image)}" alt="" loading="lazy">` : video ? `<video src="${escape(video)}" muted playsinline preload="metadata"></video><span class="app-media-type"><i class="fa-solid fa-play" aria-hidden="true"></i> 视频</span>` : '<i class="fa-solid fa-lightbulb" aria-hidden="true"></i>'}</button>
+      <div class="app-home-card-body"><div class="app-home-card-meta"><span>${escape(node.typeLabel || node.type || '知识实体')}</span><time>${escape(shortDate(node.updated_at || node.created_at))}</time></div><button type="button" class="app-home-card-title" data-home-node-id="${escape(id)}">${escape(title)}</button><div class="app-home-card-footer"><span class="app-home-card-id">${escape(id)}</span><span>查看详情 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span></div></div>
     </article>`;
   }
   function applicationBanner() {
     const project = homeApplication || {};
     const name = String(project.title || project.name || byId('headerProjectName')?.textContent || '应用首页').trim();
     const description = String(project.description || '').trim();
-    const initials = (name || '应用').replace(/\s+/g, '').slice(0, 2).toUpperCase();
-    const image = typeof project.image === 'string' && /^(https?:\/\/|\/(?!\/)|data:image\/)/i.test(project.image.trim()) ? project.image.trim() : '';
     return `<section class="app-home-banner" aria-label="当前应用">
-      <div class="app-home-banner-logo"><span aria-hidden="true">${escape(initials)}</span>${image ? `<img src="${escape(image)}" alt="${escape(name)} Logo" loading="eager" onerror="this.remove()">` : ''}</div>
       <div class="app-home-banner-content"><h1>${escape(name)}</h1>${description ? `<p>${escape(description)}</p>` : ''}</div>
     </section>`;
+  }
+  function applicationSidebarBrand() {
+    const project = homeApplication || {};
+    const name = String(project.title || project.name || byId('headerProjectName')?.textContent || '应用首页').trim();
+    const initials = (name || '应用').replace(/\s+/g, '').slice(0, 2).toUpperCase();
+    const image = typeof project.image === 'string' && /^(https?:\/\/|\/(?!\/)|data:image\/)/i.test(project.image.trim()) ? project.image.trim() : '';
+    return `<div class="app-home-rail-brand" aria-label="当前应用 Logo">
+      <div class="app-home-rail-brandmark"><span aria-hidden="true">${escape(initials)}</span>${image ? `<img src="${escape(image)}" alt="${escape(name)} Logo" loading="lazy" onerror="this.remove()">` : ''}</div>
+    </div>`;
   }
   function categoryTree(items) {
     const byParent = new Map();
@@ -318,7 +391,7 @@
     const activeCategory = homeCategories.find((item) => item.id === homeSelectedCategory);
     content.innerHTML = `<div class="app-home-quickbar"><button type="button" class="app-inspiration-trigger" data-home-inspiration-open aria-label="抽取知识灵感" title="抽取知识灵感"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i></button></div>
       <dialog class="app-inspiration-modal" data-home-inspiration-modal aria-labelledby="appInspirationTitle"><div class="app-inspiration-profile-layer" data-jev-profile-layer ${showJev ? '' : 'hidden'}>${showJev ? profileLoading() : ''}</div><div class="app-inspiration-modal-core"><div class="app-inspiration-modal-head"><div><span class="app-home-eyebrow"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> DISCOVERY</span><h2 id="appInspirationTitle">抽张知识灵感卡</h2><p>把熟悉的排序放一边，遇见一条可能没看过的知识。</p></div><button type="button" class="app-inspiration-close" data-home-inspiration-close aria-label="关闭"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div><div class="app-inspiration-draw-shell">${inspirationDrawContent(inspiration)}</div></div></dialog>
-      <div class="app-home-workspace"><aside class="app-category-panel"><div class="app-home-section-heading compact"><div><h2>分类树</h2></div><span class="app-category-total">${homeCategories.length}</span></div><nav aria-label="知识分类"><button type="button" class="app-category-item${homeSelectedCategory ? '' : ' is-active'}" data-home-category=""><i class="fa-solid fa-layer-group" aria-hidden="true"></i><span>全部知识</span><small>${Number(byId('appHomeCount')?.dataset.total) || 0}</small></button><ul class="app-category-tree">${categoryTree(homeCategories)}</ul></nav></aside>
+      <div class="app-home-workspace"><aside class="app-category-panel">${applicationSidebarBrand()}<nav aria-label="知识分类"><button type="button" class="app-category-item${homeSelectedCategory ? '' : ' is-active'}" data-home-category=""><i class="fa-solid fa-layer-group" aria-hidden="true"></i><span>全部知识</span><small>${Number(byId('appHomeCount')?.dataset.total) || 0}</small></button><ul class="app-category-tree">${categoryTree(homeCategories)}</ul></nav></aside>
       <section class="app-knowledge-panel">${applicationBanner()}<div class="app-home-section-heading compact"><div><h2>${escape(activeCategory?.name || '知识列表')}</h2></div><span class="app-list-count">${nodes.length} 条</span></div><div class="app-home-knowledge-grid">${nodes.map(homeKnowledgeCard).join('') || '<div class="app-home-empty"><i class="fa-solid fa-inbox" aria-hidden="true"></i><strong>该分类暂无知识</strong><span>选择其他分类，或创建一条新知识。</span></div>'}</div></section></div>`;
   }
   function flatten(items, depth = 0) {
@@ -355,6 +428,8 @@
     }
     byId('appSearchType').value = selected;
   }
+  window.closeHomeDetailDrawer = closeHomeDetailDrawer;
+  window.addEventListener('hashchange', closeHomeDetailDrawer);
   window.loadApplicationHome = async function () {
     const version = ++homeVersion;
     byId('appHomeName').textContent = byId('headerProjectName')?.textContent.trim() || '应用首页';
@@ -436,6 +511,14 @@
   byId('appSearchNext').addEventListener('click', () => { if (page * pageSize < total) { page++; search(); } });
   byId('appHomeContent').addEventListener('click', (event) => {
     const modal = byId('appHomeContent').querySelector('[data-home-inspiration-modal]');
+    const homeNodeButton = event.target.closest('[data-home-node-id]');
+    if (homeNodeButton) {
+      const node = homeNodes.find((item) => (item.id || item._id) === homeNodeButton.dataset.homeNodeId) || homeVisibleNodes.find((item) => (item.id || item._id) === homeNodeButton.dataset.homeNodeId);
+      if (node) {
+        openHomeNodeDetail(node);
+      }
+      return;
+    }
     if (event.target.closest('[data-home-inspiration-open]')) { modal?.showModal(); void scoreInspiration(homeNodes[homeInspirationIndex]); return; }
     if (event.target.closest('[data-home-inspiration-close]')) { clearProfileCardSelection(modal); modal?.close(); return; }
     if (event.target.closest('[data-jev-profile-refresh]')) { void scoreInspiration(homeNodes[homeInspirationIndex], true); return; }

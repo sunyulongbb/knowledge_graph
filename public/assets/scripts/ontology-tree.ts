@@ -6,6 +6,7 @@ import {
   isIllegalOntologyMove,
   toOntologyTreeItems,
   type OntologyRecord,
+  type OntologyMove,
 } from "./ontology-tree-adapter";
 import { moveOntology } from "./ontology-tree-api";
 
@@ -21,6 +22,8 @@ export type OntologyTreeControllerOptions = {
   allLabel?: string;
   showAllButton?: boolean;
   enableDrag?: boolean;
+  onMove?: (id: string, items: OntologyMove[]) => Promise<unknown>;
+  nodeLabel?: string;
   enableContextMenu?: boolean;
   disableReadonlyItems?: boolean;
   toggleSelection?: boolean;
@@ -282,14 +285,16 @@ export class OntologyTreeController {
       const source = this.records.find(
         (item) => item.id === String(data.start),
       );
-      return !this.busy && !source?.readonly && !source?.system;
+      if (this.toggleTimer) clearTimeout(this.toggleTimer);
+      this.toggleTimer = null;
+      return !this.busy && !!source && !source.readonly && !source.system;
     });
     tree.events.on("beforeDrop", (data) => {
       if (this.options.enableDrag === false) return false;
       const movedId = String(data.start);
       const targetId = data.target == null ? null : String(data.target);
       if (isIllegalOntologyMove(movedId, targetId, this.records)) {
-        this.notify("不能将本体移动到自身或其后代下面");
+        this.notify(`不能将${this.options.nodeLabel || "本体"}移动到自身或其后代下面`);
         return false;
       }
       return !this.busy;
@@ -312,11 +317,11 @@ export class OntologyTreeController {
         .getItems(parentId ?? root)
         .map((item) => String(item.id));
       const payload = createOntologyMovePayload(id, parentId, siblings);
-      await moveOntology(id, payload);
+      await (this.options.onMove || moveOntology)(id, payload);
       await this.options.onReload();
     } catch (error) {
       this.notify(
-        `移动本体失败，已恢复服务器状态：${error instanceof Error ? error.message : String(error)}`,
+        `移动${this.options.nodeLabel || "本体"}失败，将重新加载服务器状态：${error instanceof Error ? error.message : String(error)}`,
       );
       await this.options.onReload();
     } finally {

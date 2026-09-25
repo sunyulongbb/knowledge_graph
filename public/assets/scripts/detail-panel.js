@@ -51,7 +51,10 @@
   function hideDetailPanel() {
     try {
       const dp = document.getElementById("detailPanel");
-      if (dp) dp.style.display = "none";
+      if (dp) {
+        dp.style.display = "none";
+        dp.classList.remove("app-home-detail-open");
+      }
       // show default table/vis area depending on current mode
       if (window.kbViewMode === "vis") {
         if (cywrap) cywrap.style.display = "";
@@ -1019,11 +1022,14 @@
     const dp = document.getElementById("detailPanel");
     const inner = document.getElementById("detailInner");
     if (!dp || !inner) return;
+    const appHomePanel = document.getElementById("applicationHomePanel");
+    const shouldOpenHomeDrawer = Boolean(appHomePanel) && (window.kbViewMode === "app_home" || appHomePanel.style.display !== "none");
     try {
       tablePanel.style.display = "none";
       cywrap.style.display = "none";
     } catch {}
     dp.style.display = "";
+    dp.classList.toggle("app-home-detail-open", shouldOpenHomeDrawer);
     clearDetailPanel();
     // keep the current entity id on the panel for wiki actions
     try {

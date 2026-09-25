@@ -165,6 +165,8 @@ test('application home provides inspiration draw, category tree, and knowledge c
   expect(script).toContain('data-home-category');
   expect(script).toContain("class_id: homeSelectedCategory");
   expect(script).toContain('app-home-knowledge-grid');
+  expect(script).toContain('openHomeNodeDetail(node)');
+  expect(script).toContain('window.showNodeDetailInline(id, { preserveSidebarState: true });');
   expect(script).toContain('function firstVideo(node)');
   expect(script).toContain('preload="metadata"');
   expect(script).toContain('app-inspiration-progress-track');
@@ -200,6 +202,8 @@ test('application home provides inspiration draw, category tree, and knowledge c
   expect(css).toContain('background: radial-gradient(circle at center, var(--surface-0)');
   expect(css).toContain('.app-category-tree');
   expect(css).toContain('.app-home-knowledge-card');
+  expect(css).toContain('grid-template-columns: repeat(6, minmax(0, 1fr));');
+  expect(css).toContain('grid-template-columns: 1fr;');
   expect(css).toContain('.app-home-heading { display: none; }');
   expect(css).toContain('right: calc(var(--user-sidebar-width, 0px) + 18px);');
   expect(css).toContain('height: calc(100dvh - 104px);');

@@ -1,3 +1,5 @@
+import { reorderClasses } from '../class-reorder.ts';
+import { loadPropertyTailSuggestions } from '../property-tail-suggestions.ts';
 import { db, getProjectByIdentifier } from "../db.ts";
 import { resolve } from "path";
 import { loadOntologyProperties } from '../ontology-properties.ts';
@@ -1143,32 +1145,10 @@ export async function handleSchemaRoutes(
         return new Response("Missing updates", { status: 400 });
       }
 
-      const stmt = hasProjectScope
-        ? db.prepare(
-            "UPDATE classes SET parent_id = ?, sort_order = ?, project_id = COALESCE(project_id, ?) WHERE id = ? AND (project_id = ? OR project_id IS NULL)",
-          )
-        : db.prepare(
-            "UPDATE classes SET parent_id = ?, sort_order = ? WHERE id = ?",
-          );
-      const txn = db.transaction((rows: any[]) => {
-        for (const row of rows) {
-          if (!row?.id) continue;
-          const pid = row.parent_id ?? null;
-          const orderVal =
-            typeof row.sort_order === "number"
-              ? row.sort_order
-              : Number(row.sort_order);
-          const sort = Number.isFinite(orderVal) ? orderVal : null;
-          if (hasProjectScope)
-            stmt.run(pid, sort, scopedProjectId, row.id, scopedProjectId);
-          else stmt.run(pid, sort, row.id);
-        }
-      });
-      txn(updates);
-      return Response.json({ ok: true, updated: updates.length });
-    } catch (e) {
-      console.error(e);
-      return new Response("Error reordering classes", { status: 500 });
+      const updated = reorderClasses(db, scopedProjectId, updates);
+      return Response.json({ ok: true, updated });
+    } catch (error) {
+      return new Response(error instanceof Error ? error.message : '分类移动失败', { status: 400 });
     }
   }
 
@@ -1949,6 +1929,10 @@ export async function handleSchemaRoutes(
     });
 
     const propKeys = Array.from(keysToCheck);
+    const tailSuggestions = loadPropertyTailSuggestions(db, propKeys, scopedProjectId, {
+      limit, query: url.searchParams.get('q') || '', excludeId: entityIdParam || '',
+    });
+    if (tailSuggestions) return Response.json(tailSuggestions);
     const propPlaceholders = propKeys.map((_, i) => `$p${i}`).join(",");
 
     let entityId = entityIdParam;

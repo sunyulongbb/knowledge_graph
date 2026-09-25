@@ -7,7 +7,7 @@ function setup() {
   const requests: URL[] = [];
   const location = { href: 'https://example.test/?db=demo&leftSidebar=closed&rightSidebar=open#view=app_search', origin: 'https://example.test', search: '?db=demo&leftSidebar=closed&rightSidebar=open' };
   const fetch = async (url: URL) => { requests.push(url); return { ok: true, json: async () => ({ nodes: [], total: 0 }) }; };
-  const api = new Function('document', 'location', 'fetch', `${block}; return { api, card, nodeUrl, flatten };`)({}, location, fetch);
+  const api = new Function('document', 'location', 'fetch', 'window', `${block}; return { api, card, nodeUrl, flatten };`)({}, location, fetch, { addEventListener() {} });
   return { ...api, requests };
 }
 

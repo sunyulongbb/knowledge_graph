@@ -6,6 +6,8 @@ function setup() {
   const db = new Database(':memory:');
   db.run('CREATE TABLE nodes(id TEXT PRIMARY KEY,name TEXT,description TEXT,owner_user_id INTEGER,project_id INTEGER,visibility TEXT)');
   db.run('CREATE TABLE classes(id TEXT PRIMARY KEY,name TEXT,description TEXT,parent_id TEXT,project_id INTEGER)');
+  db.run('CREATE TABLE ontologies(id TEXT,name TEXT,description TEXT,project_id INTEGER)');
+  db.run('CREATE TABLE properties(id TEXT,name TEXT,project_id INTEGER)');
   db.run('CREATE TABLE attributes(node_id TEXT,key TEXT,value TEXT)');
   db.run('CREATE TABLE knowledge_maintainers(node_id TEXT,user_id INTEGER)');
   db.run('CREATE TABLE entity_classes(entity_id TEXT,class_id TEXT,PRIMARY KEY(entity_id,class_id))');
@@ -17,6 +19,7 @@ function setup() {
   let key = 'test-key';
   let calls = 0;
   let requestBody: any;
+  let answers: any[] = [];
   let answer: any = { choice: 'category_1', confidence: 0.9 };
   let beforeResponse: () => void | Promise<void> = () => {};
   const handler = createJevClassificationHandler({
@@ -24,11 +27,12 @@ function setup() {
     getProject: (slug) => slug === 'mine' ? { id: 10 } : { id: 20 },
     request: (async (_url: unknown, init: RequestInit) => {
       calls++; requestBody = JSON.parse(String(init.body)); await beforeResponse();
-      return Response.json({ data: { answers: { category: answer } } });
+      return Response.json({ data: { answers: { category: answers.length ? answers.shift() : answer } } });
     }) as typeof fetch,
   });
   return {
     db, setUser: (value: any) => { user = value; }, setKey: (value: string) => { key = value; },
+    setAnswers: (values: any[]) => { answers = values; },
     setAnswer: (value: any) => { answer = value; }, beforeResponse: (fn: () => void | Promise<void>) => { beforeResponse = fn; },
     calls: () => calls, requestBody: () => requestBody,
     assigned: () => db.query('SELECT class_id FROM entity_classes ORDER BY class_id').all(),
@@ -55,6 +59,7 @@ test('insufficient evidence, low confidence and invalid choices never write clas
   try {
     for (const answer of [{ choice: 'insufficient' }, { choice: 'category_1', confidence: 0.2 }]) {
       h.setAnswer(answer);
+      h.setAnswers([answer, { choice: 'insufficient', confidence: 0.8 }]);
       expect(await (await h.call()).json()).toMatchObject({ status: 'skipped' });
     }
     for (const answer of [null, { choice: 'foreign' }, { choice: 'category_99' }]) {
@@ -131,5 +136,31 @@ test('stream preserves authorization error status without starting JEV', async (
     const events = (await (await h.call('mine', true)).text()).trim().split('\n').map((line) => JSON.parse(line));
     expect(events.at(-1)).toMatchObject({ type: 'result', httpStatus: 401 });
     expect(h.calls()).toBe(0);
+  } finally { h.db.close(); }
+});
+
+test('uncertain fine-grained classification retries broad categories instead of discarding useful evidence', async () => {
+  const h = setup();
+  try {
+    h.setAnswers([{ choice: 'category_1', confidence: 0.4 }, { choice: 'category_0', confidence: 0.9 }]);
+    const data = await (await h.call()).json();
+    expect(data).toMatchObject({ status: 'classified', reason: '细类证据不足，已归入可确定的上位分类' });
+    expect(h.calls()).toBe(2);
+    expect(h.assigned()).toEqual([{ class_id: 'a' }, { class_id: 'c' }]);
+    expect(h.requestBody().questions.category.criteria).not.toHaveProperty('category_1');
+  } finally { h.db.close(); }
+});
+
+test('opaque ontology and property IDs are enriched with readable names for classification', async () => {
+  const h = setup();
+  try {
+    h.db.run('ALTER TABLE nodes ADD COLUMN type TEXT');
+    h.db.run("UPDATE nodes SET type='ontology/person'");
+    h.db.run("INSERT INTO ontologies VALUES('ontology/person','人物','人类',10)");
+    h.db.run("INSERT INTO properties VALUES('property/occupation','职业',10)");
+    h.db.run("UPDATE attributes SET key='property/occupation'");
+    await h.call();
+    expect(h.requestBody().state.type).toBe('人物');
+    expect(h.requestBody().state.attributes).toEqual([{ key: '职业', value: '大学教授' }]);
   } finally { h.db.close(); }
 });
