@@ -68,7 +68,7 @@
       customElements.whenDefined("media-video-layout"),
     ]).then(() => true);
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20260924-20" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20260925-jev-progress" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -2073,6 +2073,28 @@
           <button id="btnTableAdd" class="btn icon" title="新增节点" aria-label="新增节点">
             <i class="fa-solid fa-plus"></i>
           </button>
+          <button id="btnJevClassify" class="btn" type="button" title="根据选中实体的信息自动匹配分类，并补齐父级分类">
+            <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> JEV 自动分类
+          </button>
+          <button id="btnJevClassifyCancel" class="btn" type="button" hidden>停止分类</button>
+          <span id="jevClassifyStatus" role="status" aria-live="polite" class="muted"></span>
+          <button id="btnJevClassifyResults" class="btn" type="button" hidden>查看结果</button>
+          <dialog id="jevClassifyResults" class="jev-classify-dialog" aria-labelledby="jevClassifyResultTitle">
+            <div class="jev-classify-dialog-header">
+              <h3 id="jevClassifyResultTitle">JEV 分类过程与结果</h3>
+              <button id="btnJevClassifyClose" class="btn" type="button" aria-label="关闭分类结果">关闭</button>
+            </div>
+            <p class="muted">匹配最合适的分类，自动补齐父级分类，保留已有分类。信息不足时跳过。</p>
+            <p id="jevClassifyLiveStatus" role="status" aria-live="polite"></p>
+            <progress id="jevClassifyProgress" max="1" value="0" aria-label="分类完成进度"></progress>
+            <p id="jevClassifyResultSummary" role="status" aria-live="polite"></p>
+            <div class="jev-classify-results-scroll"><table>
+              <thead><tr><th scope="col">实体</th><th scope="col">状态</th><th scope="col">处理过程 / 分类结果</th></tr></thead>
+              <tbody id="jevClassifyResultBody"></tbody>
+            </table></div>
+            <button id="btnJevClassifyDialogCancel" class="btn" type="button" hidden>停止后续分类</button>
+            <button id="btnJevClassifyRetry" class="btn primary" type="button" disabled>重试失败及未处理项</button>
+          </dialog>
           <button id="btnDeleteSelected" class="btn icon" type="button" title="删除选中知识" aria-label="删除选中知识" disabled>
             <i class="fa-regular fa-trash-can"></i>
           </button>
@@ -15140,7 +15162,7 @@
     }
 
     function renderComposerDecorationsPreserveCaret(el) {
-      if (!el) return;
+      if (!el || el.composerIsComposing) return;
       const focused = document.activeElement === el;
       const caret = focused ? getComposerCaretOffset(el) : null;
       const text = (el.innerText || '').replace(/\u200B/g, '');
@@ -16024,9 +16046,25 @@
         }
       }
 
-      entityDisplayName.addEventListener('input', () => {
+      let compositionCommitTimer = null;
+      function commitComposerInput() {
+        clearTimeout(compositionCommitTimer);
+        if (entityDisplayName.composerIsComposing) return;
         syncComposerToHiddenFields();
         renderComposerDecorationsPreserveCaret(entityDisplayName);
+      }
+      entityDisplayName.addEventListener('compositionstart', () => {
+        clearTimeout(compositionCommitTimer);
+        entityDisplayName.composerIsComposing = true;
+      });
+      entityDisplayName.addEventListener('compositionend', () => {
+        entityDisplayName.composerIsComposing = false;
+        // 等浏览器完成上屏，兼容 compositionend 后才发送最终 input 的浏览器。
+        compositionCommitTimer = setTimeout(commitComposerInput, 0);
+      });
+      entityDisplayName.addEventListener('input', (event) => {
+        if (event.isComposing || entityDisplayName.composerIsComposing) return;
+        commitComposerInput();
       });
       entityDisplayName.addEventListener('paste', (event) => {
         event.preventDefault();
@@ -16038,15 +16076,8 @@
         renderComposerDecorationsPreserveCaret(entityDisplayName);
       });
       entityDisplayName.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter' && (event.isComposing || event.keyCode === 229)) {
-          // 中文输入法场景：首个 Enter 常用于确认候选，默认会表现为“第一次没反应”
-          // 这里统一处理为直接换行，避免需要按第二次 Enter。
-          event.preventDefault();
-          insertComposerTextAtCaret('\n');
-          syncComposerToHiddenFields();
-          renderComposerDecorationsPreserveCaret(entityDisplayName);
-          return;
-        }
+        // 候选确认、空格和方向键交给输入法，不能触发换行、提交或 @ 菜单。
+        if (event.isComposing || entityDisplayName.composerIsComposing || event.keyCode === 229) return;
         if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
           event.preventDefault();
           syncComposerToHiddenFields();
@@ -16577,17 +16608,28 @@
           return all;
         }
 
-        entityDisplayName.addEventListener('input', () => {
+        let mentionSearchVersion = 0;
+        function scheduleMentionSearch(event) {
           clearTimeout(mentionTimer);
+          const version = ++mentionSearchVersion;
+          if (event?.isComposing || entityDisplayName.composerIsComposing) {
+            closeAllMentionDropdowns();
+            return;
+          }
           const ctx = getAtMentionQuery();
           if (!ctx) { closeAllMentionDropdowns(); return; }
           const { query } = ctx;
           mentionTimer = setTimeout(async () => {
             const nodes = await fetchMentions(query);
+            if (version !== mentionSearchVersion || entityDisplayName.composerIsComposing ||
+                document.activeElement !== entityDisplayName || getAtMentionQuery()?.query !== query) return;
             renderMentionDropdown(nodes, query);
             closePropertyDropdown();
           }, 200);
-        });
+        }
+        entityDisplayName.addEventListener('compositionstart', scheduleMentionSearch);
+        entityDisplayName.addEventListener('compositionend', scheduleMentionSearch);
+        entityDisplayName.addEventListener('input', scheduleMentionSearch);
 
         document.addEventListener('click', (e) => {
           const drop = document.getElementById('composerMentionDropdown');
@@ -17209,7 +17251,7 @@
   <div id="classAnalysisModal" class="modal-overlay class-analysis-overlay" hidden aria-hidden="true">
     <section class="class-analysis-dialog" role="dialog" aria-modal="true" aria-labelledby="classAnalysisTitle">
       <header class="class-analysis-head"><div><span class="app-home-eyebrow">CATEGORY ANALYSIS</span><h3 id="classAnalysisTitle">分类分析</h3><p id="classAnalysisClassName" class="muted"></p></div><button id="btnClassAnalysisClose" class="btn icon" type="button" aria-label="关闭"><i class="fa-solid fa-xmark"></i></button></header>
-      <div class="class-analysis-toolbar"><p>为该分类定义分析边界，关键词支持中文逗号、英文逗号或换行分隔。</p><div><button id="btnClassAnalysisExample" class="btn sm" type="button"><i class="fa-regular fa-lightbulb"></i> 美国政治人物示例</button><button id="btnClassAnalysisAdd" class="btn sm" type="button"><i class="fa-solid fa-plus"></i> 添加角度</button></div></div>
+      <div class="class-analysis-toolbar"><p>为该分类定义分析边界，关键词支持中文逗号、英文逗号或换行分隔。</p><div><button id="btnClassAnalysisAdd" class="btn sm" type="button"><i class="fa-solid fa-plus"></i> 添加角度</button></div></div>
       <form id="classAnalysisForm"><div id="classAnalysisRows" class="class-analysis-rows"></div><p id="classAnalysisStatus" class="muted" role="status"></p><footer><button id="btnClassAnalysisCancel" class="btn" type="button">取消</button><button class="btn primary" type="submit">保存分析</button></footer></form>
     </section>
   </div>
@@ -17249,7 +17291,7 @@
   </script>
   <script src="/assets/scripts/property-panel.js?v=20260915-1"></script>
   <script src="/assets/scripts/table-panel.js?v=20260914-7"></script>
-  <script src="/assets/scripts/table-selection.js?v=20260924-6"></script>
+  <script src="/assets/scripts/table-selection.js?v=20260925-jev-click-fix"></script>
   <script src="/assets/scripts/entity-manage-table.js?v=20260924-3"></script>
   <script src="/assets/scripts/attr-panel.js?v=20260922-1"></script>
   <script src="/assets/scripts/entity-import.js?v=20260921-6"></script>

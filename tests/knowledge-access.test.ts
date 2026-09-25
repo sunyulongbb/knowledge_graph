@@ -2,6 +2,7 @@ import { test, expect } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { readFileSync } from 'node:fs';
 import { canAccessKnowledge, createKnowledgeDatabase, ensureKnowledgeAccessSchema, knowledgeContext } from '../src/server/knowledge-access.ts';
+import { applicationPermissions } from '../src/server/application-access.ts';
 import { knowledgeId } from '../src/server/knowledge-access.ts';
 
 function setup() {
@@ -107,10 +108,11 @@ test('table sorting and saved graph snapshots respect visibility', () => {
   } finally { raw.close(); }
 });
 
-function accessRoutes(raw: Database) {
+function accessRoutes(raw: Database, projects: Record<string, any> = {}) {
   const source = readFileSync(new URL('../src/server/routes/knowledge-access.ts', import.meta.url), 'utf8').replace(/^import .*;\r?\n/gm, '').replace(/export /g, '');
   const getCurrentUser = (req: Request) => req.headers.get('test-user') === 'owner' ? owner : req.headers.get('test-user') === 'reader' ? reader : null;
-  return new Function('db', 'getCurrentUser', 'canAccessKnowledge', 'knowledgeId', new Bun.Transpiler({ loader: 'ts' }).transformSync(source + '\nreturn { handleKnowledgeAccessRoutes, guardKnowledgeRequest };'))(raw, getCurrentUser, canAccessKnowledge, knowledgeId);
+  const getKnowledgeUser = (req: Request) => new URL(req.url).searchParams.get('db') === 'default' ? { ...(getCurrentUser(req) || { id: 0, username: 'anonymous' }), role: 'admin', fullAccess: true } : getCurrentUser(req);
+  return new Function('db', 'getKnowledgeUser', 'canAccessKnowledge', 'knowledgeId', 'getProjectByIdentifier', 'applicationPermissions', new Bun.Transpiler({ loader: 'ts' }).transformSync(source + '\nreturn { handleKnowledgeAccessRoutes, guardKnowledgeRequest };'))(raw, getKnowledgeUser, canAccessKnowledge, knowledgeId, (slug: string) => projects[slug] || null, applicationPermissions);
 }
 
 test('private media requires access even with alternate path casing and repeated slashes', async () => {
@@ -175,5 +177,39 @@ test('server stamps creator identity and request contexts do not cross users', a
     expect(raw.query("SELECT owner_user_id,creator_username,visibility FROM nodes WHERE id='new-3'").get()).toEqual({ owner_user_id: 3, creator_username: 'reader', visibility: 'public' });
     expect(() => knowledgeContext.run({ user: null }, () => db.run("INSERT INTO nodes (id) VALUES ('anonymous')"))).toThrow('请先登录');
     expect(knowledgeContext.run({ user: reader }, () => db.query('WITH chosen AS (SELECT * FROM nodes) SELECT id FROM chosen WHERE id = ?').get('private'))).toBeNull();
+  } finally { raw.close(); }
+});
+
+test('application owners manage all knowledge in their own application only', () => {
+  const { raw, db } = setup();
+  try {
+    raw.run('ALTER TABLE nodes ADD COLUMN project_id INTEGER');
+    raw.run("UPDATE nodes SET project_id=10 WHERE id IN ('public','private')");
+    raw.run("UPDATE nodes SET project_id=20 WHERE id='other'");
+    const appOwner = { ...reader, ownedProjectIds: [10] };
+    for (const mode of ['read', 'edit', 'manage'] as const) {
+      expect(canAccessKnowledge(raw, appOwner, 'private', mode)).toBe(true);
+      expect(canAccessKnowledge(raw, appOwner, 'other', mode)).toBe(false);
+    }
+    knowledgeContext.run({ user: appOwner }, () => {
+      expect(db.query('SELECT id FROM nodes ORDER BY id').all()).toEqual([{ id: 'private' }, { id: 'public' }]);
+    });
+  } finally { raw.close(); }
+});
+
+test('schema management is granted only in the owned application', async () => {
+  const { raw } = setup();
+  try {
+    raw.run('CREATE TABLE application_members(project_id INTEGER,user_id INTEGER)');
+    const { guardKnowledgeRequest } = accessRoutes(raw, {
+      mine: { id: 10, owner_user_id: 1 }, theirs: { id: 20, owner_user_id: 2 },
+    });
+    for (const slug of ['mine', 'theirs']) {
+      const url = new URL(`http://localhost/api/kb/classes/update?db=${slug}`);
+      const req = new Request(url, { method: 'POST', headers: { 'test-user': 'owner', 'Content-Type': 'application/json' }, body: JSON.stringify({ id: 'class/a', name: '分类' }) });
+      const result = await guardKnowledgeRequest(req, url, 'POST');
+      if (slug === 'mine') expect(result).toBeNull();
+      else expect(result.status).toBe(403);
+    }
   } finally { raw.close(); }
 });

@@ -8,20 +8,93 @@ import { mkdirSync, writeFileSync } from "fs";
 
 const UPLOADS_DIR = resolve(import.meta.dir, "..", "..", "..", "..", "uploads");
 
-function normalizeClassAnalyses(value: unknown) {
+export function normalizeAnalysisCriteria(value: unknown): Record<string, string> {
+  if (value == null) return {};
+  const parseEntries = (input: unknown): Array<[string, string]> => {
+    if (input == null) return [];
+    if (typeof input === "string") {
+      const trimmed = input.trim();
+      if (!trimmed) return [];
+      try {
+        return parseEntries(JSON.parse(trimmed));
+      } catch {}
+      const entries: Array<[string, string]> = [];
+      for (const line of trimmed.split(/\r?\n/)) {
+        const content = line.trim();
+        if (!content) continue;
+        const match = content.match(/^([^:=：=]+?)(?:\s*[:：=]\s*|\s*->\s*)(.+)$/);
+        if (!match) continue;
+        const label = match[1].trim();
+        const description = match[2].trim();
+        if (label && description) entries.push([label, description]);
+      }
+      return entries;
+    }
+    if (Array.isArray(input)) {
+      const entries: Array<[string, string]> = [];
+      for (const item of input) {
+        if (!item || typeof item !== "object") continue;
+        const record = item as Record<string, unknown>;
+        const label = String(record.label ?? record.name ?? record.key ?? record.option ?? "").trim();
+        const description = String(record.description ?? record.text ?? record.detail ?? record.value ?? "").trim();
+        if (label && description) entries.push([label, description]);
+      }
+      return entries;
+    }
+    if (typeof input === "object") {
+      return Object.entries(input as Record<string, unknown>).flatMap(([label, rawDescription]) => {
+        const description = typeof rawDescription === "string"
+          ? rawDescription
+          : rawDescription && typeof rawDescription === "object"
+            ? String((rawDescription as Record<string, unknown>).description ?? (rawDescription as Record<string, unknown>).text ?? (rawDescription as Record<string, unknown>).value ?? "")
+            : "";
+        if (!label.trim() || !description.trim()) return [] as Array<[string, string]>;
+        return [[label.trim(), description.trim()]] as Array<[string, string]>;
+      });
+    }
+    return [];
+  };
+
+  const criteria: Record<string, string> = {};
+  for (const [label, description] of parseEntries(value)) {
+    criteria[label] = description;
+  }
+  if (!Object.keys(criteria).length) return {};
+  if (!criteria["信息不足"]) criteria["信息不足"] = "现有知识没有足够证据作出该角度的判断";
+  return criteria;
+}
+
+export function normalizeClassAnalyses(value: unknown, requireCriteria = false) {
   if (value == null) return [];
-  if (!Array.isArray(value)) throw new Error("分类分析必须是数组");
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    try {
+      return normalizeClassAnalyses(JSON.parse(trimmed), requireCriteria);
+    } catch {
+      return normalizeClassAnalyses([value], requireCriteria);
+    }
+  }
+  if (!Array.isArray(value)) {
+    if (value && typeof value === "object") {
+      return normalizeClassAnalyses([value], requireCriteria);
+    }
+    throw new Error("分类分析必须是数组或对象");
+  }
   if (value.length > 20) throw new Error("每个分类最多添加 20 个分析角度");
   return value.map((item: any, index) => {
     const angle = String(item?.angle || "").trim();
     const content = String(item?.content || "").trim();
     const rawKeywords = Array.isArray(item?.keywords) ? item.keywords : String(item?.keywords || "").split(/[,，;；\n]+/);
     const keywords: string[] = [...new Set<string>(rawKeywords.map((keyword: unknown) => String(keyword || "").trim()).filter((keyword: string) => Boolean(keyword)))];
+    const criteria = normalizeAnalysisCriteria(item?.criteria);
     if (!angle) throw new Error(`第 ${index + 1} 个分析角度不能为空`);
     if (!content) throw new Error(`第 ${index + 1} 个分析内容不能为空`);
+    if (requireCriteria && !Object.keys(criteria).length) throw new Error(`第 ${index + 1} 个分析角度必须填写判断选项`);
     if (angle.length > 80 || content.length > 1000 || keywords.length > 100 || keywords.some((keyword) => keyword.length > 80)) {
       throw new Error(`第 ${index + 1} 个分析配置内容过长`);
     }
+    if (Object.keys(criteria).length) return { angle, content, keywords, criteria };
     return { angle, content, keywords };
   });
 }
@@ -834,7 +907,7 @@ export async function handleSchemaRoutes(
           rowTags = JSON.parse(row.tags || "[]");
         } catch {}
         try {
-          rowAnalyses = normalizeClassAnalyses(JSON.parse(row.analyses || "[]"));
+          rowAnalyses = normalizeClassAnalyses(JSON.parse(row.analyses || "[]"), false);
         } catch {}
         return {
           id: row.id,
@@ -1004,7 +1077,7 @@ export async function handleSchemaRoutes(
       }
       if (body.analyses !== undefined) {
         updates.push("analyses = ?");
-        params.push(JSON.stringify(normalizeClassAnalyses(body.analyses)));
+        params.push(JSON.stringify(normalizeClassAnalyses(body.analyses, true)));
       }
       if (hasProjectScope) {
         updates.push("project_id = COALESCE(project_id, ?)");
@@ -1040,7 +1113,7 @@ export async function handleSchemaRoutes(
         updatedClassTags = JSON.parse(updatedClass.tags || "[]");
       } catch {}
       try {
-        updatedClassAnalyses = normalizeClassAnalyses(JSON.parse(updatedClass.analyses || "[]"));
+        updatedClassAnalyses = normalizeClassAnalyses(JSON.parse(updatedClass.analyses || "[]"), false);
       } catch {}
       return Response.json({
         id: updatedClass.id,

@@ -4,6 +4,202 @@ function __kbInitTableSelection() {
   const dom = shared.dom || {};
   const byId = dom.byId || ((id) => document.getElementById(id));
   const btnDeleteSelected = byId("btnDeleteSelected");
+  const btnJevClassify = byId('btnJevClassify');
+  const btnJevClassifyCancel = byId('btnJevClassifyCancel');
+  const jevClassifyStatus = byId('jevClassifyStatus');
+  const classifyDialog = byId('jevClassifyResults');
+  const classifyResultBody = byId('jevClassifyResultBody');
+  const classifyRetry = byId('btnJevClassifyRetry');
+  let classifying = false;
+  let cancelClassification = false;
+  let classificationScope = null;
+  let classificationResults = [];
+  const classificationSelection = () => {
+    const ids = Array.from(window.kbSelectedRowIds || []);
+    if (!ids.length && window.kbSelectedRowId) ids.push(window.kbSelectedRowId);
+    return ids;
+  };
+  const classificationUrl = () => appendCurrentDbToUrl(new URL('/api/jev/classify', location.origin));
+  function renderClassificationResults() {
+    classifyResultBody.replaceChildren();
+    const labels = { pending: '未处理', running: '分析中', classified: '已分类', skipped: '已跳过', failed: '失败' };
+    for (const result of classificationResults) {
+      const row = document.createElement('tr');
+      for (const text of [result.name, labels[result.status], [...(result.history || []), result.detail].filter(Boolean).join('\n') || '—']) {
+        const cell = document.createElement('td');
+        cell.textContent = text;
+        row.appendChild(cell);
+      }
+      row.dataset.status = result.status;
+      classifyResultBody.appendChild(row);
+    }
+    const completed = classificationResults.filter((item) => ['classified', 'skipped', 'failed'].includes(item.status)).length;
+    const active = classificationResults.find((item) => item.status === 'running');
+    const progress = byId('jevClassifyProgress');
+    progress.max = Math.max(1, classificationResults.length);
+    progress.value = completed;
+    byId('jevClassifyLiveStatus').textContent = classifying
+      ? (cancelClassification ? '正在停止，等待当前实体完成。' : active ? '正在处理：' + active.name : '正在准备分类…') + ' 已完成 ' + completed + '/' + classificationResults.length
+      : '已处理 ' + completed + '/' + classificationResults.length;
+    byId('btnJevClassifyDialogCancel').hidden = !classifying;
+    byId('btnJevClassifyDialogCancel').disabled = cancelClassification;
+    classifyRetry.disabled = classifying || classificationUrl().searchParams.get('db') !== classificationScope ||
+      !classificationResults.some((item) => item.status === 'failed' || item.status === 'pending');
+  }
+  function openClassificationDialog(message = '') {
+    try {
+      if (!classifyDialog.open) classifyDialog.showModal();
+      renderClassificationResults();
+      byId('jevClassifyResultSummary').textContent = message;
+    } catch (error) {
+      console.error('打开 JEV 分类窗口失败', error);
+      jevClassifyStatus.textContent = '分类窗口打开失败，请刷新页面后重试';
+      throw error;
+    }
+  }
+  byId('btnJevClassifyResults')?.addEventListener('click', () => {
+    try { openClassificationDialog(); } catch {}
+  });
+  byId('btnJevClassifyClose')?.addEventListener('click', () => classifyDialog.close());
+  function stopClassification() {
+    cancelClassification = true;
+    btnJevClassifyCancel.disabled = true;
+    jevClassifyStatus.textContent = '将在当前实体处理完成后停止…';
+    byId('btnJevClassifyDialogCancel').disabled = true;
+    renderClassificationResults();
+  }
+  btnJevClassifyCancel?.addEventListener('click', stopClassification);
+  byId('btnJevClassifyDialogCancel')?.addEventListener('click', stopClassification);
+  async function readClassificationResponse(response, result) {
+    if (!response.headers?.get('content-type')?.includes('application/x-ndjson')) {
+      return { data: await response.json(), httpStatus: response.status };
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '', finalResult = null;
+    const consume = (line) => {
+      if (!line.trim()) return;
+      const event = JSON.parse(line);
+      if (event.type === 'progress' && typeof event.message === 'string') {
+        result.history.push(event.message);
+        renderClassificationResults();
+      } else if (event.type === 'result') finalResult = event;
+    };
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
+        let newline;
+        while ((newline = buffer.indexOf('\n')) >= 0) {
+          consume(buffer.slice(0, newline));
+          buffer = buffer.slice(newline + 1);
+        }
+        if (done) { consume(buffer); break; }
+      }
+    } finally { reader.releaseLock(); }
+    if (!finalResult) throw new Error('分类连接中断');
+    return finalResult;
+  }
+  async function runClassification(results) {
+    if (classifying || !results.length) return;
+    if (!window.authUser) { openClassificationDialog('请先登录，并在个人资料中配置 JEV API Key，再进行自动分类。'); return; }
+    const url = classificationUrl();
+    if (url.searchParams.get('db') !== classificationScope) return;
+    classifying = true;
+    cancelClassification = false;
+    let changed = false;
+    let refreshError = '';
+    try {
+      btnJevClassifyCancel.hidden = false;
+      btnJevClassifyCancel.disabled = false;
+      byId('btnJevClassifyResults').hidden = false;
+      openClassificationDialog();
+      ensureTableSelectedButtonsState();
+      for (let index = 0; index < results.length; index++) {
+        if (cancelClassification || classificationUrl().searchParams.get('db') !== classificationScope) break;
+        const result = results[index];
+        result.status = 'running';
+        result.detail = '';
+        result.history = [];
+        jevClassifyStatus.textContent = '分类中 ' + (index + 1) + '/' + results.length + '…';
+        renderClassificationResults();
+        try {
+          const response = await fetch(url, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' },
+            body: JSON.stringify({ id: result.id }),
+          });
+          const { data, httpStatus } = await readClassificationResponse(response, result);
+          if (httpStatus >= 400) {
+            result.status = 'failed';
+            result.detail = String(data.error || '分类失败');
+            // 登录和密钥问题影响整个批次；单条无权限不阻断其他实体。
+            if ([401, 503].includes(httpStatus)) break;
+          } else if (data.status === 'skipped') {
+            result.status = 'skipped';
+            result.detail = data.reason || '信息不足，保留已有分类';
+          } else if (data.status === 'classified' && Array.isArray(data.categories)) {
+            changed = true;
+            result.status = 'classified';
+            result.detail = data.categories.map((item) => item.name).join(' / ') +
+              (data.added === 0 ? '（已有分类，无需重复添加）' : '（已保存）');
+          } else {
+            result.status = 'failed';
+            result.detail = '服务返回了无效结果，请重试';
+          }
+        } catch {
+          result.status = 'failed';
+          result.detail = '网络请求失败或连接中断，请重试';
+        }
+        renderClassificationResults();
+      }
+      if (changed && classificationUrl().searchParams.get('db') === classificationScope) {
+        await window.loadTablePage?.({ resetPage: false });
+        // 刷新表格期间可能切换应用，再检查一次。
+        if (classificationUrl().searchParams.get('db') === classificationScope) {
+          const entityId = byId('fId')?.value;
+          if (entityId) await window.loadEntityClass?.(entityId);
+        }
+      }
+    } catch (error) {
+      console.error('JEV 分类处理失败', error);
+      refreshError = changed ? '列表刷新失败，请手动刷新' : '分类未能启动，请刷新页面后重试';
+    }
+    finally {
+      classifying = false;
+      btnJevClassifyCancel.hidden = true;
+      const count = (status) => classificationResults.filter((item) => item.status === status).length;
+      jevClassifyStatus.textContent = '已分类 ' + count('classified') + ' · 跳过 ' + count('skipped') +
+        ' · 失败 ' + count('failed') + (count('pending') ? ' · 未处理 ' + count('pending') : '');
+      jevClassifyStatus.title = refreshError || '点击“查看结果”查看分类路径和失败原因';
+      byId('jevClassifyResultSummary').textContent = jevClassifyStatus.textContent + (refreshError ? '。' + refreshError : '');
+      try { renderClassificationResults(); } catch {}
+      ensureTableSelectedButtonsState();
+    }
+  }
+  btnJevClassify?.addEventListener('click', () => {
+    const ids = classificationSelection();
+    if (classifying) { try { openClassificationDialog(); } catch {} return; }
+    if (!ids.length || !window.authUser) {
+      const message = !window.authUser
+        ? '请先登录，并在个人资料中配置 JEV API Key，再进行自动分类。'
+        : '请先在知识表格中勾选需要分类的实体，再点击 JEV 自动分类。';
+      jevClassifyStatus.textContent = message;
+      try { openClassificationDialog(message); } catch {}
+      return;
+    }
+    // 后端逐条校验权限；跨页选择或前端权限尚未加载时也能给出明确结果。
+    classificationScope = classificationUrl().searchParams.get('db');
+    classificationResults = ids.map((id) => {
+      const normalize = (value) => String(value || '').replace(/^entity\//, '');
+      const node = (window.kbTableNodes || []).find((item) => normalize(item.id || item._id) === normalize(id));
+      return { id, name: node?.name || node?.label || id, status: 'pending', detail: '' };
+    });
+    return runClassification(classificationResults);
+  });
+  classifyRetry?.addEventListener('click', () => {
+    const retry = classificationResults.filter((item) => item.status === 'failed' || item.status === 'pending');
+    return runClassification(retry);
+  });
   const tblNodes = byId("tblNodes");
   let tableListDelegatedBound = false;
   let tableListTooltip = null;
@@ -35,6 +231,11 @@ function __kbInitTableSelection() {
           ? 1
           : 0;
     try {
+      if (btnJevClassify) {
+        if (btnJevClassify.disabled) btnJevClassify.disabled = false;
+        const title = classifying ? '查看当前分类进度' : !window.authUser ? '登录并配置 JEV API Key 后可使用' : count === 0 ? '请先勾选需要分类的实体' : '根据选中实体的信息自动匹配分类，并补齐父级分类';
+        if (btnJevClassify.title !== title) btnJevClassify.title = title;
+      }
       if (btnDeleteSelected) {
         const ids = Array.from(window.kbSelectedRowIds || []);
         if (!ids.length && window.kbSelectedRowId) ids.push(window.kbSelectedRowId);

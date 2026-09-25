@@ -1,0 +1,762 @@
+[
+  {
+    "version": 1,
+    "entity": {
+      "id": "entity/review_together_surf_001",
+      "name": "抽到一起衝浪大踩雷评价",
+      "description": "怕啥来啥，直接开出一起衝浪，这个造型真的不好看，发型很突兀，算是这个系列公认雷款，拆盒瞬间emo了。",
+      "aliases": [],
+      "tags": ["负面评价", "颜值低", "踩雷"],
+      "categories": [
+        {
+          "name": "用户评价",
+          "description": "普通消费者发布的真实消费体验内容",
+          "color": "#6366F1",
+          "tags": ["UGC内容"],
+          "children": [
+            {
+              "name": "泡泡玛特产品评价",
+              "description": "针对泡泡玛特在售盲盒产品的用户反馈",
+              "color": "#3B82F6",
+              "tags": ["潮玩消费"],
+              "children": [
+                {
+                  "name": "单款式评价",
+                  "description": "针对单个盲盒款式的具体评价内容",
+                  "color": "#DC2626",
+                  "tags": ["雷款反馈"]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "images": [],
+      "videos": [],
+      "pdf": "",
+      "link": "https://www.iesdouyin.com/share/video/7620808433752040411",
+      "visibility": "public",
+      "type": {
+        "id": "ontology/user-review",
+        "name": "用户评价",
+        "description": "消费者发布的真实消费反馈内容"
+      },
+      "attributes": [
+        {
+          "id": "ATTR_REVIEW_TARGET",
+          "name": "评价对象",
+          "datatype": "wikibase-item",
+          "value": {
+            "label_zh": "一起衝浪"
+          },
+          "description": "该条评价针对的盲盒款式实体"
+        },
+        {
+          "id": "ATTR_REVIEW_SENTIMENT",
+          "name": "评价情绪倾向",
+          "datatype": "string",
+          "value": "负面",
+          "description": "评价整体的情绪极性标签"
+        },
+        {
+          "id": "ATTR_REVIEW_SOURCE",
+          "name": "评价来源平台",
+          "datatype": "string",
+          "value": "抖音",
+          "description": "该条评价的发布平台"
+        },
+        {
+          "id": "ATTR_REVIEW_PUBLISH_TIME",
+          "name": "评价发布时间",
+          "datatype": "time",
+          "value": { "time": "+2026-03-24T00:00:00Z", "precision": 11 },
+          "description": "评价内容的公开发布时间"
+        }
+      ]
+    }
+  },
+  {
+    "version": 1,
+    "entity": {
+      "id": "entity/review_together_surf_002",
+      "name": "一起衝浪发型很难看吐槽",
+      "description": "一起衝浪这个发型真的丑哭，短短的头发配上两根小辫子，造型很违和，同系列里面最不喜欢的一只。",
+      "aliases": [],
+      "tags": ["负面评价", "外观吐槽", "发型难看"],
+      "categories": [
+        {
+          "name": "用户评价",
+          "description": "普通消费者发布的真实消费体验内容",
+          "color": "#6366F1",
+          "tags": ["UGC内容"],
+          "children": [
+            {
+              "name": "泡泡玛特产品评价",
+              "description": "针对泡泡玛特在售盲盒产品的用户反馈",
+              "color": "#3B82F6",
+              "tags": ["潮玩消费"],
+              "children": [
+                {
+                  "name": "单款式评价",
+                  "description": "针对单个盲盒款式的具体评价内容",
+                  "color": "#DC2626",
+                  "tags": ["外观差评"]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "images": [],
+      "videos": [],
+      "pdf": "",
+      "link": "https://www.iesdouyin.com/share/video/7604813374304196971",
+      "visibility": "public",
+      "type": {
+        "id": "ontology/user-review",
+        "name": "用户评价",
+        "description": "消费者发布的真实消费反馈内容"
+      },
+      "attributes": [
+        {
+          "id": "ATTR_REVIEW_TARGET",
+          "name": "评价对象",
+          "datatype": "wikibase-item",
+          "value": {
+            "label_zh": "一起衝浪"
+          },
+          "description": "该条评价针对的盲盒款式实体"
+        },
+        {
+          "id": "ATTR_REVIEW_SENTIMENT",
+          "name": "评价情绪倾向",
+          "datatype": "string",
+          "value": "负面",
+          "description": "评价整体的情绪极性标签"
+        },
+        {
+          "id": "ATTR_REVIEW_SOURCE",
+          "name": "评价来源平台",
+          "datatype": "string",
+          "value": "抖音",
+          "description": "该条评价的发布平台"
+        },
+        {
+          "id": "ATTR_REVIEW_PUBLISH_TIME",
+          "name": "评价发布时间",
+          "datatype": "time",
+          "value": { "time": "+2026-02-09T00:00:00Z", "precision": 11 },
+          "description": "评价内容的公开发布时间"
+        }
+      ]
+    }
+  },
+  {
+    "version": 1,
+    "entity": {
+      "id": "entity/review_together_surf_003",
+      "name": "一起衝浪避雷摇盒手感评价",
+      "description": "一起衝浪是这个系列雷娃，摇盒特征很明显，前后能听到冲浪板清脆打盒声，大家抽盒一定要避雷这只板子。",
+      "aliases": [],
+      "tags": ["中性评价", "摇盒避雷", "雷款手感"],
+      "categories": [
+        {
+          "name": "用户评价",
+          "description": "普通消费者发布的真实消费体验内容",
+          "color": "#6366F1",
+          "tags": ["UGC内容"],
+          "children": [
+            {
+              "name": "泡泡玛特产品评价",
+              "description": "针对泡泡玛特在售盲盒产品的用户反馈",
+              "color": "#3B82F6",
+              "tags": ["潮玩消费"],
+              "children": [
+                {
+                  "name": "单款式评价",
+                  "description": "针对单个盲盒款式的具体评价内容",
+                  "color": "#DC2626",
+                  "tags": ["避雷攻略"]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "images": [],
+      "videos": [],
+      "pdf": "",
+      "link": "https://www.iesdouyin.com/share/video/7682800475549572788",
+      "visibility": "public",
+      "type": {
+        "id": "ontology/user-review",
+        "name": "用户评价",
+        "description": "消费者发布的真实消费反馈内容"
+      },
+      "attributes": [
+        {
+          "id": "ATTR_REVIEW_TARGET",
+          "name": "评价对象",
+          "datatype": "wikibase-item",
+          "value": {
+            "label_zh": "一起衝浪"
+          },
+          "description": "该条评价针对的盲盒款式实体"
+        },
+        {
+          "id": "ATTR_REVIEW_SENTIMENT",
+          "name": "评价情绪倾向",
+          "datatype": "string",
+          "value": "中性",
+          "description": "评价整体的情绪极性标签"
+        },
+        {
+          "id": "ATTR_REVIEW_SOURCE",
+          "name": "评价来源平台",
+          "datatype": "string",
+          "value": "抖音",
+          "description": "该条评价的发布平台"
+        },
+        {
+          "id": "ATTR_REVIEW_PUBLISH_TIME",
+          "name": "评价发布时间",
+          "datatype": "time",
+          "value": { "time": "+2026-09-07T00:00:00Z", "precision": 11 },
+          "description": "评价内容的公开发布时间"
+        }
+      ]
+    }
+  },
+  {
+    "version": 1,
+    "entity": {
+      "id": "entity/review_together_surf_004",
+      "name": "抽到一起衝浪直接心碎评价",
+      "description": "连续拆了三盒，直接开出一起衝浪，这个系列公认雷款，抽盲盒大型心碎现场，完全不是想要的娃。",
+      "aliases": [],
+      "tags": ["负面评价", "抽盒翻车", "不喜欢"],
+      "categories": [
+        {
+          "name": "用户评价",
+          "description": "普通消费者发布的真实消费体验内容",
+          "color": "#6366F1",
+          "tags": ["UGC内容"],
+          "children": [
+            {
+              "name": "泡泡玛特产品评价",
+              "description": "针对泡泡玛特在售盲盒产品的用户反馈",
+              "color": "#3B82F6",
+              "tags": ["潮玩消费"],
+              "children": [
+                {
+                  "name": "单款式评价",
+                  "description": "针对单个盲盒款式的具体评价内容",
+                  "color": "#DC2626",
+                  "tags": ["抽盒踩雷"]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "images": [],
+      "videos": [],
+      "pdf": "",
+      "link": "https://www.iesdouyin.com/share/video/7659995453496418683",
+      "visibility": "public",
+      "type": {
+        "id": "ontology/user-review",
+        "name": "用户评价",
+        "description": "消费者发布的真实消费反馈内容"
+      },
+      "attributes": [
+        {
+          "id": "ATTR_REVIEW_TARGET",
+          "name": "评价对象",
+          "datatype": "wikibase-item",
+          "value": {
+            "label_zh": "一起衝浪"
+          },
+          "description": "该条评价针对的盲盒款式实体"
+        },
+        {
+          "id": "ATTR_REVIEW_SENTIMENT",
+          "name": "评价情绪倾向",
+          "datatype": "string",
+          "value": "负面",
+          "description": "评价整体的情绪极性标签"
+        },
+        {
+          "id": "ATTR_REVIEW_SOURCE",
+          "name": "评价来源平台",
+          "datatype": "string",
+          "value": "抖音",
+          "description": "该条评价的发布平台"
+        },
+        {
+          "id": "ATTR_REVIEW_PUBLISH_TIME",
+          "name": "评价发布时间",
+          "datatype": "time",
+          "value": { "time": "+2026-07-08T00:00:00Z", "precision": 11 },
+          "description": "评价内容的公开发布时间"
+        }
+      ]
+    }
+  },
+  {
+    "version": 1,
+    "entity": {
+      "id": "entity/review_together_surf_005",
+      "name": "一起衝浪二手很难出评价",
+      "description": "抽到一起衝浪想转手，属于系列雷款，挂了很久没人收，价格压很低都不好出，大家抽盒尽量避开。",
+      "aliases": [],
+      "tags": ["负面评价", "流通差", "二手贬值"],
+      "categories": [
+        {
+          "name": "用户评价",
+          "description": "普通消费者发布的真实消费体验内容",
+          "color": "#6366F1",
+          "tags": ["UGC内容"],
+          "children": [
+            {
+              "name": "泡泡玛特产品评价",
+              "description": "针对泡泡玛特在售盲盒产品的用户反馈",
+              "color": "#3B82F6",
+              "tags": ["潮玩消费"],
+              "children": [
+                {
+                  "name": "单款式评价",
+                  "description": "针对单个盲盒款式的具体评价内容",
+                  "color": "#DC2626",
+                  "tags": ["二手行情"]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "images": [],
+      "videos": [],
+      "pdf": "",
+      "link": "https://www.iesdouyin.com/share/video/7673801006917080677",
+      "visibility": "public",
+      "type": {
+        "id": "ontology/user-review",
+        "name": "用户评价",
+        "description": "消费者发布的真实消费反馈内容"
+      },
+      "attributes": [
+        {
+          "id": "ATTR_REVIEW_TARGET",
+          "name": "评价对象",
+          "datatype": "wikibase-item",
+          "value": {
+            "label_zh": "一起衝浪"
+          },
+          "description": "该条评价针对的盲盒款式实体"
+        },
+        {
+          "id": "ATTR_REVIEW_SENTIMENT",
+          "name": "评价情绪倾向",
+          "datatype": "string",
+          "value": "负面",
+          "description": "评价整体的情绪极性标签"
+        },
+        {
+          "id": "ATTR_REVIEW_SOURCE",
+          "name": "评价来源平台",
+          "datatype": "string",
+          "value": "小红书",
+          "description": "该条评价的发布平台"
+        },
+        {
+          "id": "ATTR_REVIEW_PUBLISH_TIME",
+          "name": "评价发布时间",
+          "datatype": "time",
+          "value": { "time": "+2026-08-14T00:00:00Z", "precision": 11 },
+          "description": "评价内容的公开发布时间"
+        }
+      ]
+    }
+  },
+  {
+    "version": 1,
+    "entity": {
+      "id": "entity/review_together_surf_006",
+      "name": "系列雷款一起衝浪个人审美避雷",
+      "description": "这个系列热门款是沙滩小憩和咕噜咕噜，一起衝浪是公认雷款，黑皮加上冲浪板配件，整体看着很普通，不在我的审美上。",
+      "aliases": [],
+      "tags": ["中性评价", "审美不合", "系列雷款"],
+      "categories": [
+        {
+          "name": "用户评价",
+          "description": "普通消费者发布的真实消费体验内容",
+          "color": "#6366F1",
+          "tags": ["UGC内容"],
+          "children": [
+            {
+              "name": "泡泡玛特产品评价",
+              "description": "针对泡泡玛特在售盲盒产品的用户反馈",
+              "color": "#3B82F6",
+              "tags": ["潮玩消费"],
+              "children": [
+                {
+                  "name": "单款式评价",
+                  "description": "针对单个盲盒款式的具体评价内容",
+                  "color": "#DC2626",
+                  "tags": ["款式热度"]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "images": [],
+      "videos": [],
+      "pdf": "",
+      "link": "https://www.iesdouyin.com/share/video/7612204423087453876",
+      "visibility": "public",
+      "type": {
+        "id": "ontology/user-review",
+        "name": "用户评价",
+        "description": "消费者发布的真实消费反馈内容"
+      },
+      "attributes": [
+        {
+          "id": "ATTR_REVIEW_TARGET",
+          "name": "评价对象",
+          "datatype": "wikibase-item",
+          "value": {
+            "label_zh": "一起衝浪"
+          },
+          "description": "该条评价针对的盲盒款式实体"
+        },
+        {
+          "id": "ATTR_REVIEW_SENTIMENT",
+          "name": "评价情绪倾向",
+          "datatype": "string",
+          "value": "中性",
+          "description": "评价整体的情绪极性标签"
+        },
+        {
+          "id": "ATTR_REVIEW_SOURCE",
+          "name": "评价来源平台",
+          "datatype": "string",
+          "value": "小红书",
+          "description": "该条评价的发布平台"
+        },
+        {
+          "id": "ATTR_REVIEW_PUBLISH_TIME",
+          "name": "评价发布时间",
+          "datatype": "time",
+          "value": { "time": "+2026-03-01T00:00:00Z", "precision": 11 },
+          "description": "评价内容的公开发布时间"
+        }
+      ]
+    }
+  },
+  {
+    "version": 1,
+    "entity": {
+      "id": "entity/review_together_surf_007",
+      "name": "一起衝浪配件很廉价评价",
+      "description": "抽到一起衝浪，娃本体还好，但冲浪板塑料感很重，质感廉价，作为雷款完全提不起摆放的兴趣。",
+      "aliases": [],
+      "tags": ["负面评价", "配件质感差", "塑料感强"],
+      "categories": [
+        {
+          "name": "用户评价",
+          "description": "普通消费者发布的真实消费体验内容",
+          "color": "#6366F1",
+          "tags": ["UGC内容"],
+          "children": [
+            {
+              "name": "泡泡玛特产品评价",
+              "description": "针对泡泡玛特在售盲盒产品的用户反馈",
+              "color": "#3B82F6",
+              "tags": ["潮玩消费"],
+              "children": [
+                {
+                  "name": "单款式评价",
+                  "description": "针对单个盲盒款式的具体评价内容",
+                  "color": "#DC2626",
+                  "tags": ["配件吐槽"]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "images": [],
+      "videos": [],
+      "pdf": "",
+      "link": "https://www.iesdouyin.com/share/video/7686859587978437818",
+      "visibility": "public",
+      "type": {
+        "id": "ontology/user-review",
+        "name": "用户评价",
+        "description": "消费者发布的真实消费反馈内容"
+      },
+      "attributes": [
+        {
+          "id": "ATTR_REVIEW_TARGET",
+          "name": "评价对象",
+          "datatype": "wikibase-item",
+          "value": {
+            "label_zh": "一起衝浪"
+          },
+          "description": "该条评价针对的盲盒款式实体"
+        },
+        {
+          "id": "ATTR_REVIEW_SENTIMENT",
+          "name": "评价情绪倾向",
+          "datatype": "string",
+          "value": "负面",
+          "description": "评价整体的情绪极性标签"
+        },
+        {
+          "id": "ATTR_REVIEW_SOURCE",
+          "name": "评价来源平台",
+          "datatype": "string",
+          "value": "抖音",
+          "description": "该条评价的发布平台"
+        },
+        {
+          "id": "ATTR_REVIEW_PUBLISH_TIME",
+          "name": "评价发布时间",
+          "datatype": "time",
+          "value": { "time": "+2026-09-18T00:00:00Z", "precision": 11 },
+          "description": "评价内容的公开发布时间"
+        }
+      ]
+    }
+  },
+  {
+    "version": 1,
+    "entity": {
+      "id": "entity/review_together_surf_008",
+      "name": "许愿避开一起衝浪还是中了评价",
+      "description": "拆之前疯狂许愿不要一起衝浪，结果直接中雷，同系列其他款都好看，唯独这只完全长不在我的审美上。",
+      "aliases": [],
+      "tags": ["负面评价", "许愿失败", "审美不喜欢"],
+      "categories": [
+        {
+          "name": "用户评价",
+          "description": "普通消费者发布的真实消费体验内容",
+          "color": "#6366F1",
+          "tags": ["UGC内容"],
+          "children": [
+            {
+              "name": "泡泡玛特产品评价",
+              "description": "针对泡泡玛特在售盲盒产品的用户反馈",
+              "color": "#3B82F6",
+              "tags": ["潮玩消费"],
+              "children": [
+                {
+                  "name": "单款式评价",
+                  "description": "针对单个盲盒款式的具体评价内容",
+                  "color": "#DC2626",
+                  "tags": ["抽盒踩雷"]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "images": [],
+      "videos": [],
+      "pdf": "",
+      "link": "https://www.iesdouyin.com/share/video/7685706672999861530",
+      "visibility": "public",
+      "type": {
+        "id": "ontology/user-review",
+        "name": "用户评价",
+        "description": "消费者发布的真实消费反馈内容"
+      },
+      "attributes": [
+        {
+          "id": "ATTR_REVIEW_TARGET",
+          "name": "评价对象",
+          "datatype": "wikibase-item",
+          "value": {
+            "label_zh": "一起衝浪"
+          },
+          "description": "该条评价针对的盲盒款式实体"
+        },
+        {
+          "id": "ATTR_REVIEW_SENTIMENT",
+          "name": "评价情绪倾向",
+          "datatype": "string",
+          "value": "负面",
+          "description": "评价整体的情绪极性标签"
+        },
+        {
+          "id": "ATTR_REVIEW_SOURCE",
+          "name": "评价来源平台",
+          "datatype": "string",
+          "value": "小红书",
+          "description": "该条评价的发布平台"
+        },
+        {
+          "id": "ATTR_REVIEW_PUBLISH_TIME",
+          "name": "评价发布时间",
+          "datatype": "time",
+          "value": { "time": "+2026-09-15T00:00:00Z", "precision": 11 },
+          "description": "评价内容的公开发布时间"
+        }
+      ]
+    }
+  },
+  {
+    "version": 1,
+    "entity": {
+      "id": "entity/review_together_surf_009",
+      "name": "一起衝浪颜值不如同系列其他款评价",
+      "description": "对比同系列其他娃，一起衝浪确实逊色很多，大家普遍当成雷款，就算原价出都很难有人愿意收。",
+      "aliases": [],
+      "tags": ["中性评价", "对比差评", "热度低"],
+      "categories": [
+        {
+          "name": "用户评价",
+          "description": "普通消费者发布的真实消费体验内容",
+          "color": "#6366F1",
+          "tags": ["UGC内容"],
+          "children": [
+            {
+              "name": "泡泡玛特产品评价",
+              "description": "针对泡泡玛特在售盲盒产品的用户反馈",
+              "color": "#3B82F6",
+              "tags": ["潮玩消费"],
+              "children": [
+                {
+                  "name": "单款式评价",
+                  "description": "针对单个盲盒款式的具体评价内容",
+                  "color": "#DC2626",
+                  "tags": ["款式对比"]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "images": [],
+      "videos": [],
+      "pdf": "",
+      "link": "https://www.iesdouyin.com/share/video/7679799214079783105",
+      "visibility": "public",
+      "type": {
+        "id": "ontology/user-review",
+        "name": "用户评价",
+        "description": "消费者发布的真实消费反馈内容"
+      },
+      "attributes": [
+        {
+          "id": "ATTR_REVIEW_TARGET",
+          "name": "评价对象",
+          "datatype": "wikibase-item",
+          "value": {
+            "label_zh": "一起衝浪"
+          },
+          "description": "该条评价针对的盲盒款式实体"
+        },
+        {
+          "id": "ATTR_REVIEW_SENTIMENT",
+          "name": "评价情绪倾向",
+          "datatype": "string",
+          "value": "中性",
+          "description": "评价整体的情绪极性标签"
+        },
+        {
+          "id": "ATTR_REVIEW_SOURCE",
+          "name": "评价来源平台",
+          "datatype": "string",
+          "value": "小红书",
+          "description": "该条评价的发布平台"
+        },
+        {
+          "id": "ATTR_REVIEW_PUBLISH_TIME",
+          "name": "评价发布时间",
+          "datatype": "time",
+          "value": { "time": "+2026-07-30T00:00:00Z", "precision": 11 },
+          "description": "评价内容的公开发布时间"
+        }
+      ]
+    }
+  },
+  {
+    "version": 1,
+    "entity": {
+      "id": "entity/review_together_surf_010",
+      "name": "机器人商店抽到一起衝浪心态崩了评价",
+      "description": "机器人商店随手抽一盒，直接开出一起衝浪，网上公认雷款，瞬间没什么开箱喜悦感，只能闲置放着。",
+      "aliases": [],
+      "tags": ["负面评价", "开箱失望", "闲置"],
+      "categories": [
+        {
+          "name": "用户评价",
+          "description": "普通消费者发布的真实消费体验内容",
+          "color": "#6366F1",
+          "tags": ["UGC内容"],
+          "children": [
+            {
+              "name": "泡泡玛特产品评价",
+              "description": "针对泡泡玛特在售盲盒产品的用户反馈",
+              "color": "#3B82F6",
+              "tags": ["潮玩消费"],
+              "children": [
+                {
+                  "name": "单款式评价",
+                  "description": "针对单个盲盒款式的具体评价内容",
+                  "color": "#DC2626",
+                  "tags": ["开箱反馈"]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "images": [],
+      "videos": [],
+      "pdf": "",
+      "link": "https://www.iesdouyin.com/share/video/7673801006917080677",
+      "visibility": "public",
+      "type": {
+        "id": "ontology/user-review",
+        "name": "用户评价",
+        "description": "消费者发布的真实消费反馈内容"
+      },
+      "attributes": [
+        {
+          "id": "ATTR_REVIEW_TARGET",
+          "name": "评价对象",
+          "datatype": "wikibase-item",
+          "value": {
+            "label_zh": "一起衝浪"
+          },
+          "description": "该条评价针对的盲盒款式实体"
+        },
+        {
+          "id": "ATTR_REVIEW_SENTIMENT",
+          "name": "评价情绪倾向",
+          "datatype": "string",
+          "value": "负面",
+          "description": "评价整体的情绪极性标签"
+        },
+        {
+          "id": "ATTR_REVIEW_SOURCE",
+          "name": "评价来源平台",
+          "datatype": "string",
+          "value": "抖音",
+          "description": "该条评价的发布平台"
+        },
+        {
+          "id": "ATTR_REVIEW_PUBLISH_TIME",
+          "name": "评价发布时间",
+          "datatype": "time",
+          "value": { "time": "+2026-08-14T00:00:00Z", "precision": 11 },
+          "description": "评价内容的公开发布时间"
+        }
+      ]
+    }
+  }
+]

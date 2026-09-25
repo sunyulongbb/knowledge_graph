@@ -54,7 +54,12 @@
   let projectListVersion = 0;
   let projectContextMenu = null;
   function hideProjectContextMenu() {
-    if (projectContextMenu) projectContextMenu.hidden = true;
+    if (projectContextMenu) {
+      projectContextMenu.hidden = true;
+      projectContextMenu.querySelectorAll('.project-context-submenu').forEach((submenu) => {
+        submenu.hidden = true;
+      });
+    }
   }
   function showProjectCloneMenu(event, project) {
     event.preventDefault();
@@ -64,6 +69,7 @@
       projectContextMenu.className = "project-context-menu";
       projectContextMenu.hidden = true;
       document.body.appendChild(projectContextMenu);
+      projectContextMenu.addEventListener("click", (event) => event.stopPropagation());
       document.addEventListener("click", hideProjectContextMenu);
       document.addEventListener("scroll", hideProjectContextMenu, true);
       window.addEventListener("resize", hideProjectContextMenu, { passive: true });
@@ -98,10 +104,70 @@
         cloneButton.disabled = false;
       }
     });
+
+    const copyOntologyButton = document.createElement("button");
+    copyOntologyButton.type = "button";
+    copyOntologyButton.textContent = "复制本体到其他应用";
+    const copyOntologyMenu = document.createElement("div");
+    copyOntologyMenu.className = "project-context-submenu";
+    copyOntologyMenu.hidden = true;
+    copyOntologyMenu.addEventListener("click", (event) => event.stopPropagation());
+    copyOntologyMenu.style.position = "absolute";
+    copyOntologyMenu.style.left = "calc(100% + 6px)";
+    copyOntologyMenu.style.top = "0";
+    copyOntologyMenu.style.minWidth = "180px";
+    copyOntologyMenu.style.display = "flex";
+    copyOntologyMenu.style.flexDirection = "column";
+    copyOntologyMenu.style.gap = "2px";
+    copyOntologyButton.addEventListener("click", () => {
+      const currentId = Number(project.id ?? 0) || 0;
+      const apps = Array.isArray(window.kbApplicationProjects) ? window.kbApplicationProjects : [];
+      const viable = apps.filter((item) => {
+        const appId = Number(item.id ?? 0) || 0;
+        const slug = String(item.slug || item.name || item.file || "").replace(/\.sqlite$/, "");
+        const currentSlug = String(project.slug || project.name || "").replace(/\.sqlite$/, "");
+        return appId !== currentId && slug !== currentSlug;
+      });
+      copyOntologyMenu.replaceChildren();
+      if (!viable.length) {
+        const empty = document.createElement("div");
+        empty.className = "project-context-submenu-empty";
+        empty.textContent = "暂无其他应用";
+        copyOntologyMenu.appendChild(empty);
+      } else {
+        viable.forEach((item) => {
+          const targetButton = document.createElement("button");
+          targetButton.type = "button";
+          targetButton.textContent = item.title || item.name || item.slug || "未命名应用";
+          targetButton.addEventListener("click", async () => {
+            hideProjectContextMenu();
+            const sourceIdentifier = project.id ?? project.slug ?? String(project.name || "application");
+            try {
+              const response = await fetch(`/api/applications/${encodeURIComponent(sourceIdentifier)}/copy-ontology`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: item.slug || item.name || item.file || "" }),
+              });
+              const result = await response.json().catch(() => ({}));
+              if (!response.ok) throw new Error(result.error || result.message || `HTTP ${response.status}`);
+              const copied = Number(result.copied || 0);
+              window.alert(`已复制 ${copied} 个本体到应用「${result.target?.title || result.target?.slug || item.title || item.name || item.slug || "目标应用"}」。`);
+            } catch (error) {
+              window.alert(`复制本体失败：${error?.message || error}`);
+            }
+          });
+          copyOntologyMenu.appendChild(targetButton);
+        });
+      }
+      copyOntologyMenu.hidden = false;
+      copyOntologyButton.parentElement?.appendChild(copyOntologyMenu);
+    });
+
     projectContextMenu.appendChild(cloneButton);
+    projectContextMenu.appendChild(copyOntologyButton);
     projectContextMenu.hidden = false;
-    const width = 140;
-    const height = 44;
+    const width = 170;
+    const height = 94;
     projectContextMenu.style.left = `${Math.max(8, Math.min(event.clientX, window.innerWidth - width - 8))}px`;
     projectContextMenu.style.top = `${Math.max(8, Math.min(event.clientY, window.innerHeight - height - 8))}px`;
   }

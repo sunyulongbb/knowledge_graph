@@ -26,6 +26,10 @@ export function getKnowledgeUser(req: Request): any | null {
         : { id: 0, username: "anonymous", displayName: "匿名用户", role: "admin", permissions: ["*"], dataScope: "all", anonymous: true, fullAccess: true };
     }
   } catch {}
+  if (current) {
+    const ownedProjectIds = (adminDb.query('SELECT id FROM projects WHERE owner_user_id=?').all(current.id) as { id: number }[]).map((project) => project.id);
+    return { ...current, ownedProjectIds };
+  }
   return current;
 }
 

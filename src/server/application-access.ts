@@ -2,6 +2,7 @@ import type { Database } from 'bun:sqlite';
 import type { KnowledgeUser } from './knowledge-access.ts';
 import { hasApplicationPermission } from './application-role-permissions.ts';
 import { cloneApplicationData, removeClonedApplicationFiles } from './application-clone.ts';
+import { importOntologies } from './ontology-import.ts';
 
 export function ensureApplicationSchema(db: Database) {
   const columns = db.query('PRAGMA table_info(projects)').all() as any[];
@@ -37,7 +38,7 @@ export function ensureDefaultApplication(db: Database) {
 }
 
 export function applicationPermissions(db: Database, user: KnowledgeUser | null, project: any) {
-  const owner = !!user && Number(project?.owner_user_id) === user.id;
+  const owner = !!user && user.id > 0 && Number(project?.owner_user_id) === user.id;
   const member = user && project ? db.query('SELECT * FROM application_members WHERE project_id=? AND user_id=?').get(project.id, user.id) as any : null;
   const defaultAccess = Number(project?.is_default) === 1;
   return {
@@ -58,10 +59,10 @@ export function createApplicationHandler(db: Database, getUser: (req: Request) =
     const access = applicationPermissions(db, user, project);
     const defaultAccess = Number(project?.is_default) === 1;
     return { ...project, slug: project.name, name: project.title || project.name, ...access,
-      editSettings: access.editSettings && (defaultAccess || hasApplicationPermission(user, 'application:update')),
-      deleteApplication: access.owner && hasApplicationPermission(user, 'application:delete'),
-      manageMembers: access.owner && hasApplicationPermission(user, 'application:members'),
-      reviewRequests: access.reviewRequests && (defaultAccess || hasApplicationPermission(user, 'application:review')),
+      editSettings: access.editSettings && (access.owner || defaultAccess || hasApplicationPermission(user, 'application:update')),
+      deleteApplication: access.owner,
+      manageMembers: access.owner,
+      reviewRequests: access.reviewRequests && (access.owner || defaultAccess || hasApplicationPermission(user, 'application:review')),
     };
   };
   const hasTable = (name: string) => !!db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name);
@@ -69,6 +70,15 @@ export function createApplicationHandler(db: Database, getUser: (req: Request) =
     if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
     if (typeof value !== 'string' || !value.trim()) return [];
     try { const parsed = JSON.parse(value); if (Array.isArray(parsed)) return parseList(parsed); } catch {}
+    return value.split(/[,，;；、\n]+/).map((item) => item.trim()).filter(Boolean);
+  };
+  const parseAliasStorage = (value: unknown): string[] => {
+    if (Array.isArray(value)) return value.map((item) => String(item || '').trim()).filter(Boolean);
+    if (typeof value !== 'string' || !value.trim()) return [];
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parseAliasStorage(parsed);
+    } catch {}
     return value.split(/[,，;；、\n]+/).map((item) => item.trim()).filter(Boolean);
   };
   const countByProject = (table: string, projectId: number, extra = '') => {
@@ -169,7 +179,7 @@ export function createApplicationHandler(db: Database, getUser: (req: Request) =
       db.run("INSERT INTO projects(name,title,description,file,image,theme_color,tags,link,owner_user_id) VALUES(?,?,?,'app.sqlite',?,'#ff7a2b','[]',?,?)", [name, title, description, String(body.image || ''), String(body.link || ''), user.id]);
       return Response.json({ success: true, project: record(projectBy(name), user) }, { status: 201 });
     }
-    const match = path.match(/^\/api\/applications\/([^/]+)(?:\/(details|access|request|review|member|clone))?$/);
+    const match = path.match(/^\/api\/applications\/([^/]+)(?:\/(details|access|request|review|member|clone|copy-ontology))?$/);
     const projectKey = legacy ? String(body.name || '') : match ? decodeURIComponent(match[1]!) : '';
     const project = legacy
       ? projectBy(projectKey)
@@ -205,6 +215,69 @@ export function createApplicationHandler(db: Database, getUser: (req: Request) =
         console.error('clone application failed', cause);
         return error(`克隆应用失败：${cause instanceof Error ? cause.message : String(cause)}`, 500);
       }
+    }
+    if (match?.[2] === 'copy-ontology' && method === 'POST') {
+      if (!user) return error('请先登录', 401);
+      if (!permissions.member) return error('无权读取此应用的本体结构', 403);
+      const targetName = String(body.name || body.slug || body.target || '').trim();
+      if (!targetName) return error('未提供目标应用短名', 400);
+      const targetProject = /^(\d+)$/.test(targetName) ? projectBy(Number(targetName), true) : projectBy(targetName);
+      if (!targetProject) return error('目标应用不存在', 404);
+      if (Number(targetProject.id) === Number(project.id)) return error('无法将本体复制到当前应用', 409);
+      const targetPermissions = record(targetProject, user);
+      if (!targetPermissions.member) return error('无权覆盖目标应用的本体结构', 403);
+      if (!hasTable('ontologies')) return Response.json({ success: true, copied: 0, target: targetPermissions });
+
+      const ontologyRows = db.query('SELECT * FROM ontologies WHERE project_id=? ORDER BY COALESCE(sort_order, 999999), name').all(project.id) as any[];
+      const propertyRows = hasTable('properties') ? db.query('SELECT * FROM properties WHERE project_id=?').all(project.id) as any[] : [];
+      const relationRows = hasTable('ontology_properties')
+        ? db.query('SELECT op.ontology_id, op.property_id FROM ontology_properties op INNER JOIN ontologies o ON o.id = op.ontology_id WHERE o.project_id=?').all(project.id) as any[]
+        : [];
+      const propertyById = new Map(propertyRows.map((row) => [String(row.id), row]));
+      const propertyByOntology = new Map<string, any[]>();
+      for (const row of relationRows) {
+        const ontologyId = String(row.ontology_id || '').trim();
+        if (!ontologyId) continue;
+        const property = propertyById.get(String(row.property_id || ''));
+        if (!property) continue;
+        const list = propertyByOntology.get(ontologyId) || [];
+        list.push(property);
+        propertyByOntology.set(ontologyId, list);
+      }
+      const parsePropertyTypes = (value: unknown): string[] => {
+        if (Array.isArray(value)) return value.map((item) => String(item ?? '').trim()).filter(Boolean);
+        if (typeof value !== 'string' || !value.trim()) return [];
+        try {
+          const parsed = JSON.parse(value);
+          return Array.isArray(parsed) ? parsePropertyTypes(parsed) : [];
+        } catch {
+          return value.split(/[,，;；、\n]+/).map((item) => item.trim()).filter(Boolean);
+        }
+      };
+      const buildOntologyExport = (row: any): any => {
+        const children = ontologyRows.filter((child) => String(child.parent_id || '') === String(row.id)).map((child) => buildOntologyExport(child));
+        const properties = (propertyByOntology.get(String(row.id)) || []).map((property) => ({
+          name: String(property.name || '').trim(),
+          alias: parseAliasStorage(property.alias),
+          datatype: String(property.datatype || 'string').trim() || 'string',
+          description: String(property.description || '').trim(),
+          types: parsePropertyTypes(property.types),
+          tail_ontology_id: String(property.tail_ontology_id || '').trim(),
+        }));
+        return {
+          name: String(row.name || '').trim(),
+          description: String(row.description || '').trim(),
+          alias: parseAliasStorage(row.alias),
+          color: row.color ? String(row.color).trim() : null,
+          display_shape: ['rectangle', 'rounded', 'circle', 'diamond', 'hexagon'].includes(String(row.display_shape || 'rectangle').trim()) ? String(row.display_shape || 'rectangle').trim() : 'rectangle',
+          properties,
+          children,
+        };
+      };
+      const roots = ontologyRows.filter((row) => !row.parent_id).map((row) => buildOntologyExport(row));
+      if (!roots.length) return Response.json({ success: true, copied: 0, target: targetPermissions });
+      const copied = importOntologies(db, { version: 1, ontologies: roots }, Number(targetProject.id));
+      return Response.json({ success: true, copied: Number(copied.created || 0) + Number(copied.updated || 0), target: targetPermissions });
     }
     if (match?.[2] === 'details' && method === 'GET') {
       return Response.json(applicationDetails(project, user));

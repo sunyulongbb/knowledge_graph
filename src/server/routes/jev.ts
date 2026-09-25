@@ -1,6 +1,7 @@
-import { adminDb, db } from "../db.ts";
+import { createJevClassificationHandler } from '../jev-classification.ts';
+import { adminDb, db, getProjectByIdentifier } from "../db.ts";
 import { containsEntityReference, parseJevScoreAnswer } from "../jev-score.ts";
-import { getCurrentUser } from "../auth-context.ts";
+import { getCurrentUser, getKnowledgeUser } from "../auth-context.ts";
 import { createHash } from "node:crypto";
 
 type CachedScore = {
@@ -8,13 +9,99 @@ type CachedScore = {
   value: { score: number; rawScore: number; confidence: number | null; model: string; profiles: ProfileResult[] };
 };
 
-type AnalysisDefinition = { angle: string; content: string; keywords: string[]; category: string };
+type AnalysisDefinition = { angle: string; content: string; keywords: string[]; category: string; criteria?: Record<string, string> };
 type KeywordEvidence = { keyword: string; matched: boolean; evidence: string[] };
 type RelatedEntityEvidence = { sourceId: string; sourceName: string; relation: string; evidence: string; matchedKeywords: string[]; sourceUpdatedAt?: string };
 type ProfileResult = AnalysisDefinition & { classification: string; confidence: number | null; evidence: string[]; keywordEvidence: KeywordEvidence[]; relatedEvidence: RelatedEntityEvidence[] };
 
+const DEFAULT_JEV_CRITERIA: Record<string, string> = {
+  "积极支持": "明确支持、推动、扩大或高度认同相关政策方向",
+  "务实合作": "强调谈判、接触、互利或在限制条件下合作",
+  "中性审慎": "态度平衡、谨慎、观望或未表现明显倾向",
+  "限制竞争": "主张限制、施压、管制、脱钩或强化竞争",
+  "信息不足": "现有知识没有足够证据作出该角度的判断",
+};
+
 const scoreCache = new Map<string, CachedScore>();
 const SCORE_TTL_MS = 10 * 60 * 1000;
+
+function normalizeCriteriaMap(value: unknown, fallback: Record<string, string> = DEFAULT_JEV_CRITERIA): Record<string, string> {
+  const parseEntries = (input: unknown): Array<[string, string]> => {
+    if (input == null) return [];
+    if (typeof input === "string") {
+      const trimmed = input.trim();
+      if (!trimmed) return [];
+      try {
+        const parsed = JSON.parse(trimmed);
+        return parseEntries(parsed);
+      } catch {}
+      const lines = trimmed.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      const entries: Array<[string, string]> = [];
+      for (const line of lines) {
+        const match = line.match(/^([^:=：=]+?)(?:\s*[:：=]\s*|\s*->\s*)(.+)$/);
+        if (!match) continue;
+        const label = match[1].trim();
+        const description = match[2].trim();
+        if (label && description) entries.push([label, description]);
+      }
+      return entries;
+    }
+    if (Array.isArray(input)) {
+      const entries: Array<[string, string]> = [];
+      for (const item of input) {
+        if (!item || typeof item !== "object") continue;
+        const record = item as Record<string, unknown>;
+        const label = String(record.label ?? record.name ?? record.key ?? record.option ?? "").trim();
+        const description = String(record.description ?? record.text ?? record.detail ?? record.value ?? "").trim();
+        if (label && description) entries.push([label, description]);
+      }
+      return entries;
+    }
+    if (typeof input === "object") {
+      return Object.entries(input as Record<string, unknown>).flatMap(([label, rawDescription]) => {
+        const description = typeof rawDescription === "string" ? rawDescription : rawDescription && typeof rawDescription === "object" ? String((rawDescription as Record<string, unknown>).description ?? (rawDescription as Record<string, unknown>).text ?? (rawDescription as Record<string, unknown>).value ?? "") : "";
+        if (!label.trim() || !description.trim()) return [] as Array<[string, string]>;
+        return [[label.trim(), description.trim()]] as Array<[string, string]>;
+      });
+    }
+    return [];
+  };
+
+  const entries = parseEntries(value);
+  const result: Record<string, string> = {};
+  for (const [label, description] of entries) {
+    result[label] = description;
+  }
+  if (!Object.keys(result).length) return { ...fallback };
+  if (!result["信息不足"]) result["信息不足"] = "现有知识没有足够证据作出该角度的判断";
+  return result;
+}
+
+export function buildJevQuestions(analysisDefinitions: AnalysisDefinition[]) {
+  const questions: Record<string, unknown> = {
+    knowledge_quality: {
+      type: "score",
+      instructions: "综合评价这条知识的清晰度、信息完整性、可信度线索和实际参考价值。不要补充未提供的事实。",
+      criteria: [
+        "信息很少、含义不清或几乎没有参考价值",
+        "有基础信息，但完整性或可信度线索较弱",
+        "内容清楚且具备一般参考价值",
+        "信息较完整、可信且有较强参考价值",
+        "信息非常完整、清晰、可信并具有突出参考价值",
+      ],
+    },
+  };
+
+  analysisDefinitions.forEach((definition, index) => {
+    questions[`profile_${index}`] = {
+      type: "choice",
+      instructions: `严格依据 state.analysis_evidence 中“${definition.angle}”对应的分析内容、关键词命中和证据作出综合判断。不得仅根据角度名称猜测。没有足够证据时必须选择“信息不足”。`,
+      criteria: normalizeCriteriaMap(definition.criteria),
+    };
+  });
+
+  return questions;
+}
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -94,7 +181,15 @@ function evidenceSnippet(text: string, keyword: string, label: string) {
   return `${label}：${start ? "…" : ""}${text.slice(start, end).replace(/\s+/g, " ")}${end < text.length ? "…" : ""}`;
 }
 
+const classifyEntity = createJevClassificationHandler({
+  db,
+  getUser: getKnowledgeUser,
+  getApiKey: (id) => String((adminDb.query('SELECT jev_api_key FROM users WHERE id=?').get(id) as any)?.jev_api_key || ''),
+  getProject: getProjectByIdentifier,
+});
+
 export async function handleJevRoutes(req: Request, url: URL, method: string) {
+  if (url.pathname === "/api/jev/classify") return classifyEntity(req, url);
   if (url.pathname !== "/api/jev/score") return null;
   if (method !== "POST") return json({ error: "Method Not Allowed" }, 405);
 
@@ -131,7 +226,13 @@ export async function handleJevRoutes(req: Request, url: URL, method: string) {
       const key = angle.toLocaleLowerCase();
       if (!angle || !content || seenAngles.has(key)) continue;
       seenAngles.add(key);
-      analysisDefinitions.push({ angle, content, keywords: parseArray(item?.keywords).map(String).slice(0, 40), category: String(row.name || "") });
+      analysisDefinitions.push({
+        angle,
+        content,
+        keywords: parseArray(item?.keywords).map(String).slice(0, 40),
+        category: String(row.name || ""),
+        criteria: normalizeCriteriaMap(item?.criteria),
+      });
       if (analysisDefinitions.length >= 4) break;
     }
     if (analysisDefinitions.length >= 4) break;
@@ -206,32 +307,7 @@ export async function handleJevRoutes(req: Request, url: URL, method: string) {
       return { keyword, matched: evidence.length > 0, evidence };
     }),
   }));
-  const questions: Record<string, unknown> = {
-    knowledge_quality: {
-      type: "score",
-      instructions: "综合评价这条知识的清晰度、信息完整性、可信度线索和实际参考价值。不要补充未提供的事实。",
-      criteria: [
-        "信息很少、含义不清或几乎没有参考价值",
-        "有基础信息，但完整性或可信度线索较弱",
-        "内容清楚且具备一般参考价值",
-        "信息较完整、可信且有较强参考价值",
-        "信息非常完整、清晰、可信并具有突出参考价值",
-      ],
-    },
-  };
-  analysisDefinitions.forEach((definition, index) => {
-    questions[`profile_${index}`] = {
-      type: "choice",
-      instructions: `严格依据 state.analysis_evidence 中“${definition.angle}”对应的分析内容、关键词命中和证据作出综合判断。不得仅根据角度名称猜测。没有足够证据时必须选择“信息不足”。`,
-      criteria: {
-        "积极支持": "明确支持、推动、扩大或高度认同相关政策方向",
-        "务实合作": "强调谈判、接触、互利或在限制条件下合作",
-        "中性审慎": "态度平衡、谨慎、观望或未表现明显倾向",
-        "限制竞争": "主张限制、施压、管制、脱钩或强化竞争",
-        "信息不足": "现有知识没有足够证据作出该角度的判断",
-      },
-    };
-  });
+  const questions = buildJevQuestions(analysisDefinitions);
 
   const database = url.searchParams.get("db") || "default";
   const analysisSignature = createHash("sha256").update(JSON.stringify({

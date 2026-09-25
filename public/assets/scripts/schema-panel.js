@@ -1210,7 +1210,7 @@
     clsTree?.setAttribute("aria-busy", "true");
     try {
       if (assigned) await clearEntityClass(entityId, classId);
-      else await setEntityClass(entityId, classId);
+      else await assignEntityClassWithAncestors(entityId, classId);
       await loadEntityClass(entityId);
     } catch (error) {
       console.error("toggleEntityClassFromTree", error);
@@ -1378,7 +1378,7 @@
     }
     if (Array.isArray(window.kbClasses)) {
       const found = window.kbClasses.find((cls) => cls && cls.id === classId);
-      if (found && found.parent) return found.parent;
+      if (found) return found.parent_id ?? found.parent ?? null;
     }
     return null;
   }
@@ -1393,6 +1393,16 @@
       current = getParentClassId(current);
     }
     return chain;
+  }
+
+  async function assignEntityClassWithAncestors(entityId, classId) {
+    const assignedIds = new Set(
+      (window.kbEntityClasses || []).map((item) => String(item?.id || "")),
+    );
+    // 从根分类向下保存，勾选目标节点时同时关联所有父级。
+    for (const id of getClassAncestryIds(classId).reverse()) {
+      if (!assignedIds.has(id)) await setEntityClass(entityId, id);
+    }
   }
 
   async function autoAssignSelectedClassToNode(nodeId) {
@@ -1852,28 +1862,119 @@
   updateSchemaRemoveButtonState();
   // Removed subclass add/delete handlers
 
-  const US_POLITICS_ANALYSIS_EXAMPLE = [
-    { angle: "对华总体态度", content: "对中国及中美关系整体采取什么政策取向", keywords: ["中国", "中美关系", "合作", "竞争", "对话", "接触", "战略竞争", "去风险", "脱钩", "China", "cooperation", "competition", "engagement", "de-risking", "decoupling"] },
-    { angle: "经贸态度", content: "对中美贸易、中国商品、企业投资等政策主张", keywords: ["贸易", "关税", "进口", "出口", "投资", "市场准入", "贸易逆差", "供应链", "制造业", "tariff", "trade", "import", "export", "investment", "supply chain"] },
-    { angle: "科技态度", content: "对中国科技产业及中美科技往来的政策主张", keywords: ["芯片", "半导体", "人工智能", "先进技术", "出口管制", "技术合作", "研发", "实体清单", "semiconductor", "AI", "technology", "export control", "R&D"] },
-    { angle: "合作意愿", content: "是否主张在具体领域保持或扩大中美合作", keywords: ["合作", "对话", "谈判", "交流", "经贸合作", "科技合作", "气候合作", "教育交流", "访问", "协议", "cooperation", "dialogue", "negotiation", "exchange", "agreement"] },
-  ];
+  function formatAnalysisCriteria(criteria) {
+    if (!criteria || typeof criteria !== "object") return [];
+    return Object.entries(criteria)
+      .filter(([label, description]) => label && description != null && String(description).trim())
+      .map(([label, description]) => ({ label, description: String(description).trim() }));
+  }
 
-  function addClassAnalysisRow(value = {}) {
+  function parseAnalysisCriteria(raw) {
+    const text = String(raw || "").trim();
+    if (!text) return {};
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const result = {};
+        for (const [label, description] of Object.entries(parsed)) {
+          if (label && description != null) result[label] = String(description);
+        }
+        return result;
+      }
+    } catch {}
+    const result = {};
+    for (const line of text.split(/\r?\n/)) {
+      const value = line.trim();
+      if (!value) continue;
+      const match = value.match(/^([^:=：=]+?)(?:\s*[:：=]\s*|\s*->\s*)(.+)$/);
+      if (!match) continue;
+      const label = match[1].trim();
+      const description = match[2].trim();
+      if (label && description) result[label] = description;
+    }
+    return result;
+  }
+
+  function createCriteriaRow(label = "", description = "") {
+    const row = document.createElement("div");
+    row.className = "analysis-criteria-row";
+    row.innerHTML = `
+      <input class="kb-input analysis-criteria-label" type="text" maxlength="80" placeholder="选项名（如：积极支持）" value="${String(label).replace(/"/g, '&quot;')}">
+      <input class="kb-input analysis-criteria-description" type="text" maxlength="240" placeholder="说明（例如：明确支持扩大合作）" value="${String(description).replace(/"/g, '&quot;')}">
+      <button type="button" class="btn icon analysis-criteria-remove" data-analysis-criteria-remove aria-label="删除选项"><i class="fa-regular fa-trash-can"></i></button>
+    `;
+    return row;
+  }
+
+  function populateCriteriaRows(target, criteria) {
+    const rows = target.querySelectorAll(".analysis-criteria-row");
+    rows.forEach((row) => row.remove());
+    const entries = formatAnalysisCriteria(criteria);
+    const values = entries.length ? entries : [{ label: "", description: "" }];
+    values.forEach(({ label, description }) => {
+      target.appendChild(createCriteriaRow(label, description));
+    });
+    if (!target.children.length) target.appendChild(createCriteriaRow());
+  }
+
+  function gatherCriteriaFromRow(row) {
+    const criteria = {};
+    const entries = row.querySelectorAll(".analysis-criteria-row");
+    entries.forEach((entry) => {
+      const label = entry.querySelector(".analysis-criteria-label")?.value.trim() || "";
+      const description = entry.querySelector(".analysis-criteria-description")?.value.trim() || "";
+      if (label && description) criteria[label] = description;
+    });
+    return criteria;
+  }
+
+  function syncAnalysisRowNumbers() {
+    if (!classAnalysisRows) return;
+    Array.from(classAnalysisRows.querySelectorAll(".class-analysis-row")).forEach((row, index) => {
+      const badge = row.querySelector("[data-analysis-badge]");
+      if (badge) badge.textContent = `分析角度 ${index + 1}`;
+    });
+  }
+
+  function addClassAnalysisRow(value = {}, index = classAnalysisRows?.children.length || 0) {
     if (!classAnalysisRows) return;
     const row = document.createElement("article");
     row.className = "class-analysis-row";
-    row.innerHTML = `<div class="class-analysis-row-head"><strong>分析角度</strong><button type="button" class="btn icon" data-analysis-remove aria-label="删除分析角度"><i class="fa-regular fa-trash-can"></i></button></div><label>角度名称<input class="kb-input" data-analysis-angle maxlength="80" placeholder="例如：对华总体态度"></label><label>分析内容<textarea class="kb-input" data-analysis-content maxlength="1000" placeholder="说明这个角度要分析什么"></textarea></label><label>关键词<textarea class="kb-input" data-analysis-keywords placeholder="关键词以逗号或换行分隔"></textarea></label>`;
+    row.dataset.analysisIndex = String(index);
+    row.innerHTML = `
+      <div class="class-analysis-row-head">
+        <div class="class-analysis-row-title">
+          <span class="class-analysis-badge" data-analysis-badge>分析角度 ${index + 1}</span>
+          <strong>评估维度</strong>
+        </div>
+        <div class="class-analysis-row-actions">
+          <button type="button" class="btn icon" data-analysis-duplicate aria-label="复制分析角度"><i class="fa-regular fa-copy"></i></button>
+          <button type="button" class="btn icon" data-analysis-remove aria-label="删除分析角度"><i class="fa-regular fa-trash-can"></i></button>
+        </div>
+      </div>
+      <label>角度名称<input class="kb-input" data-analysis-angle maxlength="80" placeholder="例如：对华总体态度"></label>
+      <label>分析内容<textarea class="kb-input" data-analysis-content maxlength="1000" placeholder="说明这个角度要分析什么"></textarea></label>
+      <label>关键词<textarea class="kb-input" data-analysis-keywords placeholder="关键词以逗号、分号或换行分隔"></textarea></label>
+      <label class="analysis-criteria-field">
+        <span>判断选项（必填）</span>
+        <small>类似选择题：每行一个“选项名 + 说明”</small>
+        <div class="analysis-criteria-list" data-analysis-criteria-list></div>
+        <button type="button" class="btn sm analysis-criteria-add" data-analysis-criteria-add><i class="fa-solid fa-plus"></i> 新增选项</button>
+      </label>
+    `;
     row.querySelector('[data-analysis-angle]').value = value.angle || "";
     row.querySelector('[data-analysis-content]').value = value.content || "";
     row.querySelector('[data-analysis-keywords]').value = Array.isArray(value.keywords) ? value.keywords.join("、") : (value.keywords || "");
+    populateCriteriaRows(row.querySelector('[data-analysis-criteria-list]'), value.criteria || {});
     classAnalysisRows.appendChild(row);
+    syncAnalysisRowNumbers();
   }
 
   function renderClassAnalyses(items) {
     classAnalysisRows?.replaceChildren();
-    (Array.isArray(items) ? items : []).forEach(addClassAnalysisRow);
-    if (!classAnalysisRows?.children.length) addClassAnalysisRow();
+    (Array.isArray(items) ? items : []).forEach((item, index) => addClassAnalysisRow(item, index));
+    if (!classAnalysisRows?.children.length) addClassAnalysisRow({}, 0);
+    syncAnalysisRowNumbers();
   }
 
   function closeClassAnalysisModal() {
@@ -1897,23 +1998,71 @@
   byId("btnClassAnalysisClose")?.addEventListener("click", closeClassAnalysisModal);
   byId("btnClassAnalysisCancel")?.addEventListener("click", closeClassAnalysisModal);
   byId("btnClassAnalysisAdd")?.addEventListener("click", () => addClassAnalysisRow());
-  byId("btnClassAnalysisExample")?.addEventListener("click", () => renderClassAnalyses(US_POLITICS_ANALYSIS_EXAMPLE));
   classAnalysisModal?.addEventListener("click", (event) => { if (event.target === classAnalysisModal) closeClassAnalysisModal(); });
   classAnalysisRows?.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-analysis-remove]");
-    if (!button) return;
-    button.closest(".class-analysis-row")?.remove();
-    if (!classAnalysisRows.children.length) addClassAnalysisRow();
+    const removeButton = event.target.closest("[data-analysis-remove]");
+    if (removeButton) {
+      removeButton.closest(".class-analysis-row")?.remove();
+      if (!classAnalysisRows.children.length) addClassAnalysisRow({}, 0);
+      syncAnalysisRowNumbers();
+      return;
+    }
+    const criteriaRemove = event.target.closest("[data-analysis-criteria-remove]");
+    if (criteriaRemove) {
+      const list = criteriaRemove.closest(".analysis-criteria-list");
+      const row = criteriaRemove.closest(".analysis-criteria-row");
+      row?.remove();
+      if (list && !list.querySelector(".analysis-criteria-row")) {
+        list.appendChild(createCriteriaRow());
+      }
+      return;
+    }
+    const criteriaAdd = event.target.closest("[data-analysis-criteria-add]");
+    if (criteriaAdd) {
+      const list = criteriaAdd.closest(".analysis-criteria-field")?.querySelector(".analysis-criteria-list");
+      if (list) list.appendChild(createCriteriaRow());
+      return;
+    }
+    const duplicateButton = event.target.closest("[data-analysis-duplicate]");
+    if (!duplicateButton) return;
+    const row = duplicateButton.closest(".class-analysis-row");
+    if (!row) return;
+    const source = Array.from(classAnalysisRows.querySelectorAll(".class-analysis-row")).indexOf(row);
+    const current = {
+      angle: row.querySelector("[data-analysis-angle]")?.value || "",
+      content: row.querySelector("[data-analysis-content]")?.value || "",
+      keywords: row.querySelector("[data-analysis-keywords]")?.value || "",
+      criteria: gatherCriteriaFromRow(row),
+    };
+    const copy = { ...current, keywords: Array.isArray(current.keywords) ? current.keywords : current.keywords.split(/[,，;；\n、]+/).map((item) => item.trim()).filter(Boolean) };
+    addClassAnalysisRow(copy, source + 1);
+    const added = classAnalysisRows.querySelectorAll(".class-analysis-row")[source + 1];
+    added?.querySelector("[data-analysis-angle]")?.focus();
   });
   classAnalysisForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const classId = window.kbSelectedClassId;
     if (!classId) return;
-    const analyses = Array.from(classAnalysisRows.querySelectorAll(".class-analysis-row")).map((row) => ({
+    const rows = Array.from(classAnalysisRows.querySelectorAll(".class-analysis-row"));
+    const invalidRow = rows.find((row) => {
+      const angle = row.querySelector("[data-analysis-angle]")?.value.trim() || "";
+      const content = row.querySelector("[data-analysis-content]")?.value.trim() || "";
+      const keywords = (row.querySelector("[data-analysis-keywords]")?.value || "").split(/[,，;；\n、]+/).map((item) => item.trim()).filter(Boolean);
+      const criteria = gatherCriteriaFromRow(row);
+      return !angle || !content || !keywords.length || Object.keys(criteria).length === 0;
+    });
+    if (invalidRow && classAnalysisStatus) {
+      const index = rows.indexOf(invalidRow) + 1;
+      classAnalysisStatus.textContent = `第 ${index} 个分析角度未填写完整：角度名称、分析内容、关键词和判断选项均为必填。`;
+      invalidRow.querySelector("[data-analysis-angle]")?.focus();
+      return;
+    }
+    const analyses = rows.map((row) => ({
       angle: row.querySelector("[data-analysis-angle]").value.trim(),
       content: row.querySelector("[data-analysis-content]").value.trim(),
       keywords: row.querySelector("[data-analysis-keywords]").value.split(/[,，;；\n、]+/).map((item) => item.trim()).filter(Boolean),
-    })).filter((item) => item.angle || item.content || item.keywords.length);
+      criteria: gatherCriteriaFromRow(row),
+    })).filter((item) => item.angle || item.content || item.keywords.length || Object.keys(item.criteria || {}).length);
     const submit = classAnalysisForm.querySelector('button[type="submit"]');
     try {
       submit.disabled = true;

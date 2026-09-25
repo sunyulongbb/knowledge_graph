@@ -57,7 +57,6 @@ test('clear controls and scoped taxonomy clear endpoint are wired independently'
   expect(html).toContain('id="btnClsAnalysis"');
   expect(html).toContain('id="classAnalysisModal"');
   expect(html).toContain('/assets/scripts/schema-panel.js?v=20260924-3');
-  expect(schemaPanel).toContain('US_POLITICS_ANALYSIS_EXAMPLE');
   expect(schemaPanel).toContain('body: JSON.stringify({ id: classId, analyses })');
   expect(schemaPanel).toContain('onEdit: (id) => openClassModal({ classId: id })');
   expect(schemaPanel).toContain('classForm.dataset.mode === "edit"');

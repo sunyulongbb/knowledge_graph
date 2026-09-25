@@ -117,6 +117,30 @@ test('an accessible application can be cloned with isolated knowledge identifier
   } finally { db.close(); rmSync(uploadsRoot, { recursive: true, force: true }); }
 });
 
+test('an application can copy ontology definitions into another application without cloning the whole app', async () => {
+  const { db, call } = setup();
+  try {
+    db.run('CREATE TABLE ontologies(id TEXT PRIMARY KEY,name TEXT,description TEXT,alias TEXT,parent_id TEXT,color TEXT,display_shape TEXT,sort_order INTEGER,project_id INTEGER)');
+    db.run('CREATE TABLE properties(id TEXT PRIMARY KEY,name TEXT,alias TEXT,status TEXT,datatype TEXT,valuetype TEXT,types TEXT,description TEXT,tail_ontology_id TEXT,project_id INTEGER)');
+    db.run('CREATE TABLE ontology_properties(ontology_id TEXT,property_id TEXT)');
+    await call('/api/applications', 1, { name: 'source', title: 'Source' });
+    await call('/api/applications', 1, { name: 'target', title: 'Target' });
+    db.run("INSERT INTO ontologies(id,name,description,alias,parent_id,color,display_shape,sort_order,project_id) VALUES('ontology/person','人物','人类的统一分类','[\"人物\"]',NULL,'#ff7a2b','rectangle',1,1)");
+    db.run("INSERT INTO properties(id,name,alias,status,datatype,valuetype,types,description,tail_ontology_id,project_id) VALUES('property/birth','出生日期','[\"出生日期\"]','active','time','time','[]','出生日期的描述','',1)");
+    db.run("INSERT INTO ontology_properties(ontology_id,property_id) VALUES('ontology/person','property/birth')");
+
+    const response = await call('/api/applications/source/copy-ontology', 1, { name: 'target' });
+    expect(response!.status).toBe(200);
+    expect(await response!.json()).toMatchObject({ success: true, copied: 1, target: { slug: 'target' } });
+    const targetOntology = db.query('SELECT * FROM ontologies WHERE project_id=? ORDER BY sort_order').all(2);
+    expect(targetOntology[0]).toMatchObject({ name: '人物', project_id: 2 });
+    const targetProperty = db.query('SELECT * FROM properties WHERE project_id=? AND name=?').get(2, '出生日期') as any;
+    expect(targetProperty).toMatchObject({ name: '出生日期', project_id: 2 });
+    const relation = db.query('SELECT * FROM ontology_properties WHERE ontology_id=? AND property_id=?').get('ontology/person', 'property/birth') as any;
+    expect(relation).toEqual({ ontology_id: 'ontology/person', property_id: 'property/birth' });
+  } finally { db.close(); }
+});
+
 test('maintenance lifecycle, delegated permissions, notification isolation and revocation', async () => {
   const { db, call } = setup();
   try {
@@ -151,7 +175,7 @@ test('maintenance lifecycle, delegated permissions, notification isolation and r
   } finally { db.close(); }
 });
 
-test('role permissions gate creation and owner operations without granting access to other applications', async () => {
+test('role permissions gate creation but owners retain full application permissions', async () => {
   const { db, call, users } = setup();
   try {
     users[1]!.permissions = [];
@@ -161,19 +185,19 @@ test('role permissions gate creation and owner operations without granting acces
     users[1]!.permissions = ['application:create'];
     await call('/api/applications', 1, { name: 'demo' });
     const access = await (await call('/api/applications/1/access', 1))!.json();
-    expect(access.project).toMatchObject({ owner: true, editSettings: false, deleteApplication: false, manageMembers: false, reviewRequests: false });
-    expect((await call('/api/kb/update_project', 1, { name: 'demo', title: 'Edited' }))!.status).toBe(403);
-    expect((await call('/api/kb/delete_project', 1, { name: 'demo', confirmName: 'demo' }))!.status).toBe(403);
-    expect((await call('/api/applications/1/member', 1, { username: 'member' }))!.status).toBe(403);
+    expect(access.project).toMatchObject({ owner: true, editSettings: true, deleteApplication: true, manageMembers: true, reviewRequests: true });
+    expect(await call('/api/kb/update_project', 1, { name: 'demo', title: 'Edited' })).toBeNull();
+    expect(await call('/api/kb/delete_project', 1, { name: 'demo', confirmName: 'demo' })).toBeNull();
+    expect((await call('/api/applications/1/member', 1, { username: 'other' }))!.status).toBe(200);
     await call('/api/applications/1/request', 2, {});
-    expect((await call('/api/applications/1/review', 1, { user_id: 2, decision: 'approve' }))!.status).toBe(403);
+    expect((await call('/api/applications/1/review', 1, { user_id: 2, decision: 'approve' }))!.status).toBe(200);
     users[1]!.permissions.push('application:update', 'application:delete');
     expect(await call('/api/kb/update_project', 1, { name: 'demo', title: 'Edited' })).toBeNull();
     expect(await call('/api/kb/delete_project', 1, { name: 'demo', confirmName: 'demo' })).toBeNull();
     expect((await call('/api/kb/update_project', 1, { name: 'demo', title: ' ' }))!.status).toBe(400);
     expect((await call('/api/kb/delete_project', 3, { name: 'demo', confirmName: 'demo' }))!.status).toBe(403);
     users[1]!.permissions = [];
-    expect((await call('/api/kb/update_project', 1, { name: 'demo', title: 'Edited' }))!.status).toBe(403);
+    expect(await call('/api/kb/update_project', 1, { name: 'demo', title: 'Edited' })).toBeNull();
     db.run("INSERT INTO projects(name,title,file) VALUES('legacy','Legacy','app.sqlite')");
     expect((await call('/api/applications/2/request', 1, {}))!.status).toBe(403);
     expect((db.query('SELECT owner_user_id FROM projects WHERE id=2').get() as any).owner_user_id).toBeNull();

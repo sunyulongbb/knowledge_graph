@@ -1,20 +1,10 @@
 import { adminDb as db, getProjectByIdentifier } from '../db.ts';
-import { getCurrentUser } from '../auth-context.ts';
+import { getKnowledgeUser } from '../auth-context.ts';
 import { canAccessKnowledge, knowledgeId } from '../knowledge-access.ts';
 import { applicationPermissions } from '../application-access.ts';
 
 const response = (error: string, status: number) => Response.json({ error }, { status });
-const knowledgeUser = (req: Request) => {
-  const current = getCurrentUser(req);
-  try {
-    if (new URL(req.url).searchParams.get('db') === 'default') {
-      return current
-        ? { ...current, role: 'admin', permissions: ['*'], dataScope: 'all', fullAccess: true }
-        : { id: 0, username: 'anonymous', displayName: '匿名用户', role: 'admin', permissions: ['*'], dataScope: 'all', anonymous: true, fullAccess: true };
-    }
-  } catch {}
-  return current;
-};
+const knowledgeUser = getKnowledgeUser;
 
 export async function handleKnowledgeAccessRoutes(req: Request, url: URL, method: string) {
   if (!['/api/kb/knowledge-access', '/api/kb/knowledge-maintenance/request', '/api/kb/knowledge-maintenance/review', '/api/kb/knowledge-maintenance/remove'].includes(url.pathname)) return null;
@@ -161,6 +151,8 @@ export async function guardKnowledgeRequest(req: Request, url: URL, method: stri
     return project && applicationPermissions(db, user, project).member ? null : response('仅应用成员可以导入实体', 403);
   }
   // Schema changes, bulk import/cleanup and task execution remain administrative.
-  if (user.role !== 'admin') return response('该操作需要管理员权限', 403);
+  const project = getProjectByIdentifier(url.searchParams.get('db') || '');
+  const ownsApplication = project && applicationPermissions(db, user, project).owner;
+  if (user.role !== 'admin' && !ownsApplication) return response('该操作需要应用创建者或管理员权限', 403);
   return null;
 }

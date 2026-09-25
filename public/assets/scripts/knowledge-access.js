@@ -6,7 +6,7 @@
   const hasDefaultApplicationAccess = () => new URLSearchParams(window.location.search).get('db') === 'default';
   const hasAnonymousDefaultAccess = () => !window.authUser && hasDefaultApplicationAccess();
   const hasKnowledgeAccess = () => !!window.authUser || hasDefaultApplicationAccess();
-  const hasKnowledgeAdminAccess = () => window.authUser?.role === 'admin' || hasDefaultApplicationAccess();
+  const hasKnowledgeAdminAccess = () => window.authUser?.role === 'admin' || hasDefaultApplicationAccess() || (window.kbApplicationProjects || []).some((project) => project.slug === window.kbApplicationScope && project.owner);
   let editorNode = null;
   let generation = 0;
   const canCreate = () => hasKnowledgeAccess() && (!window.kbApplicationScope || (window.kbApplicationProjects || []).some((project) => project.slug === window.kbApplicationScope && project.member));
