@@ -12167,7 +12167,22 @@ table th {
 #homeKnowledgeDrawer [data-close-home-detail]:hover { background: #ffffff20; }
 #homeKnowledgeDrawer :focus-visible { outline: 2px solid #25f4ee; outline-offset: 3px; }
 #homeKnowledgeDrawer #detailPanel { background: #101014; }
-#homeKnowledgeDrawer #detailInner { padding: 0; position: relative; scroll-behavior: smooth; }
+#homeKnowledgeDrawer #detailInner {
+  position: relative;
+  height: calc(100dvh - 72px);
+  min-height: calc(100dvh - 72px);
+  max-height: calc(100dvh - 72px);
+  padding: 0;
+  overflow: hidden;
+  scroll-behavior: auto;
+}
+#homeKnowledgeDrawer #detailPanel,
+#homeKnowledgeDrawer #wikiTop,
+#homeKnowledgeDrawer .detail-content-layout,
+#homeKnowledgeDrawer #wikiView {
+  height: 100%;
+  max-height: 100%;
+}
 #homeKnowledgeDrawer .detail-navigation {
   position: absolute;
   top: clamp(180px, 39dvh, 430px);

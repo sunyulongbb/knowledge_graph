@@ -45,6 +45,33 @@
   }
   let homeDetailDrawer = null;
   let homeDetailMount = null;
+  let homeDetailFlipLock = false;
+  function getHomeDetailNodeList() {
+    return homeVisibleNodes.length ? homeVisibleNodes : homeNodes;
+  }
+  function findHomeDetailIndex(id) {
+    const list = getHomeDetailNodeList();
+    return list.findIndex((item) => (item.id || item._id) === id);
+  }
+  function flipHomeDetail(direction = 1) {
+    const list = getHomeDetailNodeList();
+    if (!list.length) return;
+    const currentId = byId('detailPanel')?.dataset.entityId || window.kbActiveDetailNodeId || '';
+    const currentIndex = findHomeDetailIndex(currentId.replace(/^entity\//, ''));
+    const startIndex = currentIndex >= 0 ? currentIndex : Math.floor(Math.random() * list.length);
+    let nextIndex = startIndex;
+    if (list.length > 1) {
+      const candidates = list.map((_, index) => index).filter((index) => index !== startIndex);
+      nextIndex = candidates[Math.floor(Math.random() * candidates.length)] || startIndex;
+      if (direction !== 0 && currentIndex >= 0) {
+        const stepIndex = (currentIndex + direction + list.length) % list.length;
+        if (stepIndex !== currentIndex) nextIndex = stepIndex;
+      }
+    }
+    const node = list[nextIndex];
+    if (!node) return;
+    openHomeDetailDrawer(node.id || node._id);
+  }
   function restoreHomeDetailPanel() {
     const saved = homeDetailMount;
     homeDetailMount = null;
@@ -71,7 +98,7 @@
       homeDetailDrawer.setAttribute('aria-label', '知识详情');
       homeDetailDrawer.innerHTML = '<div class="home-knowledge-drawer-header"><div class="home-drawer-brand"><span class="home-drawer-mark" aria-hidden="true"><i class="fa-solid fa-bolt"></i></span><div><strong>知识 · 发现</strong><small>探索每一条知识背后的故事</small></div></div><button type="button" class="btn" data-close-home-detail aria-label="关闭知识详情"><span aria-hidden="true">×</span></button></div>';
       document.body.appendChild(homeDetailDrawer);
-      homeDetailDrawer.addEventListener('close', () => { if (!homeDetailDrawer.open) restoreHomeDetailPanel(); });
+      homeDetailDrawer.addEventListener('close', () => { if (!homeDetailDrawer.open) restoreHomeDetailPanel(); document.body.style.overflow = ''; });
       homeDetailDrawer.addEventListener('click', (event) => {
         if (event.target === homeDetailDrawer) {
           const rect = homeDetailDrawer.getBoundingClientRect();
@@ -83,6 +110,36 @@
           event.preventDefault(); event.stopImmediatePropagation(); closeHomeDetailDrawer();
         }
       }, true);
+      homeDetailDrawer.addEventListener('wheel', (event) => {
+        if (!homeDetailDrawer.open || homeDetailFlipLock) return;
+        if (Math.abs(event.deltaY) < 12) return;
+        event.preventDefault();
+        homeDetailFlipLock = true;
+        window.setTimeout(() => { homeDetailFlipLock = false; }, 420);
+        flipHomeDetail(event.deltaY > 0 ? 1 : -1);
+      }, { passive: false });
+      document.addEventListener('keydown', (event) => {
+        if (!homeDetailDrawer?.open) return;
+        if (event.key === 'ArrowDown' || event.key === 'PageDown' || event.key === ' ') {
+          event.preventDefault();
+          if (!homeDetailFlipLock) {
+            homeDetailFlipLock = true;
+            window.setTimeout(() => { homeDetailFlipLock = false; }, 420);
+            flipHomeDetail(1);
+          }
+        }
+        if (event.key === 'ArrowUp' || event.key === 'PageUp') {
+          event.preventDefault();
+          if (!homeDetailFlipLock) {
+            homeDetailFlipLock = true;
+            window.setTimeout(() => { homeDetailFlipLock = false; }, 420);
+            flipHomeDetail(-1);
+          }
+        }
+        if (event.key === 'Escape') {
+          closeHomeDetailDrawer();
+        }
+      });
     }
     if (!homeDetailMount) {
       const marker = document.createComment('home detail panel original position');
@@ -91,6 +148,8 @@
       homeDetailDrawer.appendChild(panel);
     }
     panel.style.display = 'flex';
+    panel.classList.add('app-home-detail-open');
+    document.body.style.overflow = 'hidden';
     if (!homeDetailDrawer.open) homeDetailDrawer.showModal();
     void window.showNodeDetailInline(id, { preserveSidebarState: true });
     return true;
