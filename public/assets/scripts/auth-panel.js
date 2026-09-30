@@ -1,0 +1,685 @@
+(function () {
+  const btnAuth = document.getElementById("btnAuth");
+  const authModal = document.getElementById("authModal");
+  const btnCloseAuthModal = document.getElementById("btnCloseAuthModal");
+  const loginForm = document.getElementById("loginForm");
+  const registerForm = document.getElementById("registerForm");
+  const btnOpenRegister = document.getElementById("btnOpenRegister");
+  const btnOpenLogin = document.getElementById("btnOpenLogin");
+  const btnSubmitLogin = document.getElementById("btnSubmitLogin");
+  const btnSubmitRegister = document.getElementById("btnSubmitRegister");
+  const inputAuthLoginUser = document.getElementById("inputAuthLoginUser");
+  const inputAuthLoginPass = document.getElementById("inputAuthLoginPass");
+  const inputAuthRegisterUser = document.getElementById("inputAuthRegisterUser");
+  const inputAuthRegisterPass = document.getElementById("inputAuthRegisterPass");
+  const inputAuthRegisterPassConfirm = document.getElementById(
+    "inputAuthRegisterPassConfirm"
+  );
+  const authLoginError = document.getElementById("authLoginError");
+  const authRegisterError = document.getElementById("authRegisterError");
+  const profileModal = document.getElementById("profileModal");
+  const inputProfileDisplay = document.getElementById("inputProfileDisplay");
+  const inputProfileAvatar = document.getElementById("inputProfileAvatar");
+  const btnClearProfileAvatar = document.getElementById("btnClearProfileAvatar");
+  const inputProfileAvatarFile = document.getElementById("inputProfileAvatarFile");
+  const profileAvatarUpload = document.getElementById("profileAvatarUpload");
+  const btnUploadProfileAvatar = document.getElementById("btnUploadProfileAvatar");
+  const profileAvatarUploadStatus = document.getElementById("profileAvatarUploadStatus");
+  const inputProfileJevKey = document.getElementById("inputProfileJevKey");
+  const btnClearProfileJevKey = document.getElementById("btnClearProfileJevKey");
+  const profileJevKeyStatus = document.getElementById("profileJevKeyStatus");
+  const profilePreview = document.getElementById("profilePreview");
+  const profilePreviewImg = document.getElementById("profilePreviewImg");
+  const profilePreviewStatus = document.getElementById("profilePreviewStatus");
+  const profileError = document.getElementById("profileError");
+  const btnSaveProfile = document.getElementById("btnSaveProfile");
+  const btnCancelProfile = document.getElementById("btnCancelProfile");
+  const btnCloseProfile = document.getElementById("btnCloseProfile");
+  const profileAccountMeta = document.getElementById("profileAccountMeta");
+  const btnLogout = document.getElementById("btnLogout");
+  const adminUserManager = document.getElementById("adminUserManager");
+  const userManagerList = document.getElementById("userManagerList");
+  const btnUserManagerRefresh = document.getElementById("btnUserManagerRefresh");
+
+  let authUser = null;
+  const isEmojiAvatar = (value) => {
+    const normalized = String(value || "").trim();
+    return Boolean(normalized) && !/^(?:https?:\/\/|\/|data:image\/|blob:)/i.test(normalized);
+  };
+
+  function syncEmojiAvatarSelection(value) {
+    document.querySelectorAll("[data-emoji-avatar]").forEach((button) => {
+      button.classList.toggle("is-selected", button.dataset.emojiAvatar === String(value || "").trim());
+    });
+  }
+
+  function setAuthUser(user) {
+    authUser = user || null;
+    window.authUser = authUser;
+    window.dispatchEvent(new CustomEvent("kb-auth-change", { detail: { user: authUser } }));
+    if (adminUserManager) adminUserManager.style.display = authUser?.role === "admin" ? "" : "none";
+    if (btnAuth) {
+      try {
+        if (authUser && authUser.avatar && isEmojiAvatar(authUser.avatar)) {
+          btnAuth.innerHTML = `<span class="header-user-avatar is-emoji">${authUser.avatar}</span>`;
+          btnAuth.title = authUser.displayName || authUser.username || "用户";
+        } else if (authUser && authUser.avatar) {
+          btnAuth.innerHTML = `<span class="header-user-avatar is-image" style="background-image:url(${authUser.avatar})"></span>`;
+          btnAuth.title = authUser.displayName || authUser.username || "用户";
+        } else if (authUser) {
+          const initials = (authUser.displayName ||
+            authUser.username ||
+            "?")
+            .toString()
+            .replace(/\s+/g, "")
+            .slice(0, 2)
+            .toUpperCase();
+          btnAuth.innerHTML = `<span class="header-user-avatar is-initials">${initials}</span>`;
+          btnAuth.title = authUser.displayName || authUser.username || "用户";
+        } else {
+          btnAuth.innerHTML = '<i class="fa-regular fa-user"></i>';
+          btnAuth.title = "登录";
+        }
+      } catch (e) {
+        console.warn("setAuthUser failed", e);
+      }
+    }
+    try {
+      if (typeof loadUsersToSidebar === "function") loadUsersToSidebar();
+    } catch {}
+  }
+
+  async function loadUserManager() {
+    if (authUser?.role !== "admin" || !userManagerList) return;
+    userManagerList.innerHTML = '<div class="muted" style="font-size:12px;">加载用户中…</div>';
+    try {
+      const response = await fetch("/api/auth/users", { credentials: "include" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "加载失败");
+      userManagerList.innerHTML = (data.users || []).map((user) => `
+        <div class="user-manager-row" data-user-id="${user.id}">
+          <div class="user-manager-name">${String(user.display_name || user.username || "用户").replace(/[&<>]/g, "")}</div>
+          <select data-user-role aria-label="用户角色"><option value="user" ${user.role === "user" ? "selected" : ""}>普通用户</option><option value="admin" ${user.role === "admin" ? "selected" : ""}>管理员</option></select>
+          <select data-user-status aria-label="账号状态"><option value="active" ${user.status !== "disabled" ? "selected" : ""}>正常</option><option value="disabled" ${user.status === "disabled" ? "selected" : ""}>停用</option></select>
+          <button class="btn sm" data-user-save type="button">保存</button>
+        </div>`).join("") || '<div class="muted" style="font-size:12px;">暂无用户</div>';
+    } catch (error) {
+      userManagerList.innerHTML = `<div class="muted" style="font-size:12px;">${error.message || "加载失败"}</div>`;
+    }
+  }
+
+  async function whoami() {
+    try {
+      const resp = await fetch("/api/auth/whoami", { credentials: "include" });
+      if (!resp.ok) return setAuthUser(null);
+      const data = await resp.json();
+      if (data && data.user) {
+        setAuthUser(data.user);
+        try {
+          if (window.applyUserPanelState) window.applyUserPanelState(data.user.panelState);
+        } catch {}
+      } else setAuthUser(null);
+    } catch {
+      setAuthUser(null);
+    }
+  }
+
+  async function logout() {
+    try {
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      setAuthUser(null);
+      try {
+        closeProfileModal();
+      } catch {}
+      try {
+        showToast("已登出");
+      } catch {}
+      const defaultHome = new URL(window.location.pathname || "/", window.location.origin);
+      defaultHome.searchParams.set("db", "default");
+      defaultHome.hash = "view=app_home";
+      window.location.assign(defaultHome.toString());
+    } catch (e) {
+      console.warn("logout failed", e);
+      try {
+        showToast("登出失败", "error");
+      } catch {}
+    }
+  }
+
+  function openAuthModal(showRegister = false) {
+    try {
+      if (!authModal) return;
+      try {
+        if (authModal.parentElement !== document.body) {
+          document.body.appendChild(authModal);
+        }
+      } catch {}
+      try {
+        authModal.style.zIndex = "99999";
+      } catch {}
+      authModal.style.display = "flex";
+      if (showRegister) {
+        if (loginForm) loginForm.style.display = "none";
+        if (registerForm) registerForm.style.display = "block";
+        try {
+          if (inputAuthRegisterUser) inputAuthRegisterUser.value = "";
+          if (inputAuthRegisterPass) inputAuthRegisterPass.value = "";
+          if (inputAuthRegisterPassConfirm) inputAuthRegisterPassConfirm.value = "";
+        } catch {}
+      } else {
+        if (loginForm) loginForm.style.display = "block";
+        if (registerForm) registerForm.style.display = "none";
+      }
+      try {
+        if (!showRegister && inputAuthLoginUser) {
+          setTimeout(() => inputAuthLoginUser.focus(), 40);
+        }
+        if (showRegister && inputAuthRegisterUser) {
+          setTimeout(() => inputAuthRegisterUser.focus(), 40);
+        }
+      } catch {}
+    } catch (e) {
+      console.warn("openAuthModal failed", e);
+    }
+  }
+
+  function closeAuthModal() {
+    if (!authModal) return;
+    authModal.style.display = "none";
+  }
+
+  function updateProfilePreview(url) {
+    if (!profilePreview || !profilePreviewImg || !profilePreviewStatus) return;
+    const trimmed = typeof url === "string" ? url.trim() : "";
+    if (!trimmed) {
+      profilePreview.style.display = "none";
+      profilePreviewImg.style.backgroundImage = "";
+      profilePreviewImg.textContent = "";
+      profilePreviewStatus.textContent = "";
+      return;
+    }
+    if (isEmojiAvatar(trimmed)) {
+      profilePreview.style.display = "flex";
+      profilePreviewImg.style.backgroundImage = "";
+      profilePreviewImg.textContent = trimmed;
+      profilePreviewImg.style.display = "inline-flex";
+      profilePreviewImg.style.alignItems = "center";
+      profilePreviewImg.style.justifyContent = "center";
+      profilePreviewImg.style.fontSize = "36px";
+      profilePreviewStatus.textContent = "Emoji 头像预览";
+      return;
+    }
+    profilePreviewImg.textContent = "";
+    profilePreview.style.display = "flex";
+    profilePreviewStatus.textContent = "加载中…";
+    profilePreviewImg.style.backgroundImage = "";
+    profilePreviewImg.style.fontSize = "";
+    const img = new Image();
+    img.onload = () => {
+      profilePreviewImg.style.backgroundImage = `url(${trimmed})`;
+      profilePreviewStatus.textContent = "预览";
+    };
+    img.onerror = () => {
+      profilePreviewImg.style.backgroundImage = "";
+      profilePreviewStatus.textContent = "加载失败";
+    };
+    img.src = trimmed;
+  }
+
+  function openProfileModal() {
+    if (!profileModal) return;
+    try {
+      if (profileModal.parentElement !== document.body) {
+        document.body.appendChild(profileModal);
+      }
+    } catch {}
+    try {
+      profileModal.style.zIndex = "99999";
+    } catch {}
+    profileModal.style.display = "flex";
+    if (profileAvatarUploadStatus) profileAvatarUploadStatus.textContent = "";
+    if (authUser?.role === "admin") loadUserManager();
+    if (authUser) {
+      if (profileAccountMeta) {
+        profileAccountMeta.textContent = authUser.username
+          ? `当前账号：${authUser.username}`
+          : "管理你的显示名称和头像";
+      }
+      if (inputProfileDisplay) inputProfileDisplay.value = authUser.displayName || "";
+      if (inputProfileAvatar) inputProfileAvatar.value = authUser.avatar || "";
+      if (inputProfileJevKey) {
+        inputProfileJevKey.value = "";
+        inputProfileJevKey.dataset.clear = "false";
+        inputProfileJevKey.placeholder = authUser.hasJevApiKey ? "已配置，输入新 Key 可替换" : "输入 Key 后保存";
+      }
+      if (profileJevKeyStatus) profileJevKeyStatus.textContent = authUser.hasJevApiKey ? "已配置 JEV Key；出于安全原因不会显示原值。" : "尚未配置，用于灵感卡知识评分。";
+      syncEmojiAvatarSelection(authUser.avatar || "");
+      try {
+        updateProfilePreview(authUser.avatar || "");
+      } catch {}
+    }
+    try {
+      if (inputProfileDisplay) setTimeout(() => inputProfileDisplay.focus(), 40);
+    } catch {}
+  }
+
+  function closeProfileModal() {
+    if (!profileModal) return;
+    profileModal.style.display = "none";
+  }
+
+  async function uploadProfileAvatar(file) {
+    if (!(file instanceof File) || !file.type.startsWith("image/")) {
+      if (profileAvatarUploadStatus) profileAvatarUploadStatus.textContent = "请选择有效的图片文件";
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      if (profileAvatarUploadStatus) profileAvatarUploadStatus.textContent = "头像图片不能超过 5MB";
+      return;
+    }
+    try {
+      if (profileError) profileError.style.display = "none";
+      if (profileAvatarUploadStatus) profileAvatarUploadStatus.textContent = "正在上传头像…";
+      profileAvatarUpload?.setAttribute("aria-busy", "true");
+      if (btnUploadProfileAvatar) btnUploadProfileAvatar.disabled = true;
+      const formData = new FormData();
+      formData.append("file", file, file.name || "pasted-avatar.png");
+      const response = await fetch("/api/auth/upload-avatar", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.url) throw new Error(data.message || "头像上传失败");
+      if (inputProfileAvatar) {
+        inputProfileAvatar.value = data.url;
+        updateProfilePreview(data.url);
+        syncEmojiAvatarSelection("");
+      }
+      if (profileAvatarUploadStatus) profileAvatarUploadStatus.textContent = "上传完成，点击“保存修改”后生效";
+    } catch (error) {
+      if (profileAvatarUploadStatus) profileAvatarUploadStatus.textContent = error.message || "头像上传失败";
+    } finally {
+      profileAvatarUpload?.removeAttribute("aria-busy");
+      if (btnUploadProfileAvatar) btnUploadProfileAvatar.disabled = false;
+      if (inputProfileAvatarFile) inputProfileAvatarFile.value = "";
+    }
+  }
+
+  async function submitLogin() {
+    try {
+      if (!inputAuthLoginUser || !inputAuthLoginPass) return;
+      const username = inputAuthLoginUser.value.trim();
+      const password = inputAuthLoginPass.value;
+      if (!username || !password) {
+        if (authLoginError) {
+          authLoginError.textContent = "请输入用户名与密码";
+          authLoginError.style.display = "block";
+        }
+        return;
+      }
+      if (authLoginError) authLoginError.style.display = "none";
+      const resp = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+        credentials: "include",
+      });
+      const text = await resp.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {}
+      if (!resp.ok) {
+        if (authLoginError) {
+          authLoginError.textContent =
+            (data && data.message) || text || `请求失败: HTTP ${resp.status}`;
+          authLoginError.style.display = "block";
+        }
+        return;
+      }
+      if (data && data.success) {
+        setAuthUser(data.user);
+        try {
+          if (window.applyUserPanelState) window.applyUserPanelState(data.user.panelState);
+        } catch {}
+        closeAuthModal();
+        try {
+          showToast("登录成功");
+        } catch {}
+      } else if (authLoginError) {
+        authLoginError.textContent = (data && data.message) || "登录失败";
+        authLoginError.style.display = "block";
+      }
+    } catch {
+      if (authLoginError) {
+        authLoginError.textContent = "请求失败";
+        authLoginError.style.display = "block";
+      }
+    }
+  }
+
+  async function submitRegister() {
+    try {
+      if (!inputAuthRegisterUser || !inputAuthRegisterPass) return;
+      const username = inputAuthRegisterUser.value.trim();
+      const password = inputAuthRegisterPass.value;
+      const confirm = inputAuthRegisterPassConfirm
+        ? inputAuthRegisterPassConfirm.value
+        : "";
+      if (!username || !password) {
+        if (authRegisterError) {
+          authRegisterError.textContent = "请输入用户名与密码";
+          authRegisterError.style.display = "block";
+        }
+        return;
+      }
+      if (password !== confirm) {
+        if (authRegisterError) {
+          authRegisterError.textContent = "两次输入的密码不一致";
+          authRegisterError.style.display = "block";
+        }
+        return;
+      }
+      if (password.length < 6) {
+        if (authRegisterError) {
+          authRegisterError.textContent = "密码需至少6位";
+          authRegisterError.style.display = "block";
+        }
+        return;
+      }
+      if (authRegisterError) authRegisterError.style.display = "none";
+      const resp = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username,
+          password,
+          displayName: "",
+          avatar: "",
+        }),
+      });
+      const text = await resp.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {}
+      if (!resp.ok) {
+        if (authRegisterError) {
+          authRegisterError.textContent =
+            (data && data.message) || text || `请求失败: HTTP ${resp.status}`;
+          authRegisterError.style.display = "block";
+        }
+        return;
+      }
+      try {
+        const resp2 = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+          credentials: "include",
+        });
+        const t2 = await resp2.text();
+        let d2 = null;
+        try {
+          d2 = t2 ? JSON.parse(t2) : null;
+        } catch {}
+        if (resp2.ok && d2 && d2.success) {
+          setAuthUser(d2.user);
+          try {
+            if (window.applyUserPanelState) window.applyUserPanelState(d2.user.panelState);
+          } catch {}
+          closeAuthModal();
+          return;
+        }
+      } catch {}
+      if (data && data.user) {
+        setAuthUser(data.user);
+        closeAuthModal();
+      }
+    } catch {
+      if (authRegisterError) {
+        authRegisterError.textContent = "请求失败";
+        authRegisterError.style.display = "block";
+      }
+    }
+  }
+
+  if (btnAuth) {
+    btnAuth.addEventListener("click", (e) => {
+      e.preventDefault();
+      try {
+        const dm = document.getElementById("dbSelectModal");
+        if (dm && dm.style.display && dm.style.display !== "none") {
+          hideDbSelectModal();
+        }
+      } catch {}
+      if (authUser) window.toggleUserSidebar?.();
+      else openAuthModal(false);
+    });
+  }
+  if (btnCloseAuthModal) btnCloseAuthModal.addEventListener("click", closeAuthModal);
+  if (authModal) {
+    authModal.addEventListener("click", (e) => {
+      if (e.target === authModal) closeAuthModal();
+    });
+  }
+  if (btnOpenRegister) btnOpenRegister.addEventListener("click", () => openAuthModal(true));
+  if (btnOpenLogin) btnOpenLogin.addEventListener("click", () => openAuthModal(false));
+  if (inputProfileAvatar) {
+    inputProfileAvatar.addEventListener("input", (e) => {
+      try {
+        updateProfilePreview(e.target.value || "");
+        syncEmojiAvatarSelection(e.target.value || "");
+      } catch {}
+    });
+  }
+  if (btnClearProfileAvatar) {
+    btnClearProfileAvatar.addEventListener("click", (e) => {
+      e.preventDefault();
+      try {
+        if (inputProfileAvatar) {
+          inputProfileAvatar.value = "";
+          updateProfilePreview("");
+          syncEmojiAvatarSelection("");
+        }
+      } catch {}
+    });
+  }
+  btnUploadProfileAvatar?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    inputProfileAvatarFile?.click();
+  });
+  inputProfileAvatarFile?.addEventListener("change", () => {
+    const file = inputProfileAvatarFile.files?.[0];
+    if (file) void uploadProfileAvatar(file);
+  });
+  profileAvatarUpload?.addEventListener("click", (event) => {
+    if (event.target instanceof Element && event.target.closest("button")) return;
+    inputProfileAvatarFile?.click();
+  });
+  profileAvatarUpload?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    inputProfileAvatarFile?.click();
+  });
+  for (const eventName of ["dragenter", "dragover"]) {
+    profileAvatarUpload?.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      profileAvatarUpload.classList.add("is-dragover");
+    });
+  }
+  for (const eventName of ["dragleave", "drop"]) {
+    profileAvatarUpload?.addEventListener(eventName, (event) => {
+      event.preventDefault();
+      profileAvatarUpload.classList.remove("is-dragover");
+      if (eventName === "drop") {
+        const file = event.dataTransfer?.files?.[0];
+        if (file) void uploadProfileAvatar(file);
+      }
+    });
+  }
+  profileModal?.addEventListener("paste", (event) => {
+    const file = Array.from(event.clipboardData?.items || [])
+      .find((item) => item.kind === "file" && item.type.startsWith("image/"))
+      ?.getAsFile();
+    if (!file) return;
+    event.preventDefault();
+    void uploadProfileAvatar(file);
+  });
+  if (btnClearProfileJevKey) {
+    btnClearProfileJevKey.addEventListener("click", () => {
+      if (!inputProfileJevKey) return;
+      inputProfileJevKey.value = "";
+      inputProfileJevKey.dataset.clear = "true";
+      inputProfileJevKey.placeholder = "保存后清除已配置的 Key";
+      if (profileJevKeyStatus) profileJevKeyStatus.textContent = "点击“保存修改”后清除 JEV Key。";
+    });
+  }
+  inputProfileJevKey?.addEventListener("input", () => {
+    inputProfileJevKey.dataset.clear = "false";
+    if (profileJevKeyStatus) profileJevKeyStatus.textContent = inputProfileJevKey.value ? "新 Key 将在保存后生效。" : (authUser?.hasJevApiKey ? "当前已配置的 Key 将保持不变。" : "尚未配置，用于灵感卡知识评分。");
+  });
+  if (btnCloseProfile) btnCloseProfile.addEventListener("click", closeProfileModal);
+  if (btnSubmitLogin) btnSubmitLogin.addEventListener("click", (e) => {
+    e.preventDefault();
+    submitLogin();
+  });
+  if (btnSubmitRegister) btnSubmitRegister.addEventListener("click", (e) => {
+    e.preventDefault();
+    submitRegister();
+  });
+  if (inputAuthLoginPass) {
+    inputAuthLoginPass.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        submitLogin();
+      }
+    });
+  }
+  if (inputAuthRegisterPass) {
+    inputAuthRegisterPass.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        submitRegister();
+      }
+    });
+  }
+  if (inputAuthRegisterPassConfirm) {
+    inputAuthRegisterPassConfirm.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        submitRegister();
+      }
+    });
+  }
+  if (btnSaveProfile) {
+    btnSaveProfile.addEventListener("click", async () => {
+      try {
+        const displayName = inputProfileDisplay ? inputProfileDisplay.value.trim() : "";
+        const avatar = inputProfileAvatar ? inputProfileAvatar.value.trim() : "";
+        const jevApiKey = inputProfileJevKey ? inputProfileJevKey.value.trim() : "";
+        try {
+          if (avatar && !isEmojiAvatar(avatar)) new URL(avatar, window.location.origin);
+        } catch {
+          if (profileError) {
+            profileError.textContent = "头像 URL 格式不正确";
+            profileError.style.display = "block";
+          }
+          return;
+        }
+        if (profileError) {
+          profileError.style.display = "none";
+          profileError.textContent = "";
+        }
+        btnSaveProfile.disabled = true;
+        const resp = await fetch("/api/auth/update_profile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ displayName, avatar, ...(jevApiKey || inputProfileJevKey?.dataset.clear === "true" ? { jevApiKey } : {}) }),
+          credentials: "include",
+        });
+        const text = await resp.text();
+        let data = null;
+        try {
+          data = text ? JSON.parse(text) : null;
+        } catch {}
+        if (!resp.ok) {
+          if (profileError) {
+            profileError.textContent =
+              (data && data.message) || text || `请求失败: HTTP ${resp.status}`;
+            profileError.style.display = "block";
+          }
+          return;
+        }
+        if (data && data.success) {
+          setAuthUser(data.user);
+          closeProfileModal();
+        }
+      } catch {
+        if (profileError) {
+          profileError.textContent = "请求失败";
+          profileError.style.display = "block";
+        }
+      } finally {
+        try {
+          btnSaveProfile.disabled = false;
+        } catch {}
+      }
+    });
+  }
+  if (btnCancelProfile) {
+    btnCancelProfile.addEventListener("click", (e) => {
+      e.preventDefault();
+      closeProfileModal();
+    });
+  }
+  if (btnLogout) {
+    btnLogout.addEventListener("click", (e) => {
+      e.preventDefault();
+      logout();
+    });
+  }
+  document.querySelectorAll("[data-emoji-avatar]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (!inputProfileAvatar) return;
+      inputProfileAvatar.value = button.dataset.emojiAvatar || "";
+      updateProfilePreview(inputProfileAvatar.value);
+      syncEmojiAvatarSelection(inputProfileAvatar.value);
+    });
+  });
+  if (btnUserManagerRefresh) btnUserManagerRefresh.addEventListener("click", loadUserManager);
+  if (userManagerList) userManagerList.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-user-save]");
+    if (!button) return;
+    const row = button.closest("[data-user-id]");
+    try {
+      button.disabled = true;
+      const response = await fetch(`/api/auth/users/${row.dataset.userId}`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role: row.querySelector("[data-user-role]").value, status: row.querySelector("[data-user-status]").value }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "保存失败");
+      await loadUserManager();
+    } catch (error) { alert(error.message || "保存失败"); } finally { button.disabled = false; }
+  });
+  if (profileModal) {
+    profileModal.addEventListener("click", (e) => {
+      if (e.target === profileModal) closeProfileModal();
+    });
+  }
+
+  window.setAuthUser = setAuthUser;
+  window.whoami = whoami;
+  window.logout = logout;
+  window.openAuthModal = openAuthModal;
+  window.closeAuthModal = closeAuthModal;
+  window.openProfileModal = openProfileModal;
+  window.closeProfileModal = closeProfileModal;
+
+  try {
+    whoami();
+  } catch {}
+})();

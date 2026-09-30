@@ -1,0 +1,198 @@
+# Knowledge Graph
+
+This project now includes a semantic map / knowledge galaxy page built with Bun, SQLite, native HTML, and `deck.gl`. The map now reads the current application entity data from `nodes`, while `semantic_nodes` acts as the coordinate/index layer.
+
+## Install
+
+```bash
+bun install
+```
+
+The `deck.gl` browser dependency has also been added to `package.json` and installed into `node_modules`.
+
+## Start the Bun Server
+
+```bash
+bun run dev
+```
+
+The Bun entry point is `src/server/index.ts`; server routes, database access,
+and static-file handling are colocated under `src/server`.
+
+Default address:
+
+```text
+http://localhost:8080
+```
+
+Main knowledge page:
+
+```text
+http://localhost:8080/
+```
+
+Semantic map page:
+
+```text
+http://localhost:8080/semantic-map.html
+```
+
+## SQLite Schema
+
+On server startup, the app automatically ensures the `semantic_nodes` table and indexes exist. Current entity content still comes from `nodes`; `semantic_nodes` stores semantic coordinates and rendering metadata keyed by the same node id.
+
+```sql
+CREATE TABLE IF NOT EXISTS semantic_nodes (
+  id TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  type TEXT,
+  tags TEXT,
+  description TEXT,
+  x REAL,
+  y REAL,
+  size REAL DEFAULT 4,
+  color TEXT,
+  hot INTEGER DEFAULT 0,
+  created_at TEXT,
+  updated_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_semantic_nodes_xy ON semantic_nodes(x, y);
+CREATE INDEX IF NOT EXISTS idx_semantic_nodes_type ON semantic_nodes(type);
+CREATE INDEX IF NOT EXISTS idx_semantic_nodes_hot ON semantic_nodes(hot);
+```
+
+The application database is stored at:
+
+```text
+../data/app.sqlite
+```
+
+Relative to this repository, that resolves to the sibling `data` directory used by the existing Bun app.
+
+## Semantic Map APIs
+
+Implemented endpoints:
+
+```text
+GET /api/semantic-map/init
+GET /api/semantic-map/viewport
+GET /api/semantic-map/detail/:id
+GET /api/semantic-map/search?q=keyword
+```
+
+Behavior summary:
+
+- `/api/semantic-map/init`: load the initial hot nodes with non-null `x/y`.
+- `/api/semantic-map/viewport`: load nodes in the current visible XY range.
+- `/api/semantic-map/detail/:id`: fetch a single node detail record.
+- `/api/semantic-map/search`: optional backend fuzzy search by `label`, `tags`, or `description`.
+
+All endpoints return JSON and include permissive CORS headers for local development.
+
+## Insert Test Data
+
+If you want standalone sample coordinates for quick demo use, seed sample data with:
+
+```bash
+bun run seed:semantic
+```
+
+The seed script inserts 50 semantic nodes across:
+
+- Person
+- Organization
+- Equipment
+- Location
+- Event
+- Document
+- Technology
+
+Each record includes:
+
+- `label`
+- `type`
+- `tags`
+- `description`
+- `x`
+- `y`
+- `size`
+- `color`
+- `hot`
+
+## Generate Semantic Coordinates Offline
+
+Coordinate generation script:
+
+```text
+scripts/generate-semantic-coordinates.py
+```
+
+Install Python dependencies:
+
+```bash
+pip install sentence-transformers umap-learn pandas
+```
+
+Run the script:
+
+```bash
+python scripts/generate-semantic-coordinates.py
+```
+
+What it does:
+
+1. Syncs current `nodes` into `semantic_nodes`.
+2. Reads `label`, `type`, `tags`, and `description` from `semantic_nodes`.
+3. Generates embeddings with `paraphrase-multilingual-MiniLM-L12-v2`.
+4. Reduces them to 2D with UMAP.
+5. Writes `x` and `y` back into `semantic_nodes`.
+
+UMAP settings:
+
+```text
+n_neighbors=50
+min_dist=0.1
+n_components=2
+metric="cosine"
+```
+
+## Semantic Map Page Features
+
+`/semantic-map.html` currently supports:
+
+- full-screen WebGL scatter rendering via `deck.gl`
+- `OrthographicView` for a true 2D semantic plane
+- semantic content sourced from the current application `nodes`
+- semantic coordinates read from `semantic_nodes`
+- mouse wheel zoom
+- drag pan
+- node hover tooltip
+- click-to-open detail panel
+- local search over loaded nodes
+- search result highlighting and first-result focus
+- viewport-based incremental data loading
+- client-side deduplication with `Map<string, Node>`
+
+## Notes
+
+### 数据录入与知识清洗
+
+新增“数据录入 → 二维实体表 → 数据清洗 → 确认保存知识库”流程原型。支持 MySQL（含演示源）、CSV / Excel / JSON、Wikidata，以及六节点单向流程画布。
+
+完整演示步骤、新接口、SQLite 表结构、验证命令和原型限制见 [数据流程说明](docs/data-pipeline.md)。
+
+- The semantic map does not use Cytoscape.js.
+- Version one intentionally does not render relationship edges.
+- `bunx tsc --noEmit` still reports several pre-existing type errors in older route files outside this feature, but the semantic map files added in this change are in place and wired into the Bun server.
+- 用户名：admin
+- 初始密码：R76tmuTLX1pydQouow1RB6ZB
+- 角色：超级管理员
+- 状态：启用
+
+
+首次运行：已自动创建系统管理员账号
+管理员账号: admin
+管理员密码: k9AH%PhTxCc2CiL_GGmF
+请登录后立即修改密码，并妥善保存该凭据。
+此密码只会在本次创建时显示。

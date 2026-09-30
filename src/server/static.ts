@@ -1,0 +1,138 @@
+import { resolve } from "path";
+
+const PUBLIC_INDEX_FILE = Bun.file("public/index.html");
+const DEMO_CHAT_FILE = Bun.file("demo/chat.html");
+const SHARED_UPLOADS_DIR = resolve(
+  import.meta.dir,
+  "..",
+  "..",
+  "uploads",
+);
+
+export async function serveStaticRoute(req: Request, pathname: string) {
+  const makeResponse = async (file: ReturnType<typeof Bun.file>) => {
+    const headers = new Headers();
+    const pathOnly = pathname.split("?")[0] || pathname;
+    const ext = pathOnly.split(".").pop()?.toLowerCase() || "";
+    const contentTypes: Record<string, string> = {
+      png: "image/png",
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      gif: "image/gif",
+      webp: "image/webp",
+      svg: "image/svg+xml",
+      ico: "image/x-icon",
+      heif: "image/heif",
+      heic: "image/heic",
+      js: "application/javascript",
+      mjs: "application/javascript",
+      css: "text/css",
+      html: "text/html; charset=utf-8",
+      json: "application/json",
+      csv: "text/csv; charset=utf-8",
+      mp4: "video/mp4",
+      webm: "video/webm",
+      ogg: "video/ogg",
+      mov: "video/quicktime",
+      avi: "video/x-msvideo",
+      mkv: "video/x-matroska",
+      pdf: "application/pdf",
+      txt: "text/plain; charset=utf-8",
+      md: "text/plain; charset=utf-8",
+    };
+    const contentType = contentTypes[ext] || "application/octet-stream";
+    headers.set("Content-Type", contentType);
+    if (contentType === "application/pdf") {
+      headers.set("Content-Disposition", "inline");
+    }
+    headers.set("Accept-Ranges", "bytes");
+    if (pathname.startsWith("/static/uploads/")) {
+      headers.set("Cache-Control", /\/(node-images|node-videos|node-pdfs)\//i.test(pathname) ? 'private, no-store' : "public, max-age=31536000, immutable");
+    }
+    return new Response(file, { headers });
+  };
+
+  if (pathname === "/sparql" || pathname === "/sparql.html") {
+    return new Response(Bun.file("public/sparql.html"), { headers: { "Content-Type": "text/html; charset=utf-8" } });
+  }
+
+  if (pathname === "/kb" || pathname === "/") {
+    const url = new URL(req.url);
+    if (url.searchParams.get("tool") === "sparql") {
+      url.pathname = "/sparql";
+      url.searchParams.delete("tool");
+      return Response.redirect(url.toString(), 302);
+    }
+    if (!url.searchParams.has("db")) {
+      url.searchParams.set("db", "default");
+      return Response.redirect(url.toString(), 302);
+    }
+    return new Response(PUBLIC_INDEX_FILE, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+  }
+
+  if (pathname === "/demo/chat.html" || pathname === "/chat") {
+    if (await DEMO_CHAT_FILE.exists()) {
+      return new Response(DEMO_CHAT_FILE, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+    }
+    return null;
+  }
+
+  if (pathname.startsWith("/static/")) {
+    const sharedUploadPrefix = "/static/uploads/";
+    if (pathname.startsWith(sharedUploadPrefix)) {
+      const relativePath = pathname.slice(sharedUploadPrefix.length);
+      if (relativePath.split(/[\\/]/).some((part) => part === '..' || /[. :]$/.test(part) || part.includes(':'))) {
+        return new Response('Not Found', { status: 404 });
+      }
+      const file = Bun.file(resolve(SHARED_UPLOADS_DIR, relativePath));
+      if (await file.exists()) {
+        return makeResponse(file);
+      }
+      return null;
+    }
+
+    const file = Bun.file(`.${pathname}`);
+    if (await file.exists()) {
+      return makeResponse(file);
+    }
+    return null;
+  }
+
+  if (pathname.startsWith("/node_modules/")) {
+    const file = Bun.file(`.${pathname}`);
+    if (await file.exists()) {
+      return makeResponse(file);
+    }
+    return null;
+  }
+
+  if (["/examples/ontology-import.json", "/examples/ontology-import-format.md", "/examples/entity-import.json", "/examples/entity-import-format.md", "/examples/class-import.json", "/examples/class-import-format.md", "/examples/tag-import.json", "/examples/tag-import-format.md", "/examples/pipeline-people.csv", "/examples/pipeline-people-update.csv"].includes(pathname)) {
+    return makeResponse(Bun.file(`public${pathname}`));
+  }
+
+  if (pathname.startsWith("/assets/")) {
+    const file = Bun.file(`public${pathname}`);
+    if (await file.exists()) {
+      return new Response(file);
+    }
+    return null;
+  }
+
+  if (pathname.startsWith("/js/")) {
+    const file = Bun.file(`public${pathname}`);
+    if (await file.exists()) {
+      return new Response(file);
+    }
+    return null;
+  }
+
+  if (pathname.startsWith("/css/")) {
+    const file = Bun.file(`public${pathname}`);
+    if (await file.exists()) {
+      return new Response(file);
+    }
+    return null;
+  }
+
+  return null;
+}

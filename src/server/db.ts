@@ -1,0 +1,1763 @@
+import { Database } from "bun:sqlite";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from "fs";
+import { join, resolve } from "path";
+import { createKnowledgeDatabase, ensureKnowledgeAccessSchema } from './knowledge-access.ts';
+import { ensureApplicationSchema, ensureDefaultApplication } from './application-access.ts';
+import { ensureApplicationRolePermissions } from './application-role-permissions.ts';
+import { repairLegacyClonedEntityIds } from './application-clone.ts';
+
+const KNOWLEDGE_GRAPH_ROOT = resolve(import.meta.dir, "..", "..");
+const WORKSPACE_ROOT = resolve(KNOWLEDGE_GRAPH_ROOT, "..");
+const ROOT_DATA_DIR = resolve(WORKSPACE_ROOT, "data");
+const ROOT_UPLOADS_DIR = resolve(WORKSPACE_ROOT, "uploads");
+const APP_DB_FILENAME = "app.sqlite";
+const APP_DB_PATH = resolve(ROOT_DATA_DIR, APP_DB_FILENAME);
+const LEGACY_ADMIN_DB_PATH = resolve(ROOT_DATA_DIR, "admin.sqlite");
+const LEGACY_KB_DB_PATH = resolve(ROOT_DATA_DIR, "kb.sqlite");
+const LEGACY_ANY_STORE_DB_PATH = resolve(ROOT_DATA_DIR, "links.db");
+const APP_UPLOADS_DIR = ROOT_UPLOADS_DIR;
+const LEGACY_ANY_STORE_UPLOADS_DIR = resolve(
+  WORKSPACE_ROOT,
+  "any-store",
+  "public",
+  "uploads",
+);
+const LEGACY_KNOWLEDGE_GRAPH_UPLOADS_DIR = resolve(
+  KNOWLEDGE_GRAPH_ROOT,
+  "public",
+  "uploads",
+);
+const OLD_SHARED_DB_PATH = resolve(WORKSPACE_ROOT, "shared.sqlite");
+const OLD_APP_DB_PATH = resolve(ROOT_DATA_DIR, "shared.sqlite");
+const OLD_SHARED_UPLOADS_DIR = resolve(WORKSPACE_ROOT, "shared_uploads");
+const OLD_KNOWLEDGE_GRAPH_DATA_DIR = resolve(KNOWLEDGE_GRAPH_ROOT, "data");
+const OLD_ANY_STORE_DATA_DIR = resolve(WORKSPACE_ROOT, "any-store", "data");
+
+mkdirSync(ROOT_DATA_DIR, { recursive: true });
+mkdirSync(APP_UPLOADS_DIR, { recursive: true });
+
+if (!existsSync(APP_DB_PATH)) {
+  if (existsSync(OLD_SHARED_DB_PATH)) {
+    try {
+      copyFileSync(OLD_SHARED_DB_PATH, APP_DB_PATH);
+    } catch {}
+  } else if (existsSync(OLD_APP_DB_PATH)) {
+    try {
+      copyFileSync(OLD_APP_DB_PATH, APP_DB_PATH);
+    } catch {}
+  }
+}
+
+const appDb = new Database(APP_DB_PATH);
+try {
+  appDb.run("PRAGMA foreign_keys = ON");
+} catch (err) {
+  console.warn("SQLite foreign_keys pragma failed:", err);
+}
+try {
+  appDb.run("PRAGMA busy_timeout = 5000");
+} catch (err) {
+  console.warn("SQLite busy_timeout pragma failed:", err);
+}
+try {
+  appDb.run("PRAGMA journal_mode = WAL");
+} catch (err) {
+  console.warn("SQLite WAL pragma failed:", err);
+}
+try {
+  appDb.run("PRAGMA synchronous = NORMAL");
+} catch (err) {
+  console.warn("SQLite synchronous pragma failed:", err);
+}
+
+export let adminDb: any = appDb;
+export let db = createKnowledgeDatabase(appDb);
+
+function runSafe(sql: string) {
+  try {
+    appDb.run(sql);
+  } catch {}
+}
+
+function queryAllSafe(sql: string, ...params: any[]) {
+  try {
+    return appDb.query(sql).all(...params) as any[];
+  } catch {
+    return [];
+  }
+}
+
+function queryGetSafe(sql: string, ...params: any[]) {
+  try {
+    return appDb.query(sql).get(...params) as any;
+  } catch {
+    return null;
+  }
+}
+
+function tableExists(name: string) {
+  return !!queryGetSafe(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
+    name,
+  );
+}
+
+function tableHasForeignKeyToNodesOld(name: string) {
+  const fks = queryAllSafe(`PRAGMA foreign_key_list(${name})`);
+  return fks.some((fk: any) => fk?.table === "nodes_old");
+}
+
+function rebuildTableWithSchema(
+  name: string,
+  createSql: string,
+  copyColumns: string[],
+) {
+  const tempName = `${name}_old`;
+  runSafe(`DROP TABLE IF EXISTS ${tempName}`);
+  appDb.run("PRAGMA foreign_keys = OFF");
+  appDb.run(`ALTER TABLE ${name} RENAME TO ${tempName}`);
+  appDb.run(createSql);
+  if (copyColumns.length > 0) {
+    appDb.run(
+      `INSERT INTO ${name} (${copyColumns.join(", ")}) SELECT ${copyColumns.join(", ")} FROM ${tempName}`,
+    );
+  }
+  appDb.run(`DROP TABLE IF EXISTS ${tempName}`);
+  appDb.run("PRAGMA foreign_keys = ON");
+}
+
+function slugifyProjectName(value: string, fallback: string) {
+  const normalized = (value || "")
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalized || fallback;
+}
+
+function ensureUniqueProjectName(baseName: string) {
+  let candidate = baseName;
+  let attempt = 1;
+  while (
+    queryGetSafe("SELECT id FROM projects WHERE name = ? LIMIT 1", candidate)
+  ) {
+    attempt += 1;
+    candidate = `${baseName}-${attempt}`;
+  }
+  return candidate;
+}
+
+function ensureSharedTables() {
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS projects (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT UNIQUE,
+      file TEXT,
+      title TEXT,
+      description TEXT,
+      image TEXT,
+      theme_color TEXT DEFAULT '#ff7a2b',
+      tags TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  runSafe("ALTER TABLE projects ADD COLUMN image TEXT");
+  runSafe("ALTER TABLE projects ADD COLUMN theme_color TEXT DEFAULT '#ff7a2b'");
+  runSafe("ALTER TABLE projects ADD COLUMN tags TEXT");
+  runSafe("ALTER TABLE projects ADD COLUMN file TEXT");
+  runSafe("ALTER TABLE projects ADD COLUMN title TEXT");
+  runSafe("ALTER TABLE projects ADD COLUMN link TEXT");
+  runSafe(
+    "UPDATE projects SET title = name WHERE (title IS NULL OR title = '') AND name IS NOT NULL AND name <> ''",
+  );
+  runSafe(
+    `UPDATE projects SET file = '${APP_DB_FILENAME}' WHERE file IS NULL OR file = '' OR file = 'shared.sqlite'`,
+  );
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      display_name TEXT,
+      password TEXT,
+      password_hash TEXT,
+      password_salt TEXT,
+      avatar TEXT,
+      panel_state TEXT,
+      is_admin INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  runSafe("ALTER TABLE users ADD COLUMN display_name TEXT");
+  runSafe("ALTER TABLE users ADD COLUMN password TEXT");
+  runSafe("ALTER TABLE users ADD COLUMN password_hash TEXT");
+  runSafe("ALTER TABLE users ADD COLUMN password_salt TEXT");
+  runSafe("ALTER TABLE users ADD COLUMN avatar TEXT");
+  runSafe("ALTER TABLE users ADD COLUMN panel_state TEXT");
+  runSafe("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0");
+  runSafe("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'");
+  runSafe("ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'");
+  runSafe("ALTER TABLE users ADD COLUMN email TEXT");
+  runSafe("ALTER TABLE users ADD COLUMN phone TEXT");
+  runSafe("ALTER TABLE users ADD COLUMN jev_api_key TEXT");
+  runSafe("ALTER TABLE users ADD COLUMN last_login_at DATETIME");
+  runSafe("UPDATE users SET role = CASE WHEN is_admin = 1 THEN 'admin' ELSE 'user' END WHERE role IS NULL OR role = ''");
+  runSafe("UPDATE users SET status = 'active' WHERE status IS NULL OR status = ''");
+  runSafe(
+    "ALTER TABLE users ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
+  );
+  runSafe(
+    "ALTER TABLE users ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP",
+  );
+  runSafe(
+    "UPDATE users SET display_name = username WHERE display_name IS NULL OR display_name = ''",
+  );
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      token TEXT UNIQUE,
+      username TEXT,
+      user_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      expires_at DATETIME
+    )
+  `);
+  runSafe("ALTER TABLE sessions ADD COLUMN token TEXT");
+  runSafe("ALTER TABLE sessions ADD COLUMN username TEXT");
+  runSafe("ALTER TABLE sessions ADD COLUMN user_id INTEGER");
+  runSafe(
+    "ALTER TABLE sessions ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
+  );
+  runSafe("ALTER TABLE sessions ADD COLUMN expires_at DATETIME");
+  runSafe("UPDATE sessions SET token = id WHERE token IS NULL OR token = ''");
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS links (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL,
+      image TEXT,
+      tags TEXT,
+      description TEXT,
+      owner_id INTEGER,
+      source TEXT,
+      screenshots TEXT,
+      short_description TEXT,
+      first_comment TEXT,
+      approved INTEGER DEFAULT 0,
+      approved_by INTEGER,
+      approved_at INTEGER,
+      featured INTEGER DEFAULT 0,
+      product_id INTEGER,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  `);
+  runSafe("ALTER TABLE links ADD COLUMN source TEXT");
+  runSafe("ALTER TABLE links ADD COLUMN screenshots TEXT");
+  runSafe("ALTER TABLE links ADD COLUMN short_description TEXT");
+  runSafe("ALTER TABLE links ADD COLUMN first_comment TEXT");
+  runSafe("ALTER TABLE links ADD COLUMN owner_id INTEGER");
+  runSafe("ALTER TABLE links ADD COLUMN approved INTEGER DEFAULT 0");
+  runSafe("ALTER TABLE links ADD COLUMN approved_by INTEGER");
+  runSafe("ALTER TABLE links ADD COLUMN approved_at INTEGER");
+  runSafe("ALTER TABLE links ADD COLUMN featured INTEGER DEFAULT 0");
+  runSafe("ALTER TABLE links ADD COLUMN product_id INTEGER");
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS link_likes (
+      link_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      PRIMARY KEY (link_id, user_id)
+    )
+  `);
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      link_id INTEGER NOT NULL,
+      user_id INTEGER,
+      username TEXT,
+      content TEXT NOT NULL,
+      parent_id INTEGER,
+      created_at INTEGER NOT NULL
+    )
+  `);
+  runSafe("ALTER TABLE comments ADD COLUMN parent_id INTEGER");
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS comment_likes (
+      comment_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      PRIMARY KEY (comment_id, user_id)
+    )
+  `);
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS knowledge_likes (
+      user_id INTEGER NOT NULL,
+      knowledge_id TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, knowledge_id)
+    )
+  `);
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS knowledge_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      knowledge_id TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS knowledge_shares (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      knowledge_id TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  appDb.run("CREATE INDEX IF NOT EXISTS idx_knowledge_comments_knowledge ON knowledge_comments(knowledge_id, created_at DESC)");
+  appDb.run("CREATE INDEX IF NOT EXISTS idx_knowledge_shares_knowledge ON knowledge_shares(knowledge_id)");
+
+  appDb.run(`CREATE TABLE IF NOT EXISTS roles (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL, status TEXT DEFAULT 'active', data_scope TEXT DEFAULT 'all', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+  appDb.run(`CREATE TABLE IF NOT EXISTS permissions (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL, module TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+  appDb.run(`CREATE TABLE IF NOT EXISTS user_roles (user_id INTEGER NOT NULL, role_id INTEGER NOT NULL, PRIMARY KEY (user_id, role_id))`);
+  appDb.run(`CREATE TABLE IF NOT EXISTS role_permissions (role_id INTEGER NOT NULL, permission_id INTEGER NOT NULL, PRIMARY KEY (role_id, permission_id))`);
+  appDb.run(`CREATE TABLE IF NOT EXISTS menus (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL, name TEXT NOT NULL, path TEXT, permission_code TEXT, sort_order INTEGER DEFAULT 0, status TEXT DEFAULT 'active')`);
+  appDb.run(`CREATE TABLE IF NOT EXISTS role_menus (role_id INTEGER NOT NULL, menu_id INTEGER NOT NULL, PRIMARY KEY (role_id, menu_id))`);
+  appDb.run(`CREATE TABLE IF NOT EXISTS login_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, username TEXT, login_at DATETIME DEFAULT CURRENT_TIMESTAMP, ip TEXT, user_agent TEXT, success INTEGER NOT NULL, failure_reason TEXT)`);
+  appDb.run(`CREATE TABLE IF NOT EXISTS operation_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, username TEXT, module TEXT NOT NULL, action TEXT NOT NULL, target TEXT, path TEXT, success INTEGER NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+  appDb.run(`CREATE TABLE IF NOT EXISTS knowledge_favorites (user_id INTEGER NOT NULL, knowledge_id TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, knowledge_id))`);
+  runSafe("ALTER TABLE nodes ADD COLUMN created_by INTEGER");
+  runSafe("ALTER TABLE properties ADD COLUMN tail_ontology_id TEXT");
+  const defaultPermissions = ["user:view","user:create","user:update","user:delete","role:view","role:create","role:update","role:delete","permission:view","permission:update","knowledge:view","knowledge:create","knowledge:update","knowledge:delete","knowledge:audit","knowledge:like","knowledge:comment","knowledge:share","knowledge:favorite","system:config","system:log"];
+  defaultPermissions.forEach((code) => appDb.run("INSERT OR IGNORE INTO permissions (code, name, module) VALUES (?, ?, ?)", [code, code, code.split(":")[0] || ""]));
+  appDb.run("INSERT OR IGNORE INTO roles (code, name, data_scope) VALUES ('super_admin', '超级管理员', 'all')");
+  appDb.run("INSERT OR IGNORE INTO roles (code, name, data_scope) VALUES ('user', '普通用户', 'own')");
+  ensureApplicationRolePermissions(appDb);
+  const superRole = appDb.query("SELECT id FROM roles WHERE code = 'super_admin'").get() as any;
+  if (superRole) appDb.run("INSERT OR IGNORE INTO role_permissions (role_id, permission_id) SELECT ?, id FROM permissions", [superRole.id]);
+  appDb.run("INSERT OR IGNORE INTO user_roles (user_id, role_id) SELECT id, ? FROM users WHERE role = 'admin' OR is_admin = 1", [superRole?.id || 0]);
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    )
+  `);
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS knowledge_reports (
+      id TEXT PRIMARY KEY,
+      project_id INTEGER,
+      owner_user_id INTEGER,
+      title TEXT NOT NULL,
+      keywords_json TEXT NOT NULL DEFAULT '[]',
+      summary TEXT NOT NULL DEFAULT '',
+      sections_json TEXT NOT NULL DEFAULT '[]',
+      sources_json TEXT NOT NULL DEFAULT '[]',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  runSafe("CREATE INDEX IF NOT EXISTS idx_knowledge_reports_project_updated ON knowledge_reports(project_id, updated_at DESC)");
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS nodes (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      type TEXT,
+      description TEXT,
+      wiki_md TEXT,
+      aliases TEXT,
+      tags TEXT,
+      data TEXT,
+      images TEXT,
+      covers TEXT,
+      link TEXT,
+      pdf TEXT,
+      videos TEXT,
+      jev_analysis_json TEXT,
+      jev_analysis_signature TEXT,
+      jev_analysis_updated_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  runSafe("ALTER TABLE nodes ADD COLUMN wiki_md TEXT");
+  runSafe("ALTER TABLE nodes ADD COLUMN project_id INTEGER");
+  runSafe("ALTER TABLE nodes ADD COLUMN images TEXT");
+  runSafe("ALTER TABLE nodes ADD COLUMN covers TEXT");
+  runSafe("ALTER TABLE nodes ADD COLUMN link TEXT");
+  runSafe("ALTER TABLE nodes ADD COLUMN pdf TEXT");
+  runSafe("ALTER TABLE nodes ADD COLUMN videos TEXT");
+  runSafe("ALTER TABLE nodes ADD COLUMN jev_analysis_json TEXT");
+  runSafe("ALTER TABLE nodes ADD COLUMN jev_analysis_signature TEXT");
+  runSafe("ALTER TABLE nodes ADD COLUMN jev_analysis_updated_at DATETIME");
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS semantic_nodes (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      type TEXT,
+      tags TEXT,
+      description TEXT,
+      x REAL,
+      y REAL,
+      size REAL DEFAULT 4,
+      color TEXT,
+      hot INTEGER DEFAULT 0,
+      created_at TEXT,
+      updated_at TEXT
+    )
+  `);
+  runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_semantic_nodes_xy ON semantic_nodes(x, y)",
+  );
+  runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_semantic_nodes_type ON semantic_nodes(type)",
+  );
+  runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_semantic_nodes_hot ON semantic_nodes(hot)",
+  );
+
+  const nodeColumns = queryAllSafe("PRAGMA table_info(nodes)");
+  const nodeColumnNames = nodeColumns.map((col: any) =>
+    (col?.name || col?.[1]).toString(),
+  );
+  const hasLegacyImageColumn = nodeColumnNames.includes("image");
+  const hasLegacyVideoColumn = nodeColumnNames.includes("video");
+  const hasImagesColumn = nodeColumnNames.includes("images");
+  const hasVideosColumn = nodeColumnNames.includes("videos");
+
+  if (hasImagesColumn && hasLegacyImageColumn) {
+    runSafe(`
+      UPDATE nodes
+      SET images = CASE
+        WHEN TRIM(COALESCE(images, '')) <> '' THEN images
+        WHEN TRIM(COALESCE(image, '')) = '' THEN ''
+        WHEN TRIM(COALESCE(image, '')) LIKE '[%' THEN TRIM(image)
+        ELSE json_array(TRIM(image))
+      END
+      WHERE TRIM(COALESCE(images, '')) = ''
+    `);
+  }
+  if (hasVideosColumn && hasLegacyVideoColumn) {
+    runSafe(`
+      UPDATE nodes
+      SET videos = CASE
+        WHEN TRIM(COALESCE(videos, '')) <> '' THEN videos
+        WHEN TRIM(COALESCE(video, '')) = '' THEN ''
+        WHEN TRIM(COALESCE(video, '')) LIKE '[%' THEN TRIM(video)
+        ELSE json_array(TRIM(video))
+      END
+      WHERE TRIM(COALESCE(videos, '')) = ''
+    `);
+  }
+
+  const hasCategoriesColumn = nodeColumns.some(
+    (col: any) => (col?.name || col?.[1]) === "categories",
+  );
+  const shouldRebuildNodesTable =
+    hasCategoriesColumn || hasLegacyImageColumn || hasLegacyVideoColumn;
+  if (shouldRebuildNodesTable) {
+    runSafe("DROP TABLE IF EXISTS nodes_old");
+
+    let renameSucceeded = false;
+    try {
+      appDb.run("ALTER TABLE nodes RENAME TO nodes_old");
+      renameSucceeded = true;
+    } catch (err) {
+      console.warn("Failed to rename nodes table for migration:", err);
+    }
+
+    if (renameSucceeded) {
+      appDb.run(`
+      CREATE TABLE IF NOT EXISTS nodes (
+        id TEXT PRIMARY KEY,
+        name TEXT,
+        type TEXT,
+        description TEXT,
+          wiki_md TEXT,
+          aliases TEXT,
+          tags TEXT,
+        data TEXT,
+        images TEXT,
+        covers TEXT,
+        link TEXT,
+        pdf TEXT,
+        videos TEXT,
+        jev_analysis_json TEXT,
+        jev_analysis_signature TEXT,
+        jev_analysis_updated_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        project_id INTEGER
+        )
+      `);
+      const desiredCols = [
+        "id",
+        "name",
+        "type",
+        "description",
+        "wiki_md",
+        "aliases",
+        "tags",
+        "data",
+        "images",
+        "covers",
+        "link",
+        "pdf",
+        "videos",
+        "jev_analysis_json",
+        "jev_analysis_signature",
+        "jev_analysis_updated_at",
+        "created_at",
+        "updated_at",
+        "project_id",
+      ];
+      const oldNodeColumns = queryAllSafe("PRAGMA table_info(nodes_old)").map(
+        (col: any) => (col?.name || col?.[1]).toString(),
+      );
+      const selectExprs = desiredCols.map((col) => {
+        if (col === "images") {
+          if (oldNodeColumns.includes("images")) return "images AS images";
+          if (oldNodeColumns.includes("image")) {
+            return `CASE
+              WHEN TRIM(COALESCE(image, '')) = '' THEN ''
+              WHEN TRIM(COALESCE(image, '')) LIKE '[%' THEN TRIM(image)
+              ELSE json_array(TRIM(image))
+            END AS images`;
+          }
+          return `'' AS images`;
+        }
+        if (col === "covers") {
+          if (oldNodeColumns.includes("covers")) return "covers AS covers";
+          return `'' AS covers`;
+        }
+        if (col === "videos") {
+          if (oldNodeColumns.includes("videos")) return "videos AS videos";
+          if (oldNodeColumns.includes("video")) {
+            return `CASE
+              WHEN TRIM(COALESCE(video, '')) = '' THEN ''
+              WHEN TRIM(COALESCE(video, '')) LIKE '[%' THEN TRIM(video)
+              ELSE json_array(TRIM(video))
+            END AS videos`;
+          }
+          return `'' AS videos`;
+        }
+        if (col === "pdf") {
+          if (oldNodeColumns.includes("pdf")) return "pdf AS pdf";
+          return `'' AS pdf`;
+        }
+        if (oldNodeColumns.includes(col)) return `${col} AS ${col}`;
+        if (col === "project_id") return "NULL AS project_id";
+        return `NULL AS ${col}`;
+      });
+      appDb.run(
+        `INSERT INTO nodes (${desiredCols.join(", ")}) SELECT ${selectExprs.join(", ")} FROM nodes_old`,
+      );
+      runSafe("DROP TABLE IF EXISTS nodes_old");
+    }
+  }
+  runSafe("ALTER TABLE nodes ADD COLUMN jev_analysis_json TEXT");
+  runSafe("ALTER TABLE nodes ADD COLUMN jev_analysis_signature TEXT");
+  runSafe("ALTER TABLE nodes ADD COLUMN jev_analysis_updated_at DATETIME");
+  runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_nodes_project_id ON nodes(project_id)",
+  );
+  runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_attributes_node_id ON attributes(node_id)",
+  );
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS attributes (
+      id TEXT PRIMARY KEY,
+      node_id TEXT,
+      key TEXT,
+      value TEXT,
+      datatype TEXT,
+      property_name_snapshot TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(node_id) REFERENCES nodes(id) ON DELETE CASCADE
+    )
+  `);
+  runSafe("ALTER TABLE attributes ADD COLUMN property_name_snapshot TEXT");
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS entity_classes (
+      entity_id TEXT,
+      class_id TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(entity_id, class_id),
+      FOREIGN KEY(entity_id) REFERENCES nodes(id) ON DELETE CASCADE,
+      FOREIGN KEY(class_id) REFERENCES classes(id) ON DELETE CASCADE
+    )
+  `);
+
+  if (tableExists("attributes") && tableHasForeignKeyToNodesOld("attributes")) {
+    rebuildTableWithSchema(
+      "attributes",
+      `
+        CREATE TABLE attributes (
+          id TEXT PRIMARY KEY,
+          node_id TEXT,
+          key TEXT,
+          value TEXT,
+          datatype TEXT,
+          property_name_snapshot TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY(node_id) REFERENCES nodes(id) ON DELETE CASCADE
+        )
+      `,
+      ["id", "node_id", "key", "value", "datatype", "property_name_snapshot", "created_at"],
+    );
+  }
+
+  runSafe("ALTER TABLE attributes ADD COLUMN statement_json TEXT");
+
+  if (tableExists("entity_classes") && tableHasForeignKeyToNodesOld("entity_classes")) {
+    rebuildTableWithSchema(
+      "entity_classes",
+      `
+        CREATE TABLE entity_classes (
+          entity_id TEXT,
+          class_id TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY(entity_id, class_id),
+          FOREIGN KEY(entity_id) REFERENCES nodes(id) ON DELETE CASCADE,
+          FOREIGN KEY(class_id) REFERENCES classes(id) ON DELETE CASCADE
+        )
+      `,
+      ["entity_id", "class_id", "created_at"],
+    );
+  }
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS class_properties (
+      class_id TEXT,
+      property_id TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(class_id, property_id),
+      FOREIGN KEY(class_id) REFERENCES classes(id) ON DELETE CASCADE,
+      FOREIGN KEY(property_id) REFERENCES properties(id) ON DELETE CASCADE
+    )
+  `);
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS property_properties (
+      parent_property_id TEXT,
+      child_property_id TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(parent_property_id, child_property_id),
+      FOREIGN KEY(parent_property_id) REFERENCES properties(id) ON DELETE CASCADE,
+      FOREIGN KEY(child_property_id) REFERENCES properties(id) ON DELETE CASCADE
+    )
+  `);
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS properties (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      alias TEXT,
+      status TEXT,
+      datatype TEXT,
+      valuetype TEXT,
+      types TEXT,
+      description TEXT,
+      project_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  runSafe("ALTER TABLE properties ADD COLUMN alias TEXT");
+  runSafe("ALTER TABLE properties ADD COLUMN status TEXT");
+  runSafe("ALTER TABLE properties ADD COLUMN valuetype TEXT");
+  runSafe("ALTER TABLE properties ADD COLUMN types TEXT");
+  runSafe("ALTER TABLE properties ADD COLUMN project_id INTEGER");
+  runSafe(
+    "UPDATE properties SET alias = LOWER(TRIM(name)) WHERE alias IS NULL OR TRIM(alias) = ''",
+  );
+  // Convert existing string aliases into JSON array storage for multi-value alias support
+  try {
+    const rows = queryAllSafe(
+      "SELECT id, alias FROM properties WHERE alias IS NOT NULL AND TRIM(alias) != ''",
+    );
+    for (const row of rows) {
+      try {
+        const value = String(row.alias || "").trim();
+        if (!value) continue;
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) continue;
+      } catch {
+        const normalized = String(row.alias || "").trim();
+        if (!normalized) continue;
+        appDb.run("UPDATE properties SET alias = ? WHERE id = ?", [
+          JSON.stringify([normalized]),
+          row.id,
+        ]);
+      }
+    }
+  } catch {}
+  runSafe(
+    "UPDATE properties SET status = 'active' WHERE status IS NULL OR TRIM(status) = ''",
+  );
+  runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_properties_project_alias ON properties(project_id, alias)",
+  );
+  runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_properties_project_status ON properties(project_id, status)",
+  );
+  runSafe(
+    "UPDATE properties SET types = '[]' WHERE types IS NULL OR TRIM(types) = ''",
+  );
+  runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_properties_project_id ON properties(project_id)",
+  );
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS classes (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      description TEXT,
+      parent_id TEXT,
+      project_id INTEGER,
+      color TEXT,
+      display_shape TEXT DEFAULT 'rectangle',
+      sort_order INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  runSafe("ALTER TABLE classes ADD COLUMN project_id INTEGER");
+  runSafe("ALTER TABLE classes ADD COLUMN color TEXT");
+  runSafe("ALTER TABLE classes ADD COLUMN image TEXT");
+  runSafe("ALTER TABLE classes ADD COLUMN sort_order INTEGER");
+  runSafe("ALTER TABLE classes ADD COLUMN tags TEXT");
+  runSafe("ALTER TABLE classes ADD COLUMN analyses TEXT");
+  runSafe("UPDATE classes SET sort_order = rowid WHERE sort_order IS NULL");
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS ontologies (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      alias TEXT,
+      description TEXT,
+      parent_id TEXT,
+      project_id INTEGER,
+      color TEXT,
+      sort_order INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  runSafe("ALTER TABLE ontologies ADD COLUMN alias TEXT");
+  runSafe("ALTER TABLE ontologies ADD COLUMN parent_id TEXT");
+  runSafe("ALTER TABLE ontologies ADD COLUMN project_id INTEGER");
+  runSafe("ALTER TABLE ontologies ADD COLUMN color TEXT");
+  runSafe("ALTER TABLE ontologies ADD COLUMN display_shape TEXT DEFAULT 'rectangle'");
+  runSafe(
+    "UPDATE ontologies SET display_shape = 'rectangle' WHERE display_shape IS NULL OR TRIM(display_shape) = ''",
+  );
+  runSafe("ALTER TABLE ontologies ADD COLUMN sort_order INTEGER");
+  runSafe("UPDATE ontologies SET sort_order = rowid WHERE sort_order IS NULL");
+  runSafe(
+    "UPDATE ontologies SET alias = LOWER(TRIM(name)) WHERE alias IS NULL OR TRIM(alias) = ''",
+  );
+  try {
+    const rows = queryAllSafe(
+      "SELECT id, alias FROM ontologies WHERE alias IS NOT NULL AND TRIM(alias) != ''",
+    );
+    for (const row of rows) {
+      try {
+        const value = String(row.alias || "").trim();
+        if (!value) continue;
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) continue;
+      } catch {
+        const normalized = String(row.alias || "").trim();
+        if (!normalized) continue;
+        appDb.run("UPDATE ontologies SET alias = ? WHERE id = ?", [
+          JSON.stringify([normalized]),
+          row.id,
+        ]);
+      }
+    }
+  } catch {}
+  runSafe("ALTER TABLE ontologies ADD COLUMN status TEXT");
+  runSafe(
+    "UPDATE ontologies SET status = 'active' WHERE status IS NULL OR TRIM(status) = ''",
+  );
+  runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_ontologies_project_parent ON ontologies(project_id, parent_id)",
+  );
+  runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_ontologies_project_alias ON ontologies(project_id, alias)",
+  );
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS ontology_properties (
+      ontology_id TEXT,
+      property_id TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(ontology_id, property_id),
+      FOREIGN KEY(ontology_id) REFERENCES ontologies(id) ON DELETE CASCADE,
+      FOREIGN KEY(property_id) REFERENCES properties(id) ON DELETE CASCADE
+    )
+  `);
+  runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_ontology_properties_property_id ON ontology_properties(property_id)",
+  );
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS entry_tasks (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      mode TEXT NOT NULL,
+      schema_json TEXT,
+      rows_json TEXT,
+      project_id INTEGER,
+      last_imported_at DATETIME,
+      last_import_summary TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  runSafe("ALTER TABLE entry_tasks ADD COLUMN schema_json TEXT");
+  runSafe("ALTER TABLE entry_tasks ADD COLUMN rows_json TEXT");
+  runSafe("ALTER TABLE entry_tasks ADD COLUMN project_id INTEGER");
+  runSafe("ALTER TABLE entry_tasks ADD COLUMN last_imported_at DATETIME");
+  runSafe("ALTER TABLE entry_tasks ADD COLUMN last_import_summary TEXT");
+  runSafe(
+    "ALTER TABLE entry_tasks ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP",
+  );
+  runSafe(
+    "ALTER TABLE entry_tasks ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP",
+  );
+  runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_entry_tasks_project_updated ON entry_tasks(project_id, updated_at DESC)",
+  );
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS sparql_endpoints (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      endpoint TEXT NOT NULL,
+      method TEXT NOT NULL DEFAULT 'POST',
+      auth_type TEXT NOT NULL DEFAULT 'none',
+      username TEXT,
+      password TEXT,
+      token TEXT,
+      headers TEXT,
+      timeout INTEGER DEFAULT 30000,
+      retries INTEGER DEFAULT 1,
+      user_agent TEXT,
+      description TEXT,
+      default_query TEXT,
+      project_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  runSafe("ALTER TABLE sparql_endpoints ADD COLUMN project_id INTEGER");
+  runSafe("ALTER TABLE sparql_endpoints ADD COLUMN headers TEXT");
+  runSafe("ALTER TABLE sparql_endpoints ADD COLUMN retries INTEGER DEFAULT 1");
+  runSafe("ALTER TABLE sparql_endpoints ADD COLUMN user_agent TEXT");
+  runSafe("ALTER TABLE sparql_endpoints ADD COLUMN description TEXT");
+  runSafe("ALTER TABLE sparql_endpoints ADD COLUMN default_query TEXT");
+  runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_sparql_endpoints_project_updated ON sparql_endpoints(project_id, updated_at DESC)",
+  );
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS sparql_templates (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      category TEXT,
+      source_type TEXT,
+      endpoint_id TEXT,
+      query TEXT NOT NULL,
+      description TEXT,
+      is_builtin INTEGER DEFAULT 0,
+      is_favorite INTEGER DEFAULT 0,
+      project_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  runSafe("ALTER TABLE sparql_templates ADD COLUMN project_id INTEGER");
+  runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_sparql_templates_project_category ON sparql_templates(project_id, category, updated_at DESC)",
+  );
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS sparql_query_history (
+      id TEXT PRIMARY KEY,
+      endpoint_id TEXT,
+      query TEXT NOT NULL,
+      query_type TEXT,
+      result_count INTEGER DEFAULT 0,
+      duration INTEGER DEFAULT 0,
+      success INTEGER DEFAULT 0,
+      error_message TEXT,
+      project_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  runSafe("ALTER TABLE sparql_query_history ADD COLUMN project_id INTEGER");
+  runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_sparql_query_history_project_created ON sparql_query_history(project_id, created_at DESC)",
+  );
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS sparql_import_tasks (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      endpoint_id TEXT,
+      endpoint TEXT,
+      query TEXT NOT NULL,
+      query_type TEXT,
+      schema_id TEXT,
+      mapping_config TEXT,
+      import_config TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      result_count INTEGER DEFAULT 0,
+      entity_count INTEGER DEFAULT 0,
+      relation_count INTEGER DEFAULT 0,
+      success_count INTEGER DEFAULT 0,
+      failed_count INTEGER DEFAULT 0,
+      skipped_count INTEGER DEFAULT 0,
+      error_message TEXT,
+      last_import_time DATETIME,
+      started_at DATETIME,
+      finished_at DATETIME,
+      project_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  runSafe("ALTER TABLE sparql_import_tasks ADD COLUMN endpoint TEXT");
+  runSafe("ALTER TABLE sparql_import_tasks ADD COLUMN project_id INTEGER");
+  runSafe("ALTER TABLE sparql_import_tasks ADD COLUMN last_import_time DATETIME");
+  runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_sparql_import_tasks_project_updated ON sparql_import_tasks(project_id, updated_at DESC)",
+  );
+
+  appDb.run(`
+    CREATE TABLE IF NOT EXISTS sparql_import_logs (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      level TEXT NOT NULL,
+      stage TEXT NOT NULL,
+      message TEXT NOT NULL,
+      detail TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  runSafe(
+    "CREATE INDEX IF NOT EXISTS idx_sparql_import_logs_task_created ON sparql_import_logs(task_id, created_at ASC)",
+  );
+}
+
+function getProjectByIdentifier(
+  identifier: string | number | null | undefined,
+) {
+  const raw = (identifier ?? "").toString().trim();
+  if (!raw) return null;
+  const byId = /^\d+$/.test(raw)
+    ? queryGetSafe(
+        "SELECT * FROM projects WHERE id = ? LIMIT 1",
+        Number.parseInt(raw, 10),
+      )
+    : null;
+  if (byId) return byId;
+  return (
+    queryGetSafe("SELECT * FROM projects WHERE name = ? LIMIT 1", raw) ||
+    queryGetSafe(
+      "SELECT * FROM projects WHERE lower(title) = lower(?) LIMIT 1",
+      raw,
+    )
+  );
+}
+
+function rewriteImportedEntityReferences(
+  value: any,
+  idMap: Map<string, string>,
+): any {
+  if (Array.isArray(value)) {
+    return value.map((item) => rewriteImportedEntityReferences(item, idMap));
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  const next = { ...value } as Record<string, any>;
+  const candidates = ["id", "entity-id", "entity_id", "entityId"];
+  for (const key of candidates) {
+    const current = next[key];
+    if (!current && current !== 0) continue;
+    const raw = current.toString().trim();
+    if (!raw) continue;
+    const normalized = raw.startsWith("entity/") ? raw.slice(7) : raw;
+    const mapped = idMap.get(normalized);
+    if (!mapped) continue;
+    next[key] = raw.startsWith("entity/") ? `entity/${mapped}` : mapped;
+  }
+  if (next.value && typeof next.value === "object") {
+    next.value = rewriteImportedEntityReferences(next.value, idMap);
+  }
+  return next;
+}
+
+function importLegacyProjectKnowledge() {
+  const projects = queryAllSafe(
+    "SELECT id, name, title FROM projects WHERE name IS NOT NULL AND name <> ''",
+  );
+  for (const project of projects) {
+    const projectId = Number(project.id || 0);
+    const projectSlug = (project.name || "").toString().trim();
+    if (!projectId || !projectSlug) continue;
+    const existingCount = queryGetSafe(
+      "SELECT COUNT(*) AS count FROM nodes WHERE project_id = ?",
+      projectId,
+    );
+    if (Number(existingCount?.count || 0) > 0) continue;
+
+    const legacyPath = resolve(ROOT_DATA_DIR, `${projectSlug}.sqlite`);
+    if (!existsSync(legacyPath) || legacyPath === APP_DB_PATH) continue;
+
+    let legacyDb: Database | null = null;
+    try {
+      legacyDb = new Database(legacyPath, { readonly: true });
+      const legacyTables = legacyDb
+        .query("SELECT name FROM sqlite_master WHERE type = 'table'")
+        .all() as any[];
+      const hasNodes = legacyTables.some((row) => row?.name === "nodes");
+      if (!hasNodes) continue;
+
+      const legacyNodes = legacyDb.query("SELECT * FROM nodes").all() as any[];
+      if (!legacyNodes.length) continue;
+
+      const idMap = new Map<string, string>();
+      for (const row of legacyNodes) {
+        const oldId = (row.id ?? "").toString();
+        if (!oldId) continue;
+        idMap.set(oldId, `${projectSlug}:${oldId}`);
+      }
+
+      const legacyProperties = legacyTables.some(
+        (row) => row?.name === "properties",
+      )
+        ? (legacyDb.query("SELECT * FROM properties").all() as any[])
+        : [];
+      for (const row of legacyProperties) {
+        try {
+          appDb.run(
+            "INSERT OR IGNORE INTO properties (id, name, datatype, valuetype, types, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))",
+            [
+              row.id,
+              row.name || row.id,
+              row.datatype || "string",
+              row.valuetype || null,
+              row.types || "[]",
+              row.description || "",
+              row.created_at || null,
+              row.updated_at || null,
+            ],
+          );
+        } catch {}
+      }
+
+      const legacyClasses = legacyTables.some((row) => row?.name === "classes")
+        ? (legacyDb.query("SELECT * FROM classes").all() as any[])
+        : [];
+      for (const row of legacyClasses) {
+        try {
+          appDb.run(
+            "INSERT OR IGNORE INTO classes (id, name, description, parent_id, color, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))",
+            [
+              row.id,
+              row.name || row.id,
+              row.description || "",
+              row.parent_id || null,
+              row.color || null,
+              row.sort_order || null,
+              row.created_at || null,
+              row.updated_at || null,
+            ],
+          );
+        } catch {}
+      }
+
+      for (const row of legacyNodes) {
+        const mappedId = idMap.get((row.id ?? "").toString());
+        if (!mappedId) continue;
+        appDb.run(
+          "INSERT OR IGNORE INTO nodes (id, name, type, description, wiki_md, aliases, tags, data, project_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))",
+          [
+            mappedId,
+            row.name || mappedId,
+            row.type || "entity",
+            row.description || "",
+            row.wiki_md || "",
+            row.aliases || "[]",
+            row.tags || "[]",
+            row.data || "{}",
+            projectId,
+            row.created_at || null,
+            row.updated_at || null,
+          ],
+        );
+      }
+
+      const legacyAttributes = legacyTables.some(
+        (row) => row?.name === "attributes",
+      )
+        ? (legacyDb.query("SELECT * FROM attributes").all() as any[])
+        : [];
+      for (const row of legacyAttributes) {
+        const mappedNodeId = idMap.get((row.node_id ?? "").toString());
+        if (!mappedNodeId) continue;
+        let nextValue = row.value;
+        if ((row.datatype || "").trim() === "wikibase-entityid" && row.value) {
+          try {
+            nextValue = JSON.stringify(
+              rewriteImportedEntityReferences(JSON.parse(row.value), idMap),
+            );
+          } catch {}
+        }
+        const attrId = `${projectSlug}:${row.id}`;
+        appDb.run(
+          "INSERT OR IGNORE INTO attributes (id, node_id, key, value, datatype, created_at) VALUES (?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP))",
+          [
+            attrId,
+            mappedNodeId,
+            row.key,
+            nextValue,
+            row.datatype || "string",
+            row.created_at || null,
+          ],
+        );
+      }
+
+      const legacyEntityClasses = legacyTables.some(
+        (row) => row?.name === "entity_classes",
+      )
+        ? (legacyDb.query("SELECT * FROM entity_classes").all() as any[])
+        : [];
+      for (const row of legacyEntityClasses) {
+        const mappedEntityId = idMap.get((row.entity_id ?? "").toString());
+        if (!mappedEntityId) continue;
+        appDb.run(
+          "INSERT OR IGNORE INTO entity_classes (entity_id, class_id, created_at) VALUES (?, ?, COALESCE(?, CURRENT_TIMESTAMP))",
+          [mappedEntityId, row.class_id, row.created_at || null],
+        );
+      }
+    } catch (err) {
+      console.warn("importLegacyProjectKnowledge failed", projectSlug, err);
+    } finally {
+      try {
+        legacyDb?.close();
+      } catch {}
+    }
+  }
+}
+
+function migrateLegacyAnyStore() {
+  if (!existsSync(LEGACY_ANY_STORE_DB_PATH)) return;
+
+  const legacyAny = new Database(LEGACY_ANY_STORE_DB_PATH, { readonly: true });
+  const userIdMap = new Map<number, number>();
+  const projectIdMap = new Map<number, number>();
+
+  try {
+    const legacyTables = new Set(
+      (legacyAny
+        .query("SELECT name FROM sqlite_master WHERE type = 'table'")
+        .all() as Array<{ name: string }>).map((row) => row.name),
+    );
+    const readLegacyRows = (table: string, sql: string) =>
+      legacyTables.has(table) ? (legacyAny.query(sql).all() as any[]) : [];
+
+    const users = readLegacyRows(
+      "users",
+      "SELECT id, username, password, avatar, is_admin, created_at FROM users",
+    );
+    for (const row of users) {
+      const username = (row.username || "").toString().trim().toLowerCase();
+      if (!username) continue;
+      const existing = queryGetSafe(
+        "SELECT id FROM users WHERE username = ? LIMIT 1",
+        username,
+      );
+      if (existing?.id) {
+        userIdMap.set(Number(row.id), Number(existing.id));
+        appDb.run(
+          "UPDATE users SET avatar = COALESCE(NULLIF(avatar, ''), ?), is_admin = MAX(COALESCE(is_admin, 0), ?), password = COALESCE(password, ?), password_salt = COALESCE(password_salt, ?), password_hash = COALESCE(password_hash, ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+          [
+            row.avatar || "",
+            row.is_admin ? 1 : 0,
+            row.password || "",
+            String(row.password || "").split("$")[0] || "",
+            String(row.password || "").split("$")[1] || "",
+            existing.id,
+          ],
+        );
+        continue;
+      }
+
+      const password = (row.password || "").toString();
+      const [salt, hash] = password.includes("$")
+        ? password.split("$", 2)
+        : ["", ""];
+      appDb.run(
+        "INSERT INTO users (id, username, display_name, password, password_hash, password_salt, avatar, is_admin, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+          row.id,
+          username,
+          username,
+          password,
+          hash || "",
+          salt || "",
+          row.avatar || "",
+          row.is_admin ? 1 : 0,
+          row.created_at || Date.now(),
+          row.created_at || Date.now(),
+        ],
+      );
+      userIdMap.set(Number(row.id), Number(row.id));
+    }
+
+    const products = readLegacyRows(
+      "products",
+      "SELECT id, name, description, logo, theme_color, tags, created_at, updated_at FROM products",
+    );
+    for (const row of products) {
+      const title = (row.name || "").toString().trim();
+      if (!title) continue;
+
+      const existing =
+        queryGetSafe(
+          "SELECT id FROM projects WHERE title = ? LIMIT 1",
+          title,
+        ) ||
+        queryGetSafe("SELECT id FROM projects WHERE name = ? LIMIT 1", title);
+      if (existing?.id) {
+        projectIdMap.set(Number(row.id), Number(existing.id));
+        appDb.run(
+          `UPDATE projects SET description = COALESCE(NULLIF(description, ''), ?), image = COALESCE(NULLIF(image, ''), ?), theme_color = COALESCE(theme_color, ?), tags = COALESCE(tags, ?), file = COALESCE(NULLIF(file, ''), '${APP_DB_FILENAME}'), updated_at = COALESCE(updated_at, ?) WHERE id = ?`,
+          [
+            row.description || "",
+            row.logo || "",
+            row.theme_color || "#ff7a2b",
+            row.tags || "[]",
+            row.updated_at || Date.now(),
+            existing.id,
+          ],
+        );
+        continue;
+      }
+
+      const baseName = slugifyProjectName(title, `product-${row.id}`);
+      const projectName = ensureUniqueProjectName(baseName);
+      appDb.run(
+        "INSERT INTO projects (id, name, file, title, description, image, theme_color, tags, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+          row.id,
+          projectName,
+          APP_DB_FILENAME,
+          title,
+          row.description || "",
+          row.logo || "",
+          row.theme_color || "#ff7a2b",
+          row.tags || "[]",
+          row.created_at || Date.now(),
+          row.updated_at || Date.now(),
+        ],
+      );
+      projectIdMap.set(Number(row.id), Number(row.id));
+    }
+
+    const links = readLegacyRows("links", "SELECT * FROM links");
+    for (const row of links) {
+      appDb.run(
+        "INSERT OR IGNORE INTO links (id, name, url, image, tags, description, owner_id, source, screenshots, short_description, first_comment, approved, approved_by, approved_at, featured, product_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+          row.id,
+          row.name,
+          row.url,
+          row.image || "",
+          row.tags || "[]",
+          row.description || "",
+          row.owner_id ? userIdMap.get(Number(row.owner_id)) || null : null,
+          row.source || "",
+          row.screenshots || "[]",
+          row.short_description || "",
+          row.first_comment || "",
+          row.approved ? 1 : 0,
+          row.approved_by
+            ? userIdMap.get(Number(row.approved_by)) || null
+            : null,
+          row.approved_at || null,
+          row.featured ? 1 : 0,
+          row.product_id
+            ? projectIdMap.get(Number(row.product_id)) || null
+            : null,
+          row.created_at || Date.now(),
+          row.updated_at || Date.now(),
+        ],
+      );
+    }
+
+    const comments = readLegacyRows("comments", "SELECT * FROM comments");
+    for (const row of comments) {
+      appDb.run(
+        "INSERT OR IGNORE INTO comments (id, link_id, user_id, username, content, parent_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [
+          row.id,
+          row.link_id,
+          row.user_id ? userIdMap.get(Number(row.user_id)) || null : null,
+          row.username || "",
+          row.content || "",
+          row.parent_id || null,
+          row.created_at || Date.now(),
+        ],
+      );
+    }
+
+    const linkLikes = readLegacyRows(
+      "link_likes",
+      "SELECT link_id, user_id FROM link_likes",
+    );
+    for (const row of linkLikes) {
+      const userId = userIdMap.get(Number(row.user_id));
+      if (!userId) continue;
+      appDb.run(
+        "INSERT OR IGNORE INTO link_likes (link_id, user_id) VALUES (?, ?)",
+        [row.link_id, userId],
+      );
+    }
+
+    const commentLikes = readLegacyRows(
+      "comment_likes",
+      "SELECT comment_id, user_id FROM comment_likes",
+    );
+    for (const row of commentLikes) {
+      const userId = userIdMap.get(Number(row.user_id));
+      if (!userId) continue;
+      appDb.run(
+        "INSERT OR IGNORE INTO comment_likes (comment_id, user_id) VALUES (?, ?)",
+        [row.comment_id, userId],
+      );
+    }
+
+    const sessions = readLegacyRows(
+      "sessions",
+      "SELECT id, user_id, expires_at FROM sessions",
+    );
+    for (const row of sessions) {
+      const userId = userIdMap.get(Number(row.user_id));
+      if (!userId) continue;
+      const user = queryGetSafe(
+        "SELECT username FROM users WHERE id = ? LIMIT 1",
+        userId,
+      );
+      appDb.run(
+        "INSERT OR IGNORE INTO sessions (id, token, username, user_id, created_at, expires_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?)",
+        [row.id, row.id, user?.username || null, userId, row.expires_at],
+      );
+    }
+
+    const settingsRows = readLegacyRows(
+      "settings",
+      "SELECT key, value FROM settings",
+    );
+    for (const row of settingsRows) {
+      if (row.key === "currentProduct") {
+        try {
+          const currentProduct = JSON.parse(row.value || "null");
+          if (currentProduct?.id) {
+            const mappedId = projectIdMap.get(Number(currentProduct.id));
+            if (mappedId) {
+              appDb.run(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                [
+                  row.key,
+                  JSON.stringify({
+                    ...currentProduct,
+                    id: mappedId,
+                  }),
+                ],
+              );
+              continue;
+            }
+          }
+        } catch {}
+      }
+      appDb.run("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", [
+        row.key,
+        row.value,
+      ]);
+    }
+  } catch (error) {
+    console.warn("Failed to migrate legacy any-store data:", error);
+  } finally {
+    legacyAny.close();
+  }
+}
+
+function migrateLegacyAdminDatabase() {
+  if (!existsSync(LEGACY_ADMIN_DB_PATH)) return;
+
+  const legacyAdmin = new Database(LEGACY_ADMIN_DB_PATH, { readonly: true });
+  try {
+    const projects = legacyAdmin
+      .query(
+        "SELECT name, file, title, description, image, created_at, updated_at FROM projects",
+      )
+      .all() as any[];
+    for (const row of projects) {
+      const name = (row.name || "").toString().trim();
+      if (!name) continue;
+      appDb.run(
+        "INSERT OR IGNORE INTO projects (name, file, title, description, image, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [
+          name,
+          row.file === "shared.sqlite"
+            ? APP_DB_FILENAME
+            : row.file || APP_DB_FILENAME,
+          row.title || name,
+          row.description || "",
+          row.image || "",
+          row.created_at || new Date().toISOString(),
+          row.updated_at || new Date().toISOString(),
+        ],
+      );
+    }
+
+    const users = legacyAdmin
+      .query(
+        "SELECT username, display_name, password_hash, password_salt, avatar, created_at, updated_at FROM users",
+      )
+      .all() as any[];
+    for (const row of users) {
+      const username = (row.username || "").toString().trim().toLowerCase();
+      if (!username) continue;
+      appDb.run(
+        "INSERT OR IGNORE INTO users (username, display_name, password, password_hash, password_salt, avatar, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+          username,
+          row.display_name || username,
+          row.password_salt && row.password_hash
+            ? `${row.password_salt}$${row.password_hash}`
+            : null,
+          row.password_hash || "",
+          row.password_salt || "",
+          row.avatar || "",
+          row.created_at || new Date().toISOString(),
+          row.updated_at || new Date().toISOString(),
+        ],
+      );
+    }
+
+    const sessions = legacyAdmin
+      .query("SELECT token, username, created_at, expires_at FROM sessions")
+      .all() as any[];
+    for (const row of sessions) {
+      const user = queryGetSafe(
+        "SELECT id FROM users WHERE username = ? LIMIT 1",
+        row.username,
+      );
+      appDb.run(
+        "INSERT OR IGNORE INTO sessions (id, token, username, user_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
+        [
+          row.token,
+          row.token,
+          row.username,
+          user?.id || null,
+          row.created_at || new Date().toISOString(),
+          row.expires_at || null,
+        ],
+      );
+    }
+  } catch (error) {
+    console.warn("Failed to migrate legacy admin data:", error);
+  } finally {
+    legacyAdmin.close();
+  }
+}
+
+function migrateLegacyKnowledgeGraphDatabase() {
+  if (!existsSync(LEGACY_KB_DB_PATH)) return;
+
+  const legacyKb = new Database(LEGACY_KB_DB_PATH, { readonly: true });
+  try {
+    const tableCopies = [
+      {
+        name: "nodes",
+        columns:
+          "id, name, type, description, wiki_md, aliases, tags, data, pdf, created_at, updated_at",
+      },
+      {
+        name: "attributes",
+        columns: "id, node_id, key, value, datatype, created_at",
+      },
+      {
+        name: "entity_classes",
+        columns: "entity_id, class_id, created_at",
+      },
+      {
+        name: "class_properties",
+        columns: "class_id, property_id, created_at",
+      },
+      {
+        name: "property_properties",
+        columns: "parent_property_id, child_property_id, created_at",
+      },
+      {
+        name: "properties",
+        columns:
+          "id, name, datatype, valuetype, description, created_at, updated_at",
+      },
+      {
+        name: "classes",
+        columns:
+          "id, name, description, parent_id, color, sort_order, created_at, updated_at",
+      },
+    ];
+
+    for (const table of tableCopies) {
+      const rows = legacyKb
+        .query(`SELECT ${table.columns} FROM ${table.name}`)
+        .all();
+      for (const row of rows as any[]) {
+        const values = table.columns.split(",").map((column) => {
+          const key = column.trim();
+          return row[key];
+        });
+        appDb.run(
+          `INSERT OR IGNORE INTO ${table.name} (${table.columns}) VALUES (${table.columns
+            .split(",")
+            .map(() => "?")
+            .join(", ")})`,
+          values,
+        );
+      }
+    }
+  } catch (error) {
+    console.warn("Failed to migrate legacy knowledge graph data:", error);
+  } finally {
+    legacyKb.close();
+  }
+}
+
+function migrateLegacyDatabases() {
+  const migrated = queryGetSafe(
+    "SELECT value FROM settings WHERE key = ? LIMIT 1",
+    "__shared_data_migrated_v1__",
+  );
+  if (migrated?.value === "1") return;
+
+  migrateLegacyAnyStore();
+  migrateLegacyAdminDatabase();
+  migrateLegacyKnowledgeGraphDatabase();
+
+  appDb.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [
+    "__shared_data_migrated_v1__",
+    "1",
+  ]);
+}
+
+function copyDirectoryIntoSharedUploads(sourceDir: string, relativeDir = "") {
+  if (!existsSync(sourceDir)) return;
+  const entries = readdirSync(sourceDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const nextRelative = relativeDir
+      ? join(relativeDir, entry.name)
+      : entry.name;
+    const sourcePath = resolve(sourceDir, entry.name);
+    const targetPath = resolve(APP_UPLOADS_DIR, nextRelative);
+    if (entry.isDirectory()) {
+      mkdirSync(targetPath, { recursive: true });
+      copyDirectoryIntoSharedUploads(sourcePath, nextRelative);
+      continue;
+    }
+    try {
+      const sourceStat = statSync(sourcePath);
+      if (!sourceStat.isFile()) continue;
+      if (!existsSync(resolve(targetPath, ".."))) {
+        mkdirSync(resolve(targetPath, ".."), { recursive: true });
+      }
+      if (!existsSync(targetPath)) {
+        copyFileSync(sourcePath, targetPath);
+      }
+    } catch {}
+  }
+}
+
+function copyDirectoryIntoRootData(sourceDir: string, relativeDir = "") {
+  if (!existsSync(sourceDir)) return;
+  const entries = readdirSync(sourceDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const nextRelative = relativeDir
+      ? join(relativeDir, entry.name)
+      : entry.name;
+    const sourcePath = resolve(sourceDir, entry.name);
+    const targetPath = resolve(ROOT_DATA_DIR, nextRelative);
+    if (entry.isDirectory()) {
+      mkdirSync(targetPath, { recursive: true });
+      copyDirectoryIntoRootData(sourcePath, nextRelative);
+      continue;
+    }
+    try {
+      const sourceStat = statSync(sourcePath);
+      if (!sourceStat.isFile()) continue;
+      if (!existsSync(resolve(targetPath, ".."))) {
+        mkdirSync(resolve(targetPath, ".."), { recursive: true });
+      }
+      if (!existsSync(targetPath)) {
+        copyFileSync(sourcePath, targetPath);
+      }
+    } catch {}
+  }
+}
+
+function migrateLegacyDataFilesToRoot() {
+  if (existsSync(OLD_SHARED_DB_PATH) && !existsSync(APP_DB_PATH)) {
+    try {
+      copyFileSync(OLD_SHARED_DB_PATH, APP_DB_PATH);
+    } catch {}
+  }
+  if (existsSync(OLD_APP_DB_PATH) && !existsSync(APP_DB_PATH)) {
+    try {
+      copyFileSync(OLD_APP_DB_PATH, APP_DB_PATH);
+    } catch {}
+  }
+  copyDirectoryIntoRootData(OLD_KNOWLEDGE_GRAPH_DATA_DIR);
+  copyDirectoryIntoRootData(OLD_ANY_STORE_DATA_DIR);
+}
+
+function migrateLegacyUploads() {
+  copyDirectoryIntoSharedUploads(OLD_SHARED_UPLOADS_DIR);
+  copyDirectoryIntoSharedUploads(LEGACY_ANY_STORE_UPLOADS_DIR);
+  copyDirectoryIntoSharedUploads(LEGACY_KNOWLEDGE_GRAPH_UPLOADS_DIR);
+}
+
+function cleanupPlaceholderProjects() {
+  try {
+    const sharedProject = queryGetSafe(
+      "SELECT id FROM projects WHERE name = 'shared' LIMIT 1",
+    );
+    if (sharedProject?.id) {
+      const sharedNodeIds = queryAllSafe(
+        "SELECT id FROM nodes WHERE project_id = ?",
+        sharedProject.id,
+      ).map((row) => row.id);
+      if (sharedNodeIds.length) {
+        const placeholders = sharedNodeIds.map(() => "?").join(",");
+        appDb.run(
+          `DELETE FROM attributes WHERE node_id IN (${placeholders})`,
+          sharedNodeIds,
+        );
+        appDb.run(
+          `DELETE FROM entity_classes WHERE entity_id IN (${placeholders})`,
+          sharedNodeIds,
+        );
+        appDb.run(
+          `DELETE FROM nodes WHERE id IN (${placeholders})`,
+          sharedNodeIds,
+        );
+      }
+      appDb.run("DELETE FROM projects WHERE id = ?", [sharedProject.id]);
+    }
+    appDb.run(
+      `DELETE FROM projects
+       WHERE name = 'shared'
+         AND (title IS NULL OR title = '' OR title = 'shared')
+         AND (description IS NULL OR description = '')
+         AND (image IS NULL OR image = '')
+         AND NOT EXISTS (SELECT 1 FROM links WHERE product_id = projects.id LIMIT 1)`,
+    );
+    const orphanSharedNodeIds = queryAllSafe(
+      `SELECT id
+       FROM nodes
+       WHERE id LIKE 'shared:%'
+         OR (project_id IS NOT NULL AND project_id NOT IN (SELECT id FROM projects))`,
+    ).map((row) => row.id);
+    if (orphanSharedNodeIds.length) {
+      const placeholders = orphanSharedNodeIds.map(() => "?").join(",");
+      appDb.run(
+        `DELETE FROM attributes WHERE node_id IN (${placeholders})`,
+        orphanSharedNodeIds,
+      );
+      appDb.run(
+        `DELETE FROM entity_classes WHERE entity_id IN (${placeholders})`,
+        orphanSharedNodeIds,
+      );
+      appDb.run(
+        `DELETE FROM nodes WHERE id IN (${placeholders})`,
+        orphanSharedNodeIds,
+      );
+    }
+    appDb.run(
+      `UPDATE projects
+       SET file = '${APP_DB_FILENAME}'`,
+    );
+  } catch {}
+}
+
+export async function hashPassword(password: string, salt?: string) {
+  try {
+    const s = salt || crypto.randomUUID().slice(0, 8);
+    const enc = new TextEncoder();
+    const data = enc.encode(s + password);
+    const buf = await (crypto as any).subtle.digest("SHA-256", data);
+    const arr = Array.from(new Uint8Array(buf));
+    const hex = arr.map((b) => b.toString(16).padStart(2, "0")).join("");
+    return { salt: s, hash: hex };
+  } catch {
+    try {
+      const c = require("crypto");
+      const s = salt || c.randomBytes(4).toString("hex");
+      const h = c
+        .createHash("sha256")
+        .update(s + password)
+        .digest("hex");
+      return { salt: s, hash: h };
+    } catch {
+      return { salt: salt || "", hash: "" };
+    }
+  }
+}
+
+export function ensureTables() {
+  ensureSharedTables();
+}
+
+export function initializeKnowledgeBaseDatabase() {
+  migrateLegacyDataFilesToRoot();
+  ensureSharedTables();
+  migrateLegacyDatabases();
+  importLegacyProjectKnowledge();
+  migrateLegacyUploads();
+  cleanupPlaceholderProjects();
+  repairLegacyClonedEntityIds(appDb);
+}
+
+export function switchDatabase(_filename: string) {
+  db = createKnowledgeDatabase(appDb);
+  adminDb = appDb;
+  ensureSharedTables();
+}
+
+export { APP_DB_FILENAME, getProjectByIdentifier };
+
+initializeKnowledgeBaseDatabase();
+ensureKnowledgeAccessSchema(appDb);
+ensureApplicationSchema(appDb);
+ensureDefaultApplication(appDb);

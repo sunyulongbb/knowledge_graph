@@ -1,0 +1,303 @@
+import { Database } from 'bun:sqlite';
+import { test, expect } from 'bun:test';
+import { applicationPermissions, createApplicationHandler, ensureApplicationSchema, ensureDefaultApplication } from '../src/server/application-access.ts';
+import { ensureApplicationRolePermissions } from '../src/server/application-role-permissions.ts';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+
+function setup(cloneOptions: { uploadsRoot?: string } = {}) {
+  const db = new Database(':memory:');
+  db.run('PRAGMA foreign_keys=ON');
+  db.run("CREATE TABLE users(id INTEGER PRIMARY KEY,username TEXT,display_name TEXT,status TEXT DEFAULT 'active')");
+  db.run("INSERT INTO users(id,username,display_name) VALUES(1,'owner','Owner'),(2,'member','Member'),(3,'other','Other')");
+  db.run('CREATE TABLE projects(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT UNIQUE,title TEXT,description TEXT,file TEXT,image TEXT,theme_color TEXT,tags TEXT,link TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP,updated_at TEXT DEFAULT CURRENT_TIMESTAMP)');
+  ensureApplicationSchema(db);
+  const grants = ['application:create', 'application:update', 'application:delete', 'application:members', 'application:review'];
+  const users = [null, ...['owner', 'member', 'other'].map((username, index) => ({ id: index + 1, username, permissions: [...grants] }))];
+  const handle = createApplicationHandler(db, (req) => users[Number(req.headers.get('test-user'))] || null, cloneOptions);
+  const call = async (path: string, user = 0, body?: any, method = 'POST') => {
+    const url = new URL('http://localhost' + path);
+    const req = new Request(url, { method: body === undefined ? 'GET' : method, headers: { 'test-user': String(user), 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    return handle(req, url, req.method);
+  };
+  return { db, call, users };
+}
+
+test('first initialization creates one default application with access for every signed-in user', async () => {
+  const { db, call } = setup();
+  try {
+    const created = ensureDefaultApplication(db);
+    expect(created).toMatchObject({ name: 'default', title: '默认应用', is_default: 1 });
+    expect(ensureDefaultApplication(db)).toBeNull();
+    expect(db.query('SELECT count(*) AS n FROM projects').get()).toEqual({ n: 1 });
+
+    for (const userId of [1, 2, 3]) {
+      const projects = (await (await call('/api/kb/list_projects', userId))!.json()).projects;
+      expect(projects).toHaveLength(1);
+      expect(projects[0]).toMatchObject({ slug: 'default', member: true, editSettings: true, reviewRequests: true });
+    }
+    const anonymousProjects = (await (await call('/api/kb/list_projects'))!.json()).projects;
+    expect(anonymousProjects).toHaveLength(1);
+    expect(anonymousProjects[0]).toMatchObject({ slug: 'default', member: true, editSettings: true, reviewRequests: true });
+  } finally { db.close(); }
+});
+
+test('default application is added when an existing application database does not have one', () => {
+  const { db } = setup();
+  try {
+    db.run("INSERT INTO projects(name,title,file) VALUES('existing','Existing','app.sqlite')");
+    expect(ensureDefaultApplication(db)).toMatchObject({ name: 'default', title: '默认应用', is_default: 1 });
+    expect(db.query("SELECT count(*) AS n FROM projects WHERE name='default'").get()).toEqual({ n: 1 });
+    expect(db.query('SELECT count(*) AS n FROM projects').get()).toEqual({ n: 2 });
+    expect(ensureDefaultApplication(db)).toBeNull();
+  } finally { db.close(); }
+});
+
+test('an existing canonical default application is promoted instead of duplicated', () => {
+  const { db } = setup();
+  try {
+    db.run("INSERT INTO projects(name,title,file,is_default) VALUES('default','已有默认应用','app.sqlite',0)");
+    expect(ensureDefaultApplication(db)).toMatchObject({ name: 'default', title: '已有默认应用', is_default: 1 });
+    expect(db.query('SELECT count(*) AS n FROM projects').get()).toEqual({ n: 1 });
+  } finally { db.close(); }
+});
+
+test('application creation records owner, marketplace is public and sidebar lists only owned or maintained apps', async () => {
+  const { db, call } = setup();
+  try {
+    expect((await call('/api/applications', 0, { name: 'demo' }))!.status).toBe(401);
+    expect((await call('/api/kb/create_project?name=ghost'))!.status).toBe(404);
+    expect(db.query('SELECT count(*) AS n FROM projects').get()).toEqual({ n: 0 });
+    expect((await call('/api/applications', 1, { name: 'demo', title: 'Demo', owner_user_id: 3 }))!.status).toBe(201);
+    expect((db.query("SELECT owner_user_id FROM projects WHERE name='demo'").get() as any).owner_user_id).toBe(1);
+    expect((await call('/api/applications', 2, { name: 'demo' }))!.status).toBe(409);
+    expect((await (await call('/api/applications'))!.json()).projects).toHaveLength(1);
+    expect((await (await call('/api/kb/list_projects'))!.json()).projects).toHaveLength(0);
+    expect((await (await call('/api/kb/list_projects', 1))!.json()).projects).toHaveLength(1);
+    expect((await (await call('/api/kb/list_projects', 2))!.json()).projects).toHaveLength(0);
+    expect((await call('/api/kb/update_project', 2, { name: 'demo' }))!.status).toBe(403);
+    expect((await call('/api/kb/delete_project', 2, { name: 'demo' }))!.status).toBe(403);
+    ensureApplicationSchema(db);
+    expect((db.query("SELECT owner_user_id FROM projects WHERE name='demo'").get() as any).owner_user_id).toBe(1);
+  } finally { db.close(); }
+});
+
+test('an accessible application can be cloned with isolated knowledge identifiers', async () => {
+  const uploadsRoot = mkdtempSync(join(tmpdir(), 'knowledge-clone-'));
+  const { db, call } = setup({ uploadsRoot });
+  try {
+    db.run('CREATE TABLE ontologies(id TEXT PRIMARY KEY,name TEXT,parent_id TEXT,project_id INTEGER)');
+    db.run('CREATE TABLE properties(id TEXT PRIMARY KEY,name TEXT,project_id INTEGER)');
+    db.run('CREATE TABLE classes(id TEXT PRIMARY KEY,name TEXT,parent_id TEXT,project_id INTEGER)');
+    db.run('CREATE TABLE nodes(id TEXT PRIMARY KEY,name TEXT,type TEXT,images TEXT,project_id INTEGER)');
+    db.run('CREATE TABLE attributes(id TEXT PRIMARY KEY,node_id TEXT,key TEXT,value TEXT,statement_json TEXT)');
+    await call('/api/applications', 1, { name: 'source', title: 'Source' });
+    mkdirSync(join(uploadsRoot, '1', 'node-images'), { recursive: true });
+    writeFileSync(join(uploadsRoot, '1', 'node-images', 'a.png'), 'image');
+    db.run("INSERT INTO ontologies VALUES('ontology/person','Person',NULL,1)");
+    db.run("INSERT INTO properties VALUES('property/birth','Birth',1)");
+    db.run("INSERT INTO nodes VALUES('Q1','Alice','ontology/person','[\"/uploads/1/node-images/a.png\"]',1)");
+    db.run("INSERT INTO attributes VALUES('A1','Q1','property/birth','Q1','{\"id\":\"Q1\"}')");
+
+    const response = await call('/api/applications/source/clone', 1, { name: 'copy', title: 'Copy' });
+    expect(response!.status).toBe(201);
+    const cloned = (await response!.json()).project;
+    expect(cloned).toMatchObject({ slug: 'copy', name: 'Copy', owner: true });
+    const node = db.query('SELECT * FROM nodes WHERE project_id=?').get(cloned.id) as any;
+    expect(node.id).not.toBe('Q1');
+    expect(node.id).toStartWith('clone-');
+    expect(node.type).not.toBe('ontology/person');
+    expect(node.images).toContain(`/uploads/${cloned.id}/node-images/a.png`);
+    const attribute = db.query('SELECT * FROM attributes WHERE node_id=?').get(node.id) as any;
+    expect(attribute.id).not.toBe('A1');
+    expect(attribute.value).toBe(node.id);
+    expect(attribute.statement_json).toContain(node.id);
+    expect(existsSync(join(uploadsRoot, String(cloned.id), 'node-images', 'a.png'))).toBe(true);
+  } finally { db.close(); rmSync(uploadsRoot, { recursive: true, force: true }); }
+});
+
+test('an application can copy ontology definitions into another application without cloning the whole app', async () => {
+  const { db, call } = setup();
+  try {
+    db.run('CREATE TABLE ontologies(id TEXT PRIMARY KEY,name TEXT,description TEXT,alias TEXT,parent_id TEXT,color TEXT,display_shape TEXT,sort_order INTEGER,project_id INTEGER)');
+    db.run('CREATE TABLE properties(id TEXT PRIMARY KEY,name TEXT,alias TEXT,status TEXT,datatype TEXT,valuetype TEXT,types TEXT,description TEXT,tail_ontology_id TEXT,project_id INTEGER)');
+    db.run('CREATE TABLE ontology_properties(ontology_id TEXT,property_id TEXT)');
+    await call('/api/applications', 1, { name: 'source', title: 'Source' });
+    await call('/api/applications', 1, { name: 'target', title: 'Target' });
+    db.run("INSERT INTO ontologies(id,name,description,alias,parent_id,color,display_shape,sort_order,project_id) VALUES('ontology/person','人物','人类的统一分类','[\"人物\"]',NULL,'#ff7a2b','rectangle',1,1)");
+    db.run("INSERT INTO properties(id,name,alias,status,datatype,valuetype,types,description,tail_ontology_id,project_id) VALUES('property/birth','出生日期','[\"出生日期\"]','active','time','time','[]','出生日期的描述','',1)");
+    db.run("INSERT INTO ontology_properties(ontology_id,property_id) VALUES('ontology/person','property/birth')");
+
+    const response = await call('/api/applications/source/copy-ontology', 1, { name: 'target' });
+    expect(response!.status).toBe(200);
+    expect(await response!.json()).toMatchObject({ success: true, copied: 1, target: { slug: 'target' } });
+    const targetOntology = db.query('SELECT * FROM ontologies WHERE project_id=? ORDER BY sort_order').all(2);
+    expect(targetOntology[0]).toMatchObject({ name: '人物', project_id: 2 });
+    const targetProperty = db.query('SELECT * FROM properties WHERE project_id=? AND name=?').get(2, '出生日期') as any;
+    expect(targetProperty).toMatchObject({ name: '出生日期', project_id: 2 });
+    const relation = db.query('SELECT * FROM ontology_properties WHERE ontology_id=? AND property_id=?').get('ontology/person', 'property/birth') as any;
+    expect(relation).toEqual({ ontology_id: 'ontology/person', property_id: 'property/birth' });
+  } finally { db.close(); }
+});
+
+test('maintenance lifecycle, delegated permissions, notification isolation and revocation', async () => {
+  const { db, call } = setup();
+  try {
+    await call('/api/applications', 1, { name: 'demo' });
+    const prefix = '/api/applications/1';
+    expect((await call(prefix + '/request', 2, { message: 'Happy to help' }))!.status).toBe(200);
+    expect((await call(prefix + '/request', 2, {}))!.status).toBe(409);
+    expect((await (await call('/api/notifications', 1))!.json()).unread).toBe(1);
+    expect((await (await call('/api/notifications', 3))!.json()).unread).toBe(0);
+    await call('/api/notifications/read', 3, { id: 1 });
+    expect((await (await call('/api/notifications', 1))!.json()).unread).toBe(1);
+    expect((await call(prefix + '/review', 2, { user_id: 2, decision: 'approve' }))!.status).toBe(403);
+    expect((await call(prefix + '/review', 1, { user_id: 2, decision: 'approve' }))!.status).toBe(200);
+    expect((await (await call('/api/kb/list_projects', 2))!.json()).projects).toHaveLength(1);
+    expect((await call('/api/kb/update_project', 2, { name: 'demo' }))!.status).toBe(403);
+    expect((await call(prefix + '/member', 2, { user_id: 2, edit_settings: true }))!.status).toBe(403);
+    expect((await call(prefix + '/member', 1, { user_id: 2, edit_settings: true, review_requests: true }))!.status).toBe(200);
+    expect(await call('/api/kb/update_project', 2, { name: 'demo', title: 'Demo' })).toBeNull();
+    expect((await call('/api/kb/delete_project', 2, { name: 'demo' }))!.status).toBe(403);
+    await call(prefix + '/request', 3, {});
+    expect((await (await call(prefix + '/access', 2))!.json()).requests).toHaveLength(1);
+    expect((await call(prefix + '/review', 2, { user_id: 3, decision: 'approve' }))!.status).toBe(200);
+    const project = db.query('SELECT * FROM projects WHERE id=1').get();
+    expect(applicationPermissions(db, { id: 3, username: 'other' }, project)).toEqual({ owner: false, member: true, editSettings: false, reviewRequests: false });
+    await call(prefix + '/member', 1, { user_id: 2 }, 'DELETE');
+    expect((await (await call('/api/kb/list_projects', 2))!.json()).projects).toHaveLength(0);
+    expect((await call('/api/kb/update_project', 2, { name: 'demo' }))!.status).toBe(403);
+    expect((await call(prefix + '/review', 2, { user_id: 3, decision: 'reject' }))!.status).toBe(403);
+    await call('/api/notifications/read', 2, { all: true });
+    expect((await (await call('/api/notifications', 2))!.json()).unread).toBe(0);
+    expect((await (await call('/api/notifications', 1))!.json()).unread).toBeGreaterThan(0);
+  } finally { db.close(); }
+});
+
+test('role permissions gate creation but owners retain full application permissions', async () => {
+  const { db, call, users } = setup();
+  try {
+    users[1]!.permissions = [];
+    expect((await (await call('/api/applications', 1))!.json()).canCreate).toBe(false);
+    expect((await call('/api/applications', 1, { name: 'demo' }))!.status).toBe(403);
+    expect((await call('/api/kb/create_project', 1, { name: 'demo' }))!.status).toBe(403);
+    users[1]!.permissions = ['application:create'];
+    await call('/api/applications', 1, { name: 'demo' });
+    const access = await (await call('/api/applications/1/access', 1))!.json();
+    expect(access.project).toMatchObject({ owner: true, editSettings: true, deleteApplication: true, manageMembers: true, reviewRequests: true });
+    expect(await call('/api/kb/update_project', 1, { name: 'demo', title: 'Edited' })).toBeNull();
+    expect(await call('/api/kb/delete_project', 1, { name: 'demo', confirmName: 'demo' })).toBeNull();
+    expect((await call('/api/applications/1/member', 1, { username: 'other' }))!.status).toBe(200);
+    await call('/api/applications/1/request', 2, {});
+    expect((await call('/api/applications/1/review', 1, { user_id: 2, decision: 'approve' }))!.status).toBe(200);
+    users[1]!.permissions.push('application:update', 'application:delete');
+    expect(await call('/api/kb/update_project', 1, { name: 'demo', title: 'Edited' })).toBeNull();
+    expect(await call('/api/kb/delete_project', 1, { name: 'demo', confirmName: 'demo' })).toBeNull();
+    expect((await call('/api/kb/update_project', 1, { name: 'demo', title: ' ' }))!.status).toBe(400);
+    expect((await call('/api/kb/delete_project', 3, { name: 'demo', confirmName: 'demo' }))!.status).toBe(403);
+    users[1]!.permissions = [];
+    expect(await call('/api/kb/update_project', 1, { name: 'demo', title: 'Edited' })).toBeNull();
+    db.run("INSERT INTO projects(name,title,file) VALUES('legacy','Legacy','app.sqlite')");
+    expect((await call('/api/applications/2/request', 1, {}))!.status).toBe(403);
+    expect((db.query('SELECT owner_user_id FROM projects WHERE id=2').get() as any).owner_user_id).toBeNull();
+  } finally { db.close(); }
+});
+
+test('application permission migration seeds defaults once and preserves revoked grants', () => {
+  const db = new Database(':memory:');
+  try {
+    db.run('CREATE TABLE permissions(id INTEGER PRIMARY KEY,code TEXT UNIQUE,name TEXT,module TEXT)');
+    db.run('CREATE TABLE roles(id INTEGER PRIMARY KEY,code TEXT)');
+    db.run('CREATE TABLE role_permissions(role_id INTEGER,permission_id INTEGER,PRIMARY KEY(role_id,permission_id))');
+    db.run("INSERT INTO roles VALUES(1,'user'),(2,'super_admin')");
+    ensureApplicationRolePermissions(db);
+    expect((db.query('SELECT COUNT(*) AS n FROM permissions').get() as any).n).toBe(5);
+    expect((db.query('SELECT COUNT(*) AS n FROM role_permissions WHERE role_id=1').get() as any).n).toBe(5);
+    db.run('DELETE FROM role_permissions WHERE role_id=1');
+    ensureApplicationRolePermissions(db);
+    expect((db.query('SELECT COUNT(*) AS n FROM role_permissions WHERE role_id=1').get() as any).n).toBe(0);
+  } finally { db.close(); }
+});
+
+test('owners can directly add members, but permissions and application IDs remain isolated', async () => {
+  const { db, call } = setup();
+  try {
+    await call('/api/applications', 1, { name: 'demo' });
+    expect((await call('/api/applications', 3, { name: '1' }))!.status).toBe(400);
+    await call('/api/applications', 3, { name: 'another' });
+    expect((await call('/api/applications/1/member', 1, { username: 'member', edit_settings: true }))!.status).toBe(200);
+    expect((await call('/api/applications/2/member', 1, { username: 'member' }))!.status).toBe(403);
+    expect((await call('/api/applications/1/member', 1, { username: 'missing' }))!.status).toBe(400);
+    expect((await call('/api/applications/1/member', 1, { user_id: 1 }, 'DELETE'))!.status).toBe(400);
+    db.run('DELETE FROM projects WHERE id=1');
+    expect(db.query('SELECT count(*) AS n FROM application_members').get()).toEqual({ n: 0 });
+  } finally { db.close(); }
+});
+
+test('the first maintenance applicant atomically becomes owner of a legacy application', async () => {
+  const { db, call } = setup();
+  try {
+    db.run("INSERT INTO projects(name,title,file) VALUES('legacy','Legacy','app.sqlite')");
+    const first = await call('/api/applications/1/request', 2, { message: 'I will maintain it' });
+    expect(first!.status).toBe(200);
+    expect(await first!.json()).toEqual({ success: true, claimedOwnership: true });
+    expect((db.query('SELECT owner_user_id FROM projects WHERE id=1').get() as any).owner_user_id).toBe(2);
+    expect((db.query('SELECT count(*) AS n FROM application_requests WHERE project_id=1').get() as any).n).toBe(0);
+    expect((await (await call('/api/kb/list_projects', 2))!.json()).projects).toHaveLength(1);
+
+    const second = await call('/api/applications/1/request', 3, { message: 'Can I help?' });
+    expect(second!.status).toBe(200);
+    expect(await second!.json()).toEqual({ success: true, claimedOwnership: false });
+    expect((db.query('SELECT owner_user_id FROM projects WHERE id=1').get() as any).owner_user_id).toBe(2);
+    expect((db.query("SELECT status FROM application_requests WHERE project_id=1 AND user_id=3").get() as any).status).toBe('pending');
+    expect((await (await call('/api/notifications', 2))!.json()).unread).toBe(1);
+  } finally { db.close(); }
+});
+
+test('application details aggregate logo, ontology, category, tags and knowledge statistics', async () => {
+  const { db, call } = setup();
+  try {
+    await call('/api/applications', 1, { name: 'demo', title: 'Demo', image: '/logo.png' });
+    db.run('CREATE TABLE nodes(id TEXT PRIMARY KEY,type TEXT,tags TEXT,images TEXT,videos TEXT,visibility TEXT,project_id INTEGER)');
+    db.run('CREATE TABLE ontologies(id TEXT PRIMARY KEY,name TEXT,description TEXT,parent_id TEXT,color TEXT,sort_order INTEGER,project_id INTEGER)');
+    db.run('CREATE TABLE classes(id TEXT PRIMARY KEY,name TEXT,description TEXT,parent_id TEXT,color TEXT,image TEXT,tags TEXT,sort_order INTEGER,project_id INTEGER)');
+    db.run('CREATE TABLE entity_classes(entity_id TEXT,class_id TEXT)');
+    db.run('CREATE TABLE properties(id TEXT,project_id INTEGER)');
+    db.run('CREATE TABLE attributes(id TEXT,node_id TEXT)');
+    db.run("INSERT INTO ontologies VALUES('ontology/person','人物','',NULL,'#123456',1,1)");
+    db.run("INSERT INTO classes VALUES('class/news','新闻','',NULL,NULL,'','[\"推荐\"]',1,1)");
+    db.run("INSERT INTO nodes VALUES('n1','ontology/person','[\"人物\",\"推荐\"]','[\"a.jpg\"]','[]','public',1)");
+    db.run("INSERT INTO nodes VALUES('n2','ontology/person','[\"私有\"]','[]','[]','private',1)");
+    db.run("INSERT INTO entity_classes VALUES('n1','class/news')");
+    db.run("INSERT INTO properties VALUES('p1',1)");
+    db.run("INSERT INTO attributes VALUES('a1','n1')");
+    const response = await call('/api/applications/1/details');
+    expect(response!.status).toBe(200);
+    const data = await response!.json();
+    expect(data.project.image).toBe('/logo.png');
+    expect(data.ontologies[0]).toMatchObject({ id: 'ontology/person', entity_count: 1 });
+    expect(data.categories[0]).toMatchObject({ id: 'class/news', entity_count: 1, tags: ['推荐'] });
+    expect(data.tags).toEqual([{ name: '人物', count: 1 }, { name: '推荐', count: 1 }]);
+    expect(data.statistics).toMatchObject({ knowledge: 1, ontologies: 1, categories: 1, tags: 2, properties: 1, attributes: 1, media: 1 });
+    expect(data.tags.some((tag: any) => tag.name === '私有')).toBe(false);
+    const ownerData = await (await call('/api/applications/1/details', 1))!.json();
+    expect(ownerData.statistics).toMatchObject({ knowledge: 2, privateKnowledge: 1 });
+    expect(ownerData.tags.some((tag: any) => tag.name === '私有')).toBe(true);
+  } finally { db.close(); }
+});
+
+test('application banner persists on create, validates URL and migrates existing schema', async () => {
+  const { db, call } = setup();
+  try {
+    ensureApplicationSchema(db);
+    const created = await call('/api/applications', 1, { name: 'banner_test', title: 'Banner', banner_image: '/static/uploads/banner.jpg' });
+    expect(created?.status).toBe(201);
+    expect((await created!.json()).project.banner_image).toBe('/static/uploads/banner.jpg');
+    const listed = await call('/api/applications', 1);
+    expect((await listed!.json()).projects[0].banner_image).toBe('/static/uploads/banner.jpg');
+    expect((await call('/api/kb/update_project', 1, { name: 'banner_test', title: 'Banner', banner_image: 'javascript:alert(1)' }))?.status).toBe(400);
+    expect((await call('/api/kb/update_project', 3, { name: 'banner_test', title: 'Banner', banner_image: '/other.jpg' }))?.status).toBe(403);
+    expect(await call('/api/kb/update_project', 1, { name: 'banner_test', title: 'Banner', banner_image: '' })).toBeNull();
+  } finally { db.close(); }
+});

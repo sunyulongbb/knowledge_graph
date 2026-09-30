@@ -1,0 +1,742 @@
+[
+  {
+    "version": 1,
+    "entity": {
+      "id": "entity/review_gulugulu_001",
+      "name": "为咕噜端盒中隐藏款用户评价",
+      "description": "为了咕噜咕噜买了整个端盒，没想到如愿以偿，还抽中了隐藏款美人鱼，拆开整盒的瞬间治愈感爆棚，太开心了",
+      "aliases": [],
+      "tags": ["正面评价", "端盒行为", "隐藏款", "粉丝向"],
+      "categories": [
+        {
+          "name": "用户评价",
+          "description": "普通消费者发布的真实消费体验内容",
+          "color": "#6366F1",
+          "tags": ["UGC内容"],
+          "children": [
+            {
+              "name": "泡泡玛特产品评价",
+              "description": "针对泡泡玛特在售盲盒产品的用户反馈",
+              "color": "#3B82F6",
+              "tags": ["潮玩消费"],
+              "children": [
+                {
+                  "name": "单款式评价",
+                  "description": "针对单个盲盒款式的具体评价内容",
+                  "color": "#DC2626",
+                  "tags": ["热门款反馈"]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "images": [],
+      "videos": [],
+      "pdf": "",
+      "link": "https://www.iesdouyin.com/share/video/7675223767635144954",
+      "visibility": "public",
+      "type": {
+        "id": "ontology/user-review",
+        "name": "用户评价",
+        "description": "消费者发布的真实消费反馈内容"
+      },
+      "attributes": [
+        {
+          "id": "ATTR_REVIEW_TARGET",
+          "name": "评价对象",
+          "datatype": "wikibase-item",
+          "value": { "id": "entity/crybaby_gulugulu", "label_zh": "咕噜咕噜" },
+          "description": "该条评价针对的盲盒款式实体"
+        },
+        {
+          "id": "ATTR_REVIEW_SENTIMENT",
+          "name": "评价情绪倾向",
+          "datatype": "string",
+          "value": "正面",
+          "description": "评价整体的情绪极性标签"
+        },
+        {
+          "id": "ATTR_REVIEW_SOURCE",
+          "name": "评价来源平台",
+          "datatype": "string",
+          "value": "抖音",
+          "description": "该条评价的发布平台"
+        },
+        {
+          "id": "ATTR_REVIEW_PUBLISH_TIME",
+          "name": "评价发布时间",
+          "datatype": "time",
+          "value": { "time": "+2026-08-18T00:00:00Z", "precision": 11 },
+          "description": "评价内容的公开发布时间"
+        }
+      ]
+    }
+  },
+  {
+    "version": 1,
+    "entity": {
+      "id": "entity/review_gulugulu_002",
+      "name": "咕噜为系列大明盒用户评价",
+      "description": "咕噜咕噜手感特别明显，上下满盒状态，倒过来能清晰听到脚板打盒的声音，是门店里最好摇的款式，基本不会翻车",
+      "aliases": [],
+      "tags": ["正面评价", "摇盒手感", "易抽款"],
+      "categories": [
+        {
+          "name": "用户评价",
+          "description": "普通消费者发布的真实消费体验内容",
+          "color": "#6366F1",
+          "tags": ["UGC内容"],
+          "children": [
+            {
+              "name": "泡泡玛特产品评价",
+              "description": "针对泡泡玛特在售盲盒产品的用户反馈",
+              "color": "#3B82F6",
+              "tags": ["潮玩消费"],
+              "children": [
+                {
+                  "name": "单款式评价",
+                  "description": "针对单个盲盒款式的具体评价内容",
+                  "color": "#DC2626",
+                  "tags": ["摇盒攻略"]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "images": [],
+      "videos": [],
+      "pdf": "",
+      "link": "https://www.iesdouyin.com/share/video/7650783946342786537",
+      "visibility": "public",
+      "type": {
+        "id": "ontology/user-review",
+        "name": "用户评价",
+        "description": "消费者发布的真实消费反馈内容"
+      },
+      "attributes": [
+        {
+          "id": "ATTR_REVIEW_TARGET",
+          "name": "评价对象",
+          "datatype": "wikibase-item",
+          "value": { "id": "entity/crybaby_gulugulu", "label_zh": "咕噜咕噜" },
+          "description": "该条评价针对的盲盒款式实体"
+        },
+        {
+          "id": "ATTR_REVIEW_SENTIMENT",
+          "name": "评价情绪倾向",
+          "datatype": "string",
+          "value": "正面",
+          "description": "评价整体的情绪极性标签"
+        },
+        {
+          "id": "ATTR_REVIEW_SOURCE",
+          "name": "评价来源平台",
+          "datatype": "string",
+          "value": "抖音",
+          "description": "该条评价的发布平台"
+        },
+        {
+          "id": "ATTR_REVIEW_PUBLISH_TIME",
+          "name": "评价发布时间",
+          "datatype": "time",
+          "value": { "time": "+2026-06-13T00:00:00Z", "precision": 11 },
+          "description": "评价内容的公开发布时间"
+        }
+      ]
+    }
+  },
+  {
+    "version": 1,
+    "entity": {
+      "id": "entity/review_gulugulu_003",
+      "name": "溢价端盒入手本命款用户评价",
+      "description": "从发售就惦记咕噜咕噜，官网抢不到就溢价端盒冲，开出本命款的瞬间觉得这波溢价完全值得，死犟没白坚持",
+      "aliases": [],
+      "tags": ["正面评价", "溢价消费", "粉丝执念"],
+      "categories": [
+        {
+          "name": "用户评价",
+          "description": "普通消费者发布的真实消费体验内容",
+          "color": "#6366F1",
+          "tags": ["UGC内容"],
+          "children": [
+            {
+              "name": "泡泡玛特产品评价",
+              "description": "针对泡泡玛特在售盲盒产品的用户反馈",
+              "color": "#3B82F6",
+              "tags": ["潮玩消费"],
+              "children": [
+                {
+                  "name": "单款式评价",
+                  "description": "针对单个盲盒款式的具体评价内容",
+                  "color": "#DC2626",
+                  "tags": ["溢价购买"]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "images": [],
+      "videos": [],
+      "pdf": "",
+      "link": "https://www.iesdouyin.com/share/video/7602054578218451877",
+      "visibility": "public",
+      "type": {
+        "id": "ontology/user-review",
+        "name": "用户评价",
+        "description": "消费者发布的真实消费反馈内容"
+      },
+      "attributes": [
+        {
+          "id": "ATTR_REVIEW_TARGET",
+          "name": "评价对象",
+          "datatype": "wikibase-item",
+          "value": { "id": "entity/crybaby_gulugulu", "label_zh": "咕噜咕噜" },
+          "description": "该条评价针对的盲盒款式实体"
+        },
+        {
+          "id": "ATTR_REVIEW_SENTIMENT",
+          "name": "评价情绪倾向",
+          "datatype": "string",
+          "value": "正面",
+          "description": "评价整体的情绪极性标签"
+        },
+        {
+          "id": "ATTR_REVIEW_SOURCE",
+          "name": "评价来源平台",
+          "datatype": "string",
+          "value": "抖音",
+          "description": "该条评价的发布平台"
+        },
+        {
+          "id": "ATTR_REVIEW_PUBLISH_TIME",
+          "name": "评价发布时间",
+          "datatype": "time",
+          "value": { "time": "+2026-02-02T00:00:00Z", "precision": 11 },
+          "description": "评价内容的公开发布时间"
+        }
+      ]
+    }
+  },
+  {
+    "version": 1,
+    "entity": {
+      "id": "entity/review_gulugulu_004",
+      "name": "新手摇盒不翻车用户评价",
+      "description": "咕噜咕噜左右空间很大有明显打盒感，上下空间只有一指宽，倒过来能听到清脆的脚蹼打盒声，新手也能轻松摇到不翻车",
+      "aliases": [],
+      "tags": ["中性偏正", "摇盒攻略", "新手友好"],
+      "categories": [
+        {
+          "name": "用户评价",
+          "description": "普通消费者发布的真实消费体验内容",
+          "color": "#6366F1",
+          "tags": ["UGC内容"],
+          "children": [
+            {
+              "name": "泡泡玛特产品评价",
+              "description": "针对泡泡玛特在售盲盒产品的用户反馈",
+              "color": "#3B82F6",
+              "tags": ["潮玩消费"],
+              "children": [
+                {
+                  "name": "单款式评价",
+                  "description": "针对单个盲盒款式的具体评价内容",
+                  "color": "#DC2626",
+                  "tags": ["新手攻略"]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "images": [],
+      "videos": [],
+      "pdf": "",
+      "link": "https://www.iesdouyin.com/share/video/7681119492534089318",
+      "visibility": "public",
+      "type": {
+        "id": "ontology/user-review",
+        "name": "用户评价",
+        "description": "消费者发布的真实消费反馈内容"
+      },
+      "attributes": [
+        {
+          "id": "ATTR_REVIEW_TARGET",
+          "name": "评价对象",
+          "datatype": "wikibase-item",
+          "value": { "id": "entity/crybaby_gulugulu", "label_zh": "咕噜咕噜" },
+          "description": "该条评价针对的盲盒款式实体"
+        },
+        {
+          "id": "ATTR_REVIEW_SENTIMENT",
+          "name": "评价情绪倾向",
+          "datatype": "string",
+          "value": "中性",
+          "description": "评价整体的情绪极性标签"
+        },
+        {
+          "id": "ATTR_REVIEW_SOURCE",
+          "name": "评价来源平台",
+          "datatype": "string",
+          "value": "抖音",
+          "description": "该条评价的发布平台"
+        },
+        {
+          "id": "ATTR_REVIEW_PUBLISH_TIME",
+          "name": "评价发布时间",
+          "datatype": "time",
+          "value": { "time": "+2026-09-03T00:00:00Z", "precision": 11 },
+          "description": "评价内容的公开发布时间"
+        }
+      ]
+    }
+  },
+  {
+    "version": 1,
+    "entity": {
+      "id": "entity/review_gulugulu_005",
+      "name": "新批次摇盒难度提升用户评价",
+      "description": "新批次的咕噜咕噜把大干燥剂换成了小干燥剂，上下空间判断的参考性下降，没有老批次那么好摇，新手容易翻车",
+      "aliases": [],
+      "tags": ["中性评价", "品控批次差异", "摇盒难度"],
+      "categories": [
+        {
+          "name": "用户评价",
+          "description": "普通消费者发布的真实消费体验内容",
+          "color": "#6366F1",
+          "tags": ["UGC内容"],
+          "children": [
+            {
+              "name": "泡泡玛特产品评价",
+              "description": "针对泡泡玛特在售盲盒产品的用户反馈",
+              "color": "#3B82F6",
+              "tags": ["潮玩消费"],
+              "children": [
+                {
+                  "name": "单款式评价",
+                  "description": "针对单个盲盒款式的具体评价内容",
+                  "color": "#DC2626",
+                  "tags": ["批次差异"]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "images": [],
+      "videos": [],
+      "pdf": "",
+      "link": "https://www.iesdouyin.com/share/video/7679799214079783146",
+      "visibility": "public",
+      "type": {
+        "id": "ontology/user-review",
+        "name": "用户评价",
+        "description": "消费者发布的真实消费反馈内容"
+      },
+      "attributes": [
+        {
+          "id": "ATTR_REVIEW_TARGET",
+          "name": "评价对象",
+          "datatype": "wikibase-item",
+          "value": { "id": "entity/crybaby_gulugulu", "label_zh": "咕噜咕噜" },
+          "description": "该条评价针对的盲盒款式实体"
+        },
+        {
+          "id": "ATTR_REVIEW_SENTIMENT",
+          "name": "评价情绪倾向",
+          "datatype": "string",
+          "value": "中性",
+          "description": "评价整体的情绪极性标签"
+        },
+        {
+          "id": "ATTR_REVIEW_SOURCE",
+          "name": "评价来源平台",
+          "datatype": "string",
+          "value": "抖音",
+          "description": "该条评价的发布平台"
+        },
+        {
+          "id": "ATTR_REVIEW_PUBLISH_TIME",
+          "name": "评价发布时间",
+          "datatype": "time",
+          "value": { "time": "+2026-08-30T00:00:00Z", "precision": 11 },
+          "description": "评价内容的公开发布时间"
+        }
+      ]
+    }
+  },
+  {
+    "version": 1,
+    "entity": {
+      "id": "entity/review_gulugulu_006",
+      "name": "从黄牛处收心愿款用户评价",
+      "description": "为了抽到咕噜发誓抽不到就再也不买这个系列，最后还是加价从黄牛手里收了一个，实在太喜欢这款了",
+      "aliases": [],
+      "tags": ["正面评价", "二手交易", "粉丝执念"],
+      "categories": [
+        {
+          "name": "用户评价",
+          "description": "普通消费者发布的真实消费体验内容",
+          "color": "#6366F1",
+          "tags": ["UGC内容"],
+          "children": [
+            {
+              "name": "泡泡玛特产品评价",
+              "description": "针对泡泡玛特在售盲盒产品的用户反馈",
+              "color": "#3B82F6",
+              "tags": ["潮玩消费"],
+              "children": [
+                {
+                  "name": "单款式评价",
+                  "description": "针对单个盲盒款式的具体评价内容",
+                  "color": "#DC2626",
+                  "tags": ["二手溢价"]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "images": [],
+      "videos": [],
+      "pdf": "",
+      "link": "https://www.iesdouyin.com/share/video/7681119492534089318",
+      "visibility": "public",
+      "type": {
+        "id": "ontology/user-review",
+        "name": "用户评价",
+        "description": "消费者发布的真实消费反馈内容"
+      },
+      "attributes": [
+        {
+          "id": "ATTR_REVIEW_TARGET",
+          "name": "评价对象",
+          "datatype": "wikibase-item",
+          "value": { "id": "entity/crybaby_gulugulu", "label_zh": "咕噜咕噜" },
+          "description": "该条评价针对的盲盒款式实体"
+        },
+        {
+          "id": "ATTR_REVIEW_SENTIMENT",
+          "name": "评价情绪倾向",
+          "datatype": "string",
+          "value": "正面",
+          "description": "评价整体的情绪极性标签"
+        },
+        {
+          "id": "ATTR_REVIEW_SOURCE",
+          "name": "评价来源平台",
+          "datatype": "string",
+          "value": "抖音",
+          "description": "该条评价的发布平台"
+        },
+        {
+          "id": "ATTR_REVIEW_PUBLISH_TIME",
+          "name": "评价发布时间",
+          "datatype": "time",
+          "value": { "time": "+2026-09-06T00:00:00Z", "precision": 11 },
+          "description": "评价内容的公开发布时间"
+        }
+      ]
+    }
+  },
+  {
+    "version": 1,
+    "entity": {
+      "id": "entity/review_gulugulu_007",
+      "name": "误打误撞中心愿款用户评价",
+      "description": "手感特别特别轻，以为这次又要抽到不喜欢的款了，结果摇出来就是最喜欢的咕噜，惊喜感拉满",
+      "aliases": [],
+      "tags": ["正面评价", "随机惊喜", "欧气"],
+      "categories": [
+        {
+          "name": "用户评价",
+          "description": "普通消费者发布的真实消费体验内容",
+          "color": "#6366F1",
+          "tags": ["UGC内容"],
+          "children": [
+            {
+              "name": "泡泡玛特产品评价",
+              "description": "针对泡泡玛特在售盲盒产品的用户反馈",
+              "color": "#3B82F6",
+              "tags": ["潮玩消费"],
+              "children": [
+                {
+                  "name": "单款式评价",
+                  "description": "针对单个盲盒款式的具体评价内容",
+                  "color": "#DC2626",
+                  "tags": ["随机抽盒"]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "images": [],
+      "videos": [],
+      "pdf": "",
+      "link": "https://www.iesdouyin.com/share/video/7666854755306301888",
+      "visibility": "public",
+      "type": {
+        "id": "ontology/user-review",
+        "name": "用户评价",
+        "description": "消费者发布的真实消费反馈内容"
+      },
+      "attributes": [
+        {
+          "id": "ATTR_REVIEW_TARGET",
+          "name": "评价对象",
+          "datatype": "wikibase-item",
+          "value": { "id": "entity/crybaby_gulugulu", "label_zh": "咕噜咕噜" },
+          "description": "该条评价针对的盲盒款式实体"
+        },
+        {
+          "id": "ATTR_REVIEW_SENTIMENT",
+          "name": "评价情绪倾向",
+          "datatype": "string",
+          "value": "正面",
+          "description": "评价整体的情绪极性标签"
+        },
+        {
+          "id": "ATTR_REVIEW_SOURCE",
+          "name": "评价来源平台",
+          "datatype": "string",
+          "value": "抖音",
+          "description": "该条评价的发布平台"
+        },
+        {
+          "id": "ATTR_REVIEW_PUBLISH_TIME",
+          "name": "评价发布时间",
+          "datatype": "time",
+          "value": { "time": "+2026-07-26T00:00:00Z", "precision": 11 },
+          "description": "评价内容的公开发布时间"
+        }
+      ]
+    }
+  },
+  {
+    "version": 1,
+    "entity": {
+      "id": "entity/review_gulugulu_008",
+      "name": "门店热门抢手款用户评价",
+      "description": "咕噜咕噜是这个系列在门店最火的款，台面上只要摆出来很快就会被摇走，去晚了根本抢不到",
+      "aliases": [],
+      "tags": ["中性评价", "门店抢手", "高热度"],
+      "categories": [
+        {
+          "name": "用户评价",
+          "description": "普通消费者发布的真实消费体验内容",
+          "color": "#6366F1",
+          "tags": ["UGC内容"],
+          "children": [
+            {
+              "name": "泡泡玛特产品评价",
+              "description": "针对泡泡玛特在售盲盒产品的用户反馈",
+              "color": "#3B82F6",
+              "tags": ["潮玩消费"],
+              "children": [
+                {
+                  "name": "单款式评价",
+                  "description": "针对单个盲盒款式的具体评价内容",
+                  "color": "#DC2626",
+                  "tags": ["门店热度"]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "images": [],
+      "videos": [],
+      "pdf": "",
+      "link": "https://www.iesdouyin.com/share/video/7651206013337268593",
+      "visibility": "public",
+      "type": {
+        "id": "ontology/user-review",
+        "name": "用户评价",
+        "description": "消费者发布的真实消费反馈内容"
+      },
+      "attributes": [
+        {
+          "id": "ATTR_REVIEW_TARGET",
+          "name": "评价对象",
+          "datatype": "wikibase-item",
+          "value": { "id": "entity/crybaby_gulugulu", "label_zh": "咕噜咕噜" },
+          "description": "该条评价针对的盲盒款式实体"
+        },
+        {
+          "id": "ATTR_REVIEW_SENTIMENT",
+          "name": "评价情绪倾向",
+          "datatype": "string",
+          "value": "中性",
+          "description": "评价整体的情绪极性标签"
+        },
+        {
+          "id": "ATTR_REVIEW_SOURCE",
+          "name": "评价来源平台",
+          "datatype": "string",
+          "value": "抖音",
+          "description": "该条评价的发布平台"
+        },
+        {
+          "id": "ATTR_REVIEW_PUBLISH_TIME",
+          "name": "评价发布时间",
+          "datatype": "time",
+          "value": { "time": "+2026-06-14T00:00:00Z", "precision": 11 },
+          "description": "评价内容的公开发布时间"
+        }
+      ]
+    }
+  },
+  {
+    "version": 1,
+    "entity": {
+      "id": "entity/review_gulugulu_009",
+      "name": "新批次脚蹼品控问题用户评价",
+      "description": "新批次的咕噜咕噜有概率出现脚蹼零件松脱的问题，拿到手需要检查一下，别刚拆盒配件就掉了",
+      "aliases": [],
+      "tags": ["负面评价", "品控问题", "批次瑕疵"],
+      "categories": [
+        {
+          "name": "用户评价",
+          "description": "普通消费者发布的真实消费体验内容",
+          "color": "#6366F1",
+          "tags": ["UGC内容"],
+          "children": [
+            {
+              "name": "泡泡玛特产品评价",
+              "description": "针对泡泡玛特在售盲盒产品的用户反馈",
+              "color": "#3B82F6",
+              "tags": ["潮玩消费"],
+              "children": [
+                {
+                  "name": "单款式评价",
+                  "description": "针对单个盲盒款式的具体评价内容",
+                  "color": "#DC2626",
+                  "tags": ["品控反馈"]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "images": [],
+      "videos": [],
+      "pdf": "",
+      "link": "https://www.iesdouyin.com/share/video/7682308960665481979",
+      "visibility": "public",
+      "type": {
+        "id": "ontology/user-review",
+        "name": "用户评价",
+        "description": "消费者发布的真实消费反馈内容"
+      },
+      "attributes": [
+        {
+          "id": "ATTR_REVIEW_TARGET",
+          "name": "评价对象",
+          "datatype": "wikibase-item",
+          "value": { "id": "entity/crybaby_gulugulu", "label_zh": "咕噜咕噜" },
+          "description": "该条评价针对的盲盒款式实体"
+        },
+        {
+          "id": "ATTR_REVIEW_SENTIMENT",
+          "name": "评价情绪倾向",
+          "datatype": "string",
+          "value": "负面",
+          "description": "评价整体的情绪极性标签"
+        },
+        {
+          "id": "ATTR_REVIEW_SOURCE",
+          "name": "评价来源平台",
+          "datatype": "string",
+          "value": "抖音",
+          "description": "该条评价的发布平台"
+        },
+        {
+          "id": "ATTR_REVIEW_PUBLISH_TIME",
+          "name": "评价发布时间",
+          "datatype": "time",
+          "value": { "time": "+2026-09-06T00:00:00Z", "precision": 11 },
+          "description": "评价内容的公开发布时间"
+        }
+      ]
+    }
+  },
+  {
+    "version": 1,
+    "entity": {
+      "id": "entity/review_gulugulu_010",
+      "name": "重量+手感稳抽咕噜用户评价",
+      "description": "咕噜比流沙款稍沉，倒过来能明确感受到大头/脚蹼打盒，不管正放倒放打盒感都很明显，按这个方法抽基本不会错",
+      "aliases": [],
+      "tags": ["中性偏正", "精准摇盒", "抽盒技巧"],
+      "categories": [
+        {
+          "name": "用户评价",
+          "description": "普通消费者发布的真实消费体验内容",
+          "color": "#6366F1",
+          "tags": ["UGC内容"],
+          "children": [
+            {
+              "name": "泡泡玛特产品评价",
+              "description": "针对泡泡玛特在售盲盒产品的用户反馈",
+              "color": "#3B82F6",
+              "tags": ["潮玩消费"],
+              "children": [
+                {
+                  "name": "单款式评价",
+                  "description": "针对单个盲盒款式的具体评价内容",
+                  "color": "#DC2626",
+                  "tags": ["抽盒攻略"]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "images": [],
+      "videos": [],
+      "pdf": "",
+      "link": "https://www.iesdouyin.com/share/video/7647160391743383763",
+      "visibility": "public",
+      "type": {
+        "id": "ontology/user-review",
+        "name": "用户评价",
+        "description": "消费者发布的真实消费反馈内容"
+      },
+      "attributes": [
+        {
+          "id": "ATTR_REVIEW_TARGET",
+          "name": "评价对象",
+          "datatype": "wikibase-item",
+          "value": { "id": "entity/crybaby_gulugulu", "label_zh": "咕噜咕噜" },
+          "description": "该条评价针对的盲盒款式实体"
+        },
+        {
+          "id": "ATTR_REVIEW_SENTIMENT",
+          "name": "评价情绪倾向",
+          "datatype": "string",
+          "value": "中性",
+          "description": "评价整体的情绪极性标签"
+        },
+        {
+          "id": "ATTR_REVIEW_SOURCE",
+          "name": "评价来源平台",
+          "datatype": "string",
+          "value": "抖音",
+          "description": "该条评价的发布平台"
+        },
+        {
+          "id": "ATTR_REVIEW_PUBLISH_TIME",
+          "name": "评价发布时间",
+          "datatype": "time",
+          "value": { "time": "+2026-06-03T00:00:00Z", "precision": 11 },
+          "description": "评价内容的公开发布时间"
+        }
+      ]
+    }
+  }
+]

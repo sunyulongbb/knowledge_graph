@@ -1,0 +1,1995 @@
+﻿(function () {
+  // 设置按钮事件监听
+  document.addEventListener('DOMContentLoaded', function () {
+    const btn = document.getElementById('btnAppSettings');
+    if (btn) {
+      btn.onclick = function () {
+        if (window.openAppSettingsModal) window.openAppSettingsModal();
+      };
+    }
+    const btnLink = document.getElementById('btnOpenAppLink');
+    if (btnLink) {
+      btnLink.onclick = function (e) {
+        if (btnLink.dataset.disabled === 'true') {
+          e.preventDefault();
+        }
+      };
+    }
+    // 页面加载时刷新头部展示
+    if (window.updateAppHeaderFromSettings) window.updateAppHeaderFromSettings();
+    if (window.updateSidebarAppLinkButtonState) window.updateSidebarAppLinkButtonState();
+  });
+})();
+(function () {
+  function readSidebarState() {
+    const params = new URL(window.location.href).searchParams;
+    const read = (param, key, fallback) => {
+      const value = params.get(param);
+      if (value === 'open' || value === 'closed') return value === 'closed';
+      try {
+        const saved = localStorage.getItem(key);
+        if (saved === '0' || saved === '1') return saved === '1';
+      } catch {}
+      return fallback;
+    };
+    return {
+      left: read('leftSidebar', 'kbProjectSidebarCollapsed', true),
+      right: read('rightSidebar', 'kbUserSidebarCollapsed', false),
+    };
+  }
+  function saveSidebarState() {
+    const left = document.getElementById('projectSidebar')?.classList.contains('collapsed');
+    const right = document.getElementById('userSidebar')?.classList.contains('is-collapsed');
+    if (left === undefined || right === undefined) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set('leftSidebar', left ? 'closed' : 'open');
+    url.searchParams.set('rightSidebar', right ? 'closed' : 'open');
+    if (url.href !== window.location.href) history.replaceState(history.state, '', url);
+    try {
+      localStorage.setItem('kbProjectSidebarCollapsed', left ? '1' : '0');
+      localStorage.setItem('kbUserSidebarCollapsed', right ? '1' : '0');
+    } catch {}
+  }
+  // --- Project sidebar logic ---
+  let projectListVersion = 0;
+  let projectContextMenu = null;
+  function hideProjectContextMenu() {
+    if (projectContextMenu) {
+      projectContextMenu.hidden = true;
+      projectContextMenu.querySelectorAll('.project-context-submenu').forEach((submenu) => {
+        submenu.hidden = true;
+      });
+    }
+  }
+  function showProjectCloneMenu(event, project) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!projectContextMenu) {
+      projectContextMenu = document.createElement("div");
+      projectContextMenu.className = "project-context-menu";
+      projectContextMenu.hidden = true;
+      document.body.appendChild(projectContextMenu);
+      projectContextMenu.addEventListener("click", (event) => event.stopPropagation());
+      document.addEventListener("click", hideProjectContextMenu);
+      document.addEventListener("scroll", hideProjectContextMenu, true);
+      window.addEventListener("resize", hideProjectContextMenu, { passive: true });
+    }
+    projectContextMenu.replaceChildren();
+    const cloneButton = document.createElement("button");
+    cloneButton.type = "button";
+    cloneButton.textContent = "克隆应用";
+    cloneButton.addEventListener("click", async () => {
+      hideProjectContextMenu();
+      const sourceName = String(project.slug || project.name || "application");
+      const suggested = `${sourceName}-copy`;
+      const name = window.prompt("请输入新应用短名（字母、数字、短横线或下划线）", suggested)?.trim();
+      if (!name) return;
+      const title = window.prompt("请输入新应用名称", `${project.title || project.name || sourceName} 副本`)?.trim();
+      if (!title) return;
+      cloneButton.disabled = true;
+      try {
+        const sourceIdentifier = project.id ?? project.slug ?? sourceName;
+        const response = await fetch(`/api/applications/${encodeURIComponent(sourceIdentifier)}/clone`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, title }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || result.message || `HTTP ${response.status}`);
+        await loadProjectsToSidebar();
+        setUrlParam("db", result.project?.slug || name);
+      } catch (error) {
+        window.alert(`克隆失败：${error?.message || error}`);
+      } finally {
+        cloneButton.disabled = false;
+      }
+    });
+
+    const copyOntologyButton = document.createElement("button");
+    copyOntologyButton.type = "button";
+    copyOntologyButton.textContent = "复制本体到其他应用";
+    const copyOntologyMenu = document.createElement("div");
+    copyOntologyMenu.className = "project-context-submenu";
+    copyOntologyMenu.hidden = true;
+    copyOntologyMenu.addEventListener("click", (event) => event.stopPropagation());
+    copyOntologyMenu.style.position = "absolute";
+    copyOntologyMenu.style.left = "calc(100% + 6px)";
+    copyOntologyMenu.style.top = "0";
+    copyOntologyMenu.style.minWidth = "180px";
+    copyOntologyMenu.style.display = "flex";
+    copyOntologyMenu.style.flexDirection = "column";
+    copyOntologyMenu.style.gap = "2px";
+    copyOntologyButton.addEventListener("click", () => {
+      const currentId = Number(project.id ?? 0) || 0;
+      const apps = Array.isArray(window.kbApplicationProjects) ? window.kbApplicationProjects : [];
+      const viable = apps.filter((item) => {
+        const appId = Number(item.id ?? 0) || 0;
+        const slug = String(item.slug || item.name || item.file || "").replace(/\.sqlite$/, "");
+        const currentSlug = String(project.slug || project.name || "").replace(/\.sqlite$/, "");
+        return appId !== currentId && slug !== currentSlug;
+      });
+      copyOntologyMenu.replaceChildren();
+      if (!viable.length) {
+        const empty = document.createElement("div");
+        empty.className = "project-context-submenu-empty";
+        empty.textContent = "暂无其他应用";
+        copyOntologyMenu.appendChild(empty);
+      } else {
+        viable.forEach((item) => {
+          const targetButton = document.createElement("button");
+          targetButton.type = "button";
+          targetButton.textContent = item.title || item.name || item.slug || "未命名应用";
+          targetButton.addEventListener("click", async () => {
+            hideProjectContextMenu();
+            const sourceIdentifier = project.id ?? project.slug ?? String(project.name || "application");
+            try {
+              const response = await fetch(`/api/applications/${encodeURIComponent(sourceIdentifier)}/copy-ontology`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: item.slug || item.name || item.file || "" }),
+              });
+              const result = await response.json().catch(() => ({}));
+              if (!response.ok) throw new Error(result.error || result.message || `HTTP ${response.status}`);
+              const copied = Number(result.copied || 0);
+              window.alert(`已复制 ${copied} 个本体到应用「${result.target?.title || result.target?.slug || item.title || item.name || item.slug || "目标应用"}」。`);
+            } catch (error) {
+              window.alert(`复制本体失败：${error?.message || error}`);
+            }
+          });
+          copyOntologyMenu.appendChild(targetButton);
+        });
+      }
+      copyOntologyMenu.hidden = false;
+      copyOntologyButton.parentElement?.appendChild(copyOntologyMenu);
+    });
+
+    projectContextMenu.appendChild(cloneButton);
+    projectContextMenu.appendChild(copyOntologyButton);
+    projectContextMenu.hidden = false;
+    const width = 170;
+    const height = 94;
+    projectContextMenu.style.left = `${Math.max(8, Math.min(event.clientX, window.innerWidth - width - 8))}px`;
+    projectContextMenu.style.top = `${Math.max(8, Math.min(event.clientY, window.innerHeight - height - 8))}px`;
+  }
+  function isSidebarAvatarImage(value) {
+    const source = String(value || "").trim();
+    return /^(?:data:|blob:|https?:|\/|\.\.?\/)/i.test(source) || source.includes("/") || /\.(?:avif|gif|jpe?g|png|svg|webp)(?:[?#].*)?$/i.test(source);
+  }
+  function createSidebarAvatar(value, fallback) {
+    const source = String(value || "").trim();
+    const span = document.createElement("span");
+    if (source && isSidebarAvatarImage(source)) {
+      span.className = "project-avatar-img";
+      span.style.backgroundImage = `url(${JSON.stringify(source)})`;
+    } else if (source) {
+      span.className = "project-avatar-emoji";
+      span.textContent = source;
+    } else {
+      span.className = "project-initials";
+      span.textContent = String(fallback || "?").replace(/\s+/g, "").slice(0, 2).toUpperCase() || "?";
+    }
+    span.setAttribute("aria-hidden", "true");
+    return span;
+  }
+  async function loadProjectsToSidebar() {
+    const token = ++projectListVersion;
+    const wrap = document.querySelector(".project-list");
+    if (!wrap) return;
+    wrap.innerHTML = '<div class="muted">加载中…</div>';
+    try {
+      const resp = await fetch("/api/kb/list_projects");
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      const data = await resp.json();
+      if (token !== projectListVersion) return;
+      const items = Array.isArray(data.projects) ? data.projects : [];
+      window.kbApplicationProjects = items;
+      window.dispatchEvent(new CustomEvent('kb-application-access-change'));
+      wrap.innerHTML = "";
+      if (!items.length) {
+        wrap.innerHTML = '<div class="muted">暂无项目</div>';
+        return;
+      }
+      const currentDb = getUrlParam("db") || "";
+      // If a DB is currently selected, show it in the header (and do not include it in the sidebar list)
+      if (currentDb) {
+        try {
+          const found = items.find(
+            (it) =>
+              ((it.slug || it.name || it.file || "") + "").replace(
+                /\.sqlite$/,
+                "",
+              ) === currentDb,
+          );
+          if (found)
+            try {
+              updateHeaderProjectInfo(
+                currentDb,
+                found.title || currentDb,
+                found.image || "",
+              );
+              const headerAvatar = document.getElementById("headerProjectAvatar");
+              if (headerAvatar) {
+                headerAvatar.oncontextmenu = window.authUser && found.member
+                  ? (event) => showProjectCloneMenu(event, found)
+                  : null;
+              }
+            } catch (e) {}
+        } catch (e) {}
+      }
+      // Render only projects that are NOT currently selected
+      const visibleItems = items.filter(
+        (it) =>
+          ((it.slug || it.name || it.file || "") + "").replace(
+            /\.sqlite$/,
+            "",
+          ) !== currentDb,
+      );
+      if (!visibleItems.length) {
+        wrap.innerHTML = '<div class="muted">暂无项目</div>';
+        return;
+      }
+      visibleItems.forEach((it) => {
+        const dbId = ((it.slug || it.name || it.file || "") + "").replace(
+          /\.sqlite$/,
+          "",
+        );
+        const entry = document.createElement("a");
+        entry.className = "project-entry";
+        entry.href = "#";
+        entry.setAttribute("data-db", dbId);
+        entry.setAttribute("data-image", it.image || "");
+        entry.setAttribute("data-title", it.title || "");
+        entry.setAttribute("data-desc", it.desc || it.description || "");
+        entry.setAttribute("data-link", it.link || "");
+        const title = it.title ? it.title : dbId;
+        entry.title = title + "（双击编辑）";
+        entry.setAttribute("aria-label", title);
+        entry.tabIndex = 0;
+        entry.appendChild(createSidebarAvatar(it.image, it.title || dbId));
+        // label (shown when sidebar expanded) - show full title (CSS will truncate if needed)
+        const label = document.createElement("span");
+        label.className = "project-entry-label";
+        try {
+          const base = (title || dbId || "").toString().trim();
+          // store both full and short forms for responsive/compact behavior
+          label.dataset.full = base;
+          label.dataset.short = Array.from(base).slice(0, 3).join("");
+          // show full title by default; label.title holds full text for tooltip
+          label.textContent = base;
+          label.title = base;
+          const sidebarEl = document.getElementById("projectSidebar");
+          const isCollapsed =
+            sidebarEl && sidebarEl.classList.contains("collapsed");
+          label.setAttribute("aria-hidden", String(!!isCollapsed));
+        } catch (e) {
+          label.textContent = title;
+        }
+        entry.appendChild(label);
+        // click with slight delay to allow dblclick to override
+        entry.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (entry._clickTimer) return;
+          entry._clickTimer = setTimeout(() => {
+            entry._clickTimer = null;
+            // perform animated selection then navigate
+            try {
+              selectProjectWithAnimation(
+                dbId,
+                entry,
+                title,
+                entry.getAttribute("data-image") || "",
+              );
+            } catch (e) {
+              try {
+                setUrlParam("db", dbId);
+              } catch (err) {}
+            }
+          }, 260);
+        });
+        entry.addEventListener("dblclick", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          // cancel pending click switch
+          if (entry._clickTimer) {
+            clearTimeout(entry._clickTimer);
+            entry._clickTimer = null;
+          }
+          // open edit modal
+          try {
+            try {
+              updateHeaderProjectInfo(
+                dbId,
+                title,
+                entry.getAttribute("data-image") || "",
+              );
+            } catch (e) {}
+            openEditProjectModal(
+              dbId,
+              entry.getAttribute("data-title") || "",
+              entry.getAttribute("data-image") || "",
+              entry.getAttribute("data-desc") || "",
+            );
+          } catch (err) {}
+        });
+        if (window.authUser && it.member) {
+          entry.addEventListener("contextmenu", (event) => showProjectCloneMenu(event, it));
+        }
+        entry.addEventListener("keydown", (e) => {
+          const key = e.key || e.keyCode;
+          if (key === "Enter" || key === 13) {
+            e.preventDefault();
+            try {
+              selectProjectWithAnimation(
+                dbId,
+                entry,
+                title,
+                entry.getAttribute("data-image") || "",
+              );
+            } catch (err) {
+              try {
+                setUrlParam("db", dbId);
+              } catch (e) {}
+            }
+          }
+        });
+        wrap.appendChild(entry);
+      });
+      try {
+        updateSidebarLabelMode();
+      } catch (e) {}
+      try {
+        if (window.updateSidebarAppLinkButtonState)
+          window.updateSidebarAppLinkButtonState();
+      } catch (e) {
+        console.warn('updateSidebarAppLinkButtonState failed', e);
+      }
+    } catch (err) {
+      if (token !== projectListVersion) return;
+      window.kbApplicationProjects = [];
+      window.dispatchEvent(new CustomEvent('kb-application-access-change'));
+      wrap.innerHTML = '<div class="muted">加载失败</div>';
+      console.warn("loadProjectsToSidebar failed", err);
+    }
+  }
+
+  function syncHeaderSidebarToggle(collapsed) {
+    const headerLogo = document.getElementById("headerProjectAvatar");
+    if (!headerLogo) return;
+    headerLogo.setAttribute("aria-expanded", String(!collapsed));
+    headerLogo.setAttribute("aria-label", collapsed ? "展开应用栏" : "收起应用栏");
+    headerLogo.title = collapsed ? "展开应用栏" : "收起应用栏";
+  }
+
+  // Global helper to control sidebar collapsed/expanded state
+  function setSidebarCollapsed(
+    collapsed,
+    persist = true,
+    skipFocus = false,
+    instant = false,
+  ) {
+    if (!collapsed && !window.authUser) collapsed = true;
+    const sidebarEl = document.getElementById("projectSidebar");
+    const splitEl = document.querySelector(".kb-split");
+    if (!sidebarEl) return;
+    // Avoid toggling while an animation is already in progress, unless instant override requested
+    if (sidebarEl.classList.contains("animating") && !instant) return;
+
+    const wasCollapsed = sidebarEl.classList.contains("collapsed");
+    // if state didn't change, just persist and return
+    if (wasCollapsed === collapsed) {
+      try {
+        sidebarEl.setAttribute("aria-expanded", String(!collapsed));
+      } catch (e) {}
+      if (splitEl) {
+        splitEl.classList.toggle('sidebar-collapsed', collapsed);
+        splitEl.classList.toggle('sidebar-expanded', !collapsed);
+      }
+      syncHeaderSidebarToggle(collapsed);
+      if (persist) saveSidebarState();
+      return;
+    }
+
+    // If instant requested, temporarily disable CSS transitions/animations
+    if (instant) {
+      try {
+        sidebarEl.classList.remove("animating");
+      } catch (e) {}
+      try {
+        sidebarEl.classList.add("no-sidebar-transition");
+      } catch (e) {}
+      try {
+        if (splitEl) splitEl.classList.add("no-sidebar-transition");
+      } catch (e) {}
+    } else {
+      // Ensure transitions are enabled if a no-sidebar-transition flag was left (e.g., from hover)
+      try {
+        sidebarEl.classList.remove("no-sidebar-transition");
+      } catch (e) {}
+      try {
+        if (splitEl) splitEl.classList.remove("no-sidebar-transition");
+      } catch (e) {}
+      // force reflow so the transition will apply
+      void sidebarEl.offsetWidth;
+      // Mark as animating to prevent re-entrant toggles
+      sidebarEl.classList.add("animating");
+      if (splitEl) splitEl.classList.add("animating");
+    }
+
+    sidebarEl.classList.toggle("collapsed", collapsed);
+    sidebarEl.classList.toggle("expanded", !collapsed);
+    try {
+      sidebarEl.setAttribute("aria-expanded", String(!collapsed));
+    } catch (e) {}
+    syncHeaderSidebarToggle(collapsed);
+    if (splitEl) splitEl.classList.toggle("sidebar-collapsed", collapsed);
+    if (splitEl) splitEl.classList.toggle("sidebar-expanded", !collapsed);
+    if (persist) saveSidebarState();
+    // update aria-hidden on labels for screen readers
+    try {
+      const labels = sidebarEl.querySelectorAll(".project-entry-label");
+      labels.forEach((l) => {
+        try {
+          l.setAttribute("aria-hidden", String(!!collapsed));
+          // Ensure label text is synced with the entry's data-title/db so expanded view shows full names
+          const entry = l.closest && l.closest(".project-entry");
+          const full =
+            entry &&
+            (entry.getAttribute("data-title") || entry.getAttribute("data-db"))
+              ? entry.getAttribute("data-title") ||
+                entry.getAttribute("data-db")
+              : l.title || "";
+          if (full) {
+            l.textContent = full;
+            l.title = full;
+          }
+        } catch (e) {}
+      });
+    } catch (e) {}
+
+    // Recompute compact/short label mode after sidebar size/state changes
+    try {
+      updateSidebarLabelMode();
+    } catch (e) {}
+
+    // Clear any temporary hover-expanded state when we programmatically change sidebar state
+    try {
+      sidebarEl.classList.remove("hover-expanded");
+    } catch (e) {}
+    try {
+      sidebarEl.classList.remove("no-sidebar-transition");
+    } catch (e) {}
+    try {
+      if (splitEl) splitEl.classList.remove("no-sidebar-transition");
+    } catch (e) {}
+
+    // If instant, remove the temporary no-transition class on next frame so future transitions work
+    if (instant) {
+      try {
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            try {
+              sidebarEl.classList.remove("no-sidebar-transition");
+            } catch (e) {}
+            try {
+              if (splitEl) splitEl.classList.remove("no-sidebar-transition");
+            } catch (e) {}
+          }),
+        );
+      } catch (e) {}
+      // No animating class/event handlers when instant; return early after focus handling below
+    }
+
+    // When expanding, ensure selected entry is visible and focused
+    try {
+      if (!collapsed && !skipFocus) {
+        const selected = sidebarEl.querySelector(
+          ".project-list .project-entry.selected",
+        );
+        const firstEntry = sidebarEl.querySelector(
+          ".project-list .project-entry",
+        );
+        const target = selected || firstEntry;
+        if (target) {
+          const preferReduced =
+            window.matchMedia &&
+            window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+          try {
+            if (!preferReduced && target.scrollIntoView)
+              target.scrollIntoView({
+                behavior: "smooth",
+                block: "center",
+                inline: "nearest",
+              });
+          } catch (e) {}
+          try {
+            target.focus();
+          } catch (e) {}
+        }
+      }
+    } catch (e) {}
+
+    // Cleanup animating class once the transition finishes (or fallback timeout)
+    if (!instant) {
+      const onTransitionEnd = (evt) => {
+        const isSidebarWidth =
+          evt.target === sidebarEl &&
+          (evt.propertyName === "width" || evt.propertyName === "padding");
+        const isGridCols =
+          evt.target === splitEl &&
+          evt.propertyName === "grid-template-columns";
+        if (isSidebarWidth || isGridCols) {
+          sidebarEl.classList.remove("animating");
+          if (splitEl) splitEl.classList.remove("animating");
+          try {
+            sidebarEl.removeEventListener("transitionend", onTransitionEnd);
+          } catch (e) {}
+          try {
+            if (splitEl)
+              splitEl.removeEventListener("transitionend", onTransitionEnd);
+          } catch (e) {}
+        }
+      };
+      try {
+        sidebarEl.addEventListener("transitionend", onTransitionEnd);
+      } catch (e) {}
+      try {
+        if (splitEl) splitEl.addEventListener("transitionend", onTransitionEnd);
+      } catch (e) {}
+      // Fallback in case transitionend doesn't fire
+      setTimeout(() => {
+        sidebarEl.classList.remove("animating");
+        if (splitEl) splitEl.classList.remove("animating");
+        try {
+          sidebarEl.removeEventListener("transitionend", onTransitionEnd);
+        } catch (e) {}
+        try {
+          if (splitEl)
+            splitEl.removeEventListener("transitionend", onTransitionEnd);
+        } catch (e) {}
+      }, 400);
+    }
+  }
+
+  // --- User sidebar logic (right side) ---
+  async function loadUsersToSidebar() {
+    const wrap = document.querySelector(".user-list");
+    if (!wrap) return;
+    wrap.innerHTML = '<div class="muted">加载中…</div>';
+    try {
+      const resp = await fetch("/api/auth/users", { credentials: "include" });
+      if (resp.status === 401) {
+        wrap.innerHTML = '<div class="muted">登录后可查看用户</div>';
+        return;
+      }
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      const data = await resp.json();
+      const items = Array.isArray(data.users) ? data.users : [];
+      wrap.innerHTML = "";
+      if (!items.length) {
+        wrap.innerHTML = '<div class="muted">暂无用户</div>';
+        return;
+      }
+      items.forEach((it) => {
+        const username = it.username || "";
+        const isCurrentUser = Boolean(window.authUser) && (
+          Number(it.id) === Number(window.authUser.id) ||
+          username === String(window.authUser.username || "")
+        );
+        const entry = document.createElement("a");
+        entry.className = "project-entry";
+        entry.classList.toggle("is-current-user", isCurrentUser);
+        entry.href = "#";
+        entry.setAttribute("data-username", username);
+        entry.setAttribute("data-image", it.avatar || "");
+        entry.setAttribute("data-title", it.displayName || username || "");
+        entry.setAttribute("data-status", it.status || "active");
+        entry.setAttribute("aria-label", isCurrentUser ? `打开我的个人详情：${it.displayName || username}` : `选择用户：${it.displayName || username}`);
+        if (isCurrentUser && window.kbViewMode === "profile") entry.setAttribute("aria-current", "page");
+        entry.classList.toggle("is-disabled-user", it.status === "disabled");
+        entry.tabIndex = 0;
+        entry.appendChild(createSidebarAvatar(it.avatar, it.displayName || username));
+        const label = document.createElement("span");
+        label.className = "project-entry-label";
+        label.textContent = `${it.displayName || username || ""}${it.status === "disabled" ? "（已停用）" : ""}`;
+        label.dataset.full = label.textContent;
+        label.dataset.short = (label.textContent || "").slice(0, 12);
+        entry.appendChild(label);
+        entry.addEventListener("click", (e) => {
+          e.preventDefault();
+          if (isCurrentUser) {
+            window.setViewMode?.("profile");
+            return;
+          }
+          try {
+            const prev = wrap.querySelector(".project-entry.selected");
+            if (prev && prev !== entry) prev.classList.remove("selected");
+            entry.classList.add("selected");
+            entry.focus();
+          } catch (err) {}
+        });
+        entry.addEventListener("dblclick", (e) => {
+          try {
+            e.preventDefault();
+            const chatInput = document.getElementById("chat-q");
+            if (chatInput) {
+              chatInput.value = "@" + (username || "") + " ";
+              try {
+                chatInput.focus();
+              } catch (e) {}
+            }
+          } catch (e) {}
+        });
+        wrap.appendChild(entry);
+      });
+      try {
+        updateUserSidebarLabelMode();
+      } catch (e) {}
+    } catch (e) {
+      wrap.innerHTML = `<div class="muted">加载失败: ${e && e.message ? e.message : e}</div>`;
+    }
+  }
+
+  function updateUserSidebarLabelMode() {
+    try {
+      const sidebarEl = document.getElementById("userSidebar");
+      const wrap = document.querySelector(".user-list");
+      if (!sidebarEl || !wrap) return;
+      const entries = Array.from(wrap.querySelectorAll(".project-entry"));
+
+      // allow manual override via global or localStorage
+      let override = null;
+      try {
+        if (
+          typeof window !== "undefined" &&
+          typeof window.SIDEBAR_LABEL_COMPACT_THRESHOLD !== "undefined"
+        ) {
+          const v = parseInt(window.SIDEBAR_LABEL_COMPACT_THRESHOLD || "", 10);
+          if (!isNaN(v)) override = v;
+        }
+      } catch (e) {}
+      try {
+        if (override === null && window && window.localStorage) {
+          const stored = localStorage.getItem(
+            "kbUserSidebarLabelCompactThreshold",
+          );
+          if (stored !== null) {
+            const sv = parseInt(stored || "", 10);
+            if (!isNaN(sv)) override = sv;
+          }
+        }
+      } catch (e) {}
+
+      let enableCompact = false;
+      if (override !== null && !isNaN(override)) {
+        enableCompact = entries.length > override;
+      } else {
+        const avail =
+          wrap.clientHeight ||
+          wrap.getBoundingClientRect().height ||
+          window.innerHeight * 0.5;
+        let per = 56;
+        if (entries.length >= 2) {
+          try {
+            per = Math.max(24, entries[1].offsetTop - entries[0].offsetTop);
+          } catch (e) {}
+        } else if (entries.length === 1) {
+          try {
+            per = Math.max(24, entries[0].offsetHeight);
+          } catch (e) {}
+        }
+        const fit = Math.max(1, Math.floor(avail / per));
+        enableCompact = entries.length > fit;
+      }
+
+      if (enableCompact) {
+        sidebarEl.classList.add("compact-labels");
+        entries.forEach((ent) => {
+          try {
+            const lab = ent.querySelector(".project-entry-label");
+            if (lab) {
+              lab.textContent =
+                lab.dataset.short || lab.dataset.full || lab.textContent;
+              lab.title = lab.dataset.full || lab.title || "";
+            }
+          } catch (e) {}
+        });
+      } else {
+        sidebarEl.classList.remove("compact-labels");
+        entries.forEach((ent) => {
+          try {
+            const lab = ent.querySelector(".project-entry-label");
+            if (lab) {
+              lab.textContent = lab.dataset.full || lab.textContent;
+              lab.title = lab.dataset.full || lab.title || "";
+            }
+          } catch (e) {}
+        });
+      }
+    } catch (e) {
+      console.warn("updateUserSidebarLabelMode failed", e);
+    }
+  }
+
+  function setupUserSidebarHover() {
+    try {
+      const sidebar = document.getElementById("userSidebar");
+      const split = document.querySelector(".kb-split");
+      if (!sidebar) return;
+      const projectListEl = sidebar.querySelector(".project-list");
+      if (!projectListEl) return;
+      let _sidebarHoverTimer = null;
+      projectListEl.addEventListener("mouseover", (e) => {
+        try {
+          const entry =
+            e.target && e.target.closest
+              ? e.target.closest(".project-entry")
+              : null;
+          if (!entry) return;
+          if (_sidebarHoverTimer) {
+            clearTimeout(_sidebarHoverTimer);
+            _sidebarHoverTimer = null;
+          }
+          try {
+            sidebar.classList.add("hover-expanded");
+          } catch (err) {}
+          try {
+            sidebar.classList.add("no-sidebar-transition");
+            if (split) split.classList.add("no-sidebar-transition");
+          } catch (err) {}
+          try {
+            const lab = entry.querySelector(".project-entry-label");
+            if (lab && lab.dataset && lab.dataset.full) {
+              try {
+                if (sidebar.classList.contains("compact-labels")) {
+                  const others = sidebar.querySelectorAll(
+                    ".project-entry-label",
+                  );
+                  others.forEach((o) => {
+                    if (o !== lab && o.dataset && o.dataset.short) {
+                      try {
+                        o.textContent = o.dataset.short;
+                      } catch (e) {}
+                    }
+                  });
+                }
+              } catch (e) {}
+              lab.textContent = lab.dataset.full;
+              lab.title = lab.dataset.full;
+            }
+          } catch (err) {}
+        } catch (err) {}
+      });
+      projectListEl.addEventListener("mouseout", (e) => {
+        try {
+          const to = e.relatedTarget;
+          const enteringEntry =
+            to && to.closest ? to.closest(".project-entry") : null;
+          if (enteringEntry) return;
+          if (_sidebarHoverTimer) clearTimeout(_sidebarHoverTimer);
+          _sidebarHoverTimer = setTimeout(() => {
+            if (sidebar.contains(document.activeElement)) return;
+            if (sidebar.classList.contains("hover-expanded")) {
+              try {
+                sidebar.classList.remove("hover-expanded");
+              } catch (err) {}
+              try {
+                sidebar.classList.remove("no-sidebar-transition");
+                if (split) split.classList.remove("no-sidebar-transition");
+              } catch (err) {}
+            }
+            try {
+              updateUserSidebarLabelMode();
+            } catch (err) {}
+          }, 160);
+        } catch (err) {}
+      });
+      sidebar.addEventListener("mouseleave", (e) => {
+        try {
+          if (sidebar.contains(document.activeElement)) return;
+          try {
+            sidebar.classList.remove("hover-expanded");
+          } catch (err) {}
+          try {
+            sidebar.classList.remove("no-sidebar-transition");
+            if (split) split.classList.remove("no-sidebar-transition");
+          } catch (err) {}
+          try {
+            updateUserSidebarLabelMode();
+          } catch (e) {}
+        } catch (err) {}
+      });
+      // auto-update compact mode on resize or DOM changes
+      try {
+        let _lblResizeTimer = null;
+        window.addEventListener("resize", () => {
+          if (_lblResizeTimer) clearTimeout(_lblResizeTimer);
+          _lblResizeTimer = setTimeout(() => {
+            try {
+              updateUserSidebarLabelMode();
+            } catch (e) {}
+          }, 160);
+        });
+        if (typeof MutationObserver !== "undefined") {
+          const mo = new MutationObserver(() => {
+            try {
+              updateUserSidebarLabelMode();
+            } catch (e) {}
+          });
+          try {
+            mo.observe(projectListEl, { childList: true });
+          } catch (e) {}
+        }
+      } catch (e) {}
+    } catch (e) {}
+  }
+
+  // Edit project modal logic
+  const editProjectModal = document.getElementById("editProjectModal");
+  const inputProjectImageUrl = document.getElementById("inputProjectImageUrl");
+  const editProjectPreview = document.getElementById("editProjectPreview");
+  const editProjectPreviewImg = document.getElementById(
+    "editProjectPreviewImg",
+  );
+  const editProjectPreviewStatus = document.getElementById(
+    "editProjectPreviewStatus",
+  );
+  // Create project modal preview elements
+  const inputProjectCreateImageUrl = document.getElementById(
+    "inputProjectCreateImageUrl",
+  );
+  const createProjectPreview = document.getElementById("createProjectPreview");
+  const createProjectPreviewImg = document.getElementById(
+    "createProjectPreviewImg",
+  );
+  const createProjectPreviewStatus = document.getElementById(
+    "createProjectPreviewStatus",
+  );
+  const editProjectError = document.getElementById("editProjectError");
+  const editProjectId = document.getElementById("editProjectId");
+  let btnDeleteEditProject = document.getElementById("btnDeleteEditProject");
+  const btnCancelEditProject = document.getElementById("btnCancelEditProject");
+  const btnSubmitEditProject = document.getElementById("btnSubmitEditProject");
+  // title/description inputs
+  const inputProjectEditTitle = document.getElementById(
+    "inputProjectEditTitle",
+  );
+  const inputProjectEditDesc = document.getElementById("inputProjectEditDesc");
+
+  function ensureDeleteProjectButton() {
+    if (!editProjectModal) return null;
+    if (btnDeleteEditProject) return btnDeleteEditProject;
+
+    const submitBtn = document.getElementById("btnSubmitEditProject");
+    if (!submitBtn) return null;
+    const actionRow = submitBtn.closest("div");
+    if (!actionRow) return null;
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.id = "btnDeleteEditProject";
+    deleteBtn.className = "btn";
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "删除应用";
+    deleteBtn.style.background = "#ef4444";
+    deleteBtn.style.color = "#fff";
+    deleteBtn.style.borderColor = "#ef4444";
+
+    try {
+      actionRow.insertBefore(deleteBtn, actionRow.firstChild);
+    } catch {
+      actionRow.appendChild(deleteBtn);
+    }
+    btnDeleteEditProject = deleteBtn;
+    return btnDeleteEditProject;
+  }
+
+  ensureDeleteProjectButton();
+
+  // helper: small toast messages
+  function showToast(msg, type = "success", duration = 3000) {
+    try {
+      let wrap = document.getElementById("kbToastWrap");
+      if (!wrap) {
+        wrap = document.createElement("div");
+        wrap.id = "kbToastWrap";
+        document.body.appendChild(wrap);
+      }
+      const el = document.createElement("div");
+      el.className =
+        "kb-toast kb-toast-" + (type === "error" ? "error" : "success");
+      el.textContent = msg;
+      wrap.appendChild(el);
+      // show
+      setTimeout(() => el.classList.add("show"), 10);
+      // remove
+      setTimeout(() => {
+        el.classList.remove("show");
+        setTimeout(() => {
+          try {
+            el.remove();
+          } catch (e) {}
+        }, 200);
+      }, duration);
+    } catch (e) {
+      console.warn("showToast failed", e);
+    }
+  }
+
+  // helper: update sidebar entry and project-selection modal card
+  function updateProjectEntryInUI(dbId, title, desc, image, link) {
+    try {
+      const sel = document.querySelector(
+        '.project-list .project-entry[data-db="' + dbId + '"]',
+      );
+      if (sel) {
+        sel.setAttribute("data-title", title || "");
+        sel.setAttribute("data-desc", desc || "");
+        sel.setAttribute("data-link", link || "");
+        sel.setAttribute("data-image", image || "");
+        sel.title = (title || dbId) + "（双击编辑）";
+        sel.setAttribute("aria-label", title || dbId);
+        const labelEl = sel.querySelector(".project-entry-label");
+        if (labelEl) {
+          try {
+            const base = (title || dbId || "").toString().trim();
+            labelEl.dataset.full = base;
+            labelEl.dataset.short = Array.from(base).slice(0, 3).join("");
+            // respect compact mode
+            const sidebarEl = document.getElementById("projectSidebar");
+            const compact =
+              sidebarEl && sidebarEl.classList.contains("compact-labels");
+            labelEl.textContent = compact
+              ? labelEl.dataset.short || base
+              : base;
+            labelEl.title = base;
+          } catch (e) {
+            labelEl.textContent = title || dbId;
+          }
+        }
+        // update avatar
+        sel.querySelector(".project-avatar-img,.project-avatar-emoji,.project-initials")?.remove();
+        sel.insertBefore(createSidebarAvatar(image, title || dbId), sel.firstChild);
+      }
+      // if this is the currently selected DB, update header as well
+      try {
+        if ((getUrlParam("db") || "") === dbId)
+          updateHeaderProjectInfo(dbId, title || dbId, image || "");
+      } catch (e) {}
+      // update card in project selection modal if present
+      const card = document.querySelector(
+        '#dbProjectListWrap .db-project-card[data-db="' + dbId + '"]',
+      );
+      if (card) {
+        const titleEl = card.querySelector(".db-project-title");
+        if (titleEl) {
+          titleEl.textContent = title || dbId;
+          titleEl.title = title || dbId;
+          card.dataset.title = title || dbId;
+        }
+        const descEl = card.querySelector(".db-project-desc");
+        if (descEl) {
+          descEl.textContent = desc || "";
+          card.dataset.desc = desc || "";
+        }
+        const avatar = card.querySelector(".db-avatar");
+        if (avatar) {
+          if (image && image.trim()) {
+            avatar.style.background = `#fff url(${image}) center/cover no-repeat`;
+            avatar.style.backgroundSize = "cover";
+          } else {
+            avatar.style.background = "";
+            avatar.textContent =
+              (title || dbId || "")
+                .replace(/\s+/g, "")
+                .slice(0, 2)
+                .toUpperCase() || "?";
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("updateProjectEntryInUI failed", e);
+    }
+  }
+
+  async function getCurrentProjectLink() {
+    const currentDb = (window.getUrlParam ? window.getUrlParam('db') : null) || '';
+    if (!currentDb) return '';
+    try {
+      const resp = await fetch('/api/kb/list_projects');
+      if (!resp.ok) return '';
+      const data = await resp.json();
+      const items = Array.isArray(data.projects) ? data.projects : [];
+      const found = items.find(
+        (it) =>
+          (((it.slug || it.name || it.file || '') + '').replace(/\.sqlite$/, '')) ===
+          currentDb,
+      );
+      return (found && (found.link || '')) || '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  async function updateSidebarAppLinkButtonState() {
+    const btnLink = document.getElementById('btnOpenAppLink');
+    if (!btnLink) return;
+    const link = await getCurrentProjectLink();
+    if (link) {
+      btnLink.href = link;
+      btnLink.removeAttribute('data-disabled');
+      btnLink.removeAttribute('aria-disabled');
+      btnLink.setAttribute('aria-label', '访问应用');
+      btnLink.title = '访问应用';
+      btnLink.classList.remove('disabled');
+    } else {
+      btnLink.href = '#';
+      btnLink.dataset.disabled = 'true';
+      btnLink.setAttribute('aria-disabled', 'true');
+      btnLink.setAttribute('aria-label', '当前应用未配置外部链接');
+      btnLink.title = '当前应用未配置外部链接';
+      btnLink.classList.add('disabled');
+    }
+  }
+
+  // Update header project display (avatar + name)
+  function updateHeaderProjectInfo(dbId, title, image, desc) {
+    try {
+      const wrap = document.getElementById("headerProject");
+      const avatar = document.getElementById("headerProjectAvatar");
+      const nameEl = document.getElementById("headerProjectName");
+      if (!wrap || !avatar || !nameEl) return;
+      if (!dbId) {
+        wrap.style.display = "none";
+        nameEl.textContent = "";
+        avatar.style.backgroundImage = "";
+        avatar.textContent = "";
+        return;
+      }
+      const safeTitle = title || dbId;
+      nameEl.textContent = safeTitle;
+      nameEl.title = desc ? `进入${safeTitle}首页 — ${desc}` : `进入${safeTitle}首页`;
+      nameEl.setAttribute("aria-label", `进入${safeTitle}首页`);
+      const avatarValue = String(image || "").trim();
+      avatar.textContent = "";
+      if (avatarValue && isSidebarAvatarImage(avatarValue)) {
+        avatar.style.backgroundImage = `url(${JSON.stringify(avatarValue)})`;
+      } else if (avatarValue) {
+        avatar.style.backgroundImage = "";
+        avatar.textContent = avatarValue;
+      } else {
+        const initials =
+          (safeTitle || dbId || "?")
+            .toString()
+            .replace(/\s+/g, "")
+            .slice(0, 2)
+            .toUpperCase() || "?";
+        avatar.style.backgroundImage = "";
+        avatar.textContent = initials;
+      }
+      wrap.style.display = "flex";
+    } catch (e) {
+      console.warn("updateHeaderProjectInfo failed", e);
+    }
+  }
+
+  // Toggle compact label mode if there are many projects to keep layout tidy
+  function updateSidebarLabelMode() {
+    try {
+      const sidebarEl = document.getElementById("projectSidebar");
+      const wrap = document.querySelector(".project-list");
+      if (!sidebarEl || !wrap) return;
+      const entries = Array.from(wrap.querySelectorAll(".project-entry"));
+
+      // Allow manual override via window.SIDEBAR_LABEL_COMPACT_THRESHOLD or localStorage
+      let override = null;
+      try {
+        if (
+          typeof window !== "undefined" &&
+          typeof window.SIDEBAR_LABEL_COMPACT_THRESHOLD !== "undefined"
+        ) {
+          const v = parseInt(window.SIDEBAR_LABEL_COMPACT_THRESHOLD || "", 10);
+          if (!isNaN(v)) override = v;
+        }
+      } catch (e) {}
+      try {
+        if (override === null && window && window.localStorage) {
+          const stored = localStorage.getItem("kbSidebarLabelCompactThreshold");
+          if (stored !== null) {
+            const sv = parseInt(stored || "", 10);
+            if (!isNaN(sv)) override = sv;
+          }
+        }
+      } catch (e) {}
+
+      let enableCompact = false;
+      if (override !== null && !isNaN(override)) {
+        enableCompact = entries.length > override;
+      } else {
+        // Auto-detect how many entries fit into the visible project list area
+        const avail =
+          wrap.clientHeight ||
+          wrap.getBoundingClientRect().height ||
+          window.innerHeight * 0.5;
+        let per = 56;
+        if (entries.length >= 2) {
+          try {
+            per = Math.max(24, entries[1].offsetTop - entries[0].offsetTop);
+          } catch (e) {}
+        } else if (entries.length === 1) {
+          try {
+            per = Math.max(24, entries[0].offsetHeight);
+          } catch (e) {}
+        }
+        const fit = Math.max(1, Math.floor(avail / per));
+        enableCompact = entries.length > fit;
+      }
+
+      if (enableCompact) {
+        sidebarEl.classList.add("compact-labels");
+        entries.forEach((ent) => {
+          try {
+            const lab = ent.querySelector(".project-entry-label");
+            if (lab) {
+              lab.textContent =
+                lab.dataset.short || lab.dataset.full || lab.textContent;
+              lab.title = lab.dataset.full || lab.title || "";
+            }
+          } catch (e) {}
+        });
+      } else {
+        sidebarEl.classList.remove("compact-labels");
+        entries.forEach((ent) => {
+          try {
+            const lab = ent.querySelector(".project-entry-label");
+            if (lab) {
+              lab.textContent = lab.dataset.full || lab.textContent;
+              lab.title = lab.dataset.full || lab.title || "";
+            }
+          } catch (e) {}
+        });
+      }
+    } catch (e) {
+      console.warn("updateSidebarLabelMode failed", e);
+    }
+  }
+
+  // Play header appear animation and cleanup after finish
+  function playHeaderAppearAnimation() {
+    try {
+      const headerWrap = document.getElementById("headerProject");
+      if (!headerWrap) return;
+      headerWrap.classList.remove("anim-appear");
+      void headerWrap.offsetWidth; // force reflow
+      headerWrap.classList.add("anim-appear");
+      const onEnd = () => {
+        headerWrap.removeEventListener("animationend", onEnd);
+        headerWrap.classList.remove("anim-appear");
+      };
+      headerWrap.addEventListener("animationend", onEnd);
+    } catch (e) {
+      console.warn("playHeaderAppearAnimation failed", e);
+    }
+  }
+
+  // Select project with sidebar disappear animation and header appear animation,
+  // then navigate (set db param) after animation completes.
+  function selectProjectWithAnimation(dbId, entryEl, title, image) {
+    try {
+      if (!dbId) return;
+      try {
+        if (typeof window.resetFormToAdd === "function")
+          window.resetFormToAdd();
+      } catch (e) {}
+      try {
+        if (typeof window.resetAttrForm === "function") window.resetAttrForm();
+      } catch (e) {}
+      if (!entryEl) {
+        updateHeaderProjectInfo(dbId, title, image);
+        setUrlParam("db", dbId);
+        return;
+      }
+      if (entryEl._animInProgress) return;
+      entryEl._animInProgress = true;
+      // Capture previous header project info so we can re-add it to the sidebar after switching
+      const prevDb = getUrlParam("db") || "";
+      let prevTitle = "";
+      let prevImage = "";
+      try {
+        const headerName = document.getElementById("headerProjectName");
+        const headerAvatar = document.getElementById("headerProjectAvatar");
+        if (headerName) prevTitle = headerName.textContent || "";
+        if (headerAvatar) {
+          const bg = headerAvatar.style.backgroundImage || "";
+          const m = bg.match(/url\((?:'|\")?(.*?)(?:'|\")?\)/);
+          prevImage = m ? m[1] : "";
+        }
+      } catch (e) {}
+      entryEl.classList.add("anim-disappear");
+      try {
+        updateHeaderProjectInfo(dbId, title, image);
+      } catch (e) {}
+      try {
+        playHeaderAppearAnimation();
+      } catch (e) {}
+      const onEnd = () => {
+        entryEl.removeEventListener("animationend", onEnd);
+        try {
+          entryEl.remove();
+        } catch (e) {}
+        // If there was a previously selected project (prevDb) and it's different from the new one,
+        // re-add it to the top of the sidebar so it doesn't disappear permanently.
+        try {
+          if (prevDb && prevDb !== dbId && (window.kbApplicationProjects || []).some((project) => project.slug === prevDb && project.member)) {
+            const wrap = document.querySelector(".project-list");
+            if (
+              wrap &&
+              !wrap.querySelector('.project-entry[data-db="' + prevDb + '"]')
+            ) {
+              const entry = document.createElement("a");
+              entry.className = "project-entry";
+              entry.href = "#";
+              entry.setAttribute("data-db", prevDb);
+              entry.setAttribute("data-image", prevImage || "");
+              entry.setAttribute("data-title", prevTitle || prevDb);
+              entry.setAttribute("data-desc", "");
+              const displayTitle = prevTitle || prevDb;
+              entry.title = displayTitle + "（双击编辑）";
+              entry.setAttribute("aria-label", displayTitle);
+              entry.tabIndex = 0;
+              entry.appendChild(createSidebarAvatar(prevImage, displayTitle || prevDb));
+              const label = document.createElement("span");
+              label.className = "project-entry-label";
+              try {
+                const base = (displayTitle || prevDb || "").toString().trim();
+                label.dataset.full = base;
+                label.dataset.short = Array.from(base).slice(0, 3).join("");
+                // show full title for clarity
+                label.textContent = base;
+                label.title = base;
+                const sidebarEl = document.getElementById("projectSidebar");
+                const isCollapsed =
+                  sidebarEl && sidebarEl.classList.contains("collapsed");
+                label.setAttribute("aria-hidden", String(!!isCollapsed));
+              } catch (e) {
+                label.textContent = displayTitle;
+              }
+              entry.appendChild(label);
+              // attach handlers
+              entry.addEventListener("click", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (entry._clickTimer) return;
+                entry._clickTimer = setTimeout(() => {
+                  entry._clickTimer = null;
+                  try {
+                    selectProjectWithAnimation(
+                      prevDb,
+                      entry,
+                      displayTitle,
+                      entry.getAttribute("data-image") || "",
+                    );
+                  } catch (err) {
+                    try {
+                      setUrlParam("db", prevDb);
+                    } catch (e) {}
+                  }
+                }, 260);
+              });
+              entry.addEventListener("dblclick", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (entry._clickTimer) {
+                  clearTimeout(entry._clickTimer);
+                  entry._clickTimer = null;
+                }
+                try {
+                  updateHeaderProjectInfo(
+                    prevDb,
+                    displayTitle,
+                    entry.getAttribute("data-image") || "",
+                  );
+                } catch (e) {}
+                openEditProjectModal(
+                  prevDb,
+                  entry.getAttribute("data-title") || "",
+                  entry.getAttribute("data-image") || "",
+                  entry.getAttribute("data-desc") || "",
+                );
+              });
+              entry.addEventListener("keydown", (e) => {
+                const key = e.key || e.keyCode;
+                if (key === "Enter" || key === 13) {
+                  e.preventDefault();
+                  try {
+                    selectProjectWithAnimation(
+                      prevDb,
+                      entry,
+                      displayTitle,
+                      entry.getAttribute("data-image") || "",
+                    );
+                  } catch (err) {
+                    try {
+                      setUrlParam("db", prevDb);
+                    } catch (e) {}
+                  }
+                }
+              });
+              try {
+                wrap.insertBefore(entry, wrap.firstChild);
+              } catch (e) {
+                wrap.appendChild(entry);
+              }
+              try {
+                updateSidebarLabelMode();
+              } catch (e) {}
+            }
+          }
+        } catch (e) {}
+        try {
+          setUrlParam("db", dbId);
+        } catch (e) {}
+        entryEl._animInProgress = false;
+      };
+      entryEl.addEventListener("animationend", onEnd);
+      // fallback in case animationend not fired
+      setTimeout(() => {
+        if (entryEl._animInProgress) {
+          entryEl.removeEventListener("animationend", onEnd);
+          entryEl._animInProgress = false;
+          entryEl.classList.remove("anim-disappear");
+          try {
+            setUrlParam("db", dbId);
+          } catch (e) {}
+        }
+      }, 700);
+    } catch (e) {
+      console.warn("selectProjectWithAnimation failed", e);
+    }
+  }
+
+  async function openEditProjectModal(dbId, title, image, desc) {
+    try {
+      const response = await fetch('/api/kb/list_projects', { cache: 'no-store' });
+      if (!response.ok) return;
+      const data = await response.json();
+      const project = data.projects.find((item) => item.slug === dbId);
+      if (!project?.editSettings) { alert('未获授修改应用设置的权限'); return; }
+      if (btnDeleteEditProject) btnDeleteEditProject.style.display = project.owner ? '' : 'none';
+    } catch { return; }
+    if (!editProjectModal) return;
+    editProjectModal.style.display = "flex";
+    if (editProjectId) editProjectId.textContent = dbId;
+    if (inputProjectImageUrl) inputProjectImageUrl.value = image || "";
+    if (inputProjectEditTitle) inputProjectEditTitle.value = title || "";
+    if (inputProjectEditDesc) inputProjectEditDesc.value = desc || "";
+    // update preview
+    try {
+      updateEditProjectPreview(image || "");
+    } catch (e) {}
+    if (editProjectError) editProjectError.style.display = "none";
+    editProjectModal.dataset.db = dbId;
+    editProjectModal.dataset.projectTitle = (title || dbId || "").toString();
+    try {
+      (inputProjectEditTitle || inputProjectImageUrl) &&
+        (inputProjectEditTitle || inputProjectImageUrl).focus();
+    } catch (e) {}
+  }
+
+  function removeProjectEntryFromUi(dbId) {
+    try {
+      const norm = (v) => String(v || "").trim();
+      const target = norm(dbId);
+      document.querySelectorAll(".project-entry").forEach((el) => {
+        if (norm(el.getAttribute("data-db")) === target) {
+          try {
+            el.remove();
+          } catch {}
+        }
+      });
+      const modalWrap = document.getElementById("dbProjectListWrap");
+      if (modalWrap) {
+        Array.from(modalWrap.children || []).forEach((child) => {
+          if (norm(child?.dataset?.db) === target) {
+            try {
+              child.remove();
+            } catch {}
+          }
+        });
+      }
+    } catch (err) {
+      console.warn("removeProjectEntryFromUi failed", err);
+    }
+  }
+
+  function updateEditProjectPreview(url) {
+    if (
+      !editProjectPreview ||
+      !editProjectPreviewImg ||
+      !editProjectPreviewStatus
+    )
+      return;
+    const trimmed = typeof url === "string" ? url.trim() : "";
+    if (!trimmed) {
+      editProjectPreview.style.display = "none";
+      editProjectPreviewImg.style.backgroundImage = "";
+      editProjectPreviewStatus.textContent = "";
+      return;
+    }
+    editProjectPreview.style.display = "flex";
+    editProjectPreviewStatus.textContent = "加载中…";
+    editProjectPreviewImg.style.backgroundImage = "";
+    const img = new Image();
+    img.onload = () => {
+      editProjectPreviewImg.style.backgroundImage = `url(${trimmed})`;
+      editProjectPreviewStatus.textContent = "预览";
+    };
+    img.onerror = () => {
+      editProjectPreviewImg.style.backgroundImage = "";
+      editProjectPreviewStatus.textContent = "加载失败";
+    };
+    img.src = trimmed;
+  }
+
+  function updateCreateProjectPreview(url) {
+    if (
+      !createProjectPreview ||
+      !createProjectPreviewImg ||
+      !createProjectPreviewStatus
+    )
+      return;
+    const trimmed = typeof url === "string" ? url.trim() : "";
+    if (!trimmed) {
+      createProjectPreview.style.display = "none";
+      createProjectPreviewImg.style.backgroundImage = "";
+      createProjectPreviewStatus.textContent = "";
+      return;
+    }
+    createProjectPreview.style.display = "flex";
+    createProjectPreviewStatus.textContent = "加载中…";
+    createProjectPreviewImg.style.backgroundImage = "";
+    const img = new Image();
+    img.onload = () => {
+      createProjectPreviewImg.style.backgroundImage = `url(${trimmed})`;
+      createProjectPreviewStatus.textContent = "预览";
+    };
+    img.onerror = () => {
+      createProjectPreviewImg.style.backgroundImage = "";
+      createProjectPreviewStatus.textContent = "加载失败";
+    };
+    img.src = trimmed;
+  }
+
+  if (inputProjectCreateImageUrl) {
+    inputProjectCreateImageUrl.addEventListener("input", (e) => {
+      try {
+        updateCreateProjectPreview(e.target.value || "");
+      } catch (err) {}
+    });
+  }
+
+  if (inputProjectImageUrl) {
+    inputProjectImageUrl.addEventListener("input", (e) => {
+      try {
+        updateEditProjectPreview(e.target.value || "");
+      } catch (err) {}
+    });
+  }
+
+  if (btnCancelEditProject)
+    btnCancelEditProject.addEventListener("click", () => {
+      if (editProjectModal) editProjectModal.style.display = "none";
+    });
+
+  if (btnSubmitEditProject)
+    btnSubmitEditProject.addEventListener("click", async () => {
+      if (!editProjectModal) return;
+      const dbId = editProjectModal.dataset.db;
+      if (!dbId) return;
+      const url = inputProjectImageUrl ? inputProjectImageUrl.value.trim() : "";
+      const title = inputProjectEditTitle
+        ? inputProjectEditTitle.value.trim()
+        : "";
+      const desc = inputProjectEditDesc
+        ? inputProjectEditDesc.value.trim()
+        : "";
+      // allow empty URL to remove image
+      // basic trimming done above
+      try {
+        btnSubmitEditProject.disabled = true;
+        const resp = await fetch("/api/kb/update_project", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: dbId,
+            image: url,
+            title: title,
+            description: desc,
+          }),
+        });
+        // Some servers may return non-JSON (e.g., 404 Not Found with text), so parse safely
+        const respText = await resp.text();
+        let json = null;
+        try {
+          json = respText ? JSON.parse(respText) : null;
+        } catch (e) {
+          json = null;
+        }
+        if (!resp.ok) {
+          const msg =
+            json && json.message
+              ? json.message
+              : respText || `HTTP ${resp.status}`;
+          throw new Error(msg);
+        }
+        if (!json || !(json.success || json.ok)) {
+          const msg =
+            json && json.message ? json.message : respText || "保存失败";
+          throw new Error(msg);
+        }
+        if (editProjectModal) editProjectModal.style.display = "none";
+        // update UI immediately
+        try {
+          updateProjectEntryInUI(dbId, title, desc, url);
+        } catch (e) {}
+        // show toast
+        try {
+          showToast("已保存", "success");
+        } catch (e) {}
+        // refresh project-selection modal if it's visible
+        try {
+          const modal = document.getElementById("dbSelectModal");
+          if (
+            modal &&
+            modal.style.display &&
+            modal.style.display !== "none" &&
+            typeof loadProjectListToModal === "function"
+          )
+            loadProjectListToModal(getUrlParam("db"));
+        } catch (e) {}
+      } catch (err) {
+        if (editProjectError) {
+          editProjectError.textContent =
+            "保存失败：" + (err && err.message ? err.message : err);
+          editProjectError.style.display = "block";
+        }
+        try {
+          showToast(
+            "保存失败：" + (err && err.message ? err.message : ""),
+            "error",
+            4000,
+          );
+        } catch (e) {}
+        console.warn("update project failed", err);
+      } finally {
+        try {
+          btnSubmitEditProject.disabled = false;
+        } catch (e) {}
+      }
+    });
+
+  if (btnDeleteEditProject)
+    btnDeleteEditProject.addEventListener("click", async () => {
+      if (!editProjectModal) return;
+      const dbId = (editProjectModal.dataset.db || "").toString().trim();
+      if (!dbId) return;
+
+      const expectedTitle = (
+        editProjectModal.dataset.projectTitle ||
+        (inputProjectEditTitle && inputProjectEditTitle.value) ||
+        dbId
+      )
+        .toString()
+        .trim();
+
+      const warning = `确认删除应用“${expectedTitle}”？\n删除后将同时清空该应用下的实体、关系、本体、属性等数据，且不可恢复。`;
+      if (!window.confirm(warning)) return;
+
+      const typed = window.prompt(
+        `请输入应用名称以确认删除：${expectedTitle}`,
+        "",
+      );
+      if (typed === null) return;
+      const confirmName = typed.trim();
+      if (!confirmName) {
+        if (editProjectError) {
+          editProjectError.textContent = "删除失败：请输入应用名称";
+          editProjectError.style.display = "block";
+        }
+        return;
+      }
+
+      try {
+        if (editProjectError) editProjectError.style.display = "none";
+        btnDeleteEditProject.disabled = true;
+        if (btnSubmitEditProject) btnSubmitEditProject.disabled = true;
+
+        const resp = await fetch("/api/kb/delete_project", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: dbId,
+            confirmName,
+          }),
+        });
+        const text = await resp.text();
+        let payload = null;
+        try {
+          payload = text ? JSON.parse(text) : null;
+        } catch {
+          payload = null;
+        }
+        if (!resp.ok || !payload?.success) {
+          throw new Error(
+            (payload && payload.message) || text || `HTTP ${resp.status}`,
+          );
+        }
+
+        removeProjectEntryFromUi(dbId);
+        if (editProjectModal) editProjectModal.style.display = "none";
+        try {
+          showToast("应用已删除", "success");
+        } catch {}
+
+        const currentDb =
+          typeof window.getUrlParam === "function"
+            ? (window.getUrlParam("db") || "").toString().trim()
+            : "";
+        if (currentDb === dbId) {
+          const nextUrl = new URL(window.location.href);
+          nextUrl.searchParams.delete("db");
+          nextUrl.searchParams.delete("node");
+          nextUrl.searchParams.delete("type");
+          nextUrl.searchParams.delete("class_id");
+          nextUrl.searchParams.delete("page");
+          nextUrl.searchParams.delete("order");
+          window.location.href = nextUrl.toString();
+          return;
+        }
+
+        try {
+          if (typeof loadProjectsToSidebar === "function") {
+            await loadProjectsToSidebar();
+          }
+        } catch {}
+        try {
+          const modal = document.getElementById("dbSelectModal");
+          if (
+            modal &&
+            modal.style.display &&
+            modal.style.display !== "none" &&
+            typeof loadProjectListToModal === "function"
+          ) {
+            await loadProjectListToModal(
+              typeof window.getUrlParam === "function"
+                ? window.getUrlParam("db")
+                : "",
+            );
+          }
+        } catch {}
+      } catch (err) {
+        if (editProjectError) {
+          editProjectError.textContent =
+            "删除失败：" + (err && err.message ? err.message : err);
+          editProjectError.style.display = "block";
+        }
+        try {
+          showToast(
+            "删除失败：" + (err && err.message ? err.message : ""),
+            "error",
+            4000,
+          );
+        } catch {}
+      } finally {
+        btnDeleteEditProject.disabled = false;
+        if (btnSubmitEditProject) btnSubmitEditProject.disabled = false;
+      }
+    });
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const initialSidebarState = readSidebarState();
+    try {
+      (window.setSidebarCollapsed || setSidebarCollapsed)(initialSidebarState.left, false, true, true);
+    } catch (e) {}
+    // initialize sidebar projects
+    try {
+      loadProjectsToSidebar();
+    } catch (e) {}
+    // Keep the user rail visible so its management and profile actions are reachable.
+    const userSidebar = document.getElementById("userSidebar");
+    const splitLayout = document.querySelector(".kb-split");
+    const applyUserSidebarCollapsed = (collapsed, persist = true) => {
+      if (!userSidebar) return;
+      userSidebar.classList.toggle("is-collapsed", collapsed);
+      userSidebar.setAttribute("aria-expanded", String(!collapsed));
+      userSidebar.setAttribute("aria-hidden", String(collapsed));
+      if (splitLayout) splitLayout.style.setProperty("--user-sidebar-width", collapsed ? "0px" : "72px");
+      if (persist) saveSidebarState();
+    };
+    applyUserSidebarCollapsed(window.authUser ? initialSidebarState.right : true, false);
+    saveSidebarState();
+    window.addEventListener('kb-auth-change', (event) => {
+      if (event.detail?.user) return;
+      setSidebarCollapsed(true, true, true, true);
+      applyUserSidebarCollapsed(true, true);
+    });
+    const restoreSidebarRoute = () => {
+      const state = readSidebarState();
+      const wasRightCollapsed = userSidebar?.classList.contains('is-collapsed');
+      setSidebarCollapsed(state.left, false, true, true);
+      applyUserSidebarCollapsed(state.right, false);
+      if (wasRightCollapsed && !state.right) loadUsersToSidebar();
+    };
+    window.addEventListener('popstate', restoreSidebarRoute);
+    window.addEventListener('hashchange', restoreSidebarRoute);
+    window.addEventListener('kb:url-param-changed', restoreSidebarRoute);
+    window.toggleUserSidebar = () => {
+      if (!window.authUser) {
+        applyUserSidebarCollapsed(true);
+        return false;
+      }
+      const collapsed = userSidebar.classList.contains("is-collapsed");
+      applyUserSidebarCollapsed(!collapsed);
+      if (collapsed) loadUsersToSidebar();
+      return collapsed;
+    };
+    if (userSidebar && !userSidebar.hidden) {
+      try {
+        loadUsersToSidebar();
+      } catch (e) {}
+      try {
+        setupUserSidebarHover();
+      } catch (e) {}
+    }
+    const btnMoreUsers = document.getElementById("btnMoreUsers");
+    if (btnMoreUsers) {
+      btnMoreUsers.addEventListener("click", (e) => {
+        e.preventDefault();
+        try {
+          showToast("暂无更多用户", "info");
+        } catch (err) {}
+      });
+    }
+    const btn = document.getElementById("btnCreateProjectSidebar");
+    if (btn) {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        try {
+          openCreateProjectModal();
+        } catch (err) {}
+      });
+    }
+    const more = document.getElementById("btnMoreProjects");
+    if (more) {
+      more.addEventListener("click", (e) => {
+        e.preventDefault();
+        try {
+          showDbSelectModal(true);
+        } catch (err) {}
+      });
+    }
+    // The application logo toggles the left rail; its name opens the app home.
+    try {
+      const headerLogo = document.getElementById("headerProjectAvatar");
+      const headerName = document.getElementById("headerProjectName");
+      if (headerLogo) {
+        headerLogo.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!window.authUser) return;
+          const sidebarEl = document.getElementById("projectSidebar");
+          if (!sidebarEl) return;
+          (window.setSidebarCollapsed || setSidebarCollapsed)(
+            !sidebarEl.classList.contains("collapsed"),
+            true,
+          );
+        });
+      }
+      if (headerName) {
+        headerName.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          window.setViewMode?.("app_home");
+        });
+      }
+    } catch (e) {}
+    // sidebar collapse/expand state
+    const sidebar = document.getElementById("projectSidebar");
+    const split = document.querySelector(".kb-split");
+    // Whether hovering should reveal labels (disabled by default)
+    const ALLOW_HOVER_LABELS = !!(window && window.SIDEBAR_ALLOW_HOVER_LABELS);
+    // clicking on sidebar background (not on an entry) will expand/collapse for convenience
+    // Disabled by default; enable by setting window.SIDEBAR_ALLOW_EXPAND_ON_CLICK = true
+    const ALLOW_SIDEBAR_EXPAND_ON_CLICK = !!(
+      window && window.SIDEBAR_ALLOW_EXPAND_ON_CLICK
+    );
+    if (sidebar) {
+      sidebar.addEventListener("click", (e) => {
+        // ignore clicks on controls or project entries (entries handle their own clicks)
+        if (!e.target || !e.target.closest) return;
+        if (
+          e.target.closest(".project-entry") ||
+          e.target.closest("button") ||
+          e.target.closest(".btn") ||
+          e.target.closest("a")
+        )
+          return;
+        if (!ALLOW_SIDEBAR_EXPAND_ON_CLICK) return;
+        const collapsed = sidebar.classList.contains("collapsed");
+        // Explicit toggles update the route and saved preference.
+        try {
+          (window.setSidebarCollapsed || setSidebarCollapsed)(
+            !collapsed,
+            true,
+          );
+        } catch (e) {}
+      });
+      // Hover behavior: only expand when mouse is over a project avatar/entry; collapse shortly after leaving entries
+      let sidebarHoverExpanded = false;
+      let _sidebarHoverTimer = null;
+      try {
+        const projectListEl = sidebar.querySelector(".project-list");
+        if (projectListEl) {
+          if (ALLOW_HOVER_LABELS) {
+            // Expand popover labels when pointer moves over any project entry (no width change)
+            projectListEl.addEventListener("mouseover", (e) => {
+              try {
+                const entry =
+                  e.target && e.target.closest
+                    ? e.target.closest(".project-entry")
+                    : null;
+                if (!entry) return;
+                if (_sidebarHoverTimer) {
+                  clearTimeout(_sidebarHoverTimer);
+                  _sidebarHoverTimer = null;
+                }
+                // when hovering an entry, reveal labels (popover) without changing sidebar width
+                try {
+                  sidebar.classList.add("hover-expanded");
+                } catch (err) {}
+                try {
+                  sidebar.classList.add("no-sidebar-transition");
+                  if (split) split.classList.add("no-sidebar-transition");
+                } catch (err) {}
+                // if compact mode is active, temporarily show full title for this hovered entry
+                try {
+                  const lab = entry.querySelector(".project-entry-label");
+                  if (lab && lab.dataset && lab.dataset.full) {
+                    // revert other labels to short form in compact mode, then show full for hovered
+                    try {
+                      if (sidebar.classList.contains("compact-labels")) {
+                        const others = sidebar.querySelectorAll(
+                          ".project-entry-label",
+                        );
+                        others.forEach((o) => {
+                          if (o !== lab && o.dataset && o.dataset.short) {
+                            try {
+                              o.textContent = o.dataset.short;
+                            } catch (e) {}
+                          }
+                        });
+                      }
+                    } catch (e) {}
+                    lab.textContent = lab.dataset.full;
+                    lab.title = lab.dataset.full;
+                  }
+                } catch (err) {}
+              } catch (err) {}
+            });
+            // Collapse shortly after pointer leaves an entry (if not entering another entry), even if still inside the sidebar
+            projectListEl.addEventListener("mouseout", (e) => {
+              try {
+                const to = e.relatedTarget;
+                const enteringEntry =
+                  to && to.closest ? to.closest(".project-entry") : null;
+                // If moving into another entry, leave labels as-is for the new entry
+                if (enteringEntry) return;
+                if (_sidebarHoverTimer) clearTimeout(_sidebarHoverTimer);
+                _sidebarHoverTimer = setTimeout(() => {
+                  // do not auto-collapse if focus is inside the sidebar
+                  if (sidebar.contains(document.activeElement)) return;
+                  if (sidebar.classList.contains("hover-expanded")) {
+                    try {
+                      sidebar.classList.remove("hover-expanded");
+                    } catch (err) {}
+                    try {
+                      sidebar.classList.remove("no-sidebar-transition");
+                      if (split)
+                        split.classList.remove("no-sidebar-transition");
+                    } catch (err) {}
+                  }
+                  // revert any temporarily expanded labels back to compact short form if applicable
+                  try {
+                    updateSidebarLabelMode();
+                  } catch (err) {}
+                  sidebarHoverExpanded = false;
+                }, 160);
+              } catch (err) {}
+            });
+          }
+          // Disable auto-collapse when pointer leaves sidebar area.
+          // The sidebar should remain in its current expanded/collapsed state until explicitly toggled.
+        }
+      } catch (err) {}
+    }
+    // initialize: always collapse on page load (do not respect prior persisted state)
+    try {
+      // watch for layout changes to auto-update compact label mode
+      try {
+        const wrap = document.querySelector(".project-list");
+        if (wrap) {
+          let _lblResizeTimer = null;
+          window.addEventListener("resize", () => {
+            if (_lblResizeTimer) clearTimeout(_lblResizeTimer);
+            _lblResizeTimer = setTimeout(() => {
+              try {
+                updateSidebarLabelMode();
+              } catch (e) {}
+            }, 160);
+          });
+          if (typeof MutationObserver !== "undefined") {
+            const mo = new MutationObserver(() => {
+              try {
+                updateSidebarLabelMode();
+              } catch (e) {}
+            });
+            try {
+              mo.observe(wrap, { childList: true });
+            } catch (e) {}
+          }
+        }
+      } catch (e) {}
+
+      // Provide a simple setter to configure threshold at runtime
+      try {
+        window.setKbSidebarLabelCompactThreshold = function (n) {
+          try {
+            if (window && window.localStorage)
+              localStorage.setItem("kbSidebarLabelCompactThreshold", String(n));
+          } catch (e) {}
+          try {
+            window.SIDEBAR_LABEL_COMPACT_THRESHOLD = n;
+          } catch (e) {}
+          try {
+            updateSidebarLabelMode();
+          } catch (e) {}
+        };
+      } catch (e) {}
+
+    } catch (e) {}
+  });
+  window.loadProjectsToSidebar = loadProjectsToSidebar;
+  window.setSidebarCollapsed = setSidebarCollapsed;
+  window.loadUsersToSidebar = loadUsersToSidebar;
+  window.updateUserSidebarLabelMode = updateUserSidebarLabelMode;
+  window.setupUserSidebarHover = setupUserSidebarHover;
+  window.showToast = showToast;
+  window.updateProjectEntryInUI = updateProjectEntryInUI;
+  window.updateHeaderProjectInfo = updateHeaderProjectInfo;
+  window.updateSidebarAppLinkButtonState = updateSidebarAppLinkButtonState;
+  window.playHeaderAppearAnimation = playHeaderAppearAnimation;
+  window.selectProjectWithAnimation = selectProjectWithAnimation;
+  window.openEditProjectModal = openEditProjectModal;
+  window.updateEditProjectPreview = updateEditProjectPreview;
+  window.updateCreateProjectPreview = updateCreateProjectPreview;
+  window.updateSidebarLabelMode = updateSidebarLabelMode;
+})();

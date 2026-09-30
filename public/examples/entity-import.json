@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "entity": {
+    "id": "ENTITY_ID_PLACEHOLDER",
+    "name": "实体名称示例",
+    "description": "实体描述示例，用于说明该实体的基本信息。",
+    "aliases": [
+      "实体别名示例一",
+      "实体别名示例二",
+      "实体别名示例三"
+    ],
+    "tags": [
+      "标签示例一",
+      "标签示例二",
+      "标签示例三"
+    ],
+    "categories": [
+      {
+        "name": "一级分类名称示例",
+        "description": "一级分类描述示例",
+        "color": "#6366F1",
+        "tags": ["一级分类标签示例"],
+        "children": [
+          {
+            "name": "二级分类名称示例",
+            "description": "二级分类描述示例",
+            "color": "#3B82F6",
+            "tags": ["二级分类标签示例"],
+            "children": [
+              {
+                "name": "三级分类名称示例",
+                "description": "三级分类描述示例",
+                "color": "#DC2626",
+                "tags": ["三级分类标签示例一", "三级分类标签示例二"]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "images": [
+      "https://example.com/images/example-image-1.png",
+      "https://example.com/images/example-image-2.jpg"
+    ],
+    "videos": ["https://example.com/videos/example-video.mp4"],
+    "pdf": "https://example.com/documents/example-document.pdf",
+    "link": "https://example.com/entities/example-entity",
+    "visibility": "public",
+    "type": {
+      "id": "ontology/example-type",
+      "name": "实体类型名称示例",
+      "description": "实体类型描述示例"
+    },
+    "attributes": [
+      {
+        "id": "ATTRIBUTE_ID_ITEM_SINGLE",
+        "name": "关联实体属性（单值）示例",
+        "datatype": "wikibase-item",
+        "value": {
+          "id": "RELATED_ENTITY_ID_PLACEHOLDER",
+          "label_zh": "关联实体中文名称示例"
+        },
+        "description": "wikibase-item 单值结构示例"
+      },
+      {
+        "id": "ATTRIBUTE_ID_ITEM_MULTIPLE",
+        "name": "关联实体属性（多值）示例",
+        "datatype": "wikibase-item",
+        "value": [
+          { "id": "RELATED_ENTITY_ID_1_PLACEHOLDER", "label_zh": "关联实体中文名称示例一" },
+          { "id": "RELATED_ENTITY_ID_2_PLACEHOLDER", "label_zh": "关联实体中文名称示例二" }
+        ],
+        "description": "wikibase-item 数组结构示例"
+      },
+      {
+        "id": "ATTRIBUTE_ID_TIME",
+        "name": "时间属性示例",
+        "datatype": "time",
+        "value": { "time": "+2000-01-01T00:00:00Z", "precision": 11 },
+        "description": "time 结构示例；precision 请按实际时间精度填写"
+      },
+      {
+        "id": "ATTRIBUTE_ID_QUANTITY_UNITLESS",
+        "name": "无量纲数值属性示例",
+        "datatype": "quantity",
+        "value": { "amount": "10", "unit": "1" },
+        "description": "quantity 无量纲结构示例"
+      },
+      {
+        "id": "ATTRIBUTE_ID_QUANTITY_WITH_UNIT",
+        "name": "带单位数值属性示例",
+        "datatype": "quantity",
+        "value": { "amount": "1.23", "unit": "UNIT_ENTITY_URI_PLACEHOLDER" },
+        "description": "quantity 带单位结构示例；unit 填写单位实体 URI"
+      },
+      {
+        "id": "ATTRIBUTE_ID_URL",
+        "name": "网址属性示例",
+        "datatype": "url",
+        "value": "https://example.com/example-page",
+        "description": "url 字符串结构示例"
+      },
+      {
+        "id": "ATTRIBUTE_ID_MEDIA",
+        "name": "媒体文件属性示例",
+        "datatype": "commonsMedia",
+        "value": "https://example.com/media/example-image.png",
+        "description": "commonsMedia 字符串结构示例"
+      },
+      {
+        "id": "ATTRIBUTE_ID_MONOLINGUAL_TEXT",
+        "name": "单语言文本属性示例",
+        "datatype": "monolingualtext",
+        "value": { "text": "Example text", "language": "en" },
+        "description": "monolingualtext 结构示例"
+      },
+      {
+        "id": "ATTRIBUTE_ID_STRING",
+        "name": "字符串属性示例",
+        "datatype": "string",
+        "value": "字符串示例值",
+        "description": "string 结构示例"
+      },
+      {
+        "id": "ATTRIBUTE_ID_EXTERNAL",
+        "name": "外部标识符属性示例",
+        "datatype": "external-id",
+        "value": "EXTERNAL_ID_PLACEHOLDER",
+        "description": "external-id 字符串结构示例"
+      }
+    ]
+  }
+}

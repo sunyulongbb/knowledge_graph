@@ -1,0 +1,232 @@
+{
+  "version": 1,
+  "entity": {
+    "id": "Q12345678",
+    "name": "詹姆斯·戴维·万斯",
+    "description": "美国政治人物、作家、风险投资家，现任美国副总统。",
+    "aliases": ["James David Vance", "J. D. 万斯", "万斯"],
+    "tags": ["人物", "美国副总统", "政治人物", "作家"],
+    "categories": [
+      {
+        "name": "人物",
+        "description": "现实世界中的人物",
+        "color": "#6366F1",
+        "tags": ["人物"],
+        "children": [
+          {
+            "name": "政治人物",
+            "description": "从事政治活动的人物",
+            "color": "#3B82F6",
+            "tags": ["政治人物"],
+            "children": [
+              {
+                "name": "美国副总统",
+                "description": "担任过美国副总统的人物",
+                "color": "#0891B2",
+                "tags": ["美国副总统", "美国政治"]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "images": [
+      "https://dxltb3n5j8l6j.cloudfront.net/710902/uploads/d50b52c0-5b38-11ef-885f-cd9f78c29930_1200_630.jpeg"
+    ],
+    "videos": [
+      ""
+    ],
+    "pdf": "",
+    "link": "http://www.news.cn/world/20240717/beeb3d1858eb4b589b08e36c8e882cbf/c.html",
+    "visibility": "public",
+    "type": {
+      "id": "ontology/person",
+      "name": "人物",
+      "description": "现实世界中的自然人"
+    },
+    "attributes": [
+      {
+        "id": "P31",
+        "name": "性质",
+        "datatype": "wikibase-item",
+        "value": {
+          "id": "Q5",
+          "label_zh": "人类"
+        },
+        "description": "Wikidata：人类"
+      },
+      {
+        "id": "P21",
+        "name": "性别",
+        "datatype": "wikibase-item",
+        "value": {
+          "id": "Q6581097",
+          "label_zh": "男性"
+        },
+        "description": "Wikidata：男性"
+      },
+      {
+        "id": "P27",
+        "name": "国籍",
+        "datatype": "wikibase-item",
+        "value": {
+          "id": "Q30",
+          "label_zh": "美国"
+        },
+        "description": "Wikidata：美国"
+      },
+      {
+        "id": "P19",
+        "name": "出生地",
+        "datatype": "wikibase-item",
+        "value": {
+          "id": "Q1721013",
+          "label_zh": "米德尔敦(俄亥俄州)"
+        },
+        "description": "Wikidata：俄亥俄州米德尔敦"
+      },
+      {
+        "id": "P569",
+        "name": "出生日期",
+        "datatype": "time",
+        "value": {
+          "time": "+1984-08-02T00:00:00Z",
+          "precision": 11
+        },
+        "description": "Wikidata 出生日期"
+      },
+      {
+        "id": "P106",
+        "name": "职业",
+        "datatype": "wikibase-item",
+        "value": [
+          {
+            "id": "Q82955",
+            "label_zh": "政治家"
+          },
+          {
+            "id": "Q662596",
+            "label_zh": "风险投资家"
+          },
+          {
+            "id": "Q36834",
+            "label_zh": "作家"
+          },
+          {
+            "id": "Q197664",
+            "label_zh": "海军陆战队员"
+          }
+        ],
+        "description": "Wikidata：政治家、风投、作家、海军陆战队退伍军人"
+      },
+      {
+        "id": "P69",
+        "name": "就读学校",
+        "datatype": "wikibase-item",
+        "value": [
+          {
+            "id": "Q166614",
+            "label_zh": "俄亥俄州立大学"
+          },
+          {
+            "id": "Q1073474",
+            "label_zh": "耶鲁大学法学院"
+          }
+        ],
+        "description": "Wikidata：俄亥俄州立大学、耶鲁大学法学院"
+      },
+      {
+        "id": "P39",
+        "name": "担任职务",
+        "datatype": "wikibase-item",
+        "value": {
+          "id": "Q11699",
+          "label_zh": "美国副总统"
+        },
+        "description": "Wikidata：美国副总统"
+      },
+      {
+        "id": "P102",
+        "name": "政党",
+        "datatype": "wikibase-item",
+        "value": {
+          "id": "Q29468",
+          "label_zh": "美国共和党"
+        },
+        "description": "Wikidata：共和党"
+      },
+      {
+        "id": "P26",
+        "name": "配偶",
+        "datatype": "wikibase-item",
+        "value": {
+          "id": "Q124125037",
+          "label_zh": "乌莎·万斯"
+        },
+        "description": "Wikidata：乌莎·万斯"
+      },
+      {
+        "id": "P1971",
+        "name": "子女数",
+        "datatype": "quantity",
+        "value": {
+          "amount": "4",
+          "unit": "1"
+        },
+        "description": "Wikidata 子女数量"
+      },
+      {
+        "id": "P856",
+        "name": "官方网站",
+        "datatype": "url",
+        "value": "",
+        "description": "Wikidata 官方网站声明"
+      },
+      {
+        "id": "P18",
+        "name": "图像",
+        "datatype": "commonsMedia",
+        "value": "https://dxltb3n5j8l6j.cloudfront.net/710902/uploads/d50b52c0-5b38-11ef-885f-cd9f78c29930_1200_630.jpeg",
+        "description": "占位肖像链接，导入后请替换为正式图片"
+      },
+      {
+        "id": "P1559",
+        "name": "母语姓名",
+        "datatype": "monolingualtext",
+        "value": {
+          "text": "James David Vance",
+          "language": "en-us"
+        },
+        "description": "Wikidata 母语姓名"
+      },
+      {
+        "id": "P373",
+        "name": "Commons 分类",
+        "datatype": "string",
+        "value": "",
+        "description": "Wikimedia Commons 分类名称"
+      },
+      {
+        "id": "P345",
+        "name": "IMDb 标识符",
+        "datatype": "external-id",
+        "value": "",
+        "description": "Wikidata IMDb ID"
+      },
+      {
+        "id": "P213",
+        "name": "ISNI",
+        "datatype": "external-id",
+        "value": "",
+        "description": "Wikidata ISNI"
+      },
+      {
+        "id": "P214",
+        "name": "VIAF 标识符",
+        "datatype": "external-id",
+        "value": "",
+        "description": "Wikidata VIAF ID"
+      }
+    ]
+  }
+}

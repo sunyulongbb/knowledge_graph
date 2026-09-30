@@ -1,0 +1,191 @@
+{
+    "version": 1,
+    "entity": {
+        "id": "Q7246834",
+        "name": "斯科特·贝森特",
+        "description": "斯科特·肯尼斯·霍默·贝森特（Scott Kenneth Homer Bessent），美国投资人、政府官员，现任美国财政部长、第79任美国财政部长。曾任Key Square Capital Management首席执行官兼首席投资官、Soros Fund Management首席投资官，并曾在耶鲁大学教授经济史。",
+        "aliases": [
+            "斯科特·贝森特",
+            "贝森特",
+            "Scott Bessent",
+            "Scott K. H. Bessent",
+            "Scott Kenneth Homer Bessent"
+        ],
+        "tags": [
+            "美国政治人物",
+            "美国政府官员",
+            "美国财政部长",
+            "金融",
+            "投资"
+        ],
+        "categories": [
+            {
+                "name": "人物",
+                "description": "人物类知识实体",
+                "color": "#6366F1",
+                "tags": [
+                    "人物"
+                ],
+                "children": [
+                    {
+                        "name": "政治人物",
+                        "description": "从事政治活动或担任政府职务的人物",
+                        "color": "#3B82F6",
+                        "tags": [
+                            "政治人物"
+                        ],
+                        "children": [
+                            {
+                                "name": "美国政治人物",
+                                "description": "美国政治体系中的政治人物及政府官员",
+                                "color": "#DC2626",
+                                "tags": [
+                                    "美国",
+                                    "政治人物"
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "images": [
+            "https://home.treasury.gov/system/files/136/Secretary_Bessent.jpg"
+        ],
+        "videos": [],
+        "pdf": "",
+        "link": "https://home.treasury.gov/about/general-information/officials/scott-bessent",
+        "visibility": "public",
+        "type": {
+            "id": "ontology/us-politician",
+            "name": "美国政治人物",
+            "description": "美国政治体系中的政治人物及政府官员"
+        },
+        "attributes": [
+            {
+                "id": "P31",
+                "name": "性质",
+                "datatype": "wikibase-item",
+                "value": {
+                    "id": "Q5",
+                    "label_zh": "人类"
+                },
+                "description": "Wikidata：instance of"
+            },
+            {
+                "id": "P21",
+                "name": "性别",
+                "datatype": "wikibase-item",
+                "value": {
+                    "id": "Q6581097",
+                    "label_zh": "男性"
+                },
+                "description": "Wikidata：sex or gender"
+            },
+            {
+                "id": "P569",
+                "name": "出生日期",
+                "datatype": "time",
+                "value": {
+                    "time": "+1962-08-21T00:00:00Z",
+                    "precision": 11
+                },
+                "description": "Wikidata：date of birth"
+            },
+            {
+                "id": "P19",
+                "name": "出生地",
+                "datatype": "wikibase-item",
+                "value": {
+                    "id": "Q844012",
+                    "label_zh": "康威"
+                },
+                "description": "Wikidata：place of birth"
+            },
+            {
+                "id": "P27",
+                "name": "国籍",
+                "datatype": "wikibase-item",
+                "value": {
+                    "id": "Q30",
+                    "label_zh": "美国"
+                },
+                "description": "Wikidata：country of citizenship"
+            },
+            {
+                "id": "P735",
+                "name": "名字",
+                "datatype": "string",
+                "value": "Scott",
+                "description": "Wikidata：given name"
+            },
+            {
+                "id": "P734",
+                "name": "姓氏",
+                "datatype": "string",
+                "value": "Bessent",
+                "description": "Wikidata：family name"
+            },
+            {
+                "id": "P106",
+                "name": "职业",
+                "datatype": "wikibase-item",
+                "value": [
+                    {
+                        "id": "Q806798",
+                        "label_zh": "投资人"
+                    },
+                    {
+                        "id": "Q15980158",
+                        "label_zh": "政府官员"
+                    }
+                ],
+                "description": "Wikidata：occupation"
+            },
+            {
+                "id": "P39",
+                "name": "担任职务",
+                "datatype": "wikibase-item",
+                "value": {
+                    "id": "Q305950",
+                    "label_zh": "美国财政部长"
+                },
+                "description": "Wikidata：position held"
+            },
+            {
+                "id": "P69",
+                "name": "就读院校",
+                "datatype": "wikibase-item",
+                "value": {
+                    "id": "Q49112",
+                    "label_zh": "耶鲁大学"
+                },
+                "description": "Wikidata：educated at"
+            },
+            {
+                "id": "P108",
+                "name": "雇主",
+                "datatype": "wikibase-item",
+                "value": [
+                    {
+                        "id": "Q648666",
+                        "label_zh": "美国财政部"
+                    }
+                ],
+                "description": "Wikidata：employer"
+            },
+            {
+                "id": "P463",
+                "name": "所属组织",
+                "datatype": "wikibase-item",
+                "value": [
+                    {
+                        "id": "Q190204",
+                        "label_zh": "美国外交关系协会"
+                    }
+                ],
+                "description": "Wikidata：member of"
+            }
+        ]
+    }
+}

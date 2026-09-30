@@ -1,0 +1,432 @@
+.sparql-mode-switch {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 12px auto;
+  width: fit-content;
+  align-self: flex-end;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.sparql-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.sparql-layout {
+  display: grid;
+  gap: 12px;
+  align-items: start;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.sparql-layout-top,
+.sparql-layout-middle {
+  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+}
+
+.sparql-card {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-0);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(15,23,42,.035);
+}
+
+.sparql-card-sidebar {
+  position: sticky;
+  top: 8px;
+  align-self: start;
+}
+
+.sparql-card-main,
+.sparql-card-full {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.sparql-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.sparql-card-head > div:first-child { display:grid; gap:4px; }
+.sparql-card-head .muted, .sparql-editor-footer .muted { font-size:12px; }
+
+.sparql-card-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.sparql-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sparql-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.sparql-form-grid .field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sparql-form-compact {
+  gap: 12px;
+}
+
+.field-hint {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.sparql-span-2 {
+  grid-column: span 2;
+}
+
+.is-hidden {
+  display: none !important;
+}
+
+.sparql-advanced {
+  margin-top: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.88);
+  overflow: hidden;
+}
+
+.sparql-advanced summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.sparql-advanced summary::-webkit-details-marker {
+  display: none;
+}
+
+.sparql-advanced summary::after {
+  content: "展开";
+  float: right;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.sparql-advanced[open] summary::after {
+  content: "收起";
+}
+
+.sparql-advanced .sparql-form-grid {
+  padding: 0 14px 14px;
+}
+
+.sparql-template-toolbar,
+.sparql-result-tools,
+.sparql-editor-footer {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.sparql-template-toolbar .kb-select {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.sparql-editor {
+  width: 100%;
+  max-width: 100%;
+  min-height: 360px;
+  resize: vertical;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  color: var(--fg);
+  padding: 12px;
+  font: 13px/1.6 Consolas, "Courier New", monospace;
+  box-sizing: border-box;
+}
+
+.sparql-inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.sparql-table-wrap {
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-1);
+  max-height: 360px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+#sparqlMappingTable.sparql-table-wrap {
+  max-height: 420px;
+}
+
+#sparqlPreviewEntities.sparql-table-wrap,
+#sparqlPreviewRelations.sparql-table-wrap {
+  max-height: 240px;
+}
+
+
+.sparql-raw {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-1);
+  color: var(--fg);
+  min-height: 80px;
+  max-height: 260px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.sparql-task-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.sparql-task-item {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  background: var(--surface-1);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.sparql-task-item .status {
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.sparql-view .kb-input,
+.sparql-view .kb-select,
+.sparql-view textarea,
+.sparql-view input {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.sparql-actions > * {
+  min-width: 0;
+}
+
+.sparql-editor-footer > * {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .sparql-layout-top,
+  .sparql-layout-middle,
+  .sparql-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sparql-span-2 {
+    grid-column: auto;
+  }
+
+  .sparql-card-sidebar {
+    position: static;
+  }
+}
+
+@media (max-width: 1200px) {
+  .sparql-layout-top,
+  .sparql-layout-middle {
+    grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  }
+}
+.sparql-layout-top .sparql-card-sidebar .sparql-form-compact,
+.sparql-layout-top .sparql-card-sidebar > .sparql-advanced {
+  display: none;
+}
+
+/* Fuseki is the only managed source; its connection controls stay available to
+   the script but do not occupy the user-facing import flow. */
+.sparql-layout-top .sparql-card-sidebar {
+  display: none;
+}
+
+.sparql-layout-top {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Main import workflow: choose type/properties on the left, inspect data on the right. */
+#sparqlImportView.sparql-view {
+  display: grid !important;
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-items: start;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+#sparqlImportView,
+#sparqlImportView * {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+#sparqlImportView::-webkit-scrollbar,
+#sparqlImportView *::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+#sparqlImportView .sparql-layout { display: contents; }
+#sparqlImportView .sparql-layout-top .sparql-card-main { grid-column: 1; grid-row: 1; }
+#sparqlImportView .sparql-layout-middle .sparql-card-main { grid-column: 2; grid-row: 1; }
+#sparqlImportView .sparql-layout-middle .sparql-card-sidebar,
+#sparqlImportView .sparql-task-details { grid-column: 1 / -1; position: static; }
+.sparql-bottom-actions {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  position: static;
+  min-height: 48px;
+  max-height: 48px;
+  box-sizing: border-box;
+  margin-top: 0;
+  padding: 6px 2px;
+  background: var(--surface-0);
+}
+
+/* Match the sheet tabs: left mapping card + right toolbar and shared grid shell. */
+#sparqlImportView .sparql-layout-middle .sparql-card-main {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  gap: 10px;
+  min-height: 0;
+  height: 100%;
+}
+#sparqlImportView .sparql-layout-middle .sparql-card-head {
+  min-height: 34px;
+  padding: 0 2px;
+  align-items: center;
+}
+
+/* Same left-panel rhythm as file/API/manual mapping. */
+#sparqlImportView .sparql-layout-top .sparql-card-main {
+  min-height: 0;
+  height: 100%;
+  border-radius: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+#sparqlImportView .sparql-layout-top .sparql-card-head {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+#sparqlImportView .sparql-layout-top .sparql-card-main .field > span {
+  color: var(--fg);
+}
+
+@media (max-width: 900px) {
+  #sparqlImportView.sparql-view { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; overflow: visible; }
+  #sparqlImportView .sparql-layout-top .sparql-card-main,
+  #sparqlImportView .sparql-layout-middle .sparql-card-main,
+  #sparqlImportView .sparql-layout-middle .sparql-card-sidebar,
+  #sparqlImportView .sparql-task-details { grid-column: 1; }
+  #sparqlImportView .sparql-layout-top .sparql-card-main,
+  #sparqlImportView .sparql-layout-middle .sparql-card-main { grid-row: auto; height: auto; }
+  .sparql-preview-grid { min-height: 420px; height: auto; max-height: none; }
+}
+
+.sparql-structured-form { display:grid; gap:0; }
+.sparql-step-card { display:grid; gap:8px; padding:12px 2px; border:0; border-bottom:1px solid var(--border); border-radius:0; background:transparent; }
+.sparql-step-card:first-child { padding-top:2px; }
+.sparql-step-card:last-child { border-bottom:0; padding-bottom:2px; }
+.sparql-step-title { display:flex; align-items:center; gap:7px; min-width:0; font-size:13px; font-weight:650; }
+.sparql-step-title b { display:grid; place-items:center; flex:0 0 20px; width:20px; height:20px; border-radius:50%; background:var(--accent); color:#fff; font-size:11px; }
+.sparql-step-title .btn { margin-left:auto; }
+.sparql-step-card .field-hint { min-height:0; font-size:11px; }
+.sparql-filter-intro { padding:8px 10px; border:0; border-left:2px solid var(--border-strong); border-radius:0; background:transparent; color:var(--muted); font-size:12px; line-height:1.55; }
+.sparql-filter-intro code { color:var(--accent); }
+.sparql-filter-list { display:grid; gap:8px; }
+.sparql-filter-row { display:grid; grid-template-columns:1fr 1fr; gap:7px; align-items:end; padding:8px; border:0; border-radius:6px; background:var(--surface-1); }
+.sparql-filter-row .sparql-filter-value-field { grid-column:1 / -1; }
+.sparql-filter-row .field { min-width:0; }
+.sparql-filter-row .btn { min-width:30px; height:32px; padding:0 8px; }
+.sparql-label-language { max-width:none; display:grid; grid-template-columns:1fr 1fr; align-items:center; gap:8px; padding:0; }
+.sparql-return-properties { display:grid; gap:8px; }
+.sparql-return-properties .sparql-property-head { align-items:end; }
+.sparql-filter-row .btn { grid-column:2; justify-self:end; }
+@media (max-width: 760px) { .sparql-filter-row { grid-template-columns:1fr 1fr; } .sparql-filter-row .sparql-filter-value-field { grid-column:1 / -1; } .sparql-filter-row .btn { grid-column:2; justify-self:end; } }
+.sparql-structured-form > .field { padding:10px 2px; border:0; border-bottom:1px solid var(--border); border-radius:0; background:transparent; }
+.sparql-structured-props { display:grid; gap:8px; padding-top:2px; }
+.sparql-property-head { display:grid; grid-template-columns:minmax(0, 1fr) auto; align-items:center; gap:8px; }
+.sparql-property-head .field { flex:1 1 auto; min-width:0; width:auto !important; }
+.sparql-select-all { display:inline-flex !important; flex:0 0 auto; align-items:center; gap:5px; min-height:28px; margin:0; font-size:12px; color:var(--muted); white-space:nowrap; }
+.sparql-select-all input { width:14px !important; height:14px !important; min-width:14px; margin:0 !important; accent-color:var(--accent); }
+.sparql-property-checklist { display:grid; grid-template-columns:1fr; gap:4px; max-height:330px; overflow:auto; padding:4px 0; border:0; border-radius:0; background:transparent; }
+.sparql-property-count { display:inline-flex; width:fit-content; align-items:center; padding:3px 7px; border-radius:999px; background:color-mix(in srgb, var(--accent) 10%, var(--surface-1)); color:var(--accent); font-weight:600; }
+.sparql-property-count:empty { display:none; }
+.sparql-property-checklist label { display:grid !important; grid-template-columns:16px minmax(0,1fr); align-items:center; justify-content:initial !important; gap:8px; min-width:0; min-height:30px; padding:5px 7px; border:1px solid transparent; border-radius:6px; font-size:12px; cursor:pointer; transition:background .15s ease,border-color .15s ease; }
+.sparql-property-checklist label:hover { background:var(--surface-0); border-color:var(--border); }
+.sparql-property-checklist label:has(input:checked) { background:color-mix(in srgb, var(--accent) 9%, var(--surface-0)); border-color:color-mix(in srgb, var(--accent) 36%, var(--border)); }
+.sparql-property-checklist input { width:16px !important; height:16px !important; min-width:16px; margin:0 !important; accent-color:var(--accent); }
+.sparql-property-checklist label span { display:block !important; width:auto !important; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left !important; }
+.sparql-property-checklist label span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sparql-preview-grid { position:relative; min-height:0; height:auto; max-height:none; border-radius:8px; box-shadow:none; }
+.sparql-result-grid-host { position:absolute; inset:0; }
+.sparql-auto-import-config, .sparql-secondary-control { display:none !important; }
+.sparql-import-legacy { display:none; }
+.sparql-task-legacy { display:none; }
+.sparql-task-details { padding:10px 14px; }
+.sparql-task-details > summary { cursor:pointer; color:var(--muted); font-size:13px; }
+.sparql-task-details[open] > summary { margin-bottom:12px; }
+
+/* Standalone tool layout, independent of the data-entry page. */
+.sparql-hint { font-size:12px; color:var(--muted); line-height:1.6; margin-top:4px; }
+.sparql-grid-shell { border:1px solid var(--border-strong); border-radius:12px; background:var(--surface-0); overflow:hidden; min-height:0; flex:1 1 auto; display:flex; }
+.sparql-import-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; position:sticky; bottom:0; z-index:4; padding:10px 0 0; border-top:1px solid var(--border); background:var(--surface-0); }
+.sparql-import-bar > div:first-child, .sparql-import-bar__actions { display:flex; gap:12px; align-items:center; flex-wrap:wrap; font-size:13px; }
+.sparql-import-bar .muted { font-size:12px; }

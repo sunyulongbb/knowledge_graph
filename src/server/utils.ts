@@ -1,0 +1,1020 @@
+import { db } from "./db.ts";
+import { entityThumbnail } from './entity-thumbnail.ts';
+import { knowledgeContext, canAccessKnowledge } from './knowledge-access.ts';
+import { normalizeDatatype, normalizeValue, valueTypeFor, uiDatatype } from '../shared/wikidata.ts';
+
+// ── Formatters ───────────────────────────────────────────────────────────────
+
+export function formatNode(row: any) {
+  if (!row) return null;
+  let aliases = [] as any[];
+  let tags = [] as any[];
+  let extraData = {} as Record<string, any>;
+  let relationOrder = {};
+  try { relationOrder = JSON.parse(row.relation_order || '{}'); } catch {}
+  try {
+    aliases = JSON.parse(row.aliases || "[]");
+  } catch {}
+  try {
+    tags = JSON.parse(row.tags || "[]");
+  } catch {}
+  try {
+    extraData = JSON.parse(row.data || "{}");
+  } catch {}
+
+  const normalizeList = (val: any): any[] => {
+    if (Array.isArray(val))
+      return val.filter((v) => v !== null && v !== undefined);
+    if (!val && val !== "") return [];
+    if (typeof val === "string") {
+      const trimmed = val.trim();
+      if (!trimmed) return [];
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
+      return trimmed
+        .split(/[\n,，;、]+/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+    return [];
+  };
+
+  const normalizeMediaList = (
+    val: any,
+    options: { preserveEmptySlots?: boolean } = {},
+  ): string[] => {
+    const preserveEmptySlots = options.preserveEmptySlots === true;
+    const normalizeValue = (item: any) => String(item || "").trim();
+
+    if (Array.isArray(val)) {
+      return val
+        .map(normalizeValue)
+        .filter((item) => item !== "" || preserveEmptySlots);
+    }
+    if (typeof val === "string") {
+      const trimmed = val.trim();
+      if (!trimmed) return [];
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed
+            .map(normalizeValue)
+            .filter((item) => item !== "" || preserveEmptySlots);
+        }
+        if (typeof parsed === "string") {
+          const single = parsed.trim();
+          return single || preserveEmptySlots ? [single] : [];
+        }
+      } catch {}
+      return trimmed
+        .split(/[\n,，;；、|]+/)
+        .map((item) => item.trim())
+        .filter((item) => item !== "" || preserveEmptySlots);
+    }
+    return [];
+  };
+
+  const mergeMediaLists = (listA: any, listB: any): string[] => {
+    const merged = [
+      ...normalizeMediaList(listA, { preserveEmptySlots: true }),
+      ...normalizeMediaList(listB, { preserveEmptySlots: true }),
+    ];
+    const result: string[] = [];
+    const seen = new Set<string>();
+    for (const item of merged) {
+      if (item === "") {
+        result.push(item);
+        continue;
+      }
+      if (!seen.has(item)) {
+        seen.add(item);
+        result.push(item);
+      }
+    }
+    return result;
+  };
+
+  const descZhFromExtra =
+    typeof extraData.desc_zh === "string" && extraData.desc_zh.trim()
+      ? extraData.desc_zh.trim()
+      : typeof extraData.description === "string" &&
+          extraData.description.trim()
+        ? extraData.description.trim()
+        : typeof extraData.desc === "string" && extraData.desc.trim()
+          ? extraData.desc.trim()
+          : "";
+  const aliasesFromExtra = normalizeList(
+    extraData.aliases_zh ?? extraData.aliases ?? extraData.alias,
+  );
+  const tagsFromExtra = normalizeList(extraData.tags ?? extraData.tag_list);
+
+  let classes = [];
+  try {
+    classes = db
+      .query(
+        `SELECT c.id, c.name, c.color FROM classes c
+         JOIN entity_classes ec ON c.id = ec.class_id
+         WHERE ec.entity_id = ?`,
+      )
+      .all(row.id) as any[];
+  } catch {}
+
+  const categories = classes.map((cls) => cls.id);
+
+  let color = null;
+  let classId = null;
+  let classLabel = null;
+
+  if (classes.length > 0) {
+    const cls = classes[0];
+    if (cls.color) color = cls.color;
+    classId = cls.id;
+    classLabel = cls.name;
+  }
+
+  let typeLabel = "";
+  let typeId = row.type ? String(row.type).trim() : null;
+  let ontology = null as null | { id: string; name: string; color: string | null };
+  if (row.type) {
+    try {
+      const typeKey = String(row.type).trim();
+      const typeRow = db
+        .query(
+          "SELECT id, name, alias, color FROM ontologies WHERE id = ? OR lower(name) = lower(?) OR lower(alias) LIKE ? LIMIT 1",
+        )
+        .get(typeKey, typeKey, `%${typeKey.toLowerCase()}%`) as any;
+      if (typeRow?.color) {
+        color = typeRow.color;
+      }
+      if (typeRow) {
+        typeId = String(typeRow.id);
+        typeLabel = typeRow.name || typeRow.alias || row.type;
+        ontology = {
+          id: String(typeRow.id),
+          name: String(typeRow.name || typeRow.alias || typeRow.id),
+          color: typeRow.color || null,
+        };
+      }
+      if (!classLabel && typeRow) {
+        classLabel = typeRow.alias || typeRow.name || row.type;
+      }
+    } catch {}
+  }
+
+  let attrImages: string[] = [];
+  const normalizeDisplayMediaUrl = (value: string): string => {
+    const source = String(value || "").trim();
+    if (!source) return "";
+    const commonsFileMatch = source.match(
+      /^https:\/\/commons\.wikimedia\.org\/wiki\/File:([^?#]+)/i,
+    );
+    const filename = commonsFileMatch
+      ? decodeURIComponent(commonsFileMatch[1] || "")
+      : source.replace(/^File:/i, "");
+    if (/^(https?:|data:image\/|\/)/i.test(filename)) return filename;
+    if (/\.(jpe?g|png|gif|webp|avif|bmp|svg|heic)(\?.*)?$/i.test(filename)) {
+      return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(
+        filename.replace(/\s+/g, "_"),
+      )}`;
+    }
+    return source;
+  };
+  const collectMediaValues = (val: any): string[] => {
+    const result: string[] = [];
+    const visit = (item: any) => {
+      if (item === null || item === undefined) return;
+      if (typeof item === "string") {
+        const trimmed = item.trim();
+        if (!trimmed) return;
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (parsed !== trimmed) {
+            visit(parsed);
+            return;
+          }
+        } catch {}
+        const normalized = normalizeDisplayMediaUrl(trimmed);
+        if (normalized) result.push(normalized);
+        return;
+      }
+      if (Array.isArray(item)) {
+        item.forEach(visit);
+        return;
+      }
+      if (typeof item === "object") {
+        visit(item.url ?? item.src ?? item.href ?? item.value);
+      }
+    };
+    visit(val);
+    return result;
+  };
+  try {
+    const commonsMediaAttrs = db
+      .query(
+        "SELECT value FROM attributes WHERE node_id = ? AND datatype = 'commonsMedia'",
+      )
+      .all(row.id) as any[];
+    attrImages.push(
+      ...commonsMediaAttrs.flatMap((attr) => collectMediaValues(attr.value)),
+    );
+
+    let imageProp = db
+      .query("SELECT id FROM properties WHERE name = ? OR name = ? LIMIT 1")
+      .get("图像", "image") as any;
+    let imagePropId = imageProp && imageProp.id ? imageProp.id : null;
+    let imageAttr: any = null;
+    if (imagePropId) {
+      imageAttr = db
+        .query(
+          "SELECT value FROM attributes WHERE node_id = ? AND key = ? LIMIT 1",
+        )
+        .get(row.id, imagePropId) as any;
+    }
+    if (!imageAttr || !imageAttr.value) {
+      imageAttr = db
+        .query(
+          "SELECT value FROM attributes WHERE node_id = ? AND key IN (?, ?) LIMIT 1",
+        )
+        .get(row.id, "image", "图像") as any;
+    }
+    if (imageAttr && imageAttr.value) {
+      attrImages.push(...collectMediaValues(imageAttr.value));
+    }
+  } catch {}
+
+  const imagesFromRow = normalizeMediaList(row.images);
+  const imagesFromExtra = normalizeMediaList(extraData.images);
+  const images = Array.from(
+    new Set(
+      [...attrImages, ...imagesFromRow, ...imagesFromExtra].filter(Boolean),
+    ),
+  );
+  const coversFromRow = normalizeMediaList(row.covers, {
+    preserveEmptySlots: true,
+  });
+  const coversFromExtra = normalizeMediaList(extraData.covers, {
+    preserveEmptySlots: true,
+  });
+  const covers = mergeMediaLists(coversFromRow, coversFromExtra);
+
+  const link =
+    (typeof row.link === "string" && row.link.trim() && row.link.trim()) ||
+    (typeof extraData.link === "string" &&
+      extraData.link.trim() &&
+      extraData.link.trim()) ||
+    (typeof extraData.url === "string" &&
+      extraData.url.trim() &&
+      extraData.url.trim()) ||
+    "";
+  const pdf =
+    (typeof row.pdf === "string" && row.pdf.trim() && row.pdf.trim()) ||
+    (typeof extraData.pdf === "string" &&
+      extraData.pdf.trim() &&
+      extraData.pdf.trim()) ||
+    "";
+  const videosFromRow = normalizeMediaList(row.videos, {
+    preserveEmptySlots: true,
+  });
+  const videosFromExtra = normalizeMediaList(extraData.videos, {
+    preserveEmptySlots: true,
+  });
+  const videos = mergeMediaLists(videosFromRow, videosFromExtra);
+  const image = images[0] || "";
+  const cover = covers.find((item) => item && item.trim()) || "";
+  const video = videos.find((item) => item && item.trim()) || "";
+
+  const categoryLabels = classes
+    .filter((cls) => cls && cls.name)
+    .map((cls) => cls.name);
+
+  return {
+    ...extraData,
+    id: row.id,
+    _id: row.id,
+    visibility: row.visibility || 'public',
+    owner_user_id: row.owner_user_id || null,
+    creator_username: row.creator_username || '',
+    updated_by_user_id: row.updated_by_user_id || null,
+    can_edit: canAccessKnowledge(db, knowledgeContext.getStore()?.user || null, row.id, 'edit'),
+    can_manage: canAccessKnowledge(db, knowledgeContext.getStore()?.user || null, row.id, 'manage'),
+    relation_order: relationOrder,
+    name: row.name,
+    label: row.name,
+    label_zh: extraData.label_zh ?? row.name,
+    type: row.type,
+    typeId,
+    typeLabel: typeLabel || row.type || "",
+    ontology,
+    description: row.description ?? descZhFromExtra ?? "",
+    desc_zh: descZhFromExtra || row.description || "",
+    created_at: row.created_at || null,
+    updated_at: row.updated_at || null,
+    hasJevAnalysis: Boolean(String(row.jev_analysis_json || "").trim()),
+    jevAnalysisUpdatedAt: row.jev_analysis_updated_at || null,
+    aliases: aliases.length ? aliases : aliasesFromExtra,
+    aliases_zh: aliasesFromExtra.length ? aliasesFromExtra : aliases,
+    tags: tags.length ? tags : tagsFromExtra,
+    color: color,
+    classId: classId,
+    classLabel: classLabel,
+    classes: classes,
+    categories,
+    categoryIds: categories,
+    categoryLabels,
+    images,
+    image: image,
+    covers,
+    cover,
+    link,
+    pdf,
+    videos,
+    video,
+  };
+}
+
+export function formatEdge(row: any) {
+  let extraData = {};
+  try {
+    extraData = JSON.parse(row.data || "{}");
+  } catch {}
+
+  let label = row.label || row.type;
+  try {
+    let prop = db
+      .query("SELECT name FROM properties WHERE id = ?")
+      .get(row.type) as any;
+
+    if ((!prop || !prop.name) && typeof row.type === "string") {
+      if (row.type.startsWith("P")) {
+        const stripped = row.type.substring(1);
+        const propStripped = db
+          .query("SELECT name FROM properties WHERE id = ?")
+          .get(stripped) as any;
+        if (propStripped && propStripped.name) {
+          prop = propStripped;
+        }
+      }
+
+      if ((!prop || !prop.name) && typeof row.type === "string") {
+        const canonicalType = canonicalizePropertyKey(row.type);
+        if (canonicalType && canonicalType !== row.type) {
+          const propCanonical = db
+            .query("SELECT name FROM properties WHERE id = ?")
+            .get(canonicalType) as any;
+          if (propCanonical && propCanonical.name) {
+            prop = propCanonical;
+          }
+        }
+      }
+    }
+
+    if (prop && prop.name) {
+      label = prop.name;
+    }
+  } catch {}
+
+  return {
+    id: row.id,
+    source: row.source,
+    target: row.target,
+    label: label,
+    ...extraData,
+  };
+}
+
+export function formatAttribute(row: any) {
+  let statement: any = {};
+  try { statement = JSON.parse(row.statement_json || '{}'); } catch {}
+  let parsedValue: any = row.value;
+  try {
+    parsedValue = JSON.parse(row.value);
+  } catch {}
+
+  let propName = row.property_name_snapshot || row.key;
+  let propertyDatatype = "";
+  try {
+    let prop = db
+      .query("SELECT name, datatype, valuetype FROM properties WHERE id = ?")
+      .get(row.key) as any;
+    if (!row.property_name_snapshot) {
+      if (
+        (!prop || !prop.name) &&
+        typeof row.key === "string" &&
+        row.key.startsWith("P")
+      ) {
+        const stripped = row.key.substring(1);
+        const propStripped = db
+          .query("SELECT name, datatype, valuetype FROM properties WHERE id = ?")
+          .get(stripped) as any;
+        if (propStripped && propStripped.name) {
+          prop = propStripped;
+        }
+      }
+      if (prop && prop.name) {
+        propName = prop.name;
+      }
+    }
+    propertyDatatype = prop ? normalizeDatatype(prop.datatype, prop.valuetype) : '';
+  } catch {}
+
+  const datatype = normalizeDatatype(statement.datatype || (propertyDatatype && propertyDatatype !== 'string' ? propertyDatatype : row.datatype));
+  if (valueTypeFor(datatype) === 'string' && typeof parsedValue !== 'string' && !Array.isArray(parsedValue) && !['somevalue', 'novalue'].includes(statement.snaktype)) parsedValue = String(row.value ?? '');
+  try { parsedValue = normalizeValue(datatype, parsedValue); } catch {}
+
+  // Backward compatibility: older imports stored entity references as plain
+  // strings even when the property definition has since been promoted to item.
+  if (datatype === "wikibase-item" && typeof parsedValue === "string") {
+    const rawId = parsedValue.match(/([Qq]\d+)$/)?.[1] || parsedValue.trim();
+    if (rawId) parsedValue = [{ id: rawId.toUpperCase(), label: rawId.toUpperCase(), "entity-type": "item" }];
+  }
+
+  const valueThumbnails: string[] = [];
+  if (
+    valueTypeFor(datatype) === "wikibase-entityid" &&
+    parsedValue &&
+    typeof parsedValue === "object"
+  ) {
+    try {
+      const values = Array.isArray(parsedValue) ? parsedValue : [parsedValue];
+      for (const [valueIndex, value] of values.entries()) {
+        let entityId =
+          value?.id ??
+          value?.value?.id ??
+          value?.["entity-id"] ??
+          value?.["entityId"] ??
+          value?.["entity_id"] ??
+          null;
+
+        if (!entityId && (value?.["numeric-id"] ?? value?.numeric_id)) {
+          entityId = value["numeric-id"] ?? value.numeric_id;
+        }
+
+        if (entityId == null) continue;
+        let targetId = String(entityId);
+        if (targetId.startsWith("entity/")) {
+          targetId = targetId.substring("entity/".length);
+        }
+
+        const candidateIds = new Set<string>([targetId]);
+        if (/^[Qq]\d+$/.test(targetId)) {
+          candidateIds.add(targetId.substring(1));
+        }
+
+        let resolvedNode: any = null;
+        for (const candidate of candidateIds) {
+          resolvedNode = db
+            .query("SELECT id, name, images, data FROM nodes WHERE id = ? LIMIT 1")
+            .get(candidate) as any;
+          if (resolvedNode && resolvedNode.name) break;
+        }
+
+        if (resolvedNode) {
+          let extra: any = {};
+          try { extra = JSON.parse(resolvedNode.data || '{}'); } catch {}
+          let thumbnail = entityThumbnail(resolvedNode.images, extra?.images, extra?.image);
+          if (!thumbnail) {
+            const imageAttributes = db.query("SELECT value FROM attributes WHERE node_id = ? AND (datatype = 'commonsMedia' OR key IN ('P18', '18', 'image', '图像')) ORDER BY id").all(resolvedNode.id) as any[];
+            thumbnail = entityThumbnail(...imageAttributes.map((attribute) => attribute.value));
+          }
+          valueThumbnails[valueIndex] = thumbnail;
+        }
+        if (resolvedNode && resolvedNode.name && value && typeof value === "object") {
+          value.entity_label_zh = resolvedNode.name;
+          value.label_zh = resolvedNode.name;
+        }
+      }
+    } catch {}
+  }
+
+  return {
+    id: row.id,
+    node_id: row.node_id,
+    property: row.key,
+    property_label_zh: propName,
+    datatype,
+    ui_datatype: uiDatatype(datatype),
+    snaktype: statement.snaktype || 'value',
+    rank: statement.rank || 'normal',
+    qualifiers: statement.qualifiers || {},
+    references: statement.references || [],
+    value: parsedValue,
+    value_thumbnails: valueThumbnails,
+    datavalue: statement.snaktype && statement.snaktype !== 'value' ? undefined : {
+      value: parsedValue,
+      type: valueTypeFor(datatype),
+    },
+  };
+}
+
+// ── ID Generators ─────────────────────────────────────────────────────────────
+
+export function getNextNumericNodeId(): string {
+  const maxIdResult = db
+    .query(
+      "SELECT MAX(CAST(id AS INTEGER)) as maxId FROM main.nodes WHERE id GLOB '[0-9]*'",
+    )
+    .get() as any;
+  const nextId = (maxIdResult?.maxId || 0) + 1;
+  return nextId.toString();
+}
+
+export function getNextNumericPropertyId(): string {
+  const maxIdResult = db
+    .query(
+      "SELECT MAX(CAST(id AS INTEGER)) as maxId FROM properties WHERE id GLOB '[0-9]*'",
+    )
+    .get() as any;
+  const nextId = (maxIdResult?.maxId || 0) + 1;
+  return nextId.toString();
+}
+
+// ── Normalizers ───────────────────────────────────────────────────────────────
+
+export const ENTRY_VALUE_BACKEND_SPLIT = /[\s,，;；、\n\u3000]+/g;
+
+export function normalizeEntryValueList(values: any, fallback: any): string[] {
+  let source: string[] = [];
+  if (Array.isArray(values) && values.length) {
+    source = values.map((item: any) => (item ?? "").toString());
+  } else if (fallback !== undefined && fallback !== null) {
+    const raw = fallback.toString();
+    source = raw
+      .split(ENTRY_VALUE_BACKEND_SPLIT)
+      .map((item: string) => item.trim())
+      .filter(Boolean);
+  }
+  return Array.from(
+    new Set(source.map((item: string) => item.trim()).filter(Boolean)),
+  );
+}
+
+export function canonicalizePropertyKey(prop: string): string {
+  if (prop === null || typeof prop === "undefined") return "";
+  let raw = String(prop).trim();
+  if (!raw) return "";
+  if (raw.includes("/")) {
+    raw = raw.split("/").pop() || raw;
+  }
+  raw = raw.replace(/^property\//i, "");
+  if (!raw) return "";
+  const upper = raw.toUpperCase();
+  const prefixed = upper.match(/^P\s*0*(\d+)$/);
+  if (prefixed && prefixed[1]) {
+    const num = parseInt(prefixed[1], 10);
+    return Number.isFinite(num) ? `P${num}` : `P${prefixed[1]}`;
+  }
+  if (/^\d+$/.test(upper)) {
+    const num = parseInt(upper, 10);
+    return Number.isFinite(num) ? `P${num}` : `P${upper}`;
+  }
+  const anyDigits = upper.match(/(\d+)/);
+  if (anyDigits && anyDigits[1]) {
+    const num = parseInt(anyDigits[1], 10);
+    if (Number.isFinite(num)) return `P${num}`;
+  }
+  return upper;
+}
+
+export function extractNumericPropertyId(value: string): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const prefixed = trimmed.match(/^P\s*0*(\d+)$/i);
+  if (prefixed && prefixed[1]) {
+    const num = parseInt(prefixed[1], 10);
+    if (Number.isFinite(num)) return num.toString();
+  }
+  if (/^\d+$/.test(trimmed)) {
+    const num = parseInt(trimmed, 10);
+    if (Number.isFinite(num)) return num.toString();
+  }
+  return null;
+}
+
+// ── DB-Dependent Helpers ──────────────────────────────────────────────────────
+
+export type EnsurePropertyRecordResult = {
+  id: string | null;
+  created: boolean;
+};
+
+export type PropertyScopeOptions = {
+  projectId?: number | null;
+};
+
+function normalizeProjectId(projectId?: number | null): number | null {
+  return typeof projectId === "number" && Number.isFinite(projectId)
+    ? projectId
+    : null;
+}
+
+function getScopedPropertyById(
+  propertyId: string,
+  options: PropertyScopeOptions = {},
+) {
+  const projectId = normalizeProjectId(options.projectId);
+  if (!propertyId) return null;
+  try {
+    return projectId !== null
+      ? (db
+          .query(
+            "SELECT * FROM properties WHERE id = ? AND project_id = ? LIMIT 1",
+          )
+          .get(propertyId, projectId) as any)
+      : (db
+          .query(
+            "SELECT * FROM properties WHERE id = ? AND project_id IS NULL LIMIT 1",
+          )
+          .get(propertyId) as any);
+  } catch {
+    return null;
+  }
+}
+
+function getScopedPropertyByName(
+  name: string,
+  options: PropertyScopeOptions = {},
+) {
+  const projectId = normalizeProjectId(options.projectId);
+  const normalizedName = (name || "").trim();
+  if (!normalizedName) return null;
+  try {
+    return projectId !== null
+      ? (db
+          .query(
+            "SELECT * FROM properties WHERE lower(name) = lower(?) AND project_id = ? LIMIT 1",
+          )
+          .get(normalizedName, projectId) as any)
+      : (db
+          .query(
+            "SELECT * FROM properties WHERE lower(name) = lower(?) AND project_id IS NULL LIMIT 1",
+          )
+          .get(normalizedName) as any);
+  } catch {
+    return null;
+  }
+}
+
+export function ensurePropertyRecord(
+  propertyId: string,
+  label: string,
+  valuetype?: string,
+  options: PropertyScopeOptions = {},
+): EnsurePropertyRecordResult {
+  const rawId = (propertyId || "").trim();
+  const rawLabel = (label || "").trim() || rawId;
+  const projectId = normalizeProjectId(options.projectId);
+
+  if (!rawId && !rawLabel) {
+    return { id: null, created: false };
+  }
+
+  const candidateSet = new Set<string>();
+
+  const pushCandidates = (value: string) => {
+    if (!value) return;
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    candidateSet.add(trimmed);
+    const canonical = canonicalizePropertyKey(trimmed);
+    if (canonical) {
+      candidateSet.add(canonical);
+      const numericFromCanonical = extractNumericPropertyId(canonical);
+      if (numericFromCanonical) candidateSet.add(numericFromCanonical);
+    }
+    const numericDirect = extractNumericPropertyId(trimmed);
+    if (numericDirect) candidateSet.add(numericDirect);
+  };
+
+  pushCandidates(rawId);
+  pushCandidates(rawLabel);
+
+  const candidates = Array.from(candidateSet)
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  for (const candidate of candidates) {
+    const existing = getScopedPropertyById(candidate, { projectId });
+    if (existing?.id) {
+      return { id: existing.id, created: false };
+    }
+  }
+
+  if (rawLabel) {
+    const existingByName = getScopedPropertyByName(rawLabel, { projectId });
+    if (existingByName?.id) {
+      return { id: existingByName.id, created: false };
+    }
+  }
+
+  const newId = getNextNumericPropertyId();
+  const propertyName = rawLabel || rawId || newId;
+
+  try {
+    db.run(
+      "INSERT INTO properties (id, name, datatype, valuetype, types, description, project_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [newId, propertyName, normalizeDatatype('string', valuetype), valueTypeFor(normalizeDatatype('string', valuetype)), "[]", "", projectId],
+    );
+    return { id: newId, created: true };
+  } catch (err) {
+    console.warn("ensurePropertyRecord failed", err);
+    const fallback = getScopedPropertyById(newId, { projectId });
+    if (fallback?.id) {
+      return { id: fallback.id, created: false };
+    }
+    return { id: newId, created: false };
+  }
+}
+
+export type AttributeRecordOptions = {
+  datatype?: string;
+};
+
+export function parseStoredAttributeValues(
+  raw: any,
+  datatype = "string",
+): any[] {
+  if (raw === undefined || raw === null) return [];
+  const text = raw.toString();
+  if (!text) return [];
+  try {
+    const parsed = JSON.parse(text);
+    if (Array.isArray(parsed)) {
+      return parsed;
+    }
+    if (parsed && typeof parsed === "object") {
+      return [parsed];
+    }
+    if (
+      typeof parsed === "string" ||
+      typeof parsed === "number" ||
+      typeof parsed === "boolean"
+    ) {
+      const val = parsed.toString();
+      return val ? [val] : [];
+    }
+  } catch {}
+  if (datatype === "wikibase-entityid") {
+    return [];
+  }
+  const trimmed = text.trim();
+  return trimmed ? [trimmed] : [];
+}
+
+export function normalizeStringAttributeValues(values: any[]): string[] {
+  return Array.from(
+    new Set(
+      (values || []).map((v) => (v ?? "").toString().trim()).filter(Boolean),
+    ),
+  );
+}
+
+export type EntityAttributeValue = {
+  "entity-type"?: string;
+  id: string;
+  "numeric-id"?: number;
+  label_zh?: string;
+  label?: string;
+  name?: string;
+  qualifier?: string;
+};
+
+export function extractEntityId(value: any): string {
+  if (!value) return "";
+  const candidates = [
+    value.id,
+    value["entity-id"],
+    value.entity_id,
+    value.entityId,
+    value.value?.id,
+    value.value?.entity_id,
+    value.value?.entityId,
+    value.nodeId,
+    value.node_id,
+    value.target,
+  ];
+  for (const candidate of candidates) {
+    if (!candidate && candidate !== 0) continue;
+    const text = candidate.toString().trim();
+    if (!text) continue;
+    return text.startsWith("entity/") ? text.substring(7) : text;
+  }
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (text) return text.startsWith("entity/") ? text.substring(7) : text;
+  }
+  return "";
+}
+
+export function attributeValuesContainEntityId(
+  raw: any,
+  datatype = "string",
+  targetId: string,
+): boolean {
+  if (!targetId || typeof targetId !== "string") return false;
+  const values = parseStoredAttributeValues(raw, datatype);
+  for (const value of values) {
+    const candidateId = extractEntityId(value);
+    if (candidateId === targetId) return true;
+  }
+  return false;
+}
+
+export function normalizeEntityAttributeValues(
+  values: any[],
+): EntityAttributeValue[] {
+  const map = new Map<string, EntityAttributeValue>();
+  for (const raw of values || []) {
+    const id = extractEntityId(raw);
+    if (!id) continue;
+    const entityType =
+      raw?.["entity-type"] ||
+      raw?.entity_type ||
+      raw?.entityType ||
+      raw?.value?.["entity-type"] ||
+      raw?.value?.entity_type ||
+      raw?.value?.entityType ||
+      "item";
+    const numericIdRaw =
+      raw?.["numeric-id"] ??
+      raw?.numeric_id ??
+      raw?.numericId ??
+      raw?.value?.["numeric-id"] ??
+      raw?.value?.numeric_id ??
+      raw?.value?.numericId;
+    const numericId = Number(numericIdRaw);
+    const label =
+      raw?.label_zh ??
+      raw?.label ??
+      raw?.name ??
+      raw?.value?.label_zh ??
+      raw?.value?.label ??
+      raw?.value?.name ??
+      undefined;
+    const qualifier = raw?.qualifier ?? raw?.value?.qualifier ?? undefined;
+    map.set(id, {
+      ...(raw && typeof raw === 'object' ? raw : {}),
+      "entity-type": entityType,
+      id,
+      ...(Number.isFinite(numericId)
+        ? { "numeric-id": Number(numericId) }
+        : {}),
+      ...(label ? { label_zh: label, label } : {}),
+      ...(qualifier ? { qualifier } : {}),
+    });
+  }
+  return Array.from(map.values());
+}
+
+export function serializeAttributeValues(
+  values: any[],
+  datatype: string,
+): string {
+  if (datatype === "string") {
+    if (values.length <= 1) {
+      return values.length ? values[0]!.toString() : "";
+    }
+    return JSON.stringify(values);
+  }
+  if (values.length === 1) {
+    return JSON.stringify(values[0]);
+  }
+  return JSON.stringify(values);
+}
+
+export function ensureAttributeRecord(
+  nodeId: string,
+  propertyId: string,
+  values: any[],
+  options: AttributeRecordOptions = {},
+): { created: boolean; updated: boolean } {
+  if (!nodeId || !propertyId) {
+    return { created: false, updated: false };
+  }
+  const canonicalDatatype = normalizeDatatype(options.datatype);
+  const datatype = uiDatatype(canonicalDatatype);
+  const normalizedValues =
+    datatype === "wikibase-entityid"
+      ? normalizeEntityAttributeValues(values)
+      : valueTypeFor(canonicalDatatype) === 'string' ? normalizeStringAttributeValues(values)
+      : values.map((value) => normalizeValue(canonicalDatatype, value));
+  if (!normalizedValues.length) {
+    return { created: false, updated: false };
+  }
+  const existing = db
+    .query(
+      "SELECT id, value, datatype FROM attributes WHERE node_id = ? AND key = ? LIMIT 1",
+    )
+    .get(nodeId, propertyId) as any;
+  const propertyRow = db
+    .query("SELECT name FROM properties WHERE id = ?")
+    .get(propertyId) as any;
+  const propertyNameSnapshot = propertyRow?.name || null;
+
+  if (!existing) {
+    const id = `attr/${crypto.randomUUID()}`;
+    const serialized = serializeAttributeValues(normalizedValues, datatype);
+    db.run(
+      "INSERT INTO attributes (id, node_id, key, value, datatype, property_name_snapshot) VALUES (?, ?, ?, ?, ?, ?)",
+      [id, nodeId, propertyId, serialized, datatype, propertyNameSnapshot],
+    );
+    return { created: true, updated: false };
+  }
+  const existingDatatype = (existing.datatype || "string").trim() || "string";
+  let existingValues = parseStoredAttributeValues(
+    existing.value,
+    existingDatatype,
+  );
+  if (
+    existingDatatype === "wikibase-entityid" &&
+    datatype === "wikibase-entityid"
+  ) {
+    existingValues = normalizeEntityAttributeValues(existingValues);
+  } else if (existingDatatype === "string" && datatype === "string") {
+    existingValues = normalizeStringAttributeValues(existingValues);
+  } else if (existingDatatype === datatype && valueTypeFor(canonicalDatatype) !== 'string') {
+    existingValues = existingValues.map((value) => normalizeValue(canonicalDatatype, value));
+  } else {
+    existingValues = [];
+  }
+
+  let mergedValues: any[] = [];
+  if (datatype === "wikibase-entityid") {
+    const map = new Map<string, EntityAttributeValue>();
+    for (const val of existingValues as EntityAttributeValue[]) {
+      map.set(val.id, val);
+    }
+    for (const val of normalizedValues as EntityAttributeValue[]) {
+      map.set(val.id, val);
+    }
+    mergedValues = Array.from(map.values());
+  } else if (valueTypeFor(canonicalDatatype) !== 'string') {
+    mergedValues = Array.from(new Map([...existingValues, ...normalizedValues].map((value) => [JSON.stringify(value), value])).values());
+  } else {
+    mergedValues = Array.from(
+      new Set([
+        ...(existingValues as string[]),
+        ...(normalizedValues as string[]),
+      ]),
+    );
+  }
+
+  const previousSerialized = serializeAttributeValues(existingValues, datatype);
+  const serialized = serializeAttributeValues(mergedValues, datatype);
+  if (serialized === previousSerialized) {
+    return { created: false, updated: false };
+  }
+  db.run(
+    "UPDATE attributes SET value = ?, datatype = ?, property_name_snapshot = ? WHERE id = ?",
+    [serialized, datatype, propertyNameSnapshot, existing.id],
+  );
+  return { created: false, updated: true };
+}
+
+export function ensureNodeByName(
+  name: string,
+  options: { description?: string; projectId?: number | null } = {},
+): { node: any; created: boolean } {
+  const normalized = (name ?? "").toString().trim();
+  if (!normalized) {
+    throw new Error("Node name is required");
+  }
+  const projectId =
+    typeof options.projectId === "number" && Number.isFinite(options.projectId)
+      ? options.projectId
+      : null;
+  const existing =
+    projectId !== null
+      ? (db
+          .query(
+            "SELECT * FROM nodes WHERE lower(name) = lower(?) AND project_id = ? LIMIT 1",
+          )
+          .get(normalized, projectId) as any)
+      : (db
+          .query("SELECT * FROM nodes WHERE lower(name) = lower(?) LIMIT 1")
+          .get(normalized) as any);
+  const nextDescription = (options.description ?? "").toString().trim();
+  if (existing) {
+    const currentDescription = (existing.description ?? "").toString().trim();
+    if (nextDescription && nextDescription !== currentDescription) {
+      db.run(
+        "UPDATE nodes SET description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        [nextDescription, existing.id],
+      );
+      const refreshed = db
+        .query("SELECT * FROM nodes WHERE id = ?")
+        .get(existing.id) as any;
+      return { node: refreshed, created: false };
+    }
+    return { node: existing, created: false };
+  }
+  const id = getNextNumericNodeId();
+  db.run(
+    "INSERT INTO nodes (id, name, type, description, aliases, tags, project_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    [id, normalized, "entity", nextDescription, "[]", "[]", projectId],
+  );
+  const created = db.query("SELECT * FROM nodes WHERE id = ?").get(id) as any;
+  return { node: created, created: true };
+}

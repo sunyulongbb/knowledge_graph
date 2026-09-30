@@ -1,0 +1,2962 @@
+﻿(function () {
+  // Inline detail panel helper
+  // ----------------------
+  const SHOW_DETAIL_ATTR_SECTION = false;
+  const shared = window.kbApp || {};
+  const state = shared.state || {};
+  const appendDetailDb = (url) => {
+    const db = new URLSearchParams(window.location.search).get("db");
+    if (db) url.searchParams.set("db", db);
+    return url;
+  };
+  const canEditDefaultApplication = () => new URLSearchParams(window.location.search).get("db") === "default";
+  if (typeof state.bindAlias === "function") {
+    state.bindAlias("kbActiveDetailNodeId", "activeDetailNodeId", "");
+    state.bindAlias("kbActiveDetailRouteId", "activeDetailRouteId", "");
+    state.bindAlias("kbActiveVisNodeId", "activeVisNodeId", "");
+  }
+  if (
+    typeof marked !== "undefined" &&
+    typeof marked.setOptions === "function"
+  ) {
+    marked.setOptions({
+      gfm: true,
+      breaks: false,
+    });
+  }
+
+  const detailPdfViewerState = {
+    renderSeq: 0,
+    doc: null,
+    url: "",
+    resizeObserver: null,
+  };
+
+  function resetDetailPdfViewer() {
+    detailPdfViewerState.renderSeq += 1;
+    detailPdfViewerState.url = "";
+    detailPdfViewerState.resizeObserver?.disconnect?.();
+    detailPdfViewerState.resizeObserver = null;
+    if (
+      detailPdfViewerState.doc &&
+      typeof detailPdfViewerState.doc.destroy === "function"
+    ) {
+      try {
+        detailPdfViewerState.doc.destroy();
+      } catch {}
+    }
+    detailPdfViewerState.doc = null;
+  }
+
+  function hideDetailPanel() {
+    try {
+      const dp = document.getElementById("detailPanel");
+      if (dp) {
+        dp.style.display = "none";
+        dp.classList.remove("app-home-detail-open");
+      }
+      // show default table/vis area depending on current mode
+      if (window.kbViewMode === "vis") {
+        if (cywrap) cywrap.style.display = "";
+      }
+      if (window.kbViewMode === "table") {
+        if (tablePanel) tablePanel.style.display = "";
+      }
+      // Do not alter btnViewDetail here; setViewMode handles toggle state.
+    } catch {}
+  }
+
+  // Helpers (adapted from kb_detail.html)
+  function setText(el, text) {
+    if (el) el.textContent = text || "";
+  }
+  function formatPropValue(v) {
+    if (v === null || typeof v === "undefined") return "";
+    if (
+      typeof v === "string" ||
+      typeof v === "number" ||
+      typeof v === "boolean"
+    )
+      return String(v);
+    if (
+      v &&
+      typeof v === "object" &&
+      (typeof v.date === "string" || typeof v.time === "string")
+    ) {
+      const t = extractDateString(v);
+      if (t) return t;
+    }
+    if (v && typeof v === "object" && typeof v.amount !== "undefined") {
+      const amt = v.amount;
+      const unit = v.unit || "";
+      return unit ? `${amt} ${unit}` : String(amt);
+    }
+    if (
+      v &&
+      typeof v === "object" &&
+      typeof v.latitude !== "undefined" &&
+      typeof v.longitude !== "undefined"
+    ) {
+      return `${v.latitude}, ${v.longitude}`;
+    }
+    try {
+      if (
+        v &&
+        typeof v === "object" &&
+        (v["entity-type"] ||
+          v["entity_type"] ||
+          v.id ||
+          v["numeric-id"] ||
+          v.numeric_id)
+      ) {
+        const lbl =
+          v["entity_label_zh"] ??
+          v.entity_label_zh ??
+          v["label_zh"] ??
+          v.label_zh ??
+          null;
+        if (lbl != null && String(lbl).trim() !== "") return String(lbl);
+        const n = v["numeric-id"] ?? v.numeric_id ?? null;
+        if (n != null) return String(n);
+        if (v.id) return String(v.id);
+      }
+    } catch (e) {}
+    if (v && typeof v === "object" && typeof v.url === "string") return v.url;
+    try {
+      return JSON.stringify(v, null, 0);
+    } catch {
+      return String(v);
+    }
+  }
+
+  function isImageUrl(u) {
+    try {
+      if (!u || typeof u !== "string") return false;
+      if (u.startsWith("data:image/")) return true;
+      const lower = u.split("?")[0].toLowerCase();
+      return /\.(png|jpg|jpeg|gif|webp|bmp|svg|heif|heic)$/.test(lower);
+    } catch {
+      return false;
+    }
+  }
+
+  function isAnimatedImageVideoUrl(u) {
+    try {
+      if (!u || typeof u !== "string") return false;
+      if (u.startsWith("data:video/")) return true;
+      const lower = u.split("?")[0].toLowerCase();
+      return /\.(mov|mp4|webm|ogg|m4v)$/.test(lower);
+    } catch {
+      return false;
+    }
+  }
+
+  function isPdfUrl(u) {
+    try {
+      if (!u || typeof u !== "string") return false;
+      const lower = u.split("?")[0].toLowerCase();
+      return /\.pdf$/.test(lower) || /\/node-pdfs\//i.test(lower);
+    } catch {
+      return false;
+    }
+  }
+
+  function extractImageUrls(v, allowLoose = false) {
+    const out = [];
+    try {
+      if (!v) return out;
+      if (typeof v === "string") {
+        const trimmed = v.trim();
+        if (!trimmed) return out;
+        if (
+          isImageUrl(trimmed) ||
+          (allowLoose && /^https?:\/\//i.test(trimmed))
+        )
+          out.push(trimmed);
+      } else if (Array.isArray(v)) {
+        for (const it of v) out.push(...extractImageUrls(it, allowLoose));
+      } else if (typeof v === "object") {
+        const possibleKeys = [
+          "url",
+          "href",
+          "link",
+          "value",
+          "image",
+          "thumbnail",
+          "thumb",
+          "source",
+          "src",
+        ];
+        for (const key of possibleKeys) {
+          const val = v[key];
+          if (typeof val === "string") {
+            const trimmed = val.trim();
+            if (!trimmed) continue;
+            if (
+              isImageUrl(trimmed) ||
+              (allowLoose && /^https?:\/\//i.test(trimmed))
+            )
+              out.push(trimmed);
+          }
+        }
+        for (const key of Object.keys(v)) {
+          const val = v[key];
+          if (typeof val === "string") {
+            const trimmed = val.trim();
+            if (!trimmed) continue;
+            if (
+              isImageUrl(trimmed) ||
+              (allowLoose && /^https?:\/\//i.test(trimmed))
+            )
+              out.push(trimmed);
+          } else if (typeof val === "object")
+            out.push(...extractImageUrls(val, allowLoose));
+          else if (Array.isArray(val))
+            out.push(...extractImageUrls(val, allowLoose));
+        }
+      }
+    } catch {}
+    return out;
+  }
+  function normalizeImageUrl(url) {
+    try {
+      const trimmed = (url || "").trim();
+      if (!trimmed) return "";
+      return trimmed;
+    } catch {
+      return url;
+    }
+  }
+  function addImageCandidate(list, seen, url, label, force = false) {
+    try {
+      if (!url || typeof url !== "string") return;
+      const normalized = normalizeImageUrl(url);
+      const src = (normalized || url || "").trim();
+      if (!src) return;
+      if (!force && !isImageUrl(src)) return;
+      if (seen.has(src)) return;
+      seen.add(src);
+      const text = label ? String(label).trim() : "";
+      list.push({ url: src, label: text });
+    } catch {}
+  }
+
+  function addImageCandidatesFromValue(
+    list,
+    seen,
+    value,
+    label,
+    allowLoose = false,
+  ) {
+    try {
+      const urls = extractImageUrls(value, allowLoose);
+      if (!urls || !urls.length) return;
+      urls.forEach((u) => addImageCandidate(list, seen, u, label, true));
+    } catch {}
+  }
+
+  function normalizeMediaStringList(value) {
+    try {
+      if (Array.isArray(value)) {
+        return value
+          .map((item) => String(item || "").trim())
+          .filter(Boolean);
+      }
+      const text = String(value || "").trim();
+      if (!text) return [];
+      if (text.startsWith("[") && text.endsWith("]")) {
+        try {
+          const parsed = JSON.parse(text);
+          if (Array.isArray(parsed)) {
+            return parsed
+              .map((item) => String(item || "").trim())
+              .filter(Boolean);
+          }
+        } catch {}
+      }
+      return [text];
+    } catch {
+      return [];
+    }
+  }
+
+  function syncDetailTopMediaStage() {
+    const stage = document.getElementById("detailTopMediaStage");
+    if (!stage) return;
+    const media = [
+      { key: "image", panel: document.getElementById("wikiTopMedia") },
+      { key: "video", panel: document.getElementById("wikiTopVideo") },
+      { key: "pdf", panel: document.getElementById("wikiTopPdf") },
+    ];
+    const available = media.filter((item) => item.panel && item.panel.childElementCount > 0);
+    const hasMedia = available.length > 0;
+    let active = String(stage.dataset.activeMedia || "");
+    if (!available.some((item) => item.key === active)) active = available[0]?.key || "";
+    stage.dataset.activeMedia = active;
+    media.forEach((item) => {
+      if (item.panel) item.panel.style.display = item.key === active ? "block" : "none";
+    });
+    const tabs = document.getElementById("detailMediaTabs");
+    if (tabs) {
+      tabs.style.display = available.length > 1 ? "flex" : "none";
+      tabs.querySelectorAll("[data-media-tab]").forEach((button) => {
+        const key = button.dataset.mediaTab || "";
+        const isAvailable = available.some((item) => item.key === key);
+        const isActive = key === active;
+        button.hidden = !isAvailable;
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-selected", isActive ? "true" : "false");
+        button.tabIndex = isActive ? 0 : -1;
+        button.onclick = () => {
+          stage.dataset.activeMedia = key;
+          syncDetailTopMediaStage();
+        };
+      });
+    }
+    stage.style.display = hasMedia ? "" : "none";
+    const hero = document.getElementById("wikiTop");
+    if (hero) hero.classList.toggle("has-top-media", hasMedia);
+  }
+
+  function pickLabelValue(value) {
+    if (!value) return "";
+    if (typeof value === "string" || typeof value === "number")
+      return String(value).trim();
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const txt = pickLabelValue(item);
+        if (txt) return txt;
+      }
+      return "";
+    }
+    if (typeof value === "object") {
+      const candidateKeys = [
+        "zh",
+        "zh-cn",
+        "zh-hans",
+        "cn",
+        "chs",
+        "label",
+        "name",
+        "title",
+        "text",
+        "value",
+      ];
+      for (const key of candidateKeys) {
+        const nested = value[key];
+        if (typeof nested === "string" || typeof nested === "number") {
+          const txt = String(nested).trim();
+          if (txt) return txt;
+        }
+      }
+      for (const key of Object.keys(value)) {
+        const nested = value[key];
+        const txt = pickLabelValue(nested);
+        if (txt) return txt;
+      }
+    }
+    return "";
+  }
+
+  function isMediaAttrItem(item) {
+    if (!item) return false;
+    const dtype = String(item.datatype || item.datavalue?.type || "").trim();
+    const rawName = (
+      item.property_label_zh ||
+      item.property_label ||
+      item.property ||
+      item.label_zh ||
+      item.label ||
+      item.name ||
+      ""
+    )
+      .toString()
+      .trim();
+    const name = rawName.toLowerCase();
+    if (dtype === "commonsMedia") return true;
+    if (name.includes("媒体") || name.includes("media")) return true;
+    if (name.includes("图像") || name.includes("image")) return true;
+    return false;
+  }
+
+  function renderWikiMediaGrid(items, extraEntries = []) {
+    const topMedia = document.getElementById("wikiTopMedia");
+    const grid = document.getElementById("wikiMediaGrid");
+    if (grid) {
+      grid.style.display = "none";
+      grid.innerHTML = "";
+    }
+    if (!topMedia) return;
+    topMedia.innerHTML = "";
+    const entries = [];
+    const seedEntries = Array.isArray(extraEntries) ? extraEntries : [];
+    seedEntries.forEach((entry) => {
+      const url = String(entry?.url || "").trim();
+      if (url) entries.push({ url, label: String(entry?.label || "媒体") });
+    });
+
+    if ((!Array.isArray(items) || !items.length) && !entries.length) {
+      topMedia.style.display = "none";
+      syncDetailTopMediaStage();
+      return false;
+    }
+
+    for (const it of Array.isArray(items) ? items : []) {
+      if (!it) continue;
+      const title = (
+        it.property_label_zh ||
+        it.property_label ||
+        it.property ||
+        it.label_zh ||
+        it.label ||
+        it.name ||
+        "媒体"
+      ).toString();
+      let rawVal =
+        typeof it.value !== "undefined"
+          ? it.value
+          : it.val ||
+            it.text ||
+            it.description ||
+            it.value_raw ||
+            it.data ||
+            "";
+      if (typeof rawVal === "string") {
+        const trimmed = rawVal.trim();
+        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) rawVal = parsed;
+          } catch {}
+        }
+      }
+
+      const values = Array.isArray(rawVal) ? rawVal : [rawVal];
+      for (const val of values) {
+        if (val === null || typeof val === "undefined") continue;
+        const stringValue = String(val).trim();
+        if (!stringValue) continue;
+        if (isAnimatedImageVideoUrl(stringValue) || isPdfUrl(stringValue)) continue;
+        try {
+          const imgs = extractImageUrls(stringValue, true);
+          if (imgs && imgs.length) {
+            for (const src of imgs) {
+              entries.push({ url: src, label: title });
+            }
+          }
+        } catch {}
+      }
+    }
+
+    if (!entries.length) {
+      topMedia.style.display = "none";
+      syncDetailTopMediaStage();
+      return;
+    }
+
+    const carousel = document.createElement("div");
+    carousel.className = "detail-carousel-container";
+    const slides = document.createElement("div");
+    slides.className = "detail-carousel-slides";
+
+    entries.forEach((entry, index) => {
+      const slide = document.createElement("div");
+      slide.className = "detail-carousel-slide";
+      const img = document.createElement("img");
+      img.src = entry.url;
+      img.alt = entry.label || `Image ${index + 1}`;
+      img.onclick = () => window.open(entry.url, "_blank");
+      slide.appendChild(img);
+      slides.appendChild(slide);
+    });
+
+    carousel.appendChild(slides);
+
+    let currentIndex = 0;
+    const slideCount = entries.length;
+
+    function updateTransform() {
+      const offset = currentIndex * carousel.clientWidth;
+      slides.style.transform = `translate3d(-${offset}px, 0, 0)`;
+    }
+
+    function goToSlide(index) {
+      if (index < 0) index = slideCount - 1;
+      if (index >= slideCount) index = 0;
+      currentIndex = index;
+      updateTransform();
+      const dots = carousel.querySelectorAll(".detail-carousel-dot");
+      dots.forEach((dot, i) =>
+        dot.classList.toggle("active", i === currentIndex),
+      );
+    }
+
+    if (slideCount > 1) {
+      const prevBtn = document.createElement("button");
+      prevBtn.className = "detail-carousel-prev";
+      prevBtn.innerHTML = "&#10094;";
+      prevBtn.onclick = (e) => {
+        e.stopPropagation();
+        goToSlide(currentIndex - 1);
+      };
+
+      const nextBtn = document.createElement("button");
+      nextBtn.className = "detail-carousel-next";
+      nextBtn.innerHTML = "&#10095;";
+      nextBtn.onclick = (e) => {
+        e.stopPropagation();
+        goToSlide(currentIndex + 1);
+      };
+
+      const dots = document.createElement("div");
+      dots.className = "detail-carousel-dots";
+      entries.forEach((_, i) => {
+        const dot = document.createElement("span");
+        dot.className = `detail-carousel-dot ${i === 0 ? "active" : ""}`;
+        dot.onclick = (e) => {
+          e.stopPropagation();
+          goToSlide(i);
+        };
+        dots.appendChild(dot);
+      });
+
+      carousel.appendChild(prevBtn);
+      carousel.appendChild(nextBtn);
+      carousel.appendChild(dots);
+
+      const imgs = slides.querySelectorAll("img");
+      imgs.forEach((img) => {
+        if (!img.complete) {
+          img.addEventListener("load", () => updateTransform());
+        }
+      });
+    }
+
+    topMedia.appendChild(carousel);
+    topMedia.style.display = "";
+    requestAnimationFrame(() => updateTransform());
+    syncDetailTopMediaStage();
+    return true;
+  }
+
+  function getAttributeLabel(attr) {
+    if (!attr || typeof attr !== "object") return "";
+    return (
+      pickLabelValue(attr.label_zh) ||
+      pickLabelValue(attr.label) ||
+      pickLabelValue(attr.name_zh) ||
+      pickLabelValue(attr.name) ||
+      pickLabelValue(attr.key) ||
+      pickLabelValue(attr.property_label) ||
+      pickLabelValue(attr.property) ||
+      pickLabelValue(attr.alias) ||
+      pickLabelValue(attr.id) ||
+      pickLabelValue(attr.title) ||
+      ""
+    );
+  }
+
+  const IMAGE_LABEL_KEYWORDS_EN = [
+    "image",
+    "images",
+    "picture",
+    "pictures",
+    "photo",
+    "photos",
+    "poster",
+    "posters",
+    "cover",
+    "covers",
+    "logo",
+    "logos",
+    "icon",
+    "icons",
+    "thumbnail",
+    "thumbnails",
+    "screenshot",
+    "screenshots",
+    "banner",
+    "banners",
+    "avatar",
+    "avatars",
+  ];
+  const IMAGE_LABEL_KEYWORDS_ZH = [
+    "图像",
+    "图片",
+    "照片",
+    "封面",
+    "海报",
+    "横幅",
+    "头像",
+  ];
+  const MAX_INFOBOX_IMAGES = 1;
+  function isImagePropertyName(name) {
+    if (!name) return false;
+    const raw = String(name).trim();
+    if (!raw) return false;
+    const lower = raw.toLowerCase();
+    for (const kw of IMAGE_LABEL_KEYWORDS_EN) {
+      if (lower.includes(kw)) return true;
+    }
+    for (const kw of IMAGE_LABEL_KEYWORDS_ZH) {
+      if (raw.includes(kw)) return true;
+    }
+    return false;
+  }
+
+  function clearDetailPanel() {
+    try {
+      resetDetailPdfViewer();
+      const tb = document.getElementById("detailAttrList");
+      if (tb) tb.innerHTML = "";
+      const attrSection = document.getElementById("detailAttrSection");
+      if (attrSection) attrSection.style.display = "none";
+      const wikiView = document.getElementById("wikiView");
+      if (wikiView) wikiView.innerHTML = "";
+      const relatedSection = document.getElementById("detailIncomingRelations");
+      const relatedGroups = document.getElementById("detailIncomingRelationGroups");
+      const relatedCount = document.getElementById("detailIncomingRelationCount");
+      if (relatedSection) relatedSection.hidden = true;
+      if (relatedGroups) relatedGroups.replaceChildren();
+      if (relatedCount) relatedCount.textContent = "";
+      const pdfView = document.getElementById("wikiTopPdf");
+      if (pdfView) {
+        pdfView.innerHTML = "";
+        pdfView.style.display = "none";
+      }
+      const mediaStage = document.getElementById("detailTopMediaStage");
+      if (mediaStage) delete mediaStage.dataset.activeMedia;
+      const tagList = document.getElementById("detail_tagList");
+      if (tagList) tagList.innerHTML = "";
+      ["wikiTags", "wikiAliases"].forEach((id) => {
+        const element = document.getElementById(id);
+        if (!element) return;
+        element.replaceChildren();
+        element.style.display = "none";
+      });
+      // Do not modify btnViewDetail active state here; view mode
+      // (setViewMode) is responsible for updating the toggle button.
+      try {
+        const be = document.getElementById("btnEditWiki");
+        if (be) {
+          be.style.display = "none";
+          be.onclick = null;
+        }
+      } catch {}
+    } catch {}
+  }
+
+  function renderIncomingRelations(relations) {
+    const section = document.getElementById("detailIncomingRelations");
+    const host = document.getElementById("detailIncomingRelationGroups");
+    const count = document.getElementById("detailIncomingRelationCount");
+    if (!section || !host) return;
+    host.replaceChildren();
+    const candidates = [];
+    const seen = new Set();
+    for (const relation of Array.isArray(relations) ? relations : []) {
+      const source = relation?.source || {};
+      const sourceId = String(source.id || source._id || source._key || "").trim();
+      if (!sourceId) continue;
+      if (seen.has(sourceId)) continue;
+      seen.add(sourceId);
+      const typeName = String(
+        source.typeLabel || source.ontology?.name || source.classLabel || source.type || "未分类",
+      ).trim() || "未分类";
+      candidates.push({ source, sourceId, typeName });
+    }
+    candidates.sort((left, right) =>
+      left.typeName.localeCompare(right.typeName, "zh-CN") ||
+      String(left.source.name || left.source.label_zh || left.sourceId).localeCompare(String(right.source.name || right.source.label_zh || right.sourceId), "zh-CN"),
+    );
+    const groups = new Map();
+    candidates.forEach((item) => {
+      if (!groups.has(item.typeName)) groups.set(item.typeName, []);
+      groups.get(item.typeName).push(item);
+    });
+    const sortedGroups = Array.from(groups.entries()).sort(([left], [right]) =>
+      left.localeCompare(right, "zh-CN"),
+    );
+    for (const [typeName, items] of sortedGroups) {
+      const group = document.createElement("section");
+      group.className = "detail-related-group";
+      const heading = document.createElement("h3");
+      heading.className = "detail-related-group-heading";
+      const title = document.createElement("strong");
+      title.textContent = typeName;
+      const total = document.createElement("small");
+      total.textContent = items.length > 5 ? `显示 5 / ${items.length} 条` : `${items.length} 条`;
+      heading.append(title, total);
+      const list = document.createElement("div");
+      list.className = "detail-related-list";
+      items.slice(0, 5).forEach(({ source, sourceId }) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "detail-related-item";
+          const marker = document.createElement("span");
+          marker.className = "detail-related-marker";
+          button.style.setProperty("--detail-related-color", source.ontology?.color || source.color || "var(--accent)");
+          const body = document.createElement("span");
+          body.className = "detail-related-item-body";
+          const name = document.createElement("strong");
+          name.textContent = source.name || source.label_zh || source.label || source.title || sourceId;
+          body.append(name);
+          const arrow = document.createElement("i");
+          arrow.className = "fa-solid fa-arrow-right";
+          arrow.setAttribute("aria-hidden", "true");
+          button.append(marker, body, arrow);
+          button.addEventListener("click", () => {
+            const nextView = window.kbViewMode === "knowledge_detail" ? "knowledge_detail" : "detail";
+            if (typeof window.setViewMode === "function") {
+              window.setViewMode(nextView, { targetNodeId: sourceId, focusDetailOnly: nextView === "knowledge_detail" });
+            } else {
+              showNodeDetailInline(sourceId);
+            }
+          });
+          list.appendChild(button);
+        });
+      group.append(heading, list);
+      host.appendChild(group);
+    }
+    const total = seen.size;
+    section.hidden = total === 0;
+    if (count) count.textContent = total ? `${total} 条指向当前知识` : "";
+  }
+
+  function renderNativePdfFallback(root, resolvedUrl, message = "") {
+    if (!root) return;
+    root.innerHTML = "";
+
+    const fallback = document.createElement("div");
+    fallback.className = "detail-pdf-fallback";
+
+    if (message) {
+      const text = document.createElement("div");
+      text.textContent = message;
+      fallback.appendChild(text);
+    }
+
+    const link = document.createElement("a");
+    link.href = resolvedUrl;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = "在新窗口打开 PDF";
+    fallback.appendChild(link);
+    root.appendChild(fallback);
+  }
+
+  function syncDetailPdfFrameHeight(frame, scopeEl, fallbackEl) {
+    try {
+      if (!frame) return;
+      const applyHeight = () => {
+        try {
+          const detailPanel = document.getElementById("detailPanel");
+          const viewportHeight =
+            typeof window !== "undefined" ? window.innerHeight || 0 : 0;
+          const isWideLayout =
+            typeof window !== "undefined" ? window.innerWidth > 900 : true;
+          if (!detailPanel || !isWideLayout) {
+            frame.style.removeProperty("height");
+            if (scopeEl) {
+              scopeEl.style.removeProperty("--detail-pdf-frame-height");
+              scopeEl.style.removeProperty("height");
+            }
+            if (fallbackEl) {
+              fallbackEl.style.removeProperty("height");
+            }
+            return;
+          }
+          const panelRect = detailPanel.getBoundingClientRect();
+          const scopeRect = scopeEl
+            ? scopeEl.getBoundingClientRect()
+            : frame.getBoundingClientRect();
+          const nextHeight = viewportHeight
+            ? Math.max(420, Math.floor(panelRect.bottom - scopeRect.top))
+            : Math.max(420, Math.floor(panelRect.height || 0));
+          if (!nextHeight || !Number.isFinite(nextHeight)) {
+            frame.style.removeProperty("height");
+            if (scopeEl) {
+              scopeEl.style.removeProperty("--detail-pdf-frame-height");
+              scopeEl.style.removeProperty("height");
+            }
+            if (fallbackEl) {
+              fallbackEl.style.removeProperty("height");
+            }
+            return;
+          }
+          frame.style.height = `${nextHeight}px`;
+          frame.style.maxHeight = `${nextHeight}px`;
+          frame.style.minHeight = `${nextHeight}px`;
+          if (scopeEl) {
+            scopeEl.style.height = `${nextHeight}px`;
+            scopeEl.style.setProperty(
+              "--detail-pdf-frame-height",
+              `${nextHeight}px`,
+            );
+          }
+          if (fallbackEl) {
+            fallbackEl.style.height = "100%";
+          }
+        } catch {}
+      };
+
+      applyHeight();
+      const resizeKey = "__kbPdfResizeHandler";
+      if (frame[resizeKey]) {
+        window.removeEventListener("resize", frame[resizeKey]);
+      }
+      frame[resizeKey] = applyHeight;
+      window.addEventListener("resize", applyHeight);
+      requestAnimationFrame(applyHeight);
+      setTimeout(applyHeight, 0);
+    } catch {}
+  }
+
+  function mountPdfSpreadViewer(root, resolvedUrl, title) {
+    if (!root) return;
+    if (
+      detailPdfViewerState.doc &&
+      typeof detailPdfViewerState.doc.destroy === "function"
+    ) {
+      try {
+        detailPdfViewerState.doc.destroy();
+      } catch {}
+    }
+    detailPdfViewerState.doc = null;
+    const renderSeq = detailPdfViewerState.renderSeq + 1;
+    detailPdfViewerState.renderSeq = renderSeq;
+    detailPdfViewerState.url = resolvedUrl;
+    root.innerHTML = "";
+
+    const viewer = document.createElement("div");
+    viewer.className = "detail-pdf-viewer";
+    viewer.setAttribute("role", "region");
+    viewer.setAttribute("aria-label", `${title || "PDF"} 在线预览`);
+    const status = document.createElement("div");
+    status.className = "detail-pdf-status";
+    status.textContent = "正在加载 PDF…";
+    const toolbar = document.createElement("div");
+    toolbar.className = "detail-pdf-toolbar";
+    const navigation = document.createElement("div");
+    navigation.className = "detail-pdf-toolbar-group";
+    const prevButton = document.createElement("button");
+    prevButton.type = "button";
+    prevButton.className = "detail-pdf-tool-button";
+    prevButton.innerHTML = '<i class="fa-solid fa-chevron-left" aria-hidden="true"></i>';
+    prevButton.title = "上一页";
+    prevButton.setAttribute("aria-label", "上一页");
+    prevButton.disabled = true;
+    const pageIndicator = document.createElement("span");
+    pageIndicator.className = "detail-pdf-page-indicator";
+    pageIndicator.textContent = "加载中";
+    const nextButton = document.createElement("button");
+    nextButton.type = "button";
+    nextButton.className = "detail-pdf-tool-button";
+    nextButton.innerHTML = '<i class="fa-solid fa-chevron-right" aria-hidden="true"></i>';
+    nextButton.title = "下一页";
+    nextButton.setAttribute("aria-label", "下一页");
+    nextButton.disabled = true;
+    navigation.append(prevButton, pageIndicator, nextButton);
+    const zoomTools = document.createElement("div");
+    zoomTools.className = "detail-pdf-toolbar-group";
+    const zoomOutButton = document.createElement("button");
+    zoomOutButton.type = "button";
+    zoomOutButton.className = "detail-pdf-tool-button";
+    zoomOutButton.innerHTML = '<i class="fa-solid fa-minus" aria-hidden="true"></i>';
+    zoomOutButton.title = "缩小";
+    zoomOutButton.setAttribute("aria-label", "缩小 PDF");
+    const zoomResetButton = document.createElement("button");
+    zoomResetButton.type = "button";
+    zoomResetButton.className = "detail-pdf-zoom-value";
+    zoomResetButton.textContent = "适合";
+    zoomResetButton.title = "适合窗口";
+    zoomResetButton.setAttribute("aria-label", "恢复适合窗口");
+    const zoomInButton = document.createElement("button");
+    zoomInButton.type = "button";
+    zoomInButton.className = "detail-pdf-tool-button";
+    zoomInButton.innerHTML = '<i class="fa-solid fa-plus" aria-hidden="true"></i>';
+    zoomInButton.title = "放大";
+    zoomInButton.setAttribute("aria-label", "放大 PDF");
+    const openLink = document.createElement("a");
+    openLink.className = "detail-pdf-tool-button";
+    openLink.href = resolvedUrl;
+    openLink.target = "_blank";
+    openLink.rel = "noopener noreferrer";
+    openLink.innerHTML = '<i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i>';
+    openLink.title = "在新窗口打开";
+    openLink.setAttribute("aria-label", "在新窗口打开 PDF");
+    zoomTools.append(zoomOutButton, zoomResetButton, zoomInButton, openLink);
+    toolbar.append(navigation, zoomTools);
+    const pages = document.createElement("div");
+    pages.className = "detail-pdf-pages";
+    viewer.append(toolbar, pages);
+    pages.appendChild(status);
+    root.appendChild(viewer);
+    syncDetailPdfFrameHeight(viewer, root, viewer);
+
+    void (async () => {
+      try {
+        const pdfjsLib = await window.kbPdfJsReady;
+        if (!pdfjsLib || typeof pdfjsLib.getDocument !== "function") {
+          throw new Error("PDF.js 未就绪");
+        }
+        const loadingTask = pdfjsLib.getDocument({
+          url: resolvedUrl,
+          withCredentials: true,
+          wasmUrl: "/node_modules/pdfjs-dist/wasm/",
+          cMapUrl: "/node_modules/pdfjs-dist/cmaps/",
+          cMapPacked: true,
+          standardFontDataUrl: "/node_modules/pdfjs-dist/standard_fonts/",
+        });
+        const pdfDocument = await loadingTask.promise;
+        if (detailPdfViewerState.renderSeq !== renderSeq) {
+          pdfDocument.destroy?.();
+          return;
+        }
+        detailPdfViewerState.doc = pdfDocument;
+        let currentPage = 1;
+        let zoomLevel = 1;
+        let rendering = false;
+        const renderPage = async (requestedPage) => {
+          if (rendering || detailPdfViewerState.renderSeq !== renderSeq) return;
+          rendering = true;
+          currentPage = Math.max(
+            1,
+            Math.min(pdfDocument.numPages, Number(requestedPage) || 1),
+          );
+          prevButton.disabled = currentPage <= 1;
+          nextButton.disabled = currentPage >= pdfDocument.numPages;
+          pageIndicator.textContent = `第 ${currentPage} / ${pdfDocument.numPages} 页`;
+          pages.replaceChildren(status);
+          status.style.display = "block";
+          status.textContent = "正在渲染当前页…";
+          const page = await pdfDocument.getPage(currentPage);
+          if (detailPdfViewerState.renderSeq !== renderSeq) return;
+          const baseViewport = page.getViewport({ scale: 1 });
+          const availableWidth = Math.max(280, pages.clientWidth - 28);
+          const availableHeight = Math.max(240, pages.clientHeight - 28);
+          const displayScale = Math.max(
+            0.1,
+            Math.min(
+              4,
+              availableWidth / baseViewport.width,
+              availableHeight / baseViewport.height,
+            ) * zoomLevel,
+          );
+          const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+          const renderViewport = page.getViewport({
+            scale: displayScale * pixelRatio,
+          });
+          const pageEl = document.createElement("section");
+          pageEl.className = "detail-pdf-page";
+          pageEl.setAttribute("aria-label", `第 ${currentPage} 页`);
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.ceil(renderViewport.width);
+          canvas.height = Math.ceil(renderViewport.height);
+          canvas.style.width = `${Math.ceil(renderViewport.width / pixelRatio)}px`;
+          canvas.style.height = `${Math.ceil(renderViewport.height / pixelRatio)}px`;
+          pageEl.appendChild(canvas);
+          pages.replaceChildren(pageEl);
+          await page.render({
+            canvasContext: canvas.getContext("2d", { alpha: false }),
+            viewport: renderViewport,
+          }).promise;
+          if (detailPdfViewerState.renderSeq === renderSeq) {
+            pages.scrollTop = 0;
+          }
+          rendering = false;
+        };
+        prevButton.addEventListener("click", () => void renderPage(currentPage - 1));
+        nextButton.addEventListener("click", () => void renderPage(currentPage + 1));
+        zoomOutButton.addEventListener("click", () => {
+          zoomLevel = Math.max(0.5, Number((zoomLevel - 0.25).toFixed(2)));
+          zoomResetButton.textContent = `${Math.round(zoomLevel * 100)}%`;
+          void renderPage(currentPage);
+        });
+        zoomInButton.addEventListener("click", () => {
+          zoomLevel = Math.min(3, Number((zoomLevel + 0.25).toFixed(2)));
+          zoomResetButton.textContent = `${Math.round(zoomLevel * 100)}%`;
+          void renderPage(currentPage);
+        });
+        zoomResetButton.addEventListener("click", () => {
+          zoomLevel = 1;
+          zoomResetButton.textContent = "适合";
+          void renderPage(currentPage);
+        });
+        await renderPage(currentPage);
+        if (typeof ResizeObserver === "function") {
+          let observedWidth = pages.clientWidth;
+          detailPdfViewerState.resizeObserver = new ResizeObserver(() => {
+            const nextWidth = pages.clientWidth;
+            if (!nextWidth || Math.abs(nextWidth - observedWidth) < 4) return;
+            observedWidth = nextWidth;
+            void renderPage(currentPage);
+          });
+          detailPdfViewerState.resizeObserver.observe(pages);
+        }
+      } catch (error) {
+        if (detailPdfViewerState.renderSeq !== renderSeq) return;
+        console.warn("PDF.js preview failed; falling back to native viewer", error);
+        renderNativePdfFallback(
+          root,
+          resolvedUrl,
+          "在线预览加载失败，请在新窗口打开 PDF。",
+        );
+      }
+    })();
+  }
+
+  function normalizeEntityIdForApi(id) {
+    const raw = (id ?? "").toString().trim();
+    if (!raw) return "";
+    if (raw.includes("/")) return raw;
+    return "entity/" + raw;
+  }
+
+  let detailNavigationLoading = false;
+
+  function getDetailNavigationTargets() {
+    // The rendered list already reflects the active filters and sort order.
+    const ids = [...new Set(Array.from(document.querySelectorAll(
+      "#tblNodes .entity-list-item[data-id]",
+    ), (item) => normalizeEntityIdForApi(item.getAttribute("data-id"))).filter(Boolean))];
+    const active = normalizeEntityIdForApi(window.kbActiveDetailNodeId);
+    const index = ids.indexOf(active);
+    return {
+      previous: index > 0 ? ids[index - 1] : "",
+      next: index >= 0 && index < ids.length - 1 ? ids[index + 1] : "",
+    };
+  }
+
+  function updateDetailNavigation() {
+    const targets = getDetailNavigationTargets();
+    for (const [id, target] of [["btnDetailPrevious", targets.previous], ["btnDetailNext", targets.next]]) {
+      const button = document.getElementById(id);
+      if (button) button.disabled = detailNavigationLoading || !target;
+    }
+  }
+
+  for (const [id, direction] of [["btnDetailPrevious", "previous"], ["btnDetailNext", "next"]]) {
+    document.getElementById(id)?.addEventListener("click", () => {
+      if (detailNavigationLoading) return;
+      const target = getDetailNavigationTargets()[direction];
+      if (!target || typeof window.setViewMode !== "function") return;
+      const view = window.kbViewMode === "knowledge_detail" ? "knowledge_detail" : "detail";
+      window.setViewMode(view, {
+        targetNodeId: target,
+        focusDetailOnly: view === "knowledge_detail",
+        skipDetailBreadcrumbPush: true,
+      });
+      const panel = document.getElementById("detailPanel");
+      if (panel) panel.scrollTop = 0;
+    });
+  }
+  const detailNavigationList = document.getElementById("tblNodes");
+  if (detailNavigationList) {
+    new MutationObserver(updateDetailNavigation).observe(detailNavigationList, { childList: true });
+  }
+
+  async function showNodeDetailInline(nodeId, options = {}) {
+    detailNavigationLoading = true;
+    updateDetailNavigation();
+    try {
+      return await loadNodeDetailInline(nodeId, options);
+    } finally {
+      detailNavigationLoading = false;
+      updateDetailNavigation();
+    }
+  }
+
+  async function loadNodeDetailInline(nodeId, options = {}) {
+    if (!nodeId) return;
+    const preserveSidebarState =
+      options && options.preserveSidebarState === true;
+    const routeId = (nodeId ?? "").toString().trim();
+    const fullId = normalizeEntityIdForApi(routeId);
+    const dp = document.getElementById("detailPanel");
+    const inner = document.getElementById("detailInner");
+    if (!dp || !inner) return;
+    const appHomePanel = document.getElementById("applicationHomePanel");
+    const shouldOpenHomeDrawer = Boolean(appHomePanel) && (window.kbViewMode === "app_home" || appHomePanel.style.display !== "none");
+    try {
+      tablePanel.style.display = "none";
+      cywrap.style.display = "none";
+    } catch {}
+    dp.style.display = "";
+    dp.classList.toggle("app-home-detail-open", shouldOpenHomeDrawer);
+    clearDetailPanel();
+    // keep the current entity id on the panel for wiki actions
+    try {
+      dp.dataset.entityId = fullId;
+      window.kbActiveDetailNodeId = fullId;
+      window.kbActiveDetailRouteId = routeId || fullId;
+      window.kbPinnedKnowledgeDetailRouteId = routeId || fullId;
+      if (!preserveSidebarState) {
+        window.kbSelectedRowId = routeId || fullId;
+        window.kbSelectedRowIds = new Set([window.kbSelectedRowId]);
+        window.kbSelectedNodeId = window.kbSelectedRowId;
+        window.kbCurrentNodeId = window.kbSelectedRowId;
+        window.kbLastAnchorRowId = window.kbSelectedRowId;
+      }
+      if (
+        !preserveSidebarState &&
+        typeof window.loadAttributes === "function"
+      ) {
+        try {
+          window.loadAttributes(fullId);
+        } catch (err) {
+          console.warn("loadAttributes failed before detail fetch", err);
+        }
+      }
+    } catch {}
+    // show edit button immediately (fallback) so user can find it even if wiki content fetch fails
+    try {
+      const be = document.getElementById("btnEditWiki");
+      if (be) {
+        be.style.display = "none";
+        // click behavior wired separately to open inline editor
+      }
+    } catch (e) {}
+    inner.querySelector("#wikiView").textContent = "加载详情中…";
+    try {
+      const url = new URL("/api/kb/node", window.location.origin);
+      if (typeof window.appendCurrentDbParam === "function") {
+        const scopedUrl = window.appendCurrentDbParam(url);
+        if (scopedUrl instanceof URL) {
+          url.search = scopedUrl.search;
+        }
+      }
+      url.searchParams.set("id", fullId);
+      const resp = await fetch(url.toString());
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      const data = await resp.json();
+      const doc = data && data.node;
+      const neighbors = data && data.neighbors;
+      if (!doc) {
+        inner.querySelector("#wikiView").innerHTML =
+          '<div class="muted">未找到详情</div>';
+        return;
+      }
+      renderIncomingRelations(data && data.incomingRelations);
+      // prefer authoritative id from doc if available
+      try {
+        const canonicalIdRaw =
+          (doc && (doc._id || doc.id || doc._key)) || fullId;
+        const canonicalId = (canonicalIdRaw || "").toString().trim() || fullId;
+        dp.dataset.entityId = canonicalId;
+        window.kbActiveDetailNodeId = canonicalId;
+        if (!window.kbActiveDetailRouteId) {
+          window.kbActiveDetailRouteId = routeId || canonicalId;
+        }
+        if (!preserveSidebarState) {
+          window.kbSelectedRowId = canonicalId;
+          window.kbSelectedRowIds = new Set([canonicalId]);
+          window.kbSelectedNodeId = canonicalId;
+          window.kbCurrentNodeId = canonicalId;
+          window.kbLastAnchorRowId = canonicalId;
+        }
+        try {
+          if (!preserveSidebarState && typeof setFormToEdit === "function") {
+            setFormToEdit(doc);
+          }
+        } catch (err) {
+          console.warn("sync left card from detail failed", err);
+        }
+        try {
+          if (!preserveSidebarState) {
+            if (typeof window.updateSelectedRowStyles === "function") {
+              window.updateSelectedRowStyles();
+            }
+            if (typeof window.syncCheckboxStates === "function") {
+              window.syncCheckboxStates();
+            }
+          }
+        } catch (err) {
+          console.warn("sync table selection from detail failed", err);
+        }
+        try {
+          if (
+            !preserveSidebarState &&
+            typeof window.loadAttributes === "function"
+          ) {
+            window.loadAttributes(canonicalId);
+          }
+        } catch (err) {
+          console.warn("loadAttributes failed after detail fetch", err);
+        }
+      } catch {}
+      // tags
+      const tagPanel = document.getElementById("tagPanel");
+      if (tagPanel) tagPanel.style.display = "none";
+      const tagList = document.getElementById("detail_tagList");
+      if (tagList) tagList.innerHTML = "";
+      const title =
+        pickLabelValue(
+          doc && (doc.label_zh || doc.label || doc.name || doc.title),
+        ) ||
+        (doc && doc._key) ||
+        "未知实体";
+      const wikiTopTitleEl = document.getElementById("wikiTopTitle");
+      if (wikiTopTitleEl) {
+        setText(wikiTopTitleEl, title);
+        const existingLinkEl = document.getElementById("wikiTopLink");
+        if (existingLinkEl) existingLinkEl.remove();
+        const linkUrl =
+          doc && (doc.link || doc.url || "")
+            ? (doc.link || doc.url || "").toString().trim()
+            : "";
+        if (linkUrl) {
+          const linkEl = document.createElement("a");
+          linkEl.id = "wikiTopLink";
+          linkEl.href = linkUrl;
+          linkEl.target = "_blank";
+          linkEl.rel = "noreferrer noopener";
+          linkEl.title = "外部链接";
+          linkEl.style.display = "inline-flex";
+          linkEl.style.alignItems = "center";
+          linkEl.style.justifyContent = "center";
+          linkEl.style.marginLeft = "8px";
+          linkEl.style.fontSize = "1rem";
+          linkEl.style.color = "var(--link)";
+          linkEl.innerHTML = '<i class="fa-solid fa-link"></i>';
+          wikiTopTitleEl.appendChild(linkEl);
+        }
+      }
+      if (typeof window.updateDetailBreadcrumbCurrent === "function") {
+        window.updateDetailBreadcrumbCurrent(
+          (doc && (doc._id || doc.id || doc._key)) || routeId || fullId,
+          title,
+        );
+      }
+
+      // Render classes as tags
+      const wikiClasses = document.getElementById("wikiClasses");
+      if (wikiClasses) {
+        wikiClasses.innerHTML = "";
+        const normalizeClassValues = (input) => {
+          let value = input;
+          if (typeof value === "string") {
+            const trimmed = value.trim();
+            if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+              try {
+                value = JSON.parse(trimmed);
+              } catch {}
+            }
+          }
+          const flattened = Array.isArray(value) ? value.flat(Infinity) : [value];
+          return flattened
+            .map((item, index) => {
+              if (item == null || item === "") return null;
+              if (typeof item === "object") {
+                const name = pickLabelValue(
+                  item.name || item.label_zh || item.label || item.title || item.value,
+                );
+                if (!name) return null;
+                return {
+                  ...item,
+                  id: item.id || item._id || item._key || "",
+                  name,
+                };
+              }
+              return { id: "", name: String(item).trim(), color: "", index };
+            })
+            .filter((item) => item && item.name);
+        };
+        const classes = normalizeClassValues(doc.classes);
+        // Fallback to single classLabel if classes array is empty but classLabel exists
+        if (classes.length === 0 && doc.classLabel) {
+          normalizeClassValues(doc.classLabel).forEach((item) =>
+            classes.push({
+              ...item,
+              id: item.id || doc.classId,
+              color: item.color || doc.color,
+            }),
+          );
+        }
+
+        classes.forEach((cls) => {
+          const tag = document.createElement("span");
+          tag.className = "tag";
+          tag.style.display = "inline-flex";
+          tag.style.alignItems = "center";
+          tag.style.gap = "4px";
+          tag.style.padding = "2px 6px";
+          tag.style.borderRadius = "4px";
+          tag.style.fontSize = "12px";
+          tag.style.backgroundColor = cls.color ? cls.color + "20" : "#f1f5f9"; // Light background
+          tag.style.color = cls.color || "#475569";
+          tag.style.border = `1px solid ${cls.color ? cls.color + "40" : "#e2e8f0"}`;
+
+          const label = document.createElement("span");
+          label.textContent = cls.name || "未命名分类";
+          tag.appendChild(label);
+
+          if (cls.id) {
+            const delBtn = document.createElement("i");
+            delBtn.className = "fa-solid fa-xmark";
+            delBtn.style.cursor = "pointer";
+            delBtn.style.opacity = "0.6";
+            delBtn.title = "移除分类";
+            delBtn.onmouseover = () => (delBtn.style.opacity = "1");
+            delBtn.onmouseout = () => (delBtn.style.opacity = "0.6");
+            delBtn.onclick = async (e) => {
+              e.stopPropagation();
+              if (confirm(`确认移除分类“${cls.name}”吗？`)) {
+                await removeEntityClass(fullId, cls.id);
+                showNodeDetailInline(fullId); // Refresh
+              }
+            };
+            tag.appendChild(delBtn);
+          }
+
+          wikiClasses.appendChild(tag);
+        });
+      }
+
+      const wikiHtmlPresent = Boolean(data.page?.html || (doc && doc.html));
+      const wikiTopDescEl = document.getElementById("wikiTopDesc");
+      const topDescText =
+        pickLabelValue(
+          doc &&
+            (doc.desc_zh || doc.description || doc.summary || doc.desc),
+        ) || "";
+      const wikiTopMedia = document.getElementById("wikiTopMedia");
+      const hasTopMedia = Boolean(
+        wikiTopMedia && wikiTopMedia.querySelector("img,video,iframe,object"),
+      );
+      if (wikiTopDescEl) {
+        if (topDescText) {
+          wikiTopDescEl.textContent = topDescText;
+          wikiTopDescEl.style.display = "";
+        } else {
+          wikiTopDescEl.textContent = "";
+          wikiTopDescEl.style.display = "none";
+        }
+      }
+      const normalizeDetailMetaValues = (value) => {
+        let source = value;
+        if (typeof source === "string") {
+          const trimmed = source.trim();
+          if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+            try {
+              source = JSON.parse(trimmed);
+            } catch {}
+          }
+        }
+        const values = (Array.isArray(source) ? source.flat(Infinity) : [source])
+          .map((item) => pickLabelValue(item))
+          .map((item) => String(item || "").trim())
+          .filter(Boolean);
+        return Array.from(new Set(values));
+      };
+      const tagValues = normalizeDetailMetaValues(doc && doc.tags);
+      const wikiTags = document.getElementById("wikiTags");
+      if (wikiTags) {
+        wikiTags.replaceChildren();
+        if (tagValues.length) {
+          const label = document.createElement("span");
+          label.className = "detail-meta-label";
+          label.textContent = "标签";
+          wikiTags.appendChild(label);
+          tagValues.forEach((tagValue) => {
+            const chip = document.createElement("span");
+            chip.className = "detail-tag-chip";
+            chip.textContent = tagValue;
+            wikiTags.appendChild(chip);
+          });
+          wikiTags.style.display = "flex";
+        } else {
+          wikiTags.style.display = "none";
+        }
+      }
+      const aliasValues = normalizeDetailMetaValues(
+        doc && (doc.aliases_zh || doc.aliases || doc.alias),
+      );
+      const wikiAliases = document.getElementById("wikiAliases");
+      if (wikiAliases) {
+        wikiAliases.replaceChildren();
+        if (aliasValues.length) {
+          const label = document.createElement("span");
+          label.className = "detail-meta-label";
+          label.textContent = "别名：";
+          const values = document.createElement("span");
+          values.className = "detail-meta-values";
+          values.textContent = aliasValues.join("、");
+          wikiAliases.append(label, values);
+          wikiAliases.style.display = "block";
+        } else {
+          wikiAliases.style.display = "none";
+        }
+      }
+      const wikiTopVideo = document.getElementById("wikiTopVideo");
+      if (wikiTopVideo) {
+        wikiTopVideo.innerHTML = "";
+        const videoUrls = [
+          ...normalizeMediaStringList(doc && doc.video),
+          ...normalizeMediaStringList(doc && doc.videos),
+        ].filter((url, index, arr) => url && arr.indexOf(url) === index);
+        if (videoUrls.length) {
+          const normalizeDetailCoverSlots = (value) => {
+            let source = value;
+            if (typeof source === "string") {
+              const text = source.trim();
+              if (text.startsWith("[") && text.endsWith("]")) {
+                try {
+                  source = JSON.parse(text);
+                } catch {}
+              }
+            }
+            return Array.isArray(source)
+              ? source.map((item) => String(item || "").trim())
+              : [];
+          };
+          const coverList = normalizeDetailCoverSlots(doc?.covers);
+          if (!coverList.length) {
+            coverList.push(...normalizeMediaStringList(doc?.cover));
+          }
+          const playlistItems = videoUrls.map((videoUrl, index) => {
+            const resolvedUrl = (() => {
+              try {
+                return new URL(videoUrl, window.location.origin).toString();
+              } catch {
+                return videoUrl;
+              }
+            })();
+            const fromCovers = String(coverList[index] || "").trim();
+            const fromCover = String(doc?.cover || "").trim();
+            const poster = fromCovers || (videoUrls.length === 1 ? fromCover : "");
+            const extMatch = resolvedUrl.split("?")[0].match(/\.([a-z0-9]+)$/i);
+            return {
+              index,
+              src: resolvedUrl,
+              poster,
+              type: extMatch ? `video/${extMatch[1].toLowerCase()}` : "",
+              title:
+                videoUrls.length > 1
+                  ? `${title || String(doc?.label_zh || doc?.label || "").trim()} ${index + 1}`
+                  : title || String(doc?.label_zh || doc?.label || "").trim(),
+            };
+          });
+
+          const playerShell = document.createElement("div");
+          playerShell.className = "detail-video-playlist-shell";
+          const playerStage = document.createElement("div");
+          playerStage.className = "detail-video-stage";
+          const playerMount = document.createElement("div");
+          playerMount.className = "detail-video-player-mount";
+          playerStage.appendChild(playerMount);
+          playerShell.appendChild(playerStage);
+
+          let playlistNav = null;
+          let currentPlayerEl = null;
+          let activePlaylistIndex = 0;
+          let detailCoverSaveQueue = Promise.resolve();
+
+          const captureDetailVideoCover = (videoEl) => {
+            if (!(videoEl instanceof HTMLVideoElement)) return "";
+            const width = Number(videoEl.videoWidth || 0);
+            const height = Number(videoEl.videoHeight || 0);
+            if (!width || !height || videoEl.readyState < 2) return "";
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            const context = canvas.getContext("2d");
+            if (!context) return "";
+            context.drawImage(videoEl, 0, 0, width, height);
+            return canvas.toDataURL("image/jpeg", 0.82);
+          };
+
+          const updateDetailVideoCover = async (item, playerEl) => {
+            if (!item || item.coverValidationStarted) return;
+            item.coverValidationStarted = true;
+
+            // Vidstack mounts a native <video> below media-player. Give the
+            // provider a short window to finish mounting/loading after play.
+            let nativeVideo = null;
+            for (let attempt = 0; attempt < 8; attempt += 1) {
+              nativeVideo =
+                playerEl instanceof HTMLVideoElement
+                  ? playerEl
+                  : playerEl.querySelector?.("video") || null;
+              if (nativeVideo?.readyState >= 2 && nativeVideo.videoWidth) break;
+              await new Promise((resolve) => setTimeout(resolve, 125));
+            }
+
+            try {
+              const coverData = captureDetailVideoCover(nativeVideo);
+              if (!coverData) {
+                item.coverValidationStarted = false;
+                return;
+              }
+              const saveTask = detailCoverSaveQueue.then(async () => {
+                const nextCovers = [...coverList];
+                while (nextCovers.length < videoUrls.length) nextCovers.push("");
+                nextCovers[item.index] = coverData;
+                const updateUrl = new URL(
+                  "/api/kb/nodes/update",
+                  window.location.origin,
+                );
+                if (typeof window.appendCurrentDbParam === "function") {
+                  const scopedUrl = window.appendCurrentDbParam(updateUrl);
+                  if (scopedUrl instanceof URL) updateUrl.search = scopedUrl.search;
+                }
+                const response = await fetch(updateUrl.toString(), {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    id: String(doc?._id || doc?.id || fullId).replace(/^entity\//, ""),
+                    covers: nextCovers,
+                  }),
+                });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const result = await response.json();
+                if (result?.ok === false) {
+                  throw new Error(result.error || result.detail || "封面更新失败");
+                }
+                return { result, nextCovers };
+              });
+              detailCoverSaveQueue = saveTask.catch(() => null);
+              const { result, nextCovers } = await saveTask;
+              const savedCovers = normalizeDetailCoverSlots(result?.node?.covers);
+              const savedCover = savedCovers[item.index] || coverData;
+              coverList.splice(0, coverList.length, ...(savedCovers.length ? savedCovers : nextCovers));
+              item.poster = savedCover;
+              item.coverValidated = true;
+              try {
+                if (playerEl instanceof HTMLVideoElement) playerEl.poster = savedCover;
+                else playerEl.setAttribute("poster", savedCover);
+              } catch {}
+              const thumb = playlistNav?.querySelector(
+                `.detail-video-playlist-item:nth-child(${item.index + 1}) .detail-video-playlist-thumb`,
+              );
+              if (thumb) {
+                thumb.style.backgroundImage = `url("${savedCover.replace(/"/g, "%22")}")`;
+              }
+            } catch (error) {
+              item.coverValidationStarted = false;
+              console.warn("详情页视频封面自动校验失败", error);
+            }
+          };
+
+          const updatePlaylistSelection = () => {
+            if (!playlistNav) return;
+            Array.from(
+              playlistNav.querySelectorAll(".detail-video-playlist-item"),
+            ).forEach((button, buttonIndex) => {
+              const isActive = buttonIndex === activePlaylistIndex;
+              button.classList.toggle("is-active", isActive);
+              button.setAttribute("aria-pressed", isActive ? "true" : "false");
+            });
+          };
+
+          const deleteDetailVideoAt = async (index, deleteButton) => {
+            const item = playlistItems[index];
+            if (!item) return;
+            if (!window.confirm(`确定删除视频 ${index + 1}？`)) return;
+            if (deleteButton) deleteButton.disabled = true;
+            try {
+              // Finish any cover correction first so it cannot write an old
+              // video/cover array back after this deletion.
+              await detailCoverSaveQueue.catch(() => null);
+              const nextVideos = videoUrls.filter((_, itemIndex) => itemIndex !== index);
+              const nextCovers = [...coverList];
+              while (nextCovers.length < videoUrls.length) nextCovers.push("");
+              nextCovers.splice(index, 1);
+              if (nextCovers.length > nextVideos.length) {
+                nextCovers.length = nextVideos.length;
+              }
+              const updateUrl = new URL(
+                "/api/kb/nodes/update",
+                window.location.origin,
+              );
+              if (typeof window.appendCurrentDbParam === "function") {
+                const scopedUrl = window.appendCurrentDbParam(updateUrl);
+                if (scopedUrl instanceof URL) updateUrl.search = scopedUrl.search;
+              }
+              const response = await fetch(updateUrl.toString(), {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  id: String(doc?._id || doc?.id || fullId).replace(/^entity\//, ""),
+                  videos: nextVideos,
+                  covers: nextCovers,
+                }),
+              });
+              if (!response.ok) throw new Error(`HTTP ${response.status}`);
+              const result = await response.json();
+              if (result?.ok === false) {
+                throw new Error(result.error || result.detail || "视频删除失败");
+              }
+              await showNodeDetailInline(routeId || fullId, {
+                preserveSidebarState,
+              });
+            } catch (error) {
+              if (deleteButton) deleteButton.disabled = false;
+              console.warn("详情页视频删除失败", error);
+              window.alert(`视频删除失败：${error?.message || error}`);
+            }
+          };
+
+          const renderPlayerAt = (nextIndex) => {
+            const item = playlistItems[nextIndex];
+            if (!item) return;
+            activePlaylistIndex = nextIndex;
+            if (currentPlayerEl) {
+              try {
+                if (typeof window.kbDestroyVideoPlayer === "function") {
+                  window.kbDestroyVideoPlayer(currentPlayerEl);
+                }
+              } catch {}
+            }
+            playerMount.innerHTML = "";
+            const videoEl =
+              typeof window.kbCreateVideoPlayer === "function"
+                ? window.kbCreateVideoPlayer({
+                    src: item.src,
+                    type: item.type,
+                    poster: item.poster,
+                    title: item.title,
+                    preload: "metadata",
+                    playsInline: true,
+                    controls: true,
+                    streamType: "on-demand",
+                    logLevel: "warn",
+                    className: "kb-video-player detail-video-main-player",
+                    showSliderVideoPreview: true,
+                    previewVideoSrc: item.src,
+                    attributes: { controlsList: "nodownload" },
+                    style: {
+                      display: "block",
+                      width: "100%",
+                      maxWidth: "100%",
+                      height: "auto",
+                      borderRadius: "16px",
+                      background: "#000",
+                    },
+                  })
+                : document.createElement("video");
+            if (!videoEl.src && videoEl.tagName === "VIDEO") {
+              videoEl.controls = true;
+              videoEl.preload = "metadata";
+              videoEl.playsInline = true;
+              videoEl.setAttribute("playsinline", "");
+              videoEl.setAttribute("webkit-playsinline", "");
+              videoEl.style.display = "block";
+              videoEl.style.width = "100%";
+              videoEl.style.maxWidth = "100%";
+              videoEl.style.height = "auto";
+              videoEl.style.borderRadius = "16px";
+              videoEl.style.background = "#000";
+              videoEl.setAttribute("controlsList", "nodownload");
+              if (item.poster) {
+                videoEl.poster = item.poster;
+              }
+              videoEl.src = item.src;
+            }
+            videoEl.addEventListener("error", (event) => {
+              console.warn("详情页视频播放错误", event);
+              try {
+                if (typeof window.kbDestroyVideoPlayer === "function") {
+                  window.kbDestroyVideoPlayer(videoEl);
+                }
+              } catch {}
+              playerMount.innerHTML = "";
+              const fallback = document.createElement("div");
+              fallback.className = "detail-video-fallback";
+              fallback.textContent = "视频加载失败，点击打开原始文件。";
+              const linkEl = document.createElement("a");
+              linkEl.href = item.src;
+              linkEl.target = "_blank";
+              linkEl.rel = "noreferrer noopener";
+              linkEl.textContent = "打开视频";
+              fallback.appendChild(document.createElement("br"));
+              fallback.appendChild(linkEl);
+              playerMount.appendChild(fallback);
+              syncDetailTopMediaStage();
+            });
+            videoEl.addEventListener("play", () => {
+              void updateDetailVideoCover(item, videoEl);
+            });
+            currentPlayerEl = videoEl;
+            playerMount.appendChild(videoEl);
+            updatePlaylistSelection();
+          };
+
+          if (playlistItems.length) {
+            playlistNav = document.createElement("div");
+            playlistNav.className = "detail-video-playlist";
+            playlistItems.forEach((item, index) => {
+              const button = document.createElement("div");
+              button.className = "detail-video-playlist-item";
+              button.setAttribute("role", "button");
+              button.tabIndex = 0;
+              button.setAttribute("aria-label", `播放视频 ${index + 1}`);
+              const thumb = document.createElement("span");
+              thumb.className = "detail-video-playlist-thumb";
+              if (item.poster) {
+                thumb.style.backgroundImage = `url("${item.poster.replace(/"/g, "%22")}")`;
+              }
+              const deleteButton = document.createElement("button");
+              deleteButton.type = "button";
+              deleteButton.className = "detail-video-playlist-delete";
+              deleteButton.setAttribute("aria-label", `删除视频 ${index + 1}`);
+              deleteButton.title = "删除视频";
+              deleteButton.innerHTML = '<i class="fa-solid fa-trash-can"></i>';
+              button.appendChild(thumb);
+              button.appendChild(deleteButton);
+              button.addEventListener("click", () => {
+                renderPlayerAt(index);
+              });
+              button.addEventListener("keydown", (event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                renderPlayerAt(index);
+              });
+              deleteButton.addEventListener("click", (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void deleteDetailVideoAt(index, deleteButton);
+              });
+              playlistNav.appendChild(button);
+            });
+            playlistNav.addEventListener(
+              "wheel",
+              (event) => {
+                if (
+                  playlistNav.scrollWidth <= playlistNav.clientWidth ||
+                  Math.abs(event.deltaX) > Math.abs(event.deltaY)
+                ) {
+                  return;
+                }
+                event.preventDefault();
+                playlistNav.scrollLeft += event.deltaY;
+              },
+              { passive: false },
+            );
+            playerShell.appendChild(playlistNav);
+          }
+
+          renderPlayerAt(0);
+          wikiTopVideo.appendChild(playerShell);
+          wikiTopVideo.style.display = "block";
+        } else {
+          wikiTopVideo.style.display = "none";
+        }
+        syncDetailTopMediaStage();
+      }
+      const wikiTopPdf = document.getElementById("wikiTopPdf");
+      if (wikiTopPdf) {
+        wikiTopPdf.innerHTML = "";
+        const pdfUrl = String((doc && doc.pdf) || "").trim();
+        if (pdfUrl && isPdfUrl(pdfUrl)) {
+          const resolvedUrl = (() => {
+            try {
+              return new URL(pdfUrl, window.location.origin).toString();
+            } catch {
+              return pdfUrl;
+            }
+          })();
+          mountPdfSpreadViewer(wikiTopPdf, resolvedUrl, title);
+          wikiTopPdf.style.display = "block";
+        } else {
+          wikiTopPdf.style.display = "none";
+        }
+        syncDetailTopMediaStage();
+      }
+      document.getElementById("wikiTop").style.display = "";
+      // collect images
+      const imageEntries = [];
+      const seenImageUrls = new Set();
+      if (doc && typeof doc.avatar === "string")
+        addImageCandidate(
+          imageEntries,
+          seenImageUrls,
+          doc.avatar,
+          "头像",
+          true,
+        );
+      if (doc && typeof doc.image === "string")
+        addImageCandidate(
+          imageEntries,
+          seenImageUrls,
+          doc.image,
+          pickLabelValue(doc.image_caption) || "",
+          true,
+        );
+      if (doc && Array.isArray(doc.images)) {
+        for (const img of doc.images) {
+          const caption =
+            (img && pickLabelValue(img.caption)) ||
+            pickLabelValue(doc.image_caption) ||
+            pickLabelValue(doc.label_zh) ||
+            pickLabelValue(doc.label) ||
+            "";
+          const urls = extractImageUrls(img, true);
+          if (urls && urls.length)
+            urls.forEach((u) =>
+              addImageCandidate(imageEntries, seenImageUrls, u, caption, true),
+            );
+          else if (typeof img === "string")
+            addImageCandidate(imageEntries, seenImageUrls, img, caption, true);
+        }
+      }
+      if (doc && typeof doc.thumbnail === "string")
+        addImageCandidate(
+          imageEntries,
+          seenImageUrls,
+          doc.thumbnail,
+          "缩略图",
+          true,
+        );
+      if (doc && typeof doc.logo === "string")
+        addImageCandidate(imageEntries, seenImageUrls, doc.logo, "Logo", true);
+      if (doc && typeof doc.photo === "string")
+        addImageCandidate(imageEntries, seenImageUrls, doc.photo, "照片", true);
+      if (doc && typeof doc.picture === "string")
+        addImageCandidate(
+          imageEntries,
+          seenImageUrls,
+          doc.picture,
+          "图片",
+          true,
+        );
+      if (doc && typeof doc.image_url === "string")
+        addImageCandidate(imageEntries, seenImageUrls, doc.image_url, "", true);
+      if (doc && typeof doc.imageUrl === "string")
+        addImageCandidate(imageEntries, seenImageUrls, doc.imageUrl, "", true);
+      if (doc && typeof doc.thumbnailUrl === "string")
+        addImageCandidate(
+          imageEntries,
+          seenImageUrls,
+          doc.thumbnailUrl,
+          "缩略图",
+          true,
+        );
+      if (doc && typeof doc.pic === "string")
+        addImageCandidate(imageEntries, seenImageUrls, doc.pic, "图片", true);
+      if (doc && typeof doc.img === "string")
+        addImageCandidate(imageEntries, seenImageUrls, doc.img, "图片", true);
+      if (doc && typeof doc.image === "object")
+        addImageCandidatesFromValue(
+          imageEntries,
+          seenImageUrls,
+          doc.image,
+          pickLabelValue(doc.image_caption) || "",
+          true,
+        );
+      let detailMediaAttrItems = [];
+      // attributes -> props: prefer backend attribute list API used by attribute manager
+      let propCount = 0;
+      const added = new Set();
+      try {
+        // Prefer authoritative attribute list from attribute-manager API
+        let attrItems = [];
+        try {
+          const aUrl = new URL(
+            "/api/kb/node/attributes",
+            window.location.origin,
+          );
+          if (typeof window.appendCurrentDbParam === "function") {
+            const scopedUrl = window.appendCurrentDbParam(aUrl);
+            if (scopedUrl instanceof URL) {
+              aUrl.search = scopedUrl.search;
+            }
+          }
+          aUrl.searchParams.set("id", fullId);
+          const aData = typeof window.kbFetchAttributeData === 'function'
+            ? await window.kbFetchAttributeData(aUrl.toString())
+            : await fetch(aUrl.toString()).then((response) => { if (!response.ok) throw new Error('属性加载失败'); return response.json(); });
+          if (aData) {
+            attrItems = Array.isArray(aData.items) ? aData.items : [];
+            attrItems.rowOrder = aData.row_order;
+          } else {
+            // API returned non-ok -> leave attrItems empty
+            attrItems = [];
+          }
+        } catch (e) {
+          attrItems = [];
+        }
+        // Use the raw attribute items for rendering so the detail panel
+        // matches the editable attribute list exactly. Still scan for
+        // images (do not remove image candidates), but do not dedupe or
+        // skip props here — let the renderer show the same rows as the
+        // attribute manager.
+        try {
+          // collect images from attrItems (best-effort) but don't alter list
+          try {
+            for (const it of attrItems) {
+              if (!it) continue;
+              const name = (
+                it.property_label_zh ||
+                it.property_label ||
+                it.property ||
+                getAttributeLabel(it) ||
+                pickLabelValue(it.key) ||
+                pickLabelValue(it.name) ||
+                ""
+              ).trim();
+              const val =
+                typeof it.value !== "undefined"
+                  ? it.value
+                  : it.val ||
+                    it.text ||
+                    it.description ||
+                    it.value_raw ||
+                    it.data ||
+                    "";
+              const imageCaption =
+                pickLabelValue(it.caption) ||
+                pickLabelValue(it.description) ||
+                name;
+              try {
+                // Wikidata time values contain a calendarmodel URL such as
+                // http://www.wikidata.org/entity/Q1985727. Treating every
+                // HTTP value as an image turns dates into broken carousel
+                // slides. Only explicit media properties may use loose URLs;
+                // ordinary attributes must resolve to an actual image URL.
+                const imgs = extractImageUrls(val, isMediaAttrItem(it));
+                if (imgs && imgs.length)
+                  imgs.forEach((u) =>
+                    addImageCandidate(
+                      imageEntries,
+                      seenImageUrls,
+                      u,
+                      imageCaption,
+                      true,
+                    ),
+                  );
+              } catch {}
+            }
+          } catch (e) {}
+          const mediaAttrItems = Array.isArray(attrItems)
+            ? attrItems.filter(isMediaAttrItem)
+            : [];
+          detailMediaAttrItems = mediaAttrItems;
+          const detailAttrItems = Array.isArray(attrItems)
+            ? attrItems.filter((it) => !isMediaAttrItem(it))
+            : [];
+          detailAttrItems.rowOrder = attrItems.rowOrder;
+          const detailAttrListEl = document.getElementById("detailAttrList");
+          if (detailAttrListEl) {
+            // renderAttrList checks container.id === 'detailAttrList' to enable readOnly mode
+            renderAttrList(detailAttrListEl, detailAttrItems, fullId);
+            if (detailAttrItems && detailAttrItems.length > 0) {
+              propCount += detailAttrItems.length;
+            }
+          }
+        } catch (e) {
+          console.error("renderAttrList (detail) failed", e);
+        }
+      } catch (e) {
+        console.error("render attributes failed", e);
+      }
+      // neighbors self-edges and outgoing relations
+      if (Array.isArray(neighbors)) {
+        const centerId = doc && doc._id;
+        for (const it of neighbors) {
+          const edge = it && it.edge;
+          if (!edge) continue;
+          const isSelf =
+            centerId && edge.source === centerId && edge.target === centerId;
+          const displayName =
+            (edge &&
+              (edge.property_label_zh ||
+                edge.property_label ||
+                edge.label_zh ||
+                edge.label)) ||
+            "属性";
+          if (isSelf) {
+            let rawVal = edge && (edge.value || edge.val || edge.text);
+            if (typeof rawVal === "undefined")
+              rawVal = edge && edge.datavalue && edge.datavalue.value;
+            if (typeof rawVal === "undefined")
+              rawVal =
+                edge &&
+                edge.mainsnak &&
+                edge.mainsnak.datavalue &&
+                edge.mainsnak.datavalue.value;
+            const imageCaption =
+              pickLabelValue(edge && edge.caption) ||
+              pickLabelValue(edge && edge.description) ||
+              displayName;
+            const imageLike = isImagePropertyName
+              ? isImagePropertyName(displayName)
+              : false;
+            if (imageLike) {
+              const imgs = extractImageUrls(rawVal, true);
+              if (imgs && imgs.length)
+                imgs.forEach((u) =>
+                  addImageCandidate(
+                    imageEntries,
+                    seenImageUrls,
+                    u,
+                    imageCaption,
+                    true,
+                  ),
+                );
+              continue;
+            }
+            let skipProp = false;
+            try {
+              const imgs = extractImageUrls(rawVal);
+              if (imgs && imgs.length) {
+                imgs.forEach((u) =>
+                  addImageCandidate(
+                    imageEntries,
+                    seenImageUrls,
+                    u,
+                    imageCaption,
+                  ),
+                );
+                skipProp = true;
+              }
+            } catch {}
+            const val = formatPropValue(rawVal);
+            const dedupKey = displayName + "::" + String(val);
+            if (!skipProp && displayName && !added.has(dedupKey)) {
+              // For self-edge attribute-like neighbors: do not append
+              // extra rows into the detailAttrList here. We only mark as
+              // seen so it doesn't affect counting/visibility elsewhere.
+              try {
+                added.add(dedupKey);
+                propCount++;
+              } catch (e) {}
+            }
+            continue;
+          }
+          const neighbor = it && it.node;
+          const isOutgoing = centerId && edge.source === centerId;
+          if (!isOutgoing) continue;
+          const relationName = displayName;
+          const neighborId =
+            neighbor && (neighbor._id || neighbor.id || neighbor._key);
+          const neighborLabel =
+            (neighbor &&
+              (neighbor.label_zh ||
+                neighbor.label ||
+                neighbor.name ||
+                neighbor.title)) ||
+            neighborId ||
+            (isOutgoing ? edge.target : edge.source) ||
+            "";
+          const relationVal = {
+            __type: "relation",
+            direction: isOutgoing ? "outgoing" : "incoming",
+            label: neighborLabel,
+            id: neighborId,
+            href: neighborId
+              ? `/kb/detail?id=${encodeURIComponent(neighborId)}`
+              : "",
+            note: edge && edge.rank ? edge.rank : "",
+          };
+          const dedupKey =
+            relationName + "::" + (neighborId || neighborLabel || "") + "::out";
+          if (relationName && !added.has(dedupKey)) {
+            // Do not append neighbor/relation rows into the attribute infobox list.
+            // Just mark as added so we don't duplicate keys and count it for infobox visibility.
+            added.add(dedupKey);
+            propCount++;
+          }
+        }
+      }
+      // Media types use tabs. Select the first available type in priority
+      // order: image, video, then PDF.
+      const hasImageMedia = renderWikiMediaGrid(detailMediaAttrItems, imageEntries);
+      const mediaStage = document.getElementById("detailTopMediaStage");
+      if (mediaStage) mediaStage.dataset.activeMedia = hasImageMedia
+        ? "image"
+        : wikiTopVideo?.childElementCount
+          ? "video"
+          : wikiTopPdf?.childElementCount
+            ? "pdf"
+            : "";
+      syncDetailTopMediaStage();
+      if (wikiTopDescEl) {
+        const stage = document.getElementById("detailTopMediaStage");
+        const hasMediaStage =
+          stage instanceof HTMLElement && stage.style.display !== "none";
+        if (topDescText) {
+          wikiTopDescEl.textContent = topDescText;
+          wikiTopDescEl.style.display = "";
+        } else {
+          wikiTopDescEl.textContent = "";
+          wikiTopDescEl.style.display = "none";
+        }
+      }
+      const attrSection = document.getElementById("detailAttrSection");
+      if (attrSection) {
+        attrSection.style.display =
+          SHOW_DETAIL_ATTR_SECTION && propCount > 0 ? "" : "none";
+      }
+      // render wiki content if available and show edit button inside detail panel
+      try {
+        const view = document.getElementById("wikiView");
+        view.innerHTML =
+          data.page?.html ||
+          (doc && doc.html) ||
+          '<div class="muted">暂无百科内容。</div>';
+        try {
+          const be = document.getElementById("btnEditWiki");
+          if (be) {
+            be.style.display = doc?.can_edit || canEditDefaultApplication() ? "inline-flex" : "none";
+            // inline edit click is handled by wired listener
+          }
+        } catch (e) {}
+        // Also proactively load the canonical wiki payload into the inline editor
+        // This ensures TOC, heading slugs, markdown/state stash, revisions and backlinks
+        try {
+          const entityForWiki =
+            dp && dp.dataset && dp.dataset.entityId
+              ? dp.dataset.entityId
+              : fullId;
+          if (entityForWiki) await loadWikiInline(entityForWiki, "zh");
+        } catch (e) {
+          // best-effort: do not block detail rendering on wiki fetch failures
+          console.error("loadWikiInline failed", e);
+        }
+        window.dispatchEvent(new CustomEvent("kb-detail-loaded"));
+      } catch {}
+    } catch (e) {
+      console.error("load node detail failed", e);
+      inner.querySelector("#wikiView").innerHTML =
+        '<div class="muted">加载失败</div>';
+    }
+  }
+  // Inline wiki functions adapted from kb_detail.html
+  function toggleWikiModeInline(editing) {
+    const view = document.getElementById("wikiView");
+    const edit = document.getElementById("wikiEditInline");
+    const btnEdit = document.getElementById("btnEditWiki");
+    const btnSaveTop = document.getElementById("btnSaveWikiInlineTop");
+    const btnCancel = document.getElementById("btnCancelWikiInline");
+    const btnSave = document.getElementById("btnSaveWikiInline");
+    const attrSection = document.getElementById("detailAttrSection");
+    if (editing) {
+      if (view) view.style.display = "none";
+      if (edit) edit.style.display = "block";
+      // hide detail attribute list while editing wiki inline
+      try {
+        const tagPanel = document.getElementById("tagPanel");
+        if (tagPanel) tagPanel.style.display = "none";
+        const tagList = document.getElementById("detail_tagList");
+        if (tagList) tagList.innerHTML = "";
+      } catch (e) {}
+      try {
+        if (attrSection) attrSection.style.display = "none";
+      } catch (e) {}
+      if (btnEdit) btnEdit.style.display = "none";
+      if (btnSaveTop) btnSaveTop.style.display = "inline-flex";
+      if (btnCancel) btnCancel.style.display = "inline-flex";
+      if (btnSave) btnSave.style.display = "inline-flex";
+
+      // Initialize EasyMDE if not already initialized
+      if (typeof EasyMDE !== "undefined" && !window.easyMDE) {
+        if (!window.easyMDEPasteImages) {
+          window.easyMDEPasteImages = {};
+          window.easyMDEPasteImageIndex = 1;
+        }
+
+        window.easyMDERenderPasteImages = (text) => {
+          if (!text) return text;
+          return text.replace(
+            /!\[([^\]]*)\]\(((__easyMDE_paste_image_\d+__)|data:image\/[^)]+)\)/g,
+            (match, alt, key) => {
+              if (key.startsWith("__easyMDE_paste_image_")) {
+                const dataUrl = window.easyMDEPasteImages?.[key];
+                return dataUrl ? `![${alt}](${dataUrl})` : match;
+              }
+              return match;
+            },
+          );
+        };
+
+        window.applyEasyMDEPasteImageWidgets = (cm) => {
+          if (!cm || !cm.getDoc) return;
+          const doc = cm.getDoc();
+          const text = doc.getValue();
+          const regex =
+            /!\[([^\]]*)\]\(((__easyMDE_paste_image_\d+__)|data:image\/[^)]+)\)/g;
+          const existingMarks = doc.getAllMarks ? doc.getAllMarks() : [];
+          existingMarks.forEach((mark) => {
+            if (mark.__easyMDEPasteImageWidget) {
+              mark.clear();
+            }
+          });
+          let match;
+          while ((match = regex.exec(text)) !== null) {
+            const alt = match[1];
+            const key = match[2];
+            let src = key;
+            if (key.startsWith("__easyMDE_paste_image_")) {
+              src = window.easyMDEPasteImages?.[key];
+            }
+            if (!src) continue;
+            const start = doc.posFromIndex(match.index);
+            const end = doc.posFromIndex(match.index + match[0].length);
+            const img = document.createElement("img");
+            img.src = src;
+            img.alt = alt || "pasted image";
+            img.style.width = "100%";
+            img.style.height = "auto";
+            img.style.display = "block";
+            const mark = cm.markText(start, end, {
+              replacedWith: img,
+              handleMouseEvents: true,
+            });
+            mark.__easyMDEPasteImageWidget = true;
+          }
+        };
+
+        window.easyMDE = new EasyMDE({
+          element: document.getElementById("wikiMdInline"),
+          spellChecker: false,
+          autosave: {
+            enabled: false,
+          },
+          previewRender: (plainText, preview) => {
+            const html = window.easyMDERenderPasteImages(plainText);
+            if (typeof marked !== "undefined") {
+              return marked.parse(html);
+            }
+            if (preview) preview.innerHTML = html;
+            return html;
+          },
+          toolbar: [
+            "bold",
+            "italic",
+            "heading",
+            "|",
+            "quote",
+            "unordered-list",
+            "ordered-list",
+            "|",
+            "link",
+            "image",
+            "table",
+            "|",
+            "preview",
+            "side-by-side",
+            "fullscreen",
+            "|",
+            "guide",
+          ],
+          status: false,
+          minHeight: "400px",
+          maxHeight: "900px",
+        });
+
+        try {
+          const cm = window.easyMDE.codemirror;
+          const inputField = cm.getInputField && cm.getInputField();
+          if (inputField) {
+            inputField.addEventListener("paste", async (event) => {
+              const clipboardData = event.clipboardData || window.clipboardData;
+              if (!clipboardData) return;
+              const items = Array.from(clipboardData.items || []);
+              const imageItem = items.find(
+                (item) => item.type && item.type.startsWith("image/"),
+              );
+              if (!imageItem) return;
+              event.preventDefault();
+              const file = imageItem.getAsFile();
+              if (!file) return;
+
+              const reader = new FileReader();
+              reader.onload = () => {
+                const dataUrl = reader.result;
+                if (!dataUrl) return;
+                const doc = cm.getDoc();
+                const cursor = doc.getCursor();
+                const imageKey = `__easyMDE_paste_image_${window.easyMDEPasteImageIndex++}__`;
+                window.easyMDEPasteImages[imageKey] = dataUrl;
+                const markdownImage = `![pasted image](${imageKey})`;
+                doc.replaceRange(markdownImage, cursor);
+                try {
+                  const start = cursor;
+                  const end = doc.posFromIndex(
+                    doc.indexFromPos(cursor) + markdownImage.length,
+                  );
+                  const img = document.createElement("img");
+                  img.src = dataUrl;
+                  img.alt = "pasted image";
+                  img.style.width = "100%";
+                  img.style.height = "auto";
+                  img.style.maxHeight = "400px";
+                  img.style.display = "block";
+                  cm.markText(start, end, {
+                    replacedWith: img,
+                    handleMouseEvents: true,
+                  });
+                } catch (innerErr) {
+                  console.warn("EasyMDE paste image widget failed", innerErr);
+                }
+              };
+              reader.readAsDataURL(file);
+            });
+          }
+
+          if (typeof cm.on === "function") {
+            cm.on("changes", () => {
+              setTimeout(() => {
+                window.applyEasyMDEPasteImageWidgets(cm);
+              }, 0);
+            });
+          }
+        } catch (err) {
+          console.warn("EasyMDE image paste handler init failed", err);
+        }
+      }
+      // Refresh EasyMDE to ensure it renders correctly
+      setTimeout(() => {
+        if (window.easyMDE) {
+          window.easyMDE.codemirror.refresh();
+          window.applyEasyMDEPasteImageWidgets(window.easyMDE.codemirror);
+          // Sync value from textarea if needed, though EasyMDE usually does this on init
+          // But if we updated textarea while hidden, we might need to push it
+          const ta = document.getElementById("wikiMdInline");
+          if (ta && ta.value !== window.easyMDE.value()) {
+            window.easyMDE.value(ta.value);
+            window.applyEasyMDEPasteImageWidgets(window.easyMDE.codemirror);
+          }
+        }
+      }, 100);
+    } else {
+      if (view) view.style.display = "";
+      if (edit) edit.style.display = "none";
+      try {
+        if (attrSection) {
+          attrSection.style.display = SHOW_DETAIL_ATTR_SECTION ? "" : "none";
+        }
+      } catch (e) {}
+      if (btnEdit) btnEdit.style.display = "inline-flex";
+      if (btnSaveTop) btnSaveTop.style.display = "none";
+      if (btnCancel) btnCancel.style.display = "none";
+      if (btnSave) btnSave.style.display = "none";
+    }
+  }
+  window.addEventListener("kb-auth-change", (event) => {
+    const editButton = document.getElementById("btnEditWiki");
+    const detailPanel = document.getElementById("detailPanel");
+    if (editButton && detailPanel?.style.display !== "none") {
+      editButton.style.display = canEditDefaultApplication() ? "inline-flex" : "none";
+    }
+  });
+
+  function looksLikeMarkdownTable(md) {
+    try {
+      const text = String(md || "")
+        .replace(/｜/g, "|")
+        .replace(/[－—–]/g, "-");
+      return (
+        /\|.+\|/.test(text) &&
+        /\|\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?/.test(text)
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  function normalizeMarkdownTables(md) {
+    try {
+      const source = String(md || "");
+      if (!source) return "";
+      const lines = source.split(/\r?\n/);
+      const out = [];
+      const normalizeTableLine = (line) =>
+        String(line || "")
+          .replace(/｜/g, "|")
+          .replace(/[－—–]/g, "-");
+      const isTableLine = (line) =>
+        normalizeTableLine(line).trim().includes("|");
+      const isDelimiterLine = (line) => {
+        const normalized = normalizeTableLine(line).trim();
+        if (!normalized.includes("|")) return false;
+        const cells = normalized
+          .split("|")
+          .map((part) => part.trim())
+          .filter(Boolean);
+        if (!cells.length) return false;
+        return cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+      };
+
+      for (let i = 0; i < lines.length; i += 1) {
+        const current = lines[i];
+        const next = i + 1 < lines.length ? lines[i + 1] : "";
+        const isTableStart = isTableLine(current) && isDelimiterLine(next);
+        if (isTableStart) {
+          if (out.length && out[out.length - 1].trim() !== "") {
+            out.push("");
+          }
+          out.push(normalizeTableLine(current));
+          out.push(normalizeTableLine(next));
+          i += 2;
+          while (i < lines.length && isTableLine(lines[i])) {
+            out.push(normalizeTableLine(lines[i]));
+            i += 1;
+          }
+          if (out.length && out[out.length - 1].trim() !== "") {
+            out.push("");
+          }
+          i -= 1;
+          continue;
+        }
+        out.push(current);
+      }
+
+      return out.join("\n");
+    } catch {
+      return String(md || "");
+    }
+  }
+
+  function renderWikiMarkdownToHtml(md) {
+    const source = normalizeMarkdownTables(md);
+    if (typeof marked === "undefined") {
+      return (
+        '<pre style="white-space:pre-wrap">' + escapeHtml(source) + "</pre>"
+      );
+    }
+    try {
+      return marked.parse(source);
+    } catch (e) {
+      return (
+        '<pre style="white-space:pre-wrap">' + escapeHtml(source) + "</pre>"
+      );
+    }
+  }
+
+  function setWikiViewHtml(view, html) {
+    if (!view) return;
+    if (typeof DOMPurify !== "undefined") {
+      try {
+        view.innerHTML = DOMPurify.sanitize(html);
+        return;
+      } catch {}
+    }
+    view.innerHTML = html;
+  }
+
+  async function loadWikiInline(entityId, lang = "zh") {
+    try {
+      // normalize to entity/<id>
+      if (entityId && !entityId.startsWith("entity/")) {
+        entityId = entityId.startsWith("/")
+          ? entityId.slice(1)
+          : "entity/" + entityId;
+      }
+      const url = new URL("/api/wiki/page", window.location.origin);
+      appendDetailDb(url);
+      url.searchParams.set("entityId", entityId);
+      url.searchParams.set("lang", lang);
+      // do not auto-create wiki page from node metadata; avoid syncing node description into markdown
+      url.searchParams.set("create_if_missing", "0");
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error("wiki not found");
+      const data = await resp.json();
+      const page = data.page || {};
+      const view = document.getElementById("wikiView");
+      try {
+        const md = page.md || "";
+        const html = typeof page.html === "string" ? page.html : "";
+        const shouldPreferClientMarkdown =
+          looksLikeMarkdownTable(md) && !/<table[\s>]/i.test(html);
+        if (html && !shouldPreferClientMarkdown) {
+          setWikiViewHtml(view, html);
+        } else if (typeof marked !== "undefined") {
+          setWikiViewHtml(view, renderWikiMarkdownToHtml(md));
+        } else {
+          // fallback: escape and show plain markdown in a <pre>
+          setWikiViewHtml(
+            view,
+            '<pre style="white-space:pre-wrap">' +
+              (md ? escapeHtml(md) : "") +
+              "</pre>",
+          );
+        }
+      } catch (e) {
+        try {
+          setWikiViewHtml(
+            view,
+            '<pre style="white-space:pre-wrap">' +
+              (page.md ? escapeHtml(page.md) : "") +
+              "</pre>",
+          );
+        } catch {
+          view.textContent = page.md || "";
+        }
+      }
+
+      // Update popup TOC
+      if (typeof updateToc === "function") updateToc();
+
+      // build TOC if wikiToc exists
+      try {
+        const tocNav = document.getElementById("wikiToc");
+        if (tocNav) {
+          const toc = Array.isArray(page.toc) ? page.toc : [];
+          tocNav.innerHTML = "";
+          if (toc.length) {
+            tocNav.style.display = "block";
+            const title = document.createElement("div");
+            title.className = "toc-title";
+            title.textContent = "目录";
+            tocNav.appendChild(title);
+            const counters = [];
+            const levels = toc.map((it) => Number(it.level) || 1);
+            const baseLevel = levels.length ? Math.min(...levels) : 1;
+            for (const item of toc) {
+              const level = Math.min(6, Math.max(1, Number(item.level) || 1));
+              const depth = Math.max(0, level - baseLevel);
+              if (counters.length <= depth) {
+                while (counters.length <= depth) counters.push(0);
+              } else {
+                counters.length = depth + 1;
+              }
+              counters[depth] = (counters[depth] || 0) + 1;
+              const numberLabel = counters.slice(0, depth + 1).join(".");
+              const a = document.createElement("a");
+              a.href = "#" + item.slug;
+              a.textContent = `${numberLabel} ${item.text}`;
+              a.className = "toc-link toc-lv-" + level;
+              a.dataset.tocNumber = numberLabel;
+              a.addEventListener("click", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const target = document.getElementById(item.slug);
+                // prefer scrolling the detail panel container so the whole page doesn't move
+                try {
+                  const container =
+                    document.getElementById("detailInner") ||
+                    document.getElementById("wikiContent");
+                  if (container && target) {
+                    const containerRect = container.getBoundingClientRect();
+                    const targetRect = target.getBoundingClientRect();
+                    const offset =
+                      targetRect.top - containerRect.top + container.scrollTop;
+                    container.scrollTo({ top: offset, behavior: "smooth" });
+                  } else if (target) {
+                    // fallback to document scrolling
+                    target.scrollIntoView({
+                      behavior: "smooth",
+                      block: "start",
+                    });
+                  }
+                } catch (err) {
+                  try {
+                    if (target)
+                      target.scrollIntoView({
+                        behavior: "smooth",
+                        block: "start",
+                      });
+                  } catch (e) {}
+                }
+                try {
+                  // keep TOC visible after click (some UI flows may hide it)
+                  tocNav.style.display = "block";
+                } catch (err) {}
+              });
+              tocNav.appendChild(a);
+            }
+          } else {
+            tocNav.style.display = "none";
+          }
+        }
+      } catch (e) {}
+      // If headings not id-ed, attempt simple injection for h1..h6 inside view
+      try {
+        const tmp = view.querySelectorAll("h1,h2,h3,h4,h5,h6");
+        tmp.forEach((h) => {
+          if (!h.id) {
+            const txt = h.textContent || "";
+            const slug = txt
+              .trim()
+              .toLowerCase()
+              .replace(/\s+/g, "-")
+              .replace(/[^\w\-\u4e00-\u9fff]/g, "");
+            if (slug) h.id = slug;
+          }
+        });
+      } catch {}
+      // stash for edit
+      try {
+        const mdContent = page.md || "";
+        document.getElementById("wikiMdInline").value = mdContent;
+        if (window.easyMDE) {
+          window.easyMDE.value(mdContent);
+          window.applyEasyMDEPasteImageWidgets(window.easyMDE.codemirror);
+        }
+      } catch {}
+      try {
+        document.getElementById("wikiStateInline").value =
+          page.state || "published";
+      } catch {}
+      // load revisions and backlinks (use normalized id for keys)
+      await loadRevisionsInline(entityId, lang);
+      await loadBacklinksInline(entityId);
+    } catch (e) {
+      const view = document.getElementById("wikiView");
+      if (view)
+        view.innerHTML =
+          '<div class="muted">暂无百科内容，点击“编辑百科”创建。</div>';
+      const be = document.getElementById("btnEditWiki");
+      if (be) be.style.display = "none";
+    }
+  }
+
+  async function saveWikiInline(entityId, lang = "zh") {
+    // prefer entityId stored on detailPanel
+    try {
+      const dp = document.getElementById("detailPanel");
+      if (dp && dp.dataset && dp.dataset.entityId) {
+        entityId = dp.dataset.entityId || entityId;
+      }
+    } catch {}
+    // normalize to entity/<id> form if needed
+    if (entityId && !entityId.startsWith("entity/")) {
+      entityId = entityId.startsWith("/")
+        ? entityId.slice(1)
+        : "entity/" + entityId;
+    }
+    let md = "";
+    if (window.easyMDE) {
+      md = window.easyMDE.value();
+      if (window.easyMDEPasteImages) {
+        md = md.replace(
+          /!\[([^\]]*)\]\((__easyMDE_paste_image_\d+__)\)/g,
+          (match, alt, key) => {
+            const dataUrl = window.easyMDEPasteImages[key];
+            return dataUrl ? `![${alt}](${dataUrl})` : match;
+          },
+        );
+      }
+    } else {
+      md = document.getElementById("wikiMdInline").value;
+    }
+    const summary = document.getElementById("wikiSummaryInline").value.trim();
+    const state = document.getElementById("wikiStateInline").value;
+    const payload = {
+      entityId,
+      lang,
+      md,
+      summary,
+      state,
+      updatedBy: "u:anonymous",
+    };
+    const saveUrl = appendDetailDb(new URL("/api/wiki/page/save", window.location.origin));
+    const resp = await fetch(saveUrl.toString(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok) {
+      alert("保存失败: " + resp.status);
+      return;
+    }
+    // reload and display the saved wiki for the same entity
+    await loadWikiInline(entityId, lang);
+    toggleWikiModeInline(false);
+    await loadRevisionsInline(entityId, lang);
+  }
+
+  async function loadRevisionsInline(entityId, lang = "zh") {
+    try {
+      // compute key robustly: entity/<id> -> <id>
+      const parts = String(entityId || "").split("/");
+      const idPart = parts.length > 1 ? parts[1] : parts[0] || "";
+      const key = idPart + ":" + lang;
+      const url = new URL("/api/wiki/page/revisions", window.location.origin);
+      appendDetailDb(url);
+      url.searchParams.set("key", key);
+      const resp = await fetch(url);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const body = document.getElementById("wikiRevBodyInline");
+      const module = await window.kbBusinessGridModuleReady;
+      window.wikiRevisionGrid?.destroy?.();
+      window.wikiRevisionGrid = module.getBusinessGrid(body, {
+        columns: [
+          { id: "revNo", header: [{ text: "Rev" }], width: 80 },
+          { id: "createdAtText", header: [{ text: "时间" }], width: 180 },
+          { id: "user", header: [{ text: "用户" }], width: 140 },
+          { id: "summary", header: [{ text: "说明" }], minWidth: 180, gravity: 1 },
+          { id: "action", header: [{ text: "操作" }], width: 90, sortable: false, htmlEnable: true },
+        ],
+        height: "auto",
+        emptyText: "暂无历史版本",
+        onCellClick: (row, _column, event) => {
+          if (event.target.closest(".wiki-revision-preview")) previewRevisionInline(key, String(row.revNo));
+        },
+      });
+      window.wikiRevisionGrid.update((data.items || []).map((revision) => ({
+        id: String(revision.revNo),
+        revNo: revision.revNo,
+        createdAtText: new Date((revision.createdAt || 0) * 1000).toLocaleString(),
+        user: revision.user || "",
+        summary: revision.summary || "",
+        action: '<button class="btn wiki-revision-preview" type="button">预览</button>',
+      })));
+    } catch (e) {
+      console.error("loadRevisionsInline error", e);
+    }
+  }
+
+  async function previewRevisionInline(pageKey, revNo) {
+    try {
+      const url = new URL("/api/wiki/page/revision", window.location.origin);
+      url.searchParams.set("key", pageKey);
+      url.searchParams.set("revNo", revNo);
+      const resp = await fetch(url);
+      if (!resp.ok) {
+        alert("加载版本失败");
+        return;
+      }
+      const data = await resp.json();
+      const rev = data.revision;
+      const box = document.getElementById("wikiRevPreviewInline");
+      const meta = document.getElementById("wikiRevMetaInline");
+      const view = document.getElementById("wikiRevViewInline");
+      meta.textContent = `预览版本 rev ${revNo} (${new Date(
+        (rev.createdAt || 0) * 1000,
+      ).toLocaleString()})`;
+      view.innerHTML =
+        rev.html ||
+        '<pre style="white-space:pre-wrap">' +
+          (rev.md
+            ? rev.md.replace(
+                /[&<>]/g,
+                (s) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[s],
+              )
+            : "") +
+          "</pre>";
+      box.style.display = "block";
+      box.dataset.pageKey = pageKey;
+      box.dataset.revNo = revNo;
+      document.getElementById("btnRestoreRevInline").disabled = false;
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function restoreRevisionInline() {
+    const box = document.getElementById("wikiRevPreviewInline");
+    const pageKey = box.dataset.pageKey;
+    const revNo = box.dataset.revNo;
+    if (!pageKey || !revNo) return;
+    if (!confirm("确认将当前页面内容回滚到 rev " + revNo + " 吗?")) return;
+    try {
+      const payload = {
+        key: pageKey,
+        revNo: Number(revNo),
+        summary: "rollback via UI",
+        updatedBy: "u:anonymous",
+      };
+      const resp = await fetch("/api/wiki/page/revision/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) {
+        alert("回滚失败");
+        return;
+      }
+      const data = await resp.json();
+      const entityId = "entity/" + pageKey.split(":")[0];
+      await loadWikiInline(entityId, pageKey.split(":")[1]);
+      await loadRevisionsInline(entityId, pageKey.split(":")[1]);
+      closeRevisionPreviewInline();
+      alert("已回滚，新版本号: " + data.revNo);
+    } catch (e) {
+      alert("回滚异常");
+    }
+  }
+
+  function closeRevisionPreviewInline() {
+    const box = document.getElementById("wikiRevPreviewInline");
+    box.style.display = "none";
+    box.dataset.pageKey = "";
+    box.dataset.revNo = "";
+  }
+
+  async function loadBacklinksInline(entityId) {
+    try {
+      const url = new URL("/api/wiki/backlinks", window.location.origin);
+      url.searchParams.set("target", entityId);
+      const resp = await fetch(url);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      const list = document.getElementById("wikiBacklinksListInline");
+      const panel = document.getElementById("wikiBacklinksInline");
+      list.innerHTML = "";
+      for (const it of data.items || []) {
+        const li = document.createElement("li");
+        const a = document.createElement("a");
+        a.href = it.href || "#";
+        a.textContent = it.title || it.id || "";
+        a.target = "_blank";
+        a.rel = "noreferrer";
+        li.appendChild(a);
+        list.appendChild(li);
+      }
+      panel.style.display = list.childElementCount ? "block" : "none";
+    } catch {}
+  }
+
+  // Wire up inline buttons
+  (function wireWikiInlineButtons() {
+    try {
+      const be = document.getElementById("btnEditWiki");
+      if (be)
+        be.addEventListener("click", () => {
+          // show inline editor for current selected id
+          const id =
+            window.kbSelectedRowId ||
+            (document.getElementById("fId") &&
+              document.getElementById("fId").value) ||
+            "";
+          if (!id) return alert("未选择实体");
+          loadWikiInline(id, "zh");
+          toggleWikiModeInline(true);
+        });
+
+      const btnSave = document.getElementById("btnSaveWikiInline");
+      if (btnSave)
+        btnSave.addEventListener("click", async () => {
+          const id =
+            window.kbSelectedRowId ||
+            (document.getElementById("fId") &&
+              document.getElementById("fId").value) ||
+            "";
+          if (!id) return alert("未选择实体");
+          await saveWikiInline(id, "zh");
+        });
+      const btnSaveTop = document.getElementById("btnSaveWikiInlineTop");
+      if (btnSaveTop)
+        btnSaveTop.addEventListener("click", async () => {
+          const id =
+            window.kbSelectedRowId ||
+            (document.getElementById("fId") &&
+              document.getElementById("fId").value) ||
+            "";
+          if (!id) return alert("未选择实体");
+          await saveWikiInline(id, "zh");
+        });
+      const btnCancel = document.getElementById("btnCancelWikiInline");
+      if (btnCancel)
+        btnCancel.addEventListener("click", () => toggleWikiModeInline(false));
+      const btnRestore = document.getElementById("btnRestoreRevInline");
+      if (btnRestore)
+        btnRestore.addEventListener("click", restoreRevisionInline);
+      const btnCloseRev = document.getElementById("btnCloseRevInline");
+      if (btnCloseRev)
+        btnCloseRev.addEventListener("click", closeRevisionPreviewInline);
+    } catch (e) {}
+  })();
+
+  function resolveInitialDetailRoute() {
+    try {
+      if (typeof window.getRouteStateFromHash === "function") {
+        const route = window.getRouteStateFromHash() || {};
+        const view = String(route.view || "")
+          .trim()
+          .toLowerCase();
+        const node = String(route.node || "").trim();
+        if (["detail", "knowledge_detail"].includes(view) && node) {
+          return { view, node };
+        }
+      }
+    } catch {}
+
+    try {
+      if (typeof window.getUrlParams === "function") {
+        const params = window.getUrlParams() || {};
+        const view = String(params.view || "")
+          .trim()
+          .toLowerCase();
+        const node = String(params.node || "").trim();
+        if (["detail", "knowledge_detail"].includes(view) && node) {
+          return { view, node };
+        }
+      }
+    } catch {}
+
+    try {
+      const hash = String(window.location.hash || "")
+        .replace(/^#/, "")
+        .trim();
+      if (hash) {
+        const parsed = new URLSearchParams(hash);
+        const explicitView = String(parsed.get("view") || "")
+          .trim()
+          .toLowerCase();
+        const fallbackView =
+          explicitView || hash.split("&")[0].split("=")[0].trim().toLowerCase();
+        const node = String(parsed.get("node") || "").trim();
+        if (["detail", "knowledge_detail"].includes(fallbackView) && node) {
+          return { view: fallbackView, node };
+        }
+        if (["detail", "knowledge_detail"].includes(hash.toLowerCase())) {
+          const queryNode =
+            new URLSearchParams(window.location.search || "").get("node") || "";
+          if (String(queryNode).trim()) {
+            return { view: hash.toLowerCase(), node: String(queryNode).trim() };
+          }
+        }
+      }
+    } catch {}
+
+    return { view: "", node: "" };
+  }
+
+  function hydrateDetailFromCurrentRoute() {
+    try {
+      const route = resolveInitialDetailRoute();
+      if (!["detail", "knowledge_detail"].includes(route.view) || !route.node) return;
+      const detailPanel = document.getElementById("detailPanel");
+      if (!detailPanel) return;
+      const canonicalNodeId =
+        typeof normalizeEntityIdForApi === "function"
+          ? normalizeEntityIdForApi(route.node)
+          : route.node;
+      if (!canonicalNodeId) return;
+      window.kbSelectedRowId = route.node;
+      try {
+        window.kbSelectedRowIds = new Set([route.node]);
+        window.kbLastAnchorRowId = route.node;
+      } catch {}
+      window.kbSelectedNodeId = route.node;
+      window.kbActiveDetailRouteId = route.node;
+      window.kbActiveDetailNodeId = canonicalNodeId;
+      detailPanel.style.display = "";
+      showNodeDetailInline(route.node, {
+        preserveSidebarState: route.view === "knowledge_detail",
+      });
+    } catch (err) {
+      if (window.console && console.warn) {
+        console.warn("hydrateDetailFromCurrentRoute failed", err);
+      }
+    }
+  }
+
+  window.hideDetailPanel = hideDetailPanel;
+  window.setText = setText;
+  window.formatPropValue = formatPropValue;
+  window.isImageUrl = isImageUrl;
+  window.extractImageUrls = extractImageUrls;
+  window.normalizeImageUrl = normalizeImageUrl;
+  window.addImageCandidate = addImageCandidate;
+  window.pickLabelValue = pickLabelValue;
+  window.getAttributeLabel = getAttributeLabel;
+  window.isImagePropertyName = isImagePropertyName;
+  window.clearDetailPanel = clearDetailPanel;
+  window.normalizeEntityIdForApi = normalizeEntityIdForApi;
+  window.showNodeDetailInline = showNodeDetailInline;
+  window.toggleWikiModeInline = toggleWikiModeInline;
+  window.loadWikiInline = loadWikiInline;
+  window.saveWikiInline = saveWikiInline;
+  window.loadRevisionsInline = loadRevisionsInline;
+  window.previewRevisionInline = previewRevisionInline;
+  window.restoreRevisionInline = restoreRevisionInline;
+  window.closeRevisionPreviewInline = closeRevisionPreviewInline;
+  window.loadBacklinksInline = loadBacklinksInline;
+  hydrateDetailFromCurrentRoute();
+})();

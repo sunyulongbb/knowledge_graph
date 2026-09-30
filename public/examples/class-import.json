@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "classes": [
+    {
+      "name": "人物",
+      "description": "人物相关实体",
+      "color": "#6366F1",
+      "image": null,
+      "tags": ["人物", "重要实体"],
+      "children": [
+        {
+          "name": "科学家",
+          "description": "从事科学研究的人物",
+          "color": "#3B82F6",
+          "tags": ["科学", "研究人员"]
+        }
+      ]
+    }
+  ]
+}

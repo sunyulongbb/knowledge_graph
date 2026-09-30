@@ -1,0 +1,402 @@
+import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { serveStaticRoute } from '../src/server/static.ts';
+
+test('standalone SPARQL and legacy bookmarks preserve the selected knowledge base', async () => {
+  for (const path of ['/sparql', '/sparql.html']) {
+    const response = await serveStaticRoute(new Request(`http://localhost${path}?db=demo`), path);
+    expect(response?.status).toBe(200);
+    expect(response?.headers.get('Content-Type')).toContain('text/html');
+    const html = await response!.text();
+    expect(html).toContain('id="sparqlImportView"');
+    expect(html).toContain('sparql-panel.js');
+    expect(html).not.toContain('pipeline-ui.js');
+  }
+  for (const path of ['/', '/kb']) {
+    const response = await serveStaticRoute(new Request(`http://localhost${path}?db=demo&tool=sparql`), path);
+    expect(response?.status).toBe(302);
+    expect(response?.headers.get('Location')).toBe('http://localhost/sparql?db=demo');
+  }
+});
+
+test('main page selects the default application when no application is specified', async () => {
+  for (const path of ['/', '/kb']) {
+    const response = await serveStaticRoute(new Request(`http://localhost${path}`), path);
+    expect(response?.status).toBe(302);
+    expect(response?.headers.get('Location')).toBe(`http://localhost${path}?db=default`);
+  }
+  const selected = await serveStaticRoute(new Request('http://localhost/kb?db=demo'), '/kb');
+  expect(selected?.status).toBe(200);
+});
+
+test('main page scripts remain valid after removing legacy entry initialization', async () => {
+  const response = await serveStaticRoute(new Request('http://localhost/kb?db=demo'), '/kb');
+  const html = await response!.text();
+  expect(html).toContain('id="entryPanel"');
+  expect(html).toContain('pipeline-ui.js');
+  expect(html).not.toMatch(/entryManagerView|initEntryPanel|entryGridHost|sparql-panel\.js|kbPipelineEnabled/);
+  for (const page of [html, readFileSync('public/sparql.html', 'utf8')]) {
+    for (const match of page.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)) {
+      if (!/\btype\s*=\s*["']module["']/.test(match[1]!)) {
+        expect(() => new Function(match[2]!)).not.toThrow();
+      }
+    }
+  }
+});
+
+test('clear controls and scoped taxonomy clear endpoint are wired independently', async () => {
+  const response = await serveStaticRoute(new Request('http://localhost/kb?db=demo'), '/kb');
+  const html = await response!.text();
+  expect(html).toContain('id="btnClearAllNodes"');
+  expect(html).toContain('id="btnClearAllClasses"');
+  expect(readFileSync('src/server/routes/schema.ts', 'utf8')).toContain('url.pathname === "/api/kb/classes/clear" && method === "DELETE"');
+  const tableSelection = readFileSync('public/assets/scripts/table-selection.js', 'utf8');
+  const schemaPanel = readFileSync('public/assets/scripts/schema-panel.js', 'utf8');
+  expect(tableSelection).toContain('请再次确认：确定要永久删除当前应用的全部知识数据吗？');
+  expect(schemaPanel).toContain('请再次确认：确定要永久删除当前应用的全部分类吗？');
+  expect(html).toContain('id="btnClsAnalysis"');
+  expect(html).toContain('id="classAnalysisModal"');
+  expect(html).toContain('/assets/scripts/schema-panel.js?v=20260924-3');
+  expect(schemaPanel).toContain('body: JSON.stringify({ id: classId, analyses })');
+  expect(schemaPanel).toContain('onEdit: (id) => openClassModal({ classId: id })');
+  expect(schemaPanel).toContain('classForm.dataset.mode === "edit"');
+  expect(schemaPanel).toContain('await updateClass({ id: classId, name, description })');
+  expect(schemaPanel).not.toContain('shouldResetSearch');
+  expect(readFileSync('src/server/routes/schema.ts', 'utf8')).toContain('normalizeClassAnalyses(body.analyses)');
+});
+
+test('anonymous users cannot expand application or user sidebars', () => {
+  const page = readFileSync('public/index.html', 'utf8');
+  const authPanel = readFileSync('public/assets/scripts/auth-panel.js', 'utf8');
+  const sidebarPanel = readFileSync('public/assets/scripts/sidebar-panel.js', 'utf8');
+  expect(page).toContain('/assets/scripts/sidebar-panel.js?v=20260924-4');
+  expect(page).toContain('/assets/scripts/auth-panel.js?v=20260924-7');
+  expect(page).toContain('/assets/scripts/knowledge-access.js?v=20260922-4');
+  expect(page).toContain('id="appHomeMaintenance"');
+  expect(page).toContain('id="inputProfileJevKey"');
+  expect(page).toContain('id="btnClearProfileJevKey"');
+  expect(page).toContain('id="inputProfileAvatarFile"');
+  expect(page).toContain('id="profileAvatarUpload"');
+  expect(authPanel).toContain('/api/auth/upload-avatar');
+  expect(authPanel).toContain('event.clipboardData?.items');
+  expect(readFileSync('src/server/routes/auth.ts', 'utf8')).toContain('url.pathname === "/api/auth/upload-avatar"');
+  expect(page).toContain('/assets/scripts/application-pages.js?v=20260924-14');
+  expect(page).toContain('/assets/scripts/applications.js?v=20260921-1');
+  expect(authPanel).toContain('if (authUser) window.toggleUserSidebar?.();\n      else openAuthModal(false);');
+  expect(authPanel).toContain('defaultHome.searchParams.set("db", "default")');
+  expect(authPanel).toContain('defaultHome.hash = "view=app_home"');
+  expect(authPanel).toContain('window.location.assign(defaultHome.toString())');
+  expect(sidebarPanel).toContain('if (!collapsed && !window.authUser) collapsed = true;');
+  expect(sidebarPanel).toContain('if (!window.authUser) {\n        applyUserSidebarCollapsed(true);');
+  expect(sidebarPanel).toContain("window.addEventListener('kb-auth-change'");
+  expect(sidebarPanel).toContain('applyUserSidebarCollapsed(true, true);');
+  expect(sidebarPanel).toContain('headerLogo.addEventListener("click"');
+  expect(sidebarPanel).toContain('if (!window.authUser) return;');
+  expect(page).toContain('class="btn sm user-sidebar-logout"');
+  expect(page).not.toContain('id="btnOpenProfileSidebar"');
+  expect(sidebarPanel).toContain('window.setViewMode?.("profile")');
+  expect(page.indexOf('id="btnLogout"')).toBeGreaterThan(page.indexOf('id="userSidebar"'));
+});
+
+test('application theme color keeps contrast in light and dark modes', () => {
+  const page = readFileSync('public/index.html', 'utf8');
+  const script = readFileSync('public/assets/scripts/app-settings.js', 'utf8');
+  const css = readFileSync('public/assets/styles/app.css', 'utf8');
+  expect(page).toContain('/assets/scripts/app-settings.js?v=20260924-2');
+  expect(page.indexOf('localStorage.getItem(`kb-app-theme:${appThemeScope}`)')).toBeLessThan(page.indexOf('/assets/styles/app.css'));
+  expect(page).toContain('kbDocumentRoot.style.setProperty("--accent"');
+  expect(script).toContain('function createContrastingAccent(color, isDark)');
+  expect(script).toContain('function cacheAppThemeColor(color)');
+  expect(script).toContain('localStorage.setItem(`kb-app-theme:${scope}`');
+  expect(script).toContain('contrastRatio(adjusted, surface) < 4.5');
+  expect(script).toContain("attributeFilter: ['data-theme']");
+  expect(script).toContain("style.setProperty('--accent-contrast'");
+  expect(css).toContain('--accent-base: #4f46e5;');
+  expect(css).toContain('--accent-contrast: #0f172a;');
+  expect(css).toContain('color: var(--accent-contrast, #fff);');
+});
+
+test('collapsed editor and classification panels restore before first paint', () => {
+  const page = readFileSync('public/index.html', 'utf8');
+  const earlyRestore = page.indexOf('localStorage.getItem("kb-panel-state")');
+  const stylesheet = page.indexOf('/assets/styles/app.css');
+  expect(earlyRestore).toBeGreaterThan(0);
+  expect(earlyRestore).toBeLessThan(stylesheet);
+  expect(page).toContain('data-kb-editor-left');
+  expect(page).toContain('data-kb-editor-right');
+  expect(page).toContain('html[data-kb-editor-left="closed"] .kb-split');
+  expect(page.match(/var\(--user-sidebar-width, 0px\)/g)?.length).toBeGreaterThanOrEqual(6);
+  expect(page).not.toContain('var(--user-sidebar-width, 72px)');
+  expect(page).toContain("const stored = window.localStorage.getItem('kb-panel-state')");
+  expect(page).toContain("document.documentElement.classList.remove('kb-panel-state-restoring')");
+});
+
+test('knowledge reports replace the legacy dashboard with title and keyword generation', () => {
+  const page = readFileSync('public/index.html', 'utf8');
+  const css = readFileSync('public/assets/styles/app.css', 'utf8');
+  const routes = readFileSync('src/server/routes/reports.ts', 'utf8');
+  const database = readFileSync('src/server/db.ts', 'utf8');
+  expect(page).toContain('<span class="nav-label">报告</span>');
+  expect(page).toContain('id="knowledgeReportForm"');
+  expect(page).toContain('id="reportKeywordChips"');
+  expect(page).toContain("requestJson(reportApiUrl(), { method: 'POST'");
+  expect(page).toContain("/${encodeURIComponent(currentReportDetailId)}/regenerate");
+  expect(page).toContain("method: 'DELETE'");
+  expect(page).toContain('class="knowledge-report-document"');
+  expect(page).toContain('class="knowledge-report-item-media"');
+  expect(page).toContain('safeReportImageUrl(item.image)');
+  expect(page).toContain("image.addEventListener('error', removeUnavailableImage");
+  expect(page).toContain("item?.classList.remove('has-media')");
+  expect(page).not.toContain('id="reportTemplatePanel"');
+  expect(css).toContain('.knowledge-report-document-header');
+  expect(css).toContain('.knowledge-report-item.has-media');
+  expect(routes).toContain("url.pathname.startsWith('/api/kb/reports')");
+  expect(database).toContain('CREATE TABLE IF NOT EXISTS knowledge_reports');
+});
+
+test('application home provides inspiration draw, category tree, and knowledge cards', () => {
+  const page = readFileSync('public/index.html', 'utf8');
+  const script = readFileSync('public/assets/scripts/application-pages.js', 'utf8');
+  const css = readFileSync('public/assets/styles/app.css', 'utf8');
+  expect(page).toContain('id="appHomeContent" class="app-home-dashboard"');
+  expect(page).toContain('id="applicationHomePanel" class="application-content-page"');
+  expect(script).toContain("api('/api/kb/classes')");
+  expect(script).toContain('data-home-inspire');
+  expect(script).toContain('data-home-category');
+  expect(script).toContain("class_id: homeSelectedCategory");
+  expect(script).toContain('app-home-knowledge-grid');
+  expect(script).toContain('openHomeNodeDetail(node)');
+  expect(script).toContain('window.showNodeDetailInline(id, { preserveSidebarState: true });');
+  expect(script).toContain('function firstVideo(node)');
+  expect(script).toContain('preload="metadata"');
+  expect(script).toContain('app-inspiration-progress-track');
+  expect(script).toContain('再抽一张');
+  expect(script).toContain('data-home-inspiration-modal');
+  expect(script).toContain('modal?.showModal()');
+  expect(script).not.toContain('event.target === modal) modal.close()');
+  expect(script).toContain('app-inspiration-media-stage');
+  expect(script).toContain('shell.innerHTML = inspirationDrawContent');
+  expect(script).toContain("fetch(url, { method: 'POST'");
+  expect(script).toContain('data-jev-rating');
+  expect(script).toContain('is-filled');
+  expect(script).toContain('data-jev-profile-layer');
+  expect(script).not.toContain('JEV 目标画像');
+  expect(script).toContain('app-profile-actions');
+  expect(script).toContain('app-profile-confidence');
+  expect(script).toContain('app-profile-meter');
+  expect(script).toContain('app-profile-signal');
+  expect(script).toContain('app-profile-verdict');
+  expect(script).toContain('app-profile-evidence');
+  expect(script).toContain('data-jev-profile-refresh');
+  expect(script).toContain('body: JSON.stringify({ id: node.id || node._id, force })');
+  expect(script).toContain('node?.hasJevAnalysis || window.authUser?.hasJevApiKey');
+  expect(script).toContain("error?.code === 'JEV_NOT_CONFIGURED'");
+  expect(css).toContain('.app-inspiration-card');
+  expect(css).toContain('@keyframes app-profile-grow');
+  expect(css).toContain('@keyframes app-profile-ring');
+  expect(css).toContain('grid-template-rows: auto auto auto auto auto minmax(0, 174px) minmax(76px, 1fr)');
+  expect(css).toContain('.app-profile-node.is-selected .app-profile-related { min-height: 0; height: 100%; max-height: none;');
+  expect(css).toContain(':root[data-theme="dark"] .app-inspiration-modal');
+  expect(css).toContain('background: var(--modal-overlay-bg)');
+  expect(css).toContain('color: var(--fg); font-size: 17px');
+  expect(css).toContain('background: radial-gradient(circle at center, var(--surface-0)');
+  expect(css).toContain('.app-category-tree');
+  expect(css).toContain('.app-home-knowledge-card');
+  expect(css).toContain('grid-template-columns: repeat(6, minmax(0, 1fr));');
+  expect(css).toContain('grid-template-columns: 1fr;');
+  expect(css).toContain('.app-home-heading { display: none; }');
+  expect(css).toContain('right: calc(var(--user-sidebar-width, 0px) + 18px);');
+  expect(css).toContain('height: calc(100dvh - 104px);');
+});
+
+test('view menu switches reuse the mounted entity editor without repainting it', () => {
+  const page = readFileSync('public/index.html', 'utf8');
+  expect(page).toContain('isCurrentNode && hasCurrentPayload && options.refreshCurrent === false');
+  expect(page).toContain('ensureEntityIdPrefix(editorPayloadId) === fullId');
+  expect(page).toContain('Hash changes caused by switching views must not fetch and repaint');
+  expect(page).toContain('function ensureEntityRelationList(nodeId)');
+  expect(page).toContain('nodeId: normalizeViewModeInput(previousRoute?.view || "") === previousMode');
+  expect(page).toContain('const nodeAwareReturnViews = ["entry", "table", "vis", "report_detail"]');
+  expect(page).not.toContain('["app_home", "app_search"].includes(returnView)');
+  expect(page).toContain('aria-label="返回上一页"');
+  expect(page).toContain('id="detailBreadcrumbs" class="detail-breadcrumbs"');
+  expect(page).toContain('window.kbDetailBreadcrumbs = path');
+  expect(page).toContain('skipDetailBreadcrumbPush: true');
+  expect(page).toContain('button.dataset.detailBreadcrumbIndex = String(index)');
+  expect(readFileSync('public/assets/scripts/detail-panel.js', 'utf8')).toContain('window.updateDetailBreadcrumbCurrent(');
+  expect(readFileSync('public/assets/styles/app.css', 'utf8')).toContain('.detail-breadcrumbs {');
+  expect(readFileSync('public/assets/scripts/schema-panel.js', 'utf8')).toContain('defaultExpandAll: true');
+  expect(readFileSync('public/assets/scripts/schema-panel.js', 'utf8')).toContain('kb:ontology-tree-state:class-manager:v2');
+  expect(readFileSync('public/assets/scripts/ontology-tree.ts', 'utf8')).toContain('!hasSavedState && this.options.defaultExpandAll');
+  expect(page).toContain('void ensureEntityRelationList(fullId)');
+  expect(page).toContain('await ensureEntityRelationList(fullId)');
+  expect(page).toContain('/assets/scripts/attr-panel.js?v=20260922-1');
+  const attrPanel = readFileSync('public/assets/scripts/attr-panel.js', 'utf8');
+  expect(attrPanel).toContain("attrList.dataset.loadState = 'loading'");
+  expect(attrPanel).toContain("attrList.dataset.loadState = rendered ? 'ready' : 'error'");
+});
+
+test('knowledge pages and ontology tree hide auto-created reference entities', () => {
+  const pageScript = readFileSync('public/assets/scripts/application-pages.js', 'utf8');
+  const tableScript = readFileSync('public/assets/scripts/table-panel.js', 'utf8');
+  const coreRoutes = readFileSync('src/server/routes/core-kb.ts', 'utf8');
+  const schemaRoutes = readFileSync('src/server/routes/schema.ts', 'utf8');
+  const ontologyFilter = readFileSync('src/server/ontology-filter.ts', 'utf8');
+  expect(tableScript).toContain('url.searchParams.set("hide_entity", "1")');
+  expect(pageScript).toContain("hide_entity: '1'");
+  expect(pageScript).toContain("defined_class_only: '1'");
+  expect(pageScript).not.toContain("defined_type_only: '1'");
+  expect(pageScript).toContain("params.hide_entity = '1'");
+  expect(coreRoutes).toContain('hidden_default_ontology.id = n.type');
+  expect(coreRoutes).toContain('defined_type.project_id IS n.project_id');
+  expect(coreRoutes).toContain("defined_type.status = 'active'");
+  expect(coreRoutes).toContain('definedClassEntityFilterSql');
+  expect(ontologyFilter).toContain('defined_class.id = defined_entity_class.class_id');
+  expect(ontologyFilter).toContain('defined_class.project_id IS n.project_id');
+  expect(schemaRoutes).toContain('description.includes("wikibase-item 属性值自动创建")');
+});
+
+test('selected knowledge left-side image echoes from any supported image field', () => {
+  const page = readFileSync('public/index.html', 'utf8');
+  const resolveNodePrimaryImage = (node) => {
+    if (!node || typeof node !== 'object') return '';
+
+    const seenValues = new Set();
+    const collect = (value) => {
+      if (value == null) return [];
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        return trimmed ? [trimmed] : [];
+      }
+      if (Array.isArray(value)) {
+        return value.flatMap((item) => collect(item));
+      }
+      if (typeof value === 'object') {
+        const result = [];
+        for (const [key, nested] of Object.entries(value)) {
+          const lowered = String(key || '').toLowerCase();
+          if (!/^(image|images|_attr_images|image_url|picture|pictures|thumbnail|thumb|logo|logos|avatar|avatars|cover|covers|url|src|href|value)$/i.test(lowered)) {
+            continue;
+          }
+          result.push(...collect(nested));
+        }
+        return result;
+      }
+      return [];
+    };
+
+    const candidates = [];
+    const addCandidates = (source) => {
+      const values = collect(source);
+      values.forEach((value) => {
+        const trimmed = String(value || '').trim();
+        if (!trimmed || seenValues.has(trimmed)) return;
+        seenValues.add(trimmed);
+        candidates.push(trimmed);
+      });
+    };
+
+    const fieldOrder = ['images', '_attr_images', 'image', 'image_url', 'picture', 'pictures', 'thumbnail', 'thumb', 'cover', 'covers', 'logo', 'logos', 'avatar', 'avatars'];
+    fieldOrder.forEach((key) => addCandidates(node[key]));
+
+    if (typeof node.data === 'string') {
+      try {
+        const parsed = JSON.parse(node.data);
+        if (parsed && typeof parsed === 'object') {
+          fieldOrder.forEach((key) => addCandidates(parsed[key]));
+        }
+      } catch {}
+    } else if (node.data && typeof node.data === 'object') {
+      fieldOrder.forEach((key) => addCandidates(node.data[key]));
+    }
+
+    if (!candidates.length) {
+      const fallback = collect(node);
+      fallback.forEach((value) => {
+        const trimmed = String(value || '').trim();
+        if (trimmed && !seenValues.has(trimmed)) {
+          seenValues.add(trimmed);
+          candidates.push(trimmed);
+        }
+      });
+    }
+
+    const isUsable = (value) => /^(?:data:image\/|blob:|https?:\/\/|\/|\.\.?\/)/i.test(value) || /\/node-images\//i.test(value) || /\.(?:avif|gif|jpe?g|png|svg|webp)(?:[?#].*)?$/i.test(value);
+    return candidates.find(isUsable) || candidates[0] || '';
+  };
+
+  expect(page).toContain('function resolveNodePrimaryImage(node)');
+  expect(page).toContain('const imageUrl = resolveNodePrimaryImage(node);');
+  expect(page).toContain("if (Array.isArray(node._attr_images)) candidates.push(...node._attr_images);");
+  expect(page).toContain("if (typeof node.image_url === \"string\") candidates.push(node.image_url);");
+  expect(page).toContain('eImageWrap.hidden = false;');
+  expect(resolveNodePrimaryImage({
+    image: '',
+    images: [{ url: 'https://example.com/cover.jpg' }],
+    data: JSON.stringify({ image_url: 'https://example.com/data-image.jpg' }),
+    thumbnail: 'https://example.com/thumb.jpg',
+  })).toBe('https://example.com/cover.jpg');
+  expect(resolveNodePrimaryImage({
+    image_url: '',
+    picture: [{ src: 'https://example.com/picture.png' }],
+    avatar: 'blob:https://example.com/aad',
+  })).toBe('https://example.com/picture.png');
+  expect(resolveNodePrimaryImage({
+    image: '',
+    link: 'https://example.com/article',
+    data: JSON.stringify({ url: 'https://example.com/article' }),
+    images: [{ url: 'https://example.com/cover.jpg' }],
+  })).toBe('https://example.com/cover.jpg');
+});
+
+test('entity editor uses the post-composer hierarchy without changing existing control ids', () => {
+  const page = readFileSync('public/index.html', 'utf8');
+  const css = readFileSync('public/assets/styles/app.css', 'utf8');
+  expect(page).toContain('class="entity-composer-titlebar"');
+  expect(page).toContain('id="btnCancelEdit"');
+  expect(page).toContain('id="btnEntityImport"');
+  expect(page).toContain('id="btnSubmit"');
+  expect(page).toContain('/assets/styles/app.css?v=20260924-20');
+  expect(css).toContain('.app-profile-actions { position: fixed; top: 24px; right: 24px;');
+  expect(css).toContain('.app-inspiration-profile-layer.has-selection { z-index: 7; }');
+  expect(css).toContain('.app-profile-node.is-selected { position: absolute !important;');
+  expect(readFileSync('public/assets/scripts/application-pages.js', 'utf8')).toContain("card.style.setProperty('--profile-focus-height'");
+  expect(readFileSync('public/assets/scripts/application-pages.js', 'utf8')).toContain('function toggleProfileCard(card)');
+  expect(readFileSync('public/assets/scripts/application-pages.js', 'utf8')).toContain("event.target.closest('.app-inspiration-modal-core.is-profile-swapped')");
+  expect(css).toContain('/* Entity composer: compact post-editor layout */');
+  expect(css).toContain('.editor-panel #entityDisplayImageWrap');
+  expect(css).toContain('.entity-composer-titlebar');
+  expect(css).toContain('.entity-composer-footer');
+  expect(page).toContain('id="entityDisplayImageWrap" class="wd-entity-avatar-wrap empty social-avatar-wrap" hidden');
+  expect(page).toContain('id="composerUserAvatar" class="composer-user-avatar" hidden');
+  expect(page).toContain('/assets/scripts/entity-import.js?v=20260921-6');
+  expect(page).toContain('/assets/scripts/detail-panel.js?v=20260924-5');
+  expect(readFileSync('public/assets/scripts/entity-import.js', 'utf8')).toContain("window.addEventListener('kb-auth-change'");
+  expect(readFileSync('public/assets/scripts/entity-import.js', 'utf8')).toContain("document.getElementById('composerUserAvatar')");
+  expect(readFileSync('public/assets/scripts/detail-panel.js', 'utf8')).toContain('extractImageUrls(val, isMediaAttrItem(it))');
+  const detailPanel = readFileSync('public/assets/scripts/detail-panel.js', 'utf8');
+  expect(detailPanel).toContain('appendDetailDb(new URL("/api/wiki/page/save"');
+  expect(detailPanel).toContain('doc?.can_edit || canEditDefaultApplication()');
+  expect(readFileSync('public/assets/scripts/knowledge-access.js', 'utf8')).toContain('const hasDefaultApplicationAccess');
+  expect(detailPanel).toContain('const hasImageMedia = renderWikiMediaGrid(detailMediaAttrItems, imageEntries)');
+  expect(detailPanel).toContain('stage.dataset.activeMedia = key');
+  expect(page).toContain('id="detailMediaTabs" class="detail-media-tabs"');
+  expect(page).toContain('id="detailIncomingRelations" class="detail-related-section"');
+  expect(detailPanel).toContain('function renderIncomingRelations(relations)');
+  expect(detailPanel).toContain('items.slice(0, 5).forEach');
+  expect(detailPanel).toContain('`显示 5 / ${items.length} 条`');
+  expect(detailPanel).toContain('source.typeLabel || source.ontology?.name || source.classLabel');
+  expect(css).toContain('.detail-related-list { display:block; }');
+  expect(detailPanel).toContain('zoomResetButton.textContent = "适合"');
+  expect(detailPanel).toContain('openLink.setAttribute("aria-label", "在新窗口打开 PDF")');
+  expect(detailPanel).toContain('wasmUrl: "/node_modules/pdfjs-dist/wasm/"');
+  expect(detailPanel).toContain('detailPdfViewerState.resizeObserver = new ResizeObserver');
+  expect(detailPanel).toContain('availableHeight / baseViewport.height');
+  expect(page.indexOf('id="wikiTopMedia"')).toBeLessThan(page.indexOf('id="wikiTopVideo"'));
+  expect(page.indexOf('id="wikiTopVideo"')).toBeLessThan(page.indexOf('id="wikiTopPdf"'));
+  expect(css).toContain('.editor-panel .social-compose-toolbar .wd-btn-icon');
+  expect(css).toContain('flex: 0 0 32px;');
+  expect(page).toContain('fa-solid fa-paper-plane');
+  expect(page).toContain("btnSubmit.innerHTML = '<i class=\"fa-regular fa-floppy-disk\"");
+  expect(css).toContain('.editor-panel .social-compose-form-shell { padding: 0; margin: 0; }');
+});

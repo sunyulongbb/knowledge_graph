@@ -1,0 +1,276 @@
+{
+  "version": 1,
+  "entity": {
+    "id": "Q22095395",
+    "name": "道格·伯格姆",
+    "description": "道格拉斯·詹姆斯·伯格姆（Douglas James Burgum），美国政治人物、企业家和投资人，现任美国内政部长、第55任美国内政部长。曾任第33任北达科他州州长。在进入政界前长期从事科技和软件行业，曾领导Great Plains Software，并在该公司被微软收购后担任微软商业解决方案高级副总裁。",
+    "aliases": [
+      "道格·伯古姆",
+      "道格·伯格姆",
+      "Doug Burgum",
+      "Douglas Burgum",
+      "Douglas James Burgum"
+    ],
+    "tags": [
+      "美国",
+      "政治人物",
+      "内政部长",
+      "美国内政部",
+      "共和党",
+      "北达科他州",
+      "企业家"
+    ],
+    "categories": [
+      {
+        "name": "人物",
+        "description": "人物类知识实体",
+        "color": "#6366F1",
+        "tags": [
+          "人物"
+        ],
+        "children": [
+          {
+            "name": "政治人物",
+            "description": "从事政治活动或担任政府职务的人物",
+            "color": "#3B82F6",
+            "tags": [
+              "政治人物"
+            ],
+            "children": [
+              {
+                "name": "内政部长",
+                "description": "担任美国内政部长职务的政治人物",
+                "color": "#DC2626",
+                "tags": [
+                  "内政部长",
+                  "美国内政部"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "images": [
+      "https://www.doi.gov/sites/default/files/images/2025-12/sdbheadshot_final.jpg",
+      "https://www.doi.gov/sites/default/files/styles/medium_1_1/public/images/2025-11/cropped_sdbheadshot_final.jpg?itok=desXGrLo"
+    ],
+    "videos": [],
+    "pdf": "",
+    "link": "https://www.doi.gov/secretary-doug-burgum",
+    "visibility": "public",
+    "type": {
+      "id": "ontology/us-politician",
+      "name": "美国政治人物",
+      "description": "美国政治体系中的政治人物及政府官员"
+    },
+    "attributes": [
+      {
+        "id": "P31",
+        "name": "性质",
+        "datatype": "wikibase-item",
+        "value": {
+          "id": "Q5",
+          "label_zh": "人类"
+        },
+        "description": "Wikidata：instance of"
+      },
+      {
+        "id": "P21",
+        "name": "性别",
+        "datatype": "wikibase-item",
+        "value": {
+          "id": "Q6581097",
+          "label_zh": "男性"
+        },
+        "description": "Wikidata：sex or gender"
+      },
+      {
+        "id": "P569",
+        "name": "出生日期",
+        "datatype": "time",
+        "value": {
+          "time": "+1956-08-01T00:00:00Z",
+          "precision": 11
+        },
+        "description": "Wikidata：date of birth"
+      },
+      {
+        "id": "P19",
+        "name": "出生地",
+        "datatype": "wikibase-item",
+        "value": {
+          "id": "Q4798078",
+          "label_zh": "阿瑟"
+        },
+        "description": "Wikidata：place of birth"
+      },
+      {
+        "id": "P27",
+        "name": "国籍",
+        "datatype": "wikibase-item",
+        "value": {
+          "id": "Q30",
+          "label_zh": "美国"
+        },
+        "description": "Wikidata：country of citizenship"
+      },
+      {
+        "id": "P735",
+        "name": "名字",
+        "datatype": "string",
+        "value": "Douglas",
+        "description": "Wikidata：given name"
+      },
+      {
+        "id": "P734",
+        "name": "姓氏",
+        "datatype": "string",
+        "value": "Burgum",
+        "description": "Wikidata：family name"
+      },
+      {
+        "id": "P1477",
+        "name": "出生姓名",
+        "datatype": "monolingualtext",
+        "value": {
+          "text": "Douglas James Burgum",
+          "language": "en"
+        },
+        "description": "Wikidata：birth name"
+      },
+      {
+        "id": "P106",
+        "name": "职业",
+        "datatype": "wikibase-item",
+        "value": [
+          {
+            "id": "Q82955",
+            "label_zh": "政治人物"
+          },
+          {
+            "id": "Q43845",
+            "label_zh": "企业家"
+          },
+          {
+            "id": "Q1411016",
+            "label_zh": "投资人"
+          }
+        ],
+        "description": "Wikidata：occupation"
+      },
+      {
+        "id": "P39",
+        "name": "担任职务",
+        "datatype": "wikibase-item",
+        "value": [
+          {
+            "id": "Q1210577",
+            "label_zh": "美国内政部长"
+          },
+          {
+            "id": "Q154953",
+            "label_zh": "北达科他州州长"
+          }
+        ],
+        "description": "Wikidata：position held；包括现任及曾任主要政治职务"
+      },
+      {
+        "id": "P102",
+        "name": "所属政党",
+        "datatype": "wikibase-item",
+        "value": {
+          "id": "Q29468",
+          "label_zh": "共和党"
+        },
+        "description": "Wikidata：member of political party"
+      },
+      {
+        "id": "P69",
+        "name": "就读院校",
+        "datatype": "wikibase-item",
+        "value": [
+          {
+            "id": "Q1432056",
+            "label_zh": "北达科他州立大学"
+          },
+          {
+            "id": "Q41506",
+            "label_zh": "斯坦福大学"
+          },
+          {
+            "id": "Q7603031",
+            "label_zh": "斯坦福大学商学院"
+          }
+        ],
+        "description": "Wikidata：educated at"
+      },
+      {
+        "id": "P108",
+        "name": "雇主",
+        "datatype": "wikibase-item",
+        "value": [
+          {
+            "id": "Q5595428",
+            "label_zh": "Great Plains Software"
+          },
+          {
+            "id": "Q2283",
+            "label_zh": "微软"
+          }
+        ],
+        "description": "Wikidata：employer"
+      },
+      {
+        "id": "P26",
+        "name": "配偶",
+        "datatype": "wikibase-item",
+        "value": {
+          "id": "Q104869120",
+          "label_zh": "凯瑟琳·伯格姆"
+        },
+        "description": "Wikidata：spouse"
+      },
+      {
+        "id": "P1971",
+        "name": "子女数量",
+        "datatype": "quantity",
+        "value": {
+          "amount": "3",
+          "unit": "1"
+        },
+        "description": "Wikidata：number of children"
+      },
+      {
+        "id": "P1412",
+        "name": "使用语言",
+        "datatype": "wikibase-item",
+        "value": {
+          "id": "Q1860",
+          "label_zh": "英语"
+        },
+        "description": "Wikidata：languages spoken, written or signed"
+      },
+      {
+        "id": "P937",
+        "name": "工作地点",
+        "datatype": "wikibase-item",
+        "value": [
+          {
+            "id": "Q37066",
+            "label_zh": "俾斯麦"
+          },
+          {
+            "id": "Q34109",
+            "label_zh": "法戈"
+          },
+          {
+            "id": "Q61",
+            "label_zh": "华盛顿哥伦比亚特区"
+          }
+        ],
+        "description": "Wikidata：work location"
+      }
+    ]
+  }
+}
