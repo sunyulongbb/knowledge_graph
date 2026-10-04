@@ -35,6 +35,7 @@ export type OntologyTreeControllerOptions = {
   defaultExpandAll?: boolean;
   expandOnFirstRender?: boolean;
   showDropHint?: boolean;
+  onActivate?: (id: string) => void | Promise<void>;
   onImport?: () => void;
   menuActions?: (id: string) => Array<{ label: string; action: () => void; disabled?: boolean }>;
 };
@@ -126,6 +127,17 @@ export class OntologyTreeController {
         if (event.key === "Enter" || event.key === " ") activateIcon(event);
       }, true);
     }
+    if (this.options.onActivate) {
+      const activate = (event: Event) => {
+        const row = (event.target as HTMLElement)?.closest<HTMLElement>('[data-class-activate]');
+        if (!row) return;
+        event.preventDefault(); event.stopPropagation();
+        const id = row.dataset.classActivate!;
+        this.select(id); void this.options.onActivate?.(id);
+      };
+      host.addEventListener('click', activate, true);
+      host.addEventListener('keydown', (event) => { if (event.key === 'Enter' || event.key === ' ') activate(event); }, true);
+    }
     this.container.appendChild(host);
     const hasSavedState = Object.keys(oldState).length > 0;
     const openedIds = new Set(
@@ -152,7 +164,8 @@ export class OntologyTreeController {
         const icon = this.options.nodeIcon === "folder"
           ? `<span class="ontology-node-folder" style="--ontology-node-color:${this.escape(color)}" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path fill="currentColor" d="M3 5.75A1.75 1.75 0 0 1 4.75 4h5.19c.46 0 .9.18 1.23.51L12.66 6h6.59A1.75 1.75 0 0 1 21 7.75v8.5A2.75 2.75 0 0 1 18.25 19H5.75A2.75 2.75 0 0 1 3 16.25V5.75Z"/></svg></span>`
           : `<span class="ontology-node-dot${filled ? " is-filled" : ""}" style="--ontology-node-color:${this.escape(color)}"${this.options.onNodeIconClick ? ` data-ontology-node-icon="${this.escape(String(item.id))}" role="button" tabindex="0" aria-pressed="${filled}" aria-label="${filled ? "取消分类" : "添加分类"}"` : ""}></span>`;
-        return `${icon}<span class="ontology-node-label" data-tree-node-id="${this.escape(String(item.id))}">${this.escape(item.value)}</span>`;
+        const content = `${icon}<span class="ontology-node-label" data-tree-node-id="${this.escape(String(item.id))}">${this.escape(item.value)}</span>`;
+        return this.options.onActivate ? `<span class="class-tree-node${filled ? " is-assigned" : ""}" data-class-activate="${this.escape(String(item.id))}" role="button" tabindex="0" aria-pressed="${filled}" title="${filled ? "点击取消分类" : "点击添加分类"}">${content}${filled ? '<small>已分类</small>' : ""}</span>` : content;
       },
     });
     this.bindTreeEvents();
@@ -202,6 +215,19 @@ export class OntologyTreeController {
     );
     if (value) this.tree.expandAll();
     else this.restoreSavedState();
+  }
+
+  refreshAssignedStates(): void {
+    // Classification changes only affect presentation; preserve the existing tree and scroll containers.
+    this.container.querySelectorAll<HTMLElement>('[data-class-activate]').forEach((row) => {
+      const filled = Boolean(this.options.nodeIconFilled?.(row.dataset.classActivate || ''));
+      row.classList.toggle('is-assigned', filled);
+      row.setAttribute('aria-pressed', String(filled));
+      row.title = filled ? '点击取消分类' : '点击添加分类';
+      let badge = row.querySelector('small');
+      if (filled && !badge) { badge = document.createElement('small'); badge.textContent = '已分类'; row.append(badge); }
+      if (!filled) badge?.remove();
+    });
   }
 
   setExpanded(expanded: boolean, id?: string): void {

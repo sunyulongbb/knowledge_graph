@@ -501,6 +501,27 @@
     }
   }
 
+  async function exportClassTree(rootId = '') {
+    try {
+      const url = appendCurrentDbToUrl(new URL('/api/kb/classes', window.location.origin));
+      const data = await apiGet(url.toString());
+      const rows = Array.isArray(data) ? data : data.items || [];
+      const encode = (row, seen = new Set()) => {
+        if (seen.has(row.id)) throw new Error('分类层级存在循环');
+        const next = new Set(seen); next.add(row.id);
+        let tags = row.tags || []; if (typeof tags === 'string') { try { tags = JSON.parse(tags); } catch { tags = []; } }
+        return { name: row.name || row.label || row.id, description: row.description || '', color: row.color || null, image: row.image || null,
+          tags: Array.isArray(tags) ? tags.filter((tag) => typeof tag === 'string' && tag.trim()) : [],
+          children: rows.filter((item) => (item.parent_id || item.parent) === row.id).sort((a,b) => (a.sort_order || 0) - (b.sort_order || 0)).map((item) => encode(item,next)) };
+      };
+      const roots = rootId ? rows.filter((item) => item.id === rootId) : rows.filter((item) => !(item.parent_id || item.parent));
+      if (!roots.length) throw new Error('没有可导出的分类');
+      const blob = new Blob([JSON.stringify({version:1,classes:roots.map((item) => encode(item))},null,2)], {type:'application/json'});
+      const link = document.createElement('a'); const objectUrl = URL.createObjectURL(blob); link.href = objectUrl;
+      link.download = (rootId ? '分类分支' : '全部分类') + '-' + new Date().toISOString().slice(0,10) + '.json'; document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(objectUrl),1000);
+    } catch (error) { alert('导出失败：' + (error.message || error)); }
+  }
+
   if (btnClassImport && classImportFile) {
     btnClassImport.addEventListener("click", () => classImportFile.click());
     classImportFile.addEventListener("change", async () => {
@@ -642,16 +663,16 @@
                   throw error;
                 }
               },
-              toggleSelection: true,
+              toggleSelection: false,
               storageKey: "kb:ontology-tree-state:class-manager:v2",
               defaultExpandAll: true,
               expandOnFirstRender: true,
               showDropHint: true,
-              nodeIcon: "dot",
+              nodeIcon: "folder",
               nodeIconFilled: (id) =>
                 Array.isArray(window.kbEntityClasses) &&
                 window.kbEntityClasses.some((item) => String(item?.id || "") === id),
-              onNodeIconClick: (id) => toggleEntityClassFromTree(id),
+              onActivate: (id) => toggleEntityClassFromTree(id),
               onSelect: (id) => {
                 const nextId = id || null;
                 window.kbSelectedClassId = nextId;
@@ -718,6 +739,8 @@
                   { label: '设置颜色', action: invoke('clsColorPicker') },
                   { label: '设置图标', action: invoke('btnClsImage') },
                   { label: '配置分类分析', action: invoke('btnClsAnalysis') },
+                  { label: '导出此分支 JSON', action: () => void exportClassTree(id) },
+                  { label: '导出全部分类 JSON', action: () => void exportClassTree() },
                   { label: '导入分类 JSON', action: invoke('btnClassImport') },
                   { label: '新增标签', action: invoke('btnTagCreateToggle') },
                   { label: '导入标签 JSON', action: invoke('btnTagImport') },
@@ -1248,7 +1271,7 @@
       alert("请先选择左侧一个实体");
       return;
     }
-    if (!classId || pendingClassAssignments.has(classId)) return;
+    if (!classId || pendingClassAssignments.size) return;
     const assigned = Array.isArray(window.kbEntityClasses) &&
       window.kbEntityClasses.some((item) => String(item?.id || "") === classId);
     pendingClassAssignments.add(classId);
@@ -1256,11 +1279,11 @@
     try {
       if (assigned) await clearEntityClass(entityId, classId);
       else await assignSelectedEntityClass(entityId, classId);
-      await loadEntityClass(entityId);
+      if (String(fId?.value || "").trim() === entityId) await loadEntityClass(entityId);
     } catch (error) {
       console.error("toggleEntityClassFromTree", error);
       alert(`${assigned ? "取消" : "设置"}分类失败: ${error?.message || error}`);
-      await loadEntityClass(entityId).catch(() => {});
+      if (String(fId?.value || "").trim() === entityId) await loadEntityClass(entityId).catch(() => {});
     } finally {
       pendingClassAssignments.delete(classId);
       clsTree?.removeAttribute("aria-busy");
@@ -1272,7 +1295,8 @@
       window.kbEntityClasses = [];
       clsForEntity.textContent = "未选择实体";
       updateClassAssignmentActions();
-      renderClassTree(window.kbClasses || []);
+      if (classTreeController) classTreeController.refreshAssignedStates();
+      else renderClassTree(window.kbClasses || []);
       try {
         updatePropertyRecommendations();
       } catch {}
@@ -1288,9 +1312,11 @@
       );
       url.searchParams.set("id", fullId);
       const data = await apiGet(url.toString());
+      if (String(fId?.value || "").replace(/^entity\//, "") !== String(entityId).replace(/^entity\//, "")) return;
       const items = Array.isArray(data?.items) ? data.items : [];
       window.kbEntityClasses = items;
-      renderClassTree(window.kbClasses || []);
+      if (classTreeController) classTreeController.refreshAssignedStates();
+      else renderClassTree(window.kbClasses || []);
       if (!items.length) {
         clsForEntity.textContent = "当前实体未设置分类";
         updateClassAssignmentActions();

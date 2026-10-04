@@ -799,6 +799,7 @@
 
     function openCreateProjectModal() {
       if (!createProjectModal) return;
+      document.body.appendChild(createProjectModal);
       createProjectModal.style.display = "flex";
       try {
         if (inputProjectName) inputProjectName.value = generateProjectDbName();

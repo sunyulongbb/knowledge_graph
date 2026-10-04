@@ -205,6 +205,24 @@
       <div class="app-home-rail-brandmark"><span aria-hidden="true">${escape(initials)}</span>${image ? `<img src="${escape(image)}" alt="${escape(name)} Logo" loading="lazy" onerror="this.remove()">` : ''}</div>
     </div>`;
   }
+  function homeCategoryNavigation() {
+    const byId = new Map(homeCategories.map((item) => [String(item.id), item]));
+    const children = (id) => homeCategories.filter((item) => String(item.parent_id || item.parent || '') === id);
+    const ancestry = [], seen = new Set(); let current = byId.get(String(homeSelectedCategory));
+    while (current && !seen.has(String(current.id))) { seen.add(String(current.id)); ancestry.unshift(current); current = byId.get(String(current.parent_id || current.parent || '')); }
+    const chip = (item) => {
+      const id = String(item.id), active = id === String(homeSelectedCategory);
+      return '<button type="button" class="home-category-chip' + (active ? ' is-active' : seen.has(id) ? ' is-ancestor' : '') + '" data-home-category="' + escape(id) + '" aria-pressed="' + active + '"><span>' + escape(item.name || item.label || id) + '</span><small>' + (Number(item.instance_count) || 0) + '</small></button>';
+    };
+    const roots = homeCategories.filter((item) => !byId.has(String(item.parent_id || item.parent || '')));
+    const all = '<button type="button" class="home-category-chip' + (!homeSelectedCategory ? ' is-active' : '') + '" data-home-category="" aria-pressed="' + !homeSelectedCategory + '">全部知识</button>';
+    const rows = ['<div class="home-category-level"><span class="home-category-level-label">分类</span><div>' + all + roots.map(chip).join('') + '</div></div>'];
+    for (const parent of ancestry) {
+      const items = children(String(parent.id)); if (!items.length) continue;
+      rows.push('<div class="home-category-level"><span class="home-category-level-label" title="' + escape(parent.name || parent.id) + '">' + escape(parent.name || parent.id) + '</span><div>' + items.map(chip).join('') + '</div></div>');
+    }
+    return '<nav class="home-category-navigation" aria-label="知识分类筛选">' + rows.join('') + '</nav>';
+  }
   function categoryTree(items) {
     const byParent = new Map();
     (items || []).forEach((item) => {
@@ -561,8 +579,8 @@
     const activeCategory = homeCategories.find((item) => item.id === homeSelectedCategory);
     content.innerHTML = `
       <dialog class="app-inspiration-modal" data-home-inspiration-modal aria-label="知识画像"><div class="app-inspiration-profile-layer" data-jev-profile-layer ${showJev ? '' : 'hidden'}>${showJev ? profileLoading() : ''}</div><div class="app-inspiration-modal-core"><button type="button" class="app-inspiration-close" data-home-inspiration-close aria-label="关闭"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button><div class="app-inspiration-draw-shell">${inspirationDrawContent(inspiration)}</div></div></dialog>
-      <div class="app-home-workspace"><aside class="app-category-panel">${applicationSidebarBrand()}<nav aria-label="知识分类"><button type="button" class="app-category-item${homeSelectedCategory ? '' : ' is-active'}" data-home-category=""><i class="fa-solid fa-layer-group" aria-hidden="true"></i><span>全部知识</span><small>${Number(byId('appHomeCount')?.dataset.total) || 0}</small></button><ul class="app-category-tree">${categoryTree(homeCategories)}</ul></nav></aside>
-      <section class="app-knowledge-panel">${applicationBanner()}<div class="app-home-section-heading compact app-knowledge-list-heading"><div><h2>${escape(activeCategory?.name || '知识列表')}</h2></div><div class="app-knowledge-list-actions"><span class="app-list-count">共 ${homeTotal} 条 · 本页 ${nodes.length} 条</span><button id="knowledgeRoamLaunch" type="button" class="btn" data-home-roam-open data-home-roam-class="${escape(homeSelectedCategory)}"><i class="fa-solid fa-route" aria-hidden="true"></i><span>知识漫游</span></button><button type="button" class="btn" data-home-inspiration-open><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i><span>知识画像</span></button></div></div><div class="app-home-knowledge-grid">${nodes.map(homeKnowledgeCard).join('') || '<div class="app-home-empty"><i class="fa-solid fa-inbox" aria-hidden="true"></i><strong>该分类暂无知识</strong><span>选择其他分类，或创建一条新知识。</span></div>'}</div>${homePagination()}</section></div>`;
+      <div class="app-home-workspace app-home-workspace--horizontal">
+      <section class="app-knowledge-panel">${applicationBanner()}${homeCategoryNavigation()}<div class="app-home-section-heading compact app-knowledge-list-heading"><div><h2>${escape(activeCategory?.name || '知识列表')}</h2></div><div class="app-knowledge-list-actions"><span class="app-list-count">共 ${homeTotal} 条 · 本页 ${nodes.length} 条</span><button id="knowledgeRoamLaunch" type="button" class="btn" data-home-roam-open data-home-roam-class="${escape(homeSelectedCategory)}"><i class="fa-solid fa-route" aria-hidden="true"></i><span>知识漫游</span></button><button type="button" class="btn" data-home-inspiration-open><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i><span>知识画像</span></button></div></div><div class="app-home-knowledge-grid">${nodes.map(homeKnowledgeCard).join('') || '<div class="app-home-empty"><i class="fa-solid fa-inbox" aria-hidden="true"></i><strong>该分类暂无知识</strong><span>选择其他分类，或创建一条新知识。</span></div>'}</div>${homePagination()}</section></div>`;
   }
   function flatten(items, depth = 0) {
     return (items || []).flatMap((item) => [{ id: item.id, name: `${'　'.repeat(depth)}${item.name || item.id}` }, ...flatten(item.children, depth + 1)]);
