@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 const source = readFileSync(new URL('../public/assets/scripts/home-media-viewer.js', import.meta.url), 'utf8');
-function setup() {
+function setup(play?: (video: any) => Promise<void>, videosOnly = false) {
   let refs: Record<string, any> = {};
   const elements: any[] = [];
   class Element {
@@ -14,14 +14,15 @@ function setup() {
     querySelectorAll(selector: string) { if (selector === '[data-ref]') return Object.values(refs); if (selector === 'button') return []; return this.children.filter((el) => el.tag === selector); }
     querySelector(selector: string) { return this.querySelectorAll(selector)[0] || null; }
     addEventListener(name: string, fn: Function) { (this.handlers[name] ||= []).push(fn); }
-    setAttribute() {} removeAttribute() {} load() {} pause() { this.paused = true; } play() { this.paused = false; return Promise.resolve(); }
+    setAttribute() {} removeAttribute() {} load() {} pause() { this.paused = true; } play() { if (play) return play(this); this.paused = false; return Promise.resolve(); }
     showModal() { this.open = true; } close() { this.open = false; this.handlers.close?.forEach((fn) => fn()); } focus() {}
   }
   const window: any = { addEventListener() {} };
   const body = new Element('body'); body.style.overflow = 'auto';
   const requests: string[] = [];
   const first = { id: 'one', name: '一', images: ['/a.jpg', '/b.jpg'], videos: ['/c.mp4'] };
-  const second = { id: 'two', name: '二', images: ['/d.jpg'] };
+  const second = { id: 'two', name: '二', images: ['/d.jpg'], videos: ['/e.mp4'] };
+  if (videosOnly) { first.images = []; second.images = []; }
   const document = { body, activeElement: new Element('button'), createElement: (tag: string) => { const el = new Element(tag); elements.push(el); return el; } };
   new Function('window', 'document', 'location', 'fetch', 'navigator', source)(window, document, { origin: 'https://example.test', search: '?db=mine' }, async (url: URL) => {
     requests.push(url.toString());
@@ -144,4 +145,74 @@ test('up traverses history without random fallback and opening a new card resets
   h.viewer.close(); h.viewer.open('two', options); await tick();
   const reopened = h.requests.length;
   await h.refs.up.onclick(); expect(h.requests.length).toBe(reopened);
+});
+
+test('detail videos autoplay with sound by default and reopening restores sound default', async () => {
+  const h = setup(); h.viewer.open('one'); await tick();
+  h.refs.right.onclick(); h.refs.right.onclick();
+  const video = h.refs.stage.querySelector('video');
+  expect(video.autoplay).toBe(true); expect(video.muted).toBe(false); expect(video.paused).toBe(false);
+  h.refs.mute.onclick(); expect(video.muted).toBe(true);
+  h.viewer.close(); h.viewer.open('one'); await tick();
+  h.refs.right.onclick(); h.refs.right.onclick();
+  expect(h.refs.stage.querySelector('video').muted).toBe(false);
+});
+
+for (const name of ['AbortError', 'NotAllowedError', 'NotSupportedError']) {
+  test(`play rejection distinguishes ${name}`, async () => {
+    const h = setup(() => Promise.reject(Object.assign(new Error(name), { name })));
+    h.viewer.open('one'); await tick();
+    h.refs.right.onclick(); h.refs.right.onclick(); await tick();
+    const status = h.refs.status.textContent;
+    if (name === 'AbortError') expect(status).toBe('');
+    if (name === 'NotAllowedError') expect(status).toContain('浏览器暂未允许');
+    if (name === 'NotSupportedError') expect(status).toContain('格式或编码');
+  });
+}
+
+test('late rejection from outgoing video cannot overwrite the new page status', async () => {
+  let rejectPlay: (error: any) => void = () => {};
+  const h = setup(() => new Promise((_, reject) => { rejectPlay = reject; }));
+  h.viewer.open('one', { nodes: [{ id: 'one' }, { id: 'two' }] }); await tick();
+  h.refs.right.onclick(); h.refs.right.onclick();
+  await h.refs.down.onclick();
+  rejectPlay(Object.assign(new Error('blocked'), { name: 'NotAllowedError' }));
+  await tick();
+  expect(h.refs.title.textContent).toBe('二');
+  expect(h.refs.status.textContent).toBe('');
+});
+
+
+test('vertical paging automatically falls back to muted playback and retries sound on the next page', async () => {
+  const attempts: boolean[] = [];
+  let allowSound = false;
+  const h = setup(async (video) => {
+    attempts.push(video.muted);
+    if (!video.muted && !allowSound) throw Object.assign(new Error('blocked'), { name: 'NotAllowedError' });
+    video.paused = false;
+  }, true);
+  h.viewer.open('one', { nodes: [{ id: 'one' }, { id: 'two' }] }); await tick();
+  expect(attempts).toEqual([false, true]);
+  expect(h.refs.stage.querySelector('video').paused).toBe(false);
+  expect(h.refs.centerPlay.hidden).toBe(true);
+  expect(h.refs.status.textContent).toBe('');
+  await h.refs.down.onclick(); await tick();
+  expect(attempts).toEqual([false, true, false, true]);
+  expect(h.refs.title.textContent).toBe('二');
+  expect(h.refs.stage.querySelector('video').paused).toBe(false);
+  allowSound = true;
+  h.refs.mute.onclick(); await tick();
+  expect(h.refs.stage.querySelector('video').muted).toBe(false);
+  await h.refs.up.onclick(); await tick();
+  expect(h.refs.stage.querySelector('video').paused).toBe(false);
+  expect(h.refs.stage.querySelector('video').muted).toBe(false);
+});
+
+test('explicit mute persists across vertical paging without attempting sound', async () => {
+  const h = setup(undefined, true);
+  h.viewer.open('one', { nodes: [{ id: 'one' }, { id: 'two' }] }); await tick();
+  h.refs.mute.onclick();
+  await h.refs.down.onclick(); await tick();
+  expect(h.refs.stage.querySelector('video').muted).toBe(true);
+  expect(h.refs.stage.querySelector('video').paused).toBe(false);
 });

@@ -36,9 +36,19 @@
     if (typeof source === 'string' && /^(https?:\/\/|\/(?!\/))/i.test(source)) picture = `<img src="${escape(source)}" alt="" width="92" height="72" loading="lazy">`;
     return `<article class="app-knowledge-item">${picture}<div><a href="${escape(nodeUrl(node))}">${escape(node.name || node.label || node.id)}</a><p>${escape(node.description || node.desc_zh || '暂无描述')}</p><small class="muted">${escape(node.typeLabel || node.type || '未设置本体')} · ${escape((node.updated_at || node.created_at || '').slice(0, 10))}</small></div></article>`;
   }
+  function imageCandidates(value) {
+    if (Array.isArray(value)) return value.flatMap(imageCandidates);
+    if (value && typeof value === 'object') return imageCandidates(value.url || value.src || '');
+    if (typeof value !== 'string') return [];
+    const source = value.trim();
+    if (source.startsWith('[') || source.startsWith('{')) { try { return imageCandidates(JSON.parse(source)); } catch { return []; } }
+    return /^(https?:\/\/|\/(?!\/)|data:image\/)/i.test(source) ? [source] : [];
+  }
   function firstImage(node) {
-    const candidates = [node.image, ...(Array.isArray(node.images) ? node.images : []), ...(Array.isArray(node._attr_images) ? node._attr_images : [])];
-    return candidates.find((value) => typeof value === 'string' && /^(https?:\/\/|\/(?!\/)|data:image\/)/i.test(value)) || '';
+    return imageCandidates([node.image, node.images, node._attr_images])[0] || '';
+  }
+  function firstCover(node) {
+    return imageCandidates([node.covers, node.cover, node.poster, ...(Array.isArray(node.videos) ? node.videos.map((video) => video?.poster || video?.cover) : [])])[0] || '';
   }
   function firstVideo(node) {
     const rawVideos = Array.isArray(node.videos) ? node.videos : (typeof node.videos === 'string' ? (() => { try { const parsed = JSON.parse(node.videos); return Array.isArray(parsed) ? parsed : [node.videos]; } catch { return [node.videos]; } })() : []);
@@ -178,11 +188,12 @@
   }
   function homeKnowledgeCard(node) {
     const image = firstImage(node);
-    const video = image ? '' : firstVideo(node);
+    const video = firstVideo(node);
+    const cover = image || firstCover(node);
     const title = node.name || node.label || node.id;
     const id = node.id || node._id || '';
     return `<article class="app-home-knowledge-card" data-home-node-id="${escape(id)}">
-      <button type="button" class="app-home-card-media${image || video ? '' : ' is-placeholder'}" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}">${image ? `<img src="${escape(image)}" alt="" loading="lazy">` : video ? `<video src="${escape(video)}" muted playsinline preload="metadata"></video><span class="app-media-type"><i class="fa-solid fa-play" aria-hidden="true"></i> 视频</span>` : '<i class="fa-solid fa-lightbulb" aria-hidden="true"></i>'}</button>
+      <button type="button" class="app-home-card-media${cover || video ? '' : ' is-placeholder'}" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}">${cover ? `<img src="${escape(cover)}" alt="" loading="lazy">` : video ? `<video src="${escape(video)}" muted playsinline preload="metadata"></video><span class="app-media-type"><i class="fa-solid fa-play" aria-hidden="true"></i> 视频</span>` : '<i class="fa-solid fa-lightbulb" aria-hidden="true"></i>'}</button>
       <div class="app-home-card-body"><div class="app-home-card-meta"><span>${escape(node.typeLabel || node.type || '知识实体')}</span><time>${escape(shortDate(node.updated_at || node.created_at))}</time></div><button type="button" class="app-home-card-title" data-home-node-id="${escape(id)}">${escape(title)}</button><div class="app-home-card-footer"><span class="app-home-card-id">${escape(id)}</span><span>查看详情 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span></div></div>
     </article>`;
   }
@@ -192,6 +203,7 @@
     const description = String(project.description || '').trim();
     const background = String(project.banner_image || '').trim();
     const hasBackground = /^(https?:\/\/|\/(?!\/))/i.test(background);
+    if (!hasBackground) return '';
     return `<section class="app-home-banner${hasBackground ? ' has-background' : ''}" aria-label="当前应用">
       ${hasBackground ? `<img class="app-home-banner-background" src="${escape(background)}" alt="" />` : ''}
       <div class="app-home-banner-content"><h1>${escape(name)}</h1>${description ? `<p>${escape(description)}</p>` : ''}</div>
@@ -775,6 +787,8 @@
     }
     const category = event.target.closest('[data-home-category]');
     if (category) {
+      event.preventDefault();
+      clearTimeout(homeHoverTimer); homeHoverCategory = '';
       void loadHomePage(1, category.dataset.homeCategory || '');
       return;
     }

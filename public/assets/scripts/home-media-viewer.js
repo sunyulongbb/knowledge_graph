@@ -26,7 +26,7 @@
   let journey = null;
   let portrait = null;
   let feed = [], category = '', animations = [], departing = null;
-  let scope = '', recent = [], busy = false, wheelAt = 0, wheelSum = 0, touchStart, muted = true;
+  let scope = '', recent = [], busy = false, wheelAt = 0, wheelSum = 0, touchStart, muted = false;
   let focusBefore, oldOverflow, overlayMode = '', overlayPage = 0, comments = [], liked = false, actionBusy = false;
   const idOf = (item) => String(item?.id || item?._id || '').replace(/^entity\//, '');
   const currentScope = () => new URLSearchParams(location.search).get('db') || '';
@@ -43,13 +43,43 @@
   function stopMedia() { refs?.stage.querySelectorAll('video').forEach((video) => { video.pause(); video.removeAttribute('src'); video.load(); }); }
   function updateVideoControls() {
     const video = refs.stage.querySelector('video');
-    refs.play.hidden = refs.mute.hidden = refs.seek.hidden = !video;
+    refs.play.hidden = refs.mute.hidden = refs.seek.hidden = refs.playback.hidden = !video;
+    refs.centerPlay.hidden = !video || !video.paused;
     if (video) {
       refs.play.textContent = video.paused ? '▶' : 'Ⅱ';
       refs.play.setAttribute('aria-label', video.paused ? '播放' : '暂停');
-      refs.mute.textContent = video.muted ? '静音' : '声音';
+      refs.mute.textContent = video.muted ? '开启声音' : '关闭声音';
+      refs.mute.setAttribute('aria-label', video.muted ? '开启声音' : '关闭声音');
+      const time = (value) => { const seconds = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0; return Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0'); };
+      refs.time.textContent = time(video.currentTime) + ' / ' + time(video.duration);
+      refs.seek.disabled = !Number.isFinite(video.duration) || video.duration <= 0;
       refs.mute.setAttribute('aria-pressed', String(video.muted));
       refs.seek.value = Number.isFinite(video.duration) && video.duration > 0 ? video.currentTime / video.duration * 100 : 0;
+    }
+  }
+  async function playVideo(video, { deferBlocked = false, allowMutedFallback = true } = {}) {
+    const token = version;
+    try {
+      await video.play();
+      if (token === version && video.parentNode === refs.stage && dialog.open) {
+        video.dataset.playBlocked = ''; updateVideoControls();
+        if (/点击.*播放|自动播放被浏览器|浏览器暂未允许/.test(refs.status.textContent)) message('');
+      }
+    } catch (error) {
+      if (token !== version || video.parentNode !== refs.stage || !dialog.open || !video.paused) return;
+      if (error.name === 'AbortError') return;
+      updateVideoControls();
+      if (error.name === 'NotAllowedError') {
+        // Keep the feed moving when sound requires an explicit browser gesture.
+        // Do not change the user's sound preference for subsequent videos.
+        if (allowMutedFallback && !video.muted) {
+          video.muted = true;
+          return playVideo(video, { deferBlocked, allowMutedFallback: false });
+        }
+        video.dataset.playBlocked = 'true';
+        if (!deferBlocked) message('浏览器暂未允许自动播放，请点击播放');
+      } else if (error.name === 'NotSupportedError') message('此视频格式或编码不受浏览器支持');
+      else message('视频播放失败，请检查网络后重试');
     }
   }
   function renderMedia() {
@@ -66,12 +96,13 @@
       const element = document.createElement(item.kind === 'video' ? 'video' : 'img');
       element.src = item.url;
       if (item.kind === 'video') {
-        element.muted = muted; element.playsInline = true; element.loop = true; element.preload = 'metadata';
+        element.muted = muted; element.defaultMuted = muted; element.autoplay = true; element.playsInline = true; element.loop = true; element.preload = 'metadata';
+        element.addEventListener('playing', () => { if (element.parentNode === refs.stage && /点击.*播放|自动播放被浏览器|浏览器暂未允许/.test(refs.status.textContent)) message(''); });
         ['play', 'pause', 'timeupdate', 'loadedmetadata', 'volumechange'].forEach((event) => element.addEventListener(event, updateVideoControls));
       } else { element.alt = node.name || node.label || '知识图片'; element.draggable = false; }
       element.addEventListener('error', () => { if (element.parentNode === refs.stage) message('媒体加载失败，可左右切换媒体或上下翻页'); });
       refs.stage.append(element);
-      if (item.kind === 'video') element.play().catch(() => updateVideoControls());
+      if (item.kind === 'video') void playVideo(element, { deferBlocked: !!departing });
     }
     updateVideoControls();
   }
@@ -142,7 +173,11 @@
       refs.main.animate([{ transform: 'translate3d(0,' + (direction * 100) + '%,0)' }, { transform: 'translate3d(0,0,0)' }], options),
     ];
     await Promise.all(animations.map((animation) => animation.finished.catch(() => {})));
-    if (token === version) clearTransition();
+    if (token === version) {
+      clearTransition();
+      const video = refs.stage.querySelector('video');
+      if (video?.paused && video.dataset.playBlocked === 'true') void playVideo(video);
+    }
   }
   async function randomPage(direction = 1) {
     if (busy || overlayMode || !node || !dialog.open) return;
@@ -235,10 +270,12 @@
     dialog = document.createElement('dialog'); dialog.id = 'homeMediaViewer'; dialog.setAttribute('aria-label', '知识媒体详情');
     dialog.innerHTML = `<div class="home-reel-viewport" data-ref="viewport"><div class="home-reel-main" data-ref="main">
       <div class="home-reel-stage" data-ref="stage"></div>
-      <div class="home-reel-top"><div><button data-ref="play" aria-label="播放">▶</button><button data-ref="mute" aria-label="切换静音">静音</button></div><div><button data-ref="fullscreen" aria-label="全屏">⛶</button><button data-ref="close" aria-label="关闭知识详情">×</button></div></div>
+      <div class="home-reel-top"><span class="home-reel-brand">知识发现</span><div><button data-ref="fullscreen" aria-label="全屏">⛶</button><button data-ref="close" aria-label="关闭知识详情">×</button></div></div>
       <button class="home-reel-media-nav is-left" data-ref="left" aria-label="上一个媒体">‹</button><button class="home-reel-media-nav is-right" data-ref="right" aria-label="下一个媒体">›</button>
       <div class="home-reel-caption"><span data-ref="identity"></span><h2 data-ref="title"></h2><p data-ref="description"></p><button data-action="info" class="home-reel-more">查看完整信息</button></div>
       <div class="home-reel-bottom"><span data-ref="counter"></span><span>← → 切媒体 · ↑ 历史 · ↓ 随机</span></div>
+      <button class="home-reel-center-play" data-ref="centerPlay" aria-label="播放视频" hidden>▶</button>
+      <div class="home-reel-playback" data-ref="playback" hidden><button data-ref="play" aria-label="播放">▶</button><button data-ref="mute" aria-label="关闭声音">关闭声音</button><span data-ref="time" class="home-reel-time">0:00 / 0:00</span></div>
       <input data-ref="seek" class="home-reel-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="视频进度">
       <section class="home-reel-overlay" data-ref="overlay" hidden><header><strong data-ref="overlayTitle"></strong><button data-ref="overlayClose" aria-label="关闭信息">×</button></header><p data-ref="overlayText"></p><div class="home-reel-pages"><button data-ref="overlayPrev">上一页</button><span data-ref="overlayCount"></span><button data-ref="overlayNext">下一页</button></div><form data-ref="commentForm"><textarea data-ref="commentInput" maxlength="2000" rows="2" placeholder="写下评论…" aria-label="评论内容"></textarea><button type="submit">发送评论</button></form></section>
     </div></div><aside class="home-reel-rail"><button data-action="like" data-ref="like" aria-label="点赞"><i class="fa-regular fa-heart" aria-hidden="true"></i><b data-ref="likeCount">0</b></button><button data-action="comment" aria-label="评论"><i class="fa-regular fa-comment" aria-hidden="true"></i><b data-ref="commentCount">0</b></button><button data-action="share" aria-label="分享"><i class="fa-solid fa-share" aria-hidden="true"></i><b data-ref="shareCount">0</b></button><button data-ref="up" aria-label="返回上一条浏览历史"><i class="fa-solid fa-chevron-up" aria-hidden="true"></i><small>上一条历史</small></button><button data-ref="down" aria-label="向下随机翻页"><i class="fa-solid fa-chevron-down" aria-hidden="true"></i><small>随机下一条</small></button></aside><div class="home-reel-status" data-ref="status" role="status" aria-live="polite"></div>`;
@@ -248,8 +285,16 @@
     refs.close.onclick = close; dialog.addEventListener('close', () => { if (!dialog.open) cleanup(); });
     refs.left.onclick = () => moveMedia(-1); refs.right.onclick = () => moveMedia(1);
     refs.up.onclick = () => randomPage(-1); refs.down.onclick = () => randomPage(1);
-    refs.play.onclick = () => { const video = refs.stage.querySelector('video'); if (video) video.paused ? video.play().catch(() => message('请再次点击播放')) : video.pause(); };
-    refs.mute.onclick = () => { muted = !muted; const video = refs.stage.querySelector('video'); if (video) video.muted = muted; updateVideoControls(); };
+    refs.play.onclick = refs.centerPlay.onclick = () => { message(''); const video = refs.stage.querySelector('video'); if (video) video.paused ? void playVideo(video) : video.pause(); };
+    refs.mute.onclick = () => {
+      const video = refs.stage.querySelector('video');
+      muted = video ? !video.muted : !muted;
+      if (video) {
+        video.muted = muted;
+        if (!muted) void playVideo(video);
+      }
+      updateVideoControls();
+    };
     refs.seek.oninput = () => { const video = refs.stage.querySelector('video'); if (video && Number.isFinite(video.duration)) video.currentTime = Number(refs.seek.value) / 100 * video.duration; };
     refs.fullscreen.onclick = async () => { try { if (document.fullscreenElement) await document.exitFullscreen(); else await dialog.requestFullscreen(); } catch { message('当前浏览器不支持全屏'); } };
     refs.overlayClose.onclick = () => { overlayMode = ''; renderOverlay(); };
@@ -305,8 +350,25 @@
     const hint = dialog.querySelector('.home-reel-bottom > span:last-child');
     if (hint) hint.textContent = journey ? '← → 切媒体 · ↑ ↓ 沿线路漫游' : '← → 切媒体 · ↑ 历史 · ↓ 随机';
     if (!dialog.open) { focusBefore = document.activeElement; oldOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; dialog.showModal(); }
+    muted = false;
     scope = currentScope(); recent = []; history = []; overlayMode = ''; refs.overlay.hidden = true; wheelAt = Date.now(); wheelSum = 0;
     void loadNode(id);
   }
+  // Restore only an actively open standard detail panel after a browser reload.
+  let reloadDetail = null;
+  try {
+    if (window.performance?.getEntriesByType('navigation')[0]?.type === 'reload') reloadDetail = JSON.parse(sessionStorage.getItem('kb-home-detail-reload') || 'null');
+    sessionStorage.removeItem('kb-home-detail-reload');
+  } catch {}
+  window.addEventListener('pagehide', () => {
+    try {
+      if (dialog?.open && node && !journey && !portrait) sessionStorage.setItem('kb-home-detail-reload', JSON.stringify({ id: idOf(node), scope, category, nodes: feed.map((item) => ({id:idOf(item)})) }));
+      else sessionStorage.removeItem('kb-home-detail-reload');
+    } catch {}
+  });
+  window.addEventListener('load', () => {
+    if (reloadDetail && reloadDetail.scope === currentScope()) open(reloadDetail.id, {nodes:reloadDetail.nodes || [],category:reloadDetail.category});
+    reloadDetail = null;
+  }, {once:true});
   window.homeKnowledgeMediaViewer = { open, close, goTo, collectMedia, textPages };
 })();

@@ -1,3 +1,4 @@
+import { networkInterfaces } from "node:os";
 import { switchDatabase, adminDb, hashPassword } from "./db.ts";
 import { ensureInitialAdminAccount } from "./initial-admin.ts";
 import { createApplicationHandler } from './application-access.ts';
@@ -21,6 +22,7 @@ import { guardKnowledgeRequest, handleKnowledgeAccessRoutes } from './routes/kno
 import { handleJevRoutes } from './routes/jev.ts';
 
 const port = parseInt(process.env.PORT || "8080");
+const hostname = process.env.HOST?.trim() || "0.0.0.0";
 const initialAdmin = await ensureInitialAdminAccount(adminDb, hashPassword);
 if (initialAdmin) {
   console.log("\n============================================================");
@@ -35,6 +37,7 @@ const handleUserProfile = createUserProfileHandler(adminDb, getCurrentUser);
 
 const server = Bun.serve({
   port: port,
+  hostname,
   idleTimeout: 255,
   maxRequestBodySize: 5000 * 1024 * 1024,
   async fetch(req) {
@@ -126,4 +129,9 @@ const server = Bun.serve({
   },
 });
 
-console.log(`Listening on http://localhost:${server.port} ...`);
+console.log("Listening on " + hostname + ":" + server.port);
+console.log("本机访问：http://localhost:" + server.port);
+if (hostname === "0.0.0.0" || hostname === "::") {
+  const addresses = new Set(Object.values(networkInterfaces()).flatMap((items) => (items || []).filter((item) => !item.internal && item.family === "IPv4").map((item) => item.address)));
+  for (const address of addresses) console.log("局域网访问：http://" + address + ":" + server.port);
+}
