@@ -12670,3 +12670,28 @@ table th {
 .home-category-chip.is-active { background: color-mix(in srgb,var(--accent) 15%,var(--surface-0)); color: var(--accent); border-color: var(--accent); font-weight: 600; }
 .home-category-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (max-width:600px) { .home-category-navigation { padding: 12px; } .home-category-level { flex-direction: column; gap: 6px; } .home-category-level-label { flex-basis: auto; padding: 0; max-width: 100%; } .home-category-level > div { width: 100%; } }
+
+/* Stick to the homepage scroll viewport, below the application's outer header. */
+#applicationHomePanel .app-home-workspace--horizontal .app-knowledge-panel {
+  overflow: clip;
+}
+#applicationHomePanel .app-home-workspace--horizontal .app-home-banner {
+  position: relative;
+  top: auto;
+  z-index: auto;
+}
+#applicationHomePanel .home-category-navigation {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  max-height: 40dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
+  background: var(--surface-0);
+  box-shadow: 0 4px 10px #0000000d;
+}
+#applicationHomePanel .home-category-navigation { overflow: visible; max-height: none; }
+#applicationHomePanel .home-category-submenu { position: absolute; top: 100%; left: 0; right: 0; max-height: 45dvh; overflow: auto; overscroll-behavior: contain; padding: 14px 18px; background: var(--surface-0); border: 1px solid var(--border); border-radius: 0 0 12px 12px; box-shadow: 0 12px 24px #0002; }
+#applicationHomePanel .home-category-submenu[hidden] { display: none; }
+#applicationHomePanel .home-category-navigation:has(.home-category-submenu:not([hidden])) { z-index: 25; }

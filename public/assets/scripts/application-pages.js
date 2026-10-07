@@ -4,6 +4,7 @@
   let homeVersion = 0, searchVersion = 0, typesVersion = 0, page = 1, total = 0;
   let currentHomeApplicationId = '';
   let homeApplication = null;
+  let homeHoverCategory = '', homeHoverTimer;
   let homePage = 1, homeTotal = 0, homeBusy = false, homeError = '';
   const homePageSize = 24;
   let homeRetry = { page: 1, category: '' };
@@ -208,7 +209,7 @@
   function homeCategoryNavigation() {
     const byId = new Map(homeCategories.map((item) => [String(item.id), item]));
     const children = (id) => homeCategories.filter((item) => String(item.parent_id || item.parent || '') === id);
-    const ancestry = [], seen = new Set(); let current = byId.get(String(homeSelectedCategory));
+    const ancestry = [], seen = new Set(); let current = byId.get(String(homeHoverCategory));
     while (current && !seen.has(String(current.id))) { seen.add(String(current.id)); ancestry.unshift(current); current = byId.get(String(current.parent_id || current.parent || '')); }
     const chip = (item) => {
       const id = String(item.id), active = id === String(homeSelectedCategory);
@@ -217,11 +218,12 @@
     const roots = homeCategories.filter((item) => !byId.has(String(item.parent_id || item.parent || '')));
     const all = '<button type="button" class="home-category-chip' + (!homeSelectedCategory ? ' is-active' : '') + '" data-home-category="" aria-pressed="' + !homeSelectedCategory + '">全部知识</button>';
     const rows = ['<div class="home-category-level"><span class="home-category-level-label">分类</span><div>' + all + roots.map(chip).join('') + '</div></div>'];
+    const subRows = [];
     for (const parent of ancestry) {
       const items = children(String(parent.id)); if (!items.length) continue;
-      rows.push('<div class="home-category-level"><span class="home-category-level-label" title="' + escape(parent.name || parent.id) + '">' + escape(parent.name || parent.id) + '</span><div>' + items.map(chip).join('') + '</div></div>');
+      subRows.push('<div class="home-category-level"><span class="home-category-level-label" title="' + escape(parent.name || parent.id) + '">' + escape(parent.name || parent.id) + '</span><div>' + items.map(chip).join('') + '</div></div>');
     }
-    return '<nav class="home-category-navigation" aria-label="知识分类筛选">' + rows.join('') + '</nav>';
+    return '<nav class="home-category-navigation" aria-label="知识分类筛选">' + rows.join('') + '<div class="home-category-submenu"' + (subRows.length ? '' : ' hidden') + '>' + subRows.join('') + '</div></nav>';
   }
   function categoryTree(items) {
     const byParent = new Map();
@@ -562,7 +564,7 @@
       if (nextPage > lastPage) return loadHomePage(lastPage, category);
       homePage = nextPage; homeTotal = count; homeSelectedCategory = category;
       homeNodes = homeVisibleNodes = data.nodes || []; homeBusy = false; renderHome();
-      byId('appHomeContent').querySelector('.app-knowledge-list-heading')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+
     } catch (error) {
       if (version !== homeVersion) return;
       homeBusy = false; homeError = error.message || '加载失败'; renderHome();
@@ -571,6 +573,8 @@
   function renderHome(nodes = homeVisibleNodes) {
     const content = byId('appHomeContent');
     if (!content) return;
+    const scrollPanel = byId('applicationHomePanel');
+    const scrollTop = scrollPanel?.scrollTop || 0;
     content.classList.remove('is-filtering');
     homeVisibleNodes = nodes;
     homeInspirationIndex = homeVisibleNodes.length ? homeInspirationIndex % homeVisibleNodes.length : 0;
@@ -581,6 +585,7 @@
       <dialog class="app-inspiration-modal" data-home-inspiration-modal aria-label="知识画像"><div class="app-inspiration-profile-layer" data-jev-profile-layer ${showJev ? '' : 'hidden'}>${showJev ? profileLoading() : ''}</div><div class="app-inspiration-modal-core"><button type="button" class="app-inspiration-close" data-home-inspiration-close aria-label="关闭"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button><div class="app-inspiration-draw-shell">${inspirationDrawContent(inspiration)}</div></div></dialog>
       <div class="app-home-workspace app-home-workspace--horizontal">
       <section class="app-knowledge-panel">${applicationBanner()}${homeCategoryNavigation()}<div class="app-home-section-heading compact app-knowledge-list-heading"><div><h2>${escape(activeCategory?.name || '知识列表')}</h2></div><div class="app-knowledge-list-actions"><span class="app-list-count">共 ${homeTotal} 条 · 本页 ${nodes.length} 条</span><button id="knowledgeRoamLaunch" type="button" class="btn" data-home-roam-open data-home-roam-class="${escape(homeSelectedCategory)}"><i class="fa-solid fa-route" aria-hidden="true"></i><span>知识漫游</span></button><button type="button" class="btn" data-home-inspiration-open><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i><span>知识画像</span></button></div></div><div class="app-home-knowledge-grid">${nodes.map(homeKnowledgeCard).join('') || '<div class="app-home-empty"><i class="fa-solid fa-inbox" aria-hidden="true"></i><strong>该分类暂无知识</strong><span>选择其他分类，或创建一条新知识。</span></div>'}</div>${homePagination()}</section></div>`;
+    if (scrollPanel) scrollPanel.scrollTop = scrollTop;
   }
   function flatten(items, depth = 0) {
     return (items || []).flatMap((item) => [{ id: item.id, name: `${'　'.repeat(depth)}${item.name || item.id}` }, ...flatten(item.children, depth + 1)]);
@@ -628,6 +633,7 @@
     const version = ++homeVersion;
     byId('appHomeName').textContent = byId('headerProjectName')?.textContent.trim() || '应用首页';
     byId('appHomeContent').innerHTML = '<p class="muted">正在加载应用知识…</p>';
+    homeHoverCategory = '';
     homeSelectedCategory = ''; homePage = 1; homeTotal = 0; homeBusy = false; homeError = '';
     const results = await Promise.allSettled([
       api('/api/kb/entity_search', { order: 'modified_desc', limit: homePageSize, offset: 0, hide_entity: '1', defined_class_only: '1' }),
@@ -706,6 +712,31 @@
   byId('appSearchReset').addEventListener('click', () => { Object.entries(fields).forEach(([key, id]) => { byId(id).value = key === 'order' ? 'modified_desc' : ''; }); byId('appSearchImage').checked = false; page = 1; search(); });
   byId('appSearchPrev').addEventListener('click', () => { if (page > 1) { page--; search(); } });
   byId('appSearchNext').addEventListener('click', () => { if (page * pageSize < total) { page++; search(); } });
+  function revealCategoryChildren(event) {
+    if (event.target.closest('.home-category-navigation')) clearTimeout(homeHoverTimer);
+    const chip = event.target.closest('[data-home-category]');
+    if (!chip) return;
+    clearTimeout(homeHoverTimer);
+    const id = chip.dataset.homeCategory || '';
+    if (id === homeHoverCategory) return;
+    homeHoverCategory = id;
+    const nav = chip.closest('.home-category-navigation');
+    if (!nav) return;
+    const template = document.createElement('template'); template.innerHTML = homeCategoryNavigation();
+    const next = template.content.querySelector('.home-category-submenu');
+    const focusedId = event.type === 'focusin' ? id : null;
+    nav.querySelector('.home-category-submenu')?.replaceWith(next);
+    if (focusedId !== null && !chip.isConnected) {
+      Array.from(nav.querySelectorAll('[data-home-category]')).find((item) => item.dataset.homeCategory === focusedId)?.focus({ preventScroll: true });
+    }
+  }
+  byId('appHomeContent').addEventListener('mouseover', revealCategoryChildren);
+  byId('appHomeContent').addEventListener('focusin', revealCategoryChildren);
+  byId('appHomeContent').addEventListener('mouseout', (event) => {
+    const nav = event.target.closest('.home-category-navigation');
+    if (!nav || nav.contains(event.relatedTarget)) return;
+    homeHoverTimer = setTimeout(() => { homeHoverCategory = ''; const submenu = byId('appHomeContent').querySelector('.home-category-submenu'); if (submenu) submenu.hidden = true; }, 180);
+  });
   byId('appHomeContent').addEventListener('click', (event) => {
     const paging = event.target.closest('[data-home-page]');
     if (paging) { if (!homeBusy && !paging.disabled) void loadHomePage(Number(paging.dataset.homePage)); return; }
