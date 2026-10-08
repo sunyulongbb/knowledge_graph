@@ -408,6 +408,50 @@
   window.getCurrentDbParam = getCurrentDbParam;
   window.appendCurrentDbParam = appendCurrentDbParam;
 
+  function initMobileMenuToggle() {
+    const menuToggle = document.getElementById("btnMobileMenuToggle");
+    const navMenu = document.getElementById("mobileNavMenu");
+    
+    if (!menuToggle || !navMenu) return;
+    
+    menuToggle.addEventListener("click", function () {
+      const isExpanded = this.getAttribute("aria-expanded") === "true";
+      this.setAttribute("aria-expanded", String(!isExpanded));
+      navMenu.classList.toggle("is-active");
+      
+      // Close menu when clicking outside
+      if (!isExpanded) {
+        const closeMenu = function (e) {
+          if (!navMenu.contains(e.target) && !menuToggle.contains(e.target)) {
+            menuToggle.setAttribute("aria-expanded", "false");
+            navMenu.classList.remove("is-active");
+            document.removeEventListener("click", closeMenu);
+          }
+        };
+        setTimeout(function () {
+          document.addEventListener("click", closeMenu);
+        }, 0);
+      }
+    });
+    
+    // Close menu when clicking a nav item
+    navMenu.addEventListener("click", function (e) {
+      if (e.target.classList.contains("nav-item") || e.target.closest(".nav-item")) {
+        menuToggle.setAttribute("aria-expanded", "false");
+        navMenu.classList.remove("is-active");
+      }
+    });
+    
+    // Handle escape key
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && navMenu.classList.contains("is-active")) {
+        menuToggle.setAttribute("aria-expanded", "false");
+        navMenu.classList.remove("is-active");
+        menuToggle.focus();
+      }
+    });
+  }
+
   bindDbSwitchButton();
   initDetailPanelHeight();
   initKbStats();
@@ -415,4 +459,5 @@
   initViewportHeightWatcher();
   initClassModal();
   initToc();
+  initMobileMenuToggle();
 })();
