@@ -5035,20 +5035,102 @@ export async function handleCoreKbRoutes(
       neighbors.push(...neighborNodes);
       const nodeById = new Map(neighborNodes.map((item: any) => [String(item?.id || item?._id || '').replace(/^entity\//, ''), item]));
       const propertyNames = new Map<string, string>();
+      const resolvePropertyName = (propertyId: string, snapshot?: string) => {
+        const snapshotName = String(snapshot || '').trim();
+        if (snapshotName) return snapshotName;
+        if (!propertyId) return '关联';
+        if (!propertyNames.has(propertyId)) {
+          const property = db.query('SELECT name FROM properties WHERE id = ? LIMIT 1').get(propertyId) as any;
+          propertyNames.set(propertyId, String(property?.name || propertyId));
+        }
+        return propertyNames.get(propertyId) || propertyId;
+      };
       for (const attr of matchingIncomingAttrs) {
         const sourceId = String(attr.node_id || '').replace(/^entity\//, '');
         const source = nodeById.get(sourceId);
         if (!source) continue;
         const propertyId = String(attr.key || '').trim();
-        let propertyName = String(attr.property_name_snapshot || '').trim();
-        if (!propertyName && propertyId) {
-          if (!propertyNames.has(propertyId)) {
-            const property = db.query('SELECT name FROM properties WHERE id = ? LIMIT 1').get(propertyId) as any;
-            propertyNames.set(propertyId, String(property?.name || propertyId));
+        incomingRelations.push({ source, propertyId, propertyName: resolvePropertyName(propertyId, attr.property_name_snapshot) });
+      }
+
+      // 关联信息展示两层关系：为每个一级关联实体补充指向它的实体（入边关联，排除当前知识本身）。
+      const levelOneIds = new Set(
+        incomingRelations
+          .map((relation: any) => String(relation.source?.id || relation.source?._id || '').replace(/^entity\//, ''))
+          .filter(Boolean),
+      );
+      if (levelOneIds.size) {
+        const secondLevelByTarget = new Map<string, Map<string, { sourceId: string; propertyId: string; propertyName: string }>>();
+        const secondLevelIds = new Set<string>();
+        const relationAttrs = db
+          .query(
+            "SELECT node_id, key, value, property_name_snapshot, datatype FROM attributes WHERE datatype IN ('wikibase-entityid', 'wikibase-item')",
+          )
+          .all() as any[];
+        for (const attr of relationAttrs) {
+          const relatedId = String(attr.node_id || '').replace(/^entity\//, '');
+          if (!relatedId || relatedId === id) continue;
+          const rawValue = String(attr.value || '');
+          let referencesLevelOne = false;
+          for (const targetId of levelOneIds) {
+            if (rawValue.includes(targetId)) {
+              referencesLevelOne = true;
+              break;
+            }
           }
-          propertyName = propertyNames.get(propertyId) || propertyId;
+          if (!referencesLevelOne) continue;
+          const targets = parseStoredAttributeValues(attr.value, attr.datatype)
+            .map((value: any) => extractEntityId(value))
+            .filter((targetId: string) => targetId && levelOneIds.has(targetId));
+          if (!targets.length) continue;
+          const propertyId = String(attr.key || '').trim();
+          const propertyName = resolvePropertyName(propertyId, attr.property_name_snapshot);
+          for (const targetId of targets) {
+            if (!secondLevelByTarget.has(targetId)) secondLevelByTarget.set(targetId, new Map());
+            secondLevelByTarget.get(targetId)!.set(relatedId, { sourceId: relatedId, propertyId, propertyName });
+            secondLevelIds.add(relatedId);
+          }
         }
-        incomingRelations.push({ source, propertyId, propertyName: propertyName || '关联' });
+        const secondLevelNodes = new Map<string, any>();
+        if (secondLevelIds.size) {
+          const secondLevelRows = db
+            .query(
+              `SELECT * FROM nodes WHERE id IN (${Array.from(secondLevelIds)
+                .map(() => "?")
+                .join(",")})${hasProjectScope ? ` AND ${scopedClause()}` : ""}`,
+            )
+            .all(
+              ...Array.from(secondLevelIds),
+              ...(hasProjectScope ? [scopedProjectId] : []),
+            ) as any[];
+          secondLevelRows
+            .filter((row) => canAccessKnowledge(db, requestUser, row.id))
+            .forEach((row) => {
+              const formatted = formatNode(row);
+              secondLevelNodes.set(
+                String(formatted?.id || formatted?._id || '').replace(/^entity\//, ''),
+                formatted,
+              );
+            });
+        }
+        for (const relation of incomingRelations) {
+          const sourceId = String(relation.source?.id || relation.source?._id || '').replace(/^entity\//, '');
+          const matches = secondLevelByTarget.get(sourceId);
+          if (!matches) continue;
+          const secondLevel: any[] = [];
+          matches.forEach(({ sourceId: relatedId, propertyId, propertyName }) => {
+            const related = secondLevelNodes.get(relatedId);
+            if (!related) return;
+            secondLevel.push({ source: related, propertyId, propertyName });
+          });
+          secondLevel.sort((left, right) =>
+            String(left.source?.name || left.source?.label_zh || left.source?.id || '').localeCompare(
+              String(right.source?.name || right.source?.label_zh || right.source?.id || ''),
+              'zh-CN',
+            ),
+          );
+          if (secondLevel.length) relation.secondLevel = secondLevel;
+        }
       }
     }
 

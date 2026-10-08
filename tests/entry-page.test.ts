@@ -383,8 +383,9 @@ test('entity editor uses the post-composer hierarchy without changing existing c
   expect(page).toContain('id="detailMediaTabs" class="detail-media-tabs"');
   expect(page).toContain('id="detailIncomingRelations" class="detail-related-section"');
   expect(detailPanel).toContain('function renderIncomingRelations(relations)');
-  expect(detailPanel).toContain('items.slice(0, 5).forEach');
-  expect(detailPanel).toContain('`显示 5 / ${items.length} 条`');
+  expect(detailPanel).toContain('items.forEach(({ source, sourceId, secondLevel }) => {');
+  expect(detailPanel).toContain('total.textContent = `${items.length} 条`;');
+  expect(detailPanel).toContain('detail-related-children');
   expect(detailPanel).toContain('source.typeLabel || source.ontology?.name || source.classLabel');
   expect(css).toContain('.detail-related-list { display:block; }');
   expect(detailPanel).toContain('zoomResetButton.textContent = "适合"');

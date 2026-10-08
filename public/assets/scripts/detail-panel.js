@@ -663,7 +663,20 @@
       const typeName = String(
         source.typeLabel || source.ontology?.name || source.classLabel || source.type || "未分类",
       ).trim() || "未分类";
-      candidates.push({ source, sourceId, typeName });
+      const secondLevel = [];
+      const secondLevelSeen = new Set();
+      for (const entry of Array.isArray(relation?.secondLevel) ? relation.secondLevel : []) {
+        const related = entry?.source || {};
+        const relatedId = String(related.id || related._id || related._key || "").trim().replace(/^entity\//, "");
+        if (!relatedId || relatedId === sourceId.replace(/^entity\//, "") || secondLevelSeen.has(relatedId)) continue;
+        secondLevelSeen.add(relatedId);
+        secondLevel.push({
+          source: related,
+          sourceId: relatedId,
+          relationName: String(entry?.propertyName || "").trim(),
+        });
+      }
+      candidates.push({ source, sourceId, typeName, secondLevel });
     }
     candidates.sort((left, right) =>
       left.typeName.localeCompare(right.typeName, "zh-CN") ||
@@ -677,6 +690,41 @@
     const sortedGroups = Array.from(groups.entries()).sort(([left], [right]) =>
       left.localeCompare(right, "zh-CN"),
     );
+    const openRelatedEntity = (targetId) => {
+      const nextView = window.kbViewMode === "knowledge_detail" ? "knowledge_detail" : "detail";
+      if (typeof window.setViewMode === "function") {
+        window.setViewMode(nextView, { targetNodeId: targetId, focusDetailOnly: nextView === "knowledge_detail" });
+      } else {
+        showNodeDetailInline(targetId);
+      }
+    };
+    const createRelatedItem = ({ source, sourceId, relationName }, isChild) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = isChild ? "detail-related-item detail-related-item-child" : "detail-related-item";
+      const marker = document.createElement("span");
+      marker.className = "detail-related-marker";
+      button.style.setProperty("--detail-related-color", source.ontology?.color || source.color || "var(--accent)");
+      const body = document.createElement("span");
+      body.className = "detail-related-item-body";
+      const name = document.createElement("strong");
+      name.textContent = source.name || source.label_zh || source.label || source.title || sourceId;
+      body.append(name);
+      if (relationName) {
+        const relation = document.createElement("small");
+        relation.className = "detail-related-relation";
+        relation.textContent = relationName;
+        body.append(relation);
+      }
+      const arrow = document.createElement("i");
+      arrow.className = "fa-solid fa-arrow-right";
+      arrow.setAttribute("aria-hidden", "true");
+      button.append(marker, body, arrow);
+      button.addEventListener("click", () => openRelatedEntity(sourceId));
+      return button;
+    };
+    let renderedCount = 0;
+    let renderedSecondLevelCount = 0;
     for (const [typeName, items] of sortedGroups) {
       const group = document.createElement("section");
       group.className = "detail-related-group";
@@ -685,42 +733,35 @@
       const title = document.createElement("strong");
       title.textContent = typeName;
       const total = document.createElement("small");
-      total.textContent = items.length > 5 ? `显示 5 / ${items.length} 条` : `${items.length} 条`;
+      total.textContent = `${items.length} 条`;
       heading.append(title, total);
       const list = document.createElement("div");
       list.className = "detail-related-list";
-      items.slice(0, 5).forEach(({ source, sourceId }) => {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.className = "detail-related-item";
-          const marker = document.createElement("span");
-          marker.className = "detail-related-marker";
-          button.style.setProperty("--detail-related-color", source.ontology?.color || source.color || "var(--accent)");
-          const body = document.createElement("span");
-          body.className = "detail-related-item-body";
-          const name = document.createElement("strong");
-          name.textContent = source.name || source.label_zh || source.label || source.title || sourceId;
-          body.append(name);
-          const arrow = document.createElement("i");
-          arrow.className = "fa-solid fa-arrow-right";
-          arrow.setAttribute("aria-hidden", "true");
-          button.append(marker, body, arrow);
-          button.addEventListener("click", () => {
-            const nextView = window.kbViewMode === "knowledge_detail" ? "knowledge_detail" : "detail";
-            if (typeof window.setViewMode === "function") {
-              window.setViewMode(nextView, { targetNodeId: sourceId, focusDetailOnly: nextView === "knowledge_detail" });
-            } else {
-              showNodeDetailInline(sourceId);
-            }
+      items.forEach(({ source, sourceId, secondLevel }) => {
+        const node = document.createElement("div");
+        node.className = "detail-related-node";
+        node.appendChild(createRelatedItem({ source, sourceId }, false));
+        renderedCount += 1;
+        if (secondLevel.length) {
+          const children = document.createElement("div");
+          children.className = "detail-related-children";
+          secondLevel.forEach((child) => {
+            children.appendChild(createRelatedItem(child, true));
+            renderedSecondLevelCount += 1;
           });
-          list.appendChild(button);
-        });
+          node.appendChild(children);
+        }
+        list.appendChild(node);
+      });
       group.append(heading, list);
       host.appendChild(group);
     }
-    const total = seen.size;
-    section.hidden = total === 0;
-    if (count) count.textContent = total ? `${total} 条指向当前知识` : "";
+    section.hidden = renderedCount === 0;
+    if (count) {
+      count.textContent = renderedCount
+        ? `${renderedCount} 条指向当前知识${renderedSecondLevelCount ? ` · 二级关联 ${renderedSecondLevelCount} 条` : ""}`
+        : "";
+    }
   }
 
   function renderNativePdfFallback(root, resolvedUrl, message = "") {
