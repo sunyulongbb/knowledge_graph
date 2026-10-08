@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 
 <head>
@@ -68,7 +68,7 @@
       customElements.whenDefined("media-video-layout"),
     ]).then(() => true);
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20261007-cover-center" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20261008-toolbar-layout" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -2537,23 +2537,8 @@
                     <span id="entityAliasValues" class="wd-alias-values"></span>
                   </div>
                 </div>
-              </div>
-              <div class="social-compose-toolbar">
-                <button id="btnEntityImageUpload" type="button" class="btn wd-btn-icon" title="上传图片" aria-label="上传图片">
-                  <i class="fa-regular fa-image"></i>
-                </button>
-                <button id="btnEntityVideoUpload" type="button" class="btn wd-btn-icon" title="上传视频" aria-label="上传视频">
-                  <i class="fa-solid fa-video"></i>
-                </button>
-                <button id="btnEntityPdfUpload" type="button" class="btn wd-btn-icon" title="上传 PDF" aria-label="上传 PDF">
-                  <i class="fa-regular fa-file-pdf"></i>
-                </button>
-                <button id="btnEntityLink" type="button" class="btn wd-btn-icon" title="添加外部链接" aria-label="添加外部链接">
-                  <i class="fa-solid fa-link"></i>
-                </button>
-              </div>
-              <div class="entity-composer-footer">
-                <div class="knowledge-visibility-control entity-composer-visibility">
+                <!-- Move visibility button to top-right corner -->
+                <div class="entity-visibility-top-right">
                   <button id="btnKnowledgeVisibility" class="entity-composer-option" type="button" title="公开，点击切换为私有" aria-label="公开，点击切换为私有" aria-pressed="false">
                     <i id="knowledgeVisibilityIcon" class="fa-regular fa-eye" aria-hidden="true"></i>
                     <span>公开可见</span>
@@ -2563,10 +2548,29 @@
                     <option value="private">私有</option>
                   </select>
                 </div>
-                <span id="entityVideoUploadStatus" style="display:none;"></span>
-                <span id="addMsg" class="wd-msg"></span>
-                <span id="entityIdBadge" class="wd-entity-id-badge" style="display:none"></span>
-                <button id="btnSubmit" class="btn wd-btn-primary social-submit-btn" type="submit" title="发布实体" aria-label="发布实体"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i></button>
+              </div>
+              <!-- Combine toolbar and submit button in one row -->
+              <div class="social-compose-toolbar-row">
+                <div class="social-compose-toolbar">
+                  <button id="btnEntityImageUpload" type="button" class="btn wd-btn-icon" title="上传图片" aria-label="上传图片">
+                    <i class="fa-regular fa-image"></i>
+                  </button>
+                  <button id="btnEntityVideoUpload" type="button" class="btn wd-btn-icon" title="上传视频" aria-label="上传视频">
+                    <i class="fa-solid fa-video"></i>
+                  </button>
+                  <button id="btnEntityPdfUpload" type="button" class="btn wd-btn-icon" title="上传 PDF" aria-label="上传 PDF">
+                    <i class="fa-regular fa-file-pdf"></i>
+                  </button>
+                  <button id="btnEntityLink" type="button" class="btn wd-btn-icon" title="添加外部链接" aria-label="添加外部链接">
+                    <i class="fa-solid fa-link"></i>
+                  </button>
+                </div>
+                <div class="social-compose-actions">
+                  <span id="entityVideoUploadStatus" style="display:none;"></span>
+                  <span id="addMsg" class="wd-msg"></span>
+                  <span id="entityIdBadge" class="wd-entity-id-badge" style="display:none"></span>
+                  <button id="btnSubmit" class="btn wd-btn-primary social-submit-btn" type="submit" title="发布实体" aria-label="发布实体"><i class="fa-solid fa-paper-plane" aria-hidden="true"></i></button>
+                </div>
               </div>
               <div id="entityDraftImagePreview" style="display:none;flex-direction:column;gap:8px;margin-top:10px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface-1, rgba(0,0,0,.02));">
                 <div id="entityDraftImagePreviewList" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
