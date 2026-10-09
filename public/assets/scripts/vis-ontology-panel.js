@@ -3,6 +3,15 @@ const PANEL_ID = "visOntologyPanel";
 const TREE_HOST_ID = "visOntologyTree";
 const STATUS_ID = "visOntologyPanelStatus";
 const TOGGLE_ID = "cy_btnOntologyPanel";
+const RECOMMEND_PANEL_ID = "visRecommendPanel";
+const RECOMMEND_LIST_ID = "visRecommendList";
+const RECOMMEND_STATUS_ID = "visRecommendStatus";
+const RECOMMEND_HINT_ID = "visRecommendHint";
+const RECOMMEND_TOGGLE_ID = "cy_btnRecommendPanel";
+const RECOMMEND_COLLAPSE_STORAGE_KEY = "kb-vis-recommend-panel-collapsed";
+const RECOMMEND_LIMIT = 12;
+const DEFAULT_RECOMMEND_HINT =
+  "点击左侧本体树上的分类，这里会列出该类型的知识；拖到画布即可加入关系图。";
 const GRAPH_HOST_ID = "cy";
 const GRAPH_WRAP_ID = "cywrap";
 const GRAPH_BODY_SELECTOR = ".vis-panel .vis-graph-body";
@@ -20,6 +29,14 @@ let dragWindowBound = false;
 let popover = null;
 let popoverCleanup = null;
 let statusTimer = null;
+let recommendStatusTimer = null;
+let recommendRequestSeq = 0;
+let recommendTypeId = "";
+let recommendTypeLabel = "";
+let recommendMode = "type";
+let searchQuery = "";
+const recommendCache = new Map();
+const recommendNodesById = new Map();
 
 /* ── 纯函数（供单测直接引用） ─────────────────────────────── */
 
@@ -151,6 +168,14 @@ function persistCollapsedState(collapsed) {
   } catch {}
 }
 
+function resizeGraphAfterLayoutChange() {
+  window.requestAnimationFrame(() => {
+    try {
+      window.kbCy?.resize();
+    } catch {}
+  });
+}
+
 function setCollapsed(collapsed) {
   const panel = byId(PANEL_ID);
   const toggle = byId(TOGGLE_ID);
@@ -166,6 +191,7 @@ function setCollapsed(collapsed) {
     }
   }
   if (!collapsed && treeState === "idle") void ensureTree();
+  resizeGraphAfterLayoutChange();
 }
 
 function bindPanelToggle() {
@@ -206,7 +232,8 @@ function buildController(module, host) {
     nodeIcon: "folder",
     defaultExpandAll: true,
     expandOnFirstRender: true,
-    onSelect: () => {},
+    // 点击分类 → 右侧知识推荐列出该类型的知识
+    onSelect: (id) => void loadRecommendations(id),
     onEdit: () => {},
     onAddChild: () => {},
     onDelete: () => {},
@@ -271,7 +298,297 @@ function refreshTree() {
   return ensureTree();
 }
 
-/* ── 拖拽：树 → 画布 ─────────────────────────────────────── */
+/* ── 知识推荐面板（右侧） ───────────────────────────────── */
+
+function readRecommendCollapsedState() {
+  try {
+    return window.localStorage.getItem(RECOMMEND_COLLAPSE_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function persistRecommendCollapsedState(collapsed) {
+  try {
+    window.localStorage.setItem(RECOMMEND_COLLAPSE_STORAGE_KEY, String(collapsed));
+  } catch {}
+}
+
+function setRecommendCollapsed(collapsed) {
+  const panel = byId(RECOMMEND_PANEL_ID);
+  const toggle = byId(RECOMMEND_TOGGLE_ID);
+  if (!panel) return;
+  panel.classList.toggle("is-collapsed", collapsed);
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+    toggle.title = collapsed ? "展开知识推荐" : "收起知识推荐";
+    const icon = toggle.querySelector("i");
+    if (icon) {
+      icon.classList.toggle("fa-chevron-right", !collapsed);
+      icon.classList.toggle("fa-chevron-left", collapsed);
+    }
+  }
+  resizeGraphAfterLayoutChange();
+}
+
+function setRecommendStatus(text, variant = "") {
+  const el = byId(RECOMMEND_STATUS_ID);
+  if (!el) return;
+  if (recommendStatusTimer) {
+    clearTimeout(recommendStatusTimer);
+    recommendStatusTimer = null;
+  }
+  el.textContent = text || "";
+  el.classList.toggle("is-error", variant === "error");
+  el.classList.toggle("is-success", variant === "success");
+  if (text) {
+    recommendStatusTimer = setTimeout(() => {
+      recommendStatusTimer = null;
+      el.textContent = "";
+      el.classList.remove("is-error", "is-success");
+    }, STATUS_CLEAR_DELAY);
+  }
+}
+
+function bindRecommendPanel() {
+  const panel = byId(RECOMMEND_PANEL_ID);
+  const toggle = byId(RECOMMEND_TOGGLE_ID);
+  if (!panel || panel.dataset.toggleBound === "true") return;
+  panel.dataset.toggleBound = "true";
+  toggle?.addEventListener("click", () => {
+    const collapsed = !panel.classList.contains("is-collapsed");
+    setRecommendCollapsed(collapsed);
+    persistRecommendCollapsedState(collapsed);
+  });
+  panel.addEventListener("click", (event) => {
+    if (!panel.classList.contains("is-collapsed")) return;
+    const target = event.target;
+    if (target instanceof Element && target.closest("button")) return;
+    setRecommendCollapsed(false);
+    persistRecommendCollapsedState(false);
+  });
+}
+
+function recommendEndpoint(typeId) {
+  const url = new URL("/api/kb/entity_search", window.location.origin);
+  const append = window.appendCurrentDbParam;
+  if (typeof append === "function") {
+    const scoped = append(url);
+    if (scoped instanceof URL) url.search = scoped.search;
+  }
+  url.searchParams.set("type", typeId);
+  url.searchParams.set("limit", String(RECOMMEND_LIMIT));
+  url.searchParams.set("offset", "0");
+  url.searchParams.set("order", "modified_desc");
+  // 只按本体类型筛选，未分类的知识一样推荐
+  return url;
+}
+
+function renderRecommendState(html, variant = "") {
+  const list = byId(RECOMMEND_LIST_ID);
+  if (!list) return;
+  list.replaceChildren();
+  const state = document.createElement("div");
+  state.className = variant ? `ontology-tree-state ${variant}` : "ontology-tree-state";
+  state.textContent = html;
+  list.appendChild(state);
+}
+
+const RECOMMEND_THUMB_PLACEHOLDER = "fa-solid fa-circle-nodes";
+
+function recommendNodeId(node) {
+  return String(node?._id ?? node?.id ?? "").trim();
+}
+
+function recommendNodeImage(node) {
+  const candidates = [node?.image, node?.images, node?._attr_images];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      const found = candidate.map((item) => String(item || "").trim()).find(Boolean);
+      if (found) return found;
+      continue;
+    }
+    const value = String(candidate || "").trim();
+    if (value) return value;
+  }
+  return "";
+}
+
+function buildRecommendCard(node) {
+  const id = recommendNodeId(node);
+  const label = String(node?.name || node?.label || node?.label_zh || id).trim();
+  const typeLabel = String(node?.classLabel || node?.typeLabel || node?.type || "").trim();
+  const description = String(node?.description || "").replace(/\s+/g, " ").trim();
+  const color = normalizeOntologyColor(node?.color);
+  const image = recommendNodeImage(node);
+
+  const card = document.createElement("div");
+  card.className = "vis-recommend-card";
+  card.setAttribute("role", "button");
+  card.tabIndex = 0;
+  card.dataset.recommendNodeId = id;
+  card.dataset.recommendNodeLabel = label;
+  card.style.setProperty("--recommend-node-color", color);
+  card.title = "拖到画布加入关系图（或按回车）";
+  recommendNodesById.set(id, node);
+
+  const thumb = document.createElement("div");
+  thumb.className = "vis-recommend-card__thumb";
+  if (image) {
+    const img = document.createElement("img");
+    img.src = image;
+    img.alt = "";
+    img.loading = "lazy";
+    thumb.appendChild(img);
+  } else {
+    const icon = document.createElement("i");
+    icon.className = RECOMMEND_THUMB_PLACEHOLDER;
+    icon.setAttribute("aria-hidden", "true");
+    thumb.appendChild(icon);
+  }
+
+  const body = document.createElement("div");
+  body.className = "vis-recommend-card__body";
+  const name = document.createElement("span");
+  name.className = "vis-recommend-card__name";
+  name.textContent = label || id;
+  body.appendChild(name);
+  if (typeLabel) {
+    const meta = document.createElement("span");
+    meta.className = "vis-recommend-card__meta";
+    const dot = document.createElement("span");
+    dot.className = "vis-recommend-card__dot";
+    const type = document.createElement("span");
+    type.className = "vis-recommend-card__type";
+    type.textContent = typeLabel;
+    meta.append(dot, type);
+    body.appendChild(meta);
+  }
+  if (description) {
+    const desc = document.createElement("span");
+    desc.className = "vis-recommend-card__desc";
+    desc.textContent = description;
+    body.appendChild(desc);
+  }
+
+  card.append(thumb, body);
+  return card;
+}
+
+function renderRecommendations(list) {
+  const host = byId(RECOMMEND_LIST_ID);
+  if (!host) return;
+  host.replaceChildren();
+  if (!list.length) {
+    renderRecommendState("该类型下暂时没有知识。");
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  list.forEach((node) => {
+    if (!recommendNodeId(node)) return;
+    fragment.appendChild(buildRecommendCard(node));
+  });
+  host.appendChild(fragment);
+}
+
+function ontologyLabelFor(ontologyId) {
+  const labelEl = document.querySelector(
+    `.vis-ontology-tree [data-tree-node-id="${CSS.escape ? CSS.escape(ontologyId) : ontologyId}"]`,
+  );
+  return String(labelEl?.textContent || "").trim() || ontologyId;
+}
+
+/** 推荐模式：按本体类型推荐 / 展示搜索结果，两者共用同一个列表。 */
+function applyRecommendHint() {
+  const hint = byId(RECOMMEND_HINT_ID);
+  if (!hint) return;
+  if (recommendMode === "search") {
+    hint.textContent = `搜索「${searchQuery}」的结果，拖到画布即可加入关系图。`;
+    return;
+  }
+  hint.textContent = recommendTypeId
+    ? `「${recommendTypeLabel}」的推荐知识，拖到画布即可加入关系图。`
+    : DEFAULT_RECOMMEND_HINT;
+}
+
+/** 搜索结果直接复用推荐列表展示，清空搜索时回到本体类型推荐。 */
+function applySearchResults(detail) {
+  const nodes = Array.isArray(detail?.nodes) ? detail.nodes : [];
+  const query = String(detail?.query || "").trim();
+  if (!query) {
+    exitSearchMode();
+    return;
+  }
+  recommendMode = "search";
+  searchQuery = query;
+  applyRecommendHint();
+  if (!nodes.length) {
+    renderRecommendState(`没有找到与「${query}」匹配的知识。`);
+    setRecommendStatus(`搜索「${query}」没有匹配的知识`);
+    return;
+  }
+  renderRecommendations(nodes);
+  setRecommendStatus(`搜索「${query}」找到 ${nodes.length} 条知识`);
+}
+
+function exitSearchMode() {
+  if (recommendMode !== "search") return;
+  recommendMode = "type";
+  searchQuery = "";
+  applyRecommendHint();
+  if (!recommendTypeId) {
+    renderRecommendState("点击左侧本体树上的分类，查看该类型的知识。");
+    setRecommendStatus("");
+    return;
+  }
+  const cached = recommendCache.get(recommendTypeId);
+  if (cached) renderRecommendations(cached);
+  else void loadRecommendations(recommendTypeId);
+}
+
+async function loadRecommendations(ontologyId) {
+  const list = byId(RECOMMEND_LIST_ID);
+  if (!list) return;
+  recommendMode = "type";
+  searchQuery = "";
+  recommendTypeId = ontologyId;
+  recommendTypeLabel = ontologyId ? ontologyLabelFor(ontologyId) : "";
+  applyRecommendHint();
+  const seq = ++recommendRequestSeq;
+  if (!ontologyId) {
+    renderRecommendState("点击左侧本体树上的分类，查看该类型的知识。");
+    setRecommendStatus("");
+    return;
+  }
+  const cached = recommendCache.get(ontologyId);
+  if (cached) {
+    renderRecommendations(cached);
+    setRecommendStatus(
+      cached.length ? `已推荐 ${cached.length} 条「${recommendTypeLabel}」知识` : "该类型下暂时没有知识",
+    );
+    return;
+  }
+  renderRecommendState("正在推荐知识…");
+  try {
+    const response = await fetch(recommendEndpoint(ontologyId));
+    if (seq !== recommendRequestSeq) return;
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    if (seq !== recommendRequestSeq) return;
+    const nodes = Array.isArray(payload?.nodes) ? payload.nodes : [];
+    recommendCache.set(ontologyId, nodes);
+    renderRecommendations(nodes);
+    setRecommendStatus(
+      nodes.length ? `已推荐 ${nodes.length} 条「${recommendTypeLabel}」知识` : "该类型下暂时没有知识",
+    );
+  } catch (error) {
+    if (seq !== recommendRequestSeq) return;
+    renderRecommendState("知识推荐加载失败", "ontology-tree-state--error");
+    setRecommendStatus(`知识推荐加载失败：${error?.message || error}`, "error");
+  }
+}
+
+/* ── 拖拽：树/推荐卡片 → 画布 ────────────────────────────── */
 
 function readIconColor(scopeEl) {
   const icon = scopeEl?.querySelector?.(".ontology-node-folder, .ontology-node-dot");
@@ -344,6 +661,31 @@ function buildDragChip(payload) {
   return chip;
 }
 
+/**
+ * 推荐卡片 / 搜索结果 → 拖拽负载，都带节点 id、名称与类型。
+ */
+export function resolveRecommendPayload(target) {
+  if (!target || typeof target.closest !== "function") return null;
+  const card = target.closest("[data-recommend-node-id]");
+  if (!card || typeof card.getAttribute !== "function") return null;
+  const id = String(card.getAttribute("data-recommend-node-id") || "").trim();
+  if (!id) return null;
+  const label = String(card.getAttribute("data-recommend-node-label") || "").trim() || id;
+  const typeAttr = String(card.getAttribute("data-recommend-node-type") || "").trim();
+  const colorAttr = String(card.getAttribute("data-recommend-node-color") || "").trim();
+  const color = colorAttr
+    ? normalizeOntologyColor(colorAttr)
+    : normalizeOntologyColor(getComputedStyle(card).getPropertyValue("--recommend-node-color"));
+  return { kind: "node", id, label, type: typeAttr, color };
+}
+
+/** 树上的分类 → 新建节点；推荐卡片 → 已有知识加入画布。 */
+export function resolveDragPayload(target) {
+  const ontology = resolveTreePayload(target);
+  if (ontology) return { kind: "ontology", ...ontology };
+  return resolveRecommendPayload(target);
+}
+
 function graphBodyEl() {
   return document.querySelector(GRAPH_BODY_SELECTOR);
 }
@@ -371,14 +713,32 @@ function startPointerDrag(event) {
   closePopover();
   dragChip = buildDragChip(payload);
   document.body.classList.add("vis-ontology-dragging");
+  // 拖已有知识时提示文案不同（CSS 按这个类切换 ::after 内容）
+  document.body.classList.toggle("is-recommend-drag", payload.kind === "node");
   positionDragChip(event.clientX, event.clientY);
 }
 
-function onTreePointerDown(event) {
+/** 取当前视口的图模型坐标（与落点浮层用同一套换算）。 */
+function currentGraphPoint(point) {
+  const cyHost = byId(GRAPH_HOST_ID);
+  const cyRect = cyHost?.getBoundingClientRect();
+  if (!cyRect) return null;
+  const cy = window.kbCy;
+  const pan = typeof cy?.pan === "function" ? cy.pan() : { x: 0, y: 0 };
+  const zoom = typeof cy?.zoom === "function" ? cy.zoom() : 1;
+  return graphPointFromClient(
+    cyRect,
+    { panX: pan?.x, panY: pan?.y, zoom },
+    point.clientX,
+    point.clientY,
+  );
+}
+
+function onPanelPointerDown(event) {
   if (event.button !== 0 || event.isPrimary === false) return;
   // 展开箭头沿用树自身的展开/收起行为
   if (event.target instanceof Element && event.target.closest(".dhx_tree-toggle-button")) return;
-  const payload = resolveTreePayload(event.target);
+  const payload = resolveDragPayload(event.target);
   if (!payload) return;
   pointerDrag = {
     payload,
@@ -416,6 +776,10 @@ function onPointerUp(event) {
   if (!started) return;
   const body = graphBodyEl();
   if (!body || !isPointInside(point, body.getBoundingClientRect())) return;
+  if (payload.kind === "node") {
+    void addRecommendedNodeToGraph(payload, currentGraphPoint(point));
+    return;
+  }
   openCreatePopover(body, payload, point);
 }
 
@@ -426,9 +790,10 @@ function onDragKeydown(event) {
 function bindTreeDrag(host) {
   if (!host || host.dataset.dragBound === "true") return;
   host.dataset.dragBound = "true";
-  host.addEventListener("pointerdown", onTreePointerDown);
   if (dragWindowBound) return;
   dragWindowBound = true;
+  // 树会随刷新重建，所以在 document 上统一代理；推荐卡片也走同一套逻辑
+  document.addEventListener("pointerdown", onPanelPointerDown);
   // 拖拽过程中指针会移出面板，因此监听挂在 window 上
   window.addEventListener("pointermove", onPointerMove, { passive: true });
   window.addEventListener("pointerup", onPointerUp);
@@ -440,9 +805,44 @@ function bindTreeDrag(host) {
 function clearDragState() {
   pointerDrag = null;
   document.body.classList.remove("vis-ontology-dragging");
+  document.body.classList.remove("is-recommend-drag");
   graphBodyEl()?.classList.remove("is-ontology-drop-target");
   dragChip?.remove();
   dragChip = null;
+}
+
+/**
+ * 把推荐里的知识拖入画布：只加这个节点本身，
+ * 不拉下级关系、也不重新布局。
+ */
+async function addRecommendedNodeToGraph(payload, graphPoint) {
+  if (typeof window.kbLoadGraphWithData !== "function" && !window.kbCy) {
+    setRecommendStatus("加入画布失败：图谱模块不可用", "error");
+    return;
+  }
+  const nodeData = recommendNodesById.get(payload.id) || {
+    id: payload.id,
+    name: payload.label,
+    color: payload.color,
+    type: payload.type || undefined,
+    classLabel: payload.type || undefined,
+  };
+  const spec = ontologyNodeCyElement(nodeData, payload.label);
+  if (!spec) {
+    setRecommendStatus("加入画布失败：缺少节点标识", "error");
+    return;
+  }
+  const placed = await placeNodeInGraph(spec, graphPoint);
+  if (placed) setRecommendStatus(`已把「${payload.label}」加入画布`, "success");
+  else setRecommendStatus(`加入画布失败：「${payload.label}」`, "error");
+}
+
+function onRecommendListKeydown(event) {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  const payload = resolveRecommendPayload(event.target);
+  if (!payload) return;
+  event.preventDefault();
+  void addRecommendedNodeToGraph(payload, null);
 }
 
 /* ── 落点浮层：输入名称 → 创建节点 ───────────────────────── */
@@ -457,14 +857,8 @@ function closePopover() {
 
 function openCreatePopover(body, payload, point) {
   closePopover();
-  const cyHost = byId(GRAPH_HOST_ID);
-  const cyRect = cyHost?.getBoundingClientRect();
   const bodyRect = body.getBoundingClientRect();
-  const cy = window.kbCy;
-  const pan = typeof cy?.pan === "function" ? cy.pan() : { x: 0, y: 0 };
-  const graphPoint = cyRect
-    ? graphPointFromClient(cyRect, { panX: pan?.x, panY: pan?.y, zoom: cy?.zoom?.() }, point.clientX, point.clientY)
-    : null;
+  const graphPoint = currentGraphPoint(point);
 
   const form = document.createElement("form");
   form.className = "vis-node-popover";
@@ -596,13 +990,13 @@ async function createNode(ontologyId, name) {
   return payload?.node || null;
 }
 
-async function addCreatedNodeToGraph(node, fallbackLabel, graphPoint) {
-  const spec = ontologyNodeCyElement(node, fallbackLabel);
-  if (!spec) return false;
+/**
+ * 把一个节点元素放进画布：画布为空时用该节点初始化图谱实例，
+ * 否则直接 add —— 不拉取关系、也不触发重新布局。
+ */
+async function placeNodeInGraph(spec, graphPoint) {
   const hadGraph = Boolean(window.kbCy);
   if (!hadGraph) {
-    // 关联视图默认是空画布、还没有图谱实例：直接用新节点初始化，
-    // 这样创建后立刻能在画布上看到，不必先「加载图谱」。
     if (typeof window.kbLoadGraphWithData !== "function") return false;
     try {
       await window.kbLoadGraphWithData({
@@ -627,7 +1021,7 @@ async function addCreatedNodeToGraph(node, fallbackLabel, graphPoint) {
       if (graphPoint) element.position(graphPoint);
     };
     placeAtDropPoint();
-    // 保持单选：只选中刚创建的节点
+    // 保持单选：只选中刚加入的节点
     cy.elements().unselect();
     element.select();
     element.addClass("new-node");
@@ -653,9 +1047,15 @@ async function addCreatedNodeToGraph(node, fallbackLabel, graphPoint) {
     }
     return true;
   } catch (error) {
-    console.warn("添加新节点到关系图失败", error);
+    console.warn("添加节点到关系图失败", error);
     return false;
   }
+}
+
+async function addCreatedNodeToGraph(node, fallbackLabel, graphPoint) {
+  const spec = ontologyNodeCyElement(node, fallbackLabel);
+  if (!spec) return false;
+  return await placeNodeInGraph(spec, graphPoint);
 }
 
 function syncGraphCounters() {
@@ -693,13 +1093,30 @@ function watchGraphVisibility() {
   sync();
 }
 
+function bindRecommendListEvents() {
+  const list = byId(RECOMMEND_LIST_ID);
+  if (!list || list.dataset.bound === "true") return;
+  list.dataset.bound = "true";
+  // 只能拖拽入画布：点击不把知识加进关系图
+  list.addEventListener("keydown", onRecommendListKeydown);
+}
+
 function init() {
   const panel = byId(PANEL_ID);
   if (!panel) return;
   bindPanelToggle();
   setCollapsed(readCollapsedState());
+  bindRecommendPanel();
+  setRecommendCollapsed(readRecommendCollapsedState());
+  bindRecommendListEvents();
+  // 搜索节点：结果直接复用推荐列表展示，清空搜索时回到本体类型推荐
+  window.addEventListener("kb:vis-search-results", (event) => {
+    applySearchResults(event.detail || {});
+  });
   window.addEventListener("kb:ontologies-updated", () => {
     if (treeState === "ready" || treeState === "error") void refreshTree();
+    recommendCache.clear();
+    if (recommendTypeId) void loadRecommendations(recommendTypeId);
   });
   window.addEventListener("hashchange", closePopover);
   watchGraphVisibility();
@@ -717,6 +1134,8 @@ if (typeof window !== "undefined") {
   window.kbVisOntologyPanel = {
     refresh: refreshTree,
     setCollapsed,
+    setRecommendCollapsed,
+    loadRecommendations,
     isReady: () => treeState === "ready",
   };
 }

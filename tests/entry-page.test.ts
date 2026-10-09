@@ -256,12 +256,15 @@ test('relation view ships a draggable ontology palette next to the canvas', () =
   expect(page).toContain('id="visOntologyTree" class="vis-ontology-tree"');
   expect(page).toContain('id="cy_btnOntologyPanel"');
   expect(page).toContain('拖动分类到画布，即可新建该类型节点');
-  expect(page.indexOf('id="visOntologyPanel"')).toBeLessThan(page.indexOf('class="vis-sidebar vis-sidebar-left"'));
-  expect(page).toContain('/assets/scripts/vis-ontology-panel.js?v=20261010-vis-ontology4');
+  expect(page.indexOf('id="visOntologyPanel"')).toBeLessThan(page.indexOf('class="vis-graph-body"'));
+  // 左右两条竖栏的工具按钮已合并到画布上方工具条与下方状态栏
+  expect(page).not.toContain('vis-sidebar');
+  expect(page.indexOf('class="vis-topbar"')).toBeLessThan(page.indexOf('id="visOntologyPanel"'));
+  expect(page).toContain('/assets/scripts/vis-ontology-panel.js?v=20261010-vis-ontology8');
   // 复用分类面板的本体树组件，拖拽时由本模块负责落点与创建
   expect(panel).toContain('new module.OntologyTreeController(host, {');
   // DHTMLX 会在按下时重绘行，原生 HTML5 拖拽会被取消，因此用 pointer 事件自己实现
-  expect(panel).toContain('host.addEventListener("pointerdown", onTreePointerDown)');
+  expect(panel).toContain('document.addEventListener("pointerdown", onPanelPointerDown)');
   expect(panel).toContain('window.addEventListener("pointerup", onPointerUp)');
   expect(panel).toContain('export function resolveTreePayload(target)');
   // 画布还没初始化时用新节点初始化图谱实例，创建后立即可见
@@ -278,6 +281,120 @@ test('relation view ships a draggable ontology palette next to the canvas', () =
   expect(css).toContain('.ontology-node-folder > svg {');
 });
 
+test('relation view recommends knowledge for the clicked ontology and lets it be dragged in', () => {
+  const page = readFileSync('public/index.html', 'utf8');
+  const panel = readFileSync('public/assets/scripts/vis-ontology-panel.js', 'utf8');
+  const css = readFileSync('public/assets/styles/app.css', 'utf8');
+  // 右侧知识推荐面板在画布右侧、画布之后
+  expect(page).toContain('id="visRecommendPanel" class="vis-recommend-panel"');
+  expect(page).toContain('id="visRecommendList"');
+  expect(page).toContain('id="cy_btnRecommendPanel"');
+  expect(page).toContain('点击左侧本体树上的分类');
+  // 面板是画布区里的最后一个子元素（画布右侧、底部状态栏之前）
+  const areaIndex = page.indexOf('class="vis-canvas-area"');
+  const panelIndex = page.indexOf('id="visRecommendPanel"');
+  expect(panelIndex).toBeGreaterThan(areaIndex);
+  expect(panelIndex).toBeGreaterThan(page.indexOf('class="vis-graph-body"'));
+  expect(panelIndex).toBeLessThan(page.indexOf('<!-- Bottom status bar'));
+  // 点击本体树 → 只按本体类型拉推荐（未分类的知识也要推荐）
+  expect(panel).toContain('onSelect: (id) => void loadRecommendations(id)');
+  expect(panel).toContain('url.searchParams.set("type", typeId);');
+  expect(panel).not.toContain('defined_class_only');
+  expect(panel).not.toContain('hide_entity');
+  expect(panel).toContain('// 只按本体类型筛选，未分类的知识一样推荐');
+  expect(panel).toContain('export function resolveRecommendPayload(target)');
+  expect(panel).toContain('export function resolveDragPayload(target)');
+  // 拖入画布只加这个节点，不拉下级关系、也不重新布局
+  expect(panel).toContain('if (payload.kind === "node")');
+  expect(panel).toContain('void addRecommendedNodeToGraph(payload, currentGraphPoint(point))');
+  expect(panel).toContain('async function placeNodeInGraph(spec, graphPoint)');
+  expect(panel).not.toContain('kbMergeNodeNeighborhood');
+  expect(page).not.toContain('kbMergeNodeNeighborhood');
+  expect(panel).toContain('已把「${payload.label}」加入画布');
+  expect(css).toContain('.vis-recommend-panel {');
+  expect(css).toContain('.vis-recommend-card {');
+  expect(css).toContain('body.vis-ontology-dragging.is-recommend-drag .vis-panel .vis-graph-body::after');
+  // 搜索节点入口合并到推荐面板里，顶部工具栏不再有搜索框
+  const topbarBlock = page.slice(
+    page.indexOf('class="vis-topbar"'),
+    page.indexOf('class="vis-canvas-area"'),
+  );
+  expect(topbarBlock).not.toContain('visSearch');
+  const recommendBlock = page.slice(
+    page.indexOf('id="visRecommendPanel"'),
+    page.indexOf('<!-- Bottom status bar -->'),
+  );
+  expect(recommendBlock).toContain('id="visSearch"');
+  expect(recommendBlock).toContain('搜索节点…');
+  expect(page.indexOf('id="visSearch"')).toBeLessThan(page.indexOf('id="visRecommendList"'));
+  // 搜索结果不再弹下拉浮层，直接在推荐列表里复用推荐卡片呈现
+  expect(page).not.toContain('visSearchDropdown');
+  expect(page).not.toContain('vis-search-item');
+  expect(css).not.toContain('.vis-search-dropdown');
+  expect(page).toContain("window.dispatchEvent(new CustomEvent('kb:vis-search-results'");
+  expect(page).toContain('// 搜索结果不依赖画布实例，空白画布上也要能搜索');
+  expect(panel).toContain('window.addEventListener("kb:vis-search-results"');
+  expect(panel).toContain('function applySearchResults(detail)');
+  expect(panel).toContain('fragment.appendChild(buildRecommendCard(node));');
+  // 推荐/搜索结果只能拖到画布：列表不绑定点击入图，只有回车走键盘等价操作
+  expect(panel).not.toContain('onRecommendListClick');
+  expect(panel).not.toContain('list.addEventListener("click"');
+  expect(panel).toContain('// 只能拖拽入画布：点击不把知识加进关系图');
+  expect(panel).toContain('list.addEventListener("keydown", onRecommendListKeydown)');
+  expect(panel).toContain('void addRecommendedNodeToGraph(payload, currentGraphPoint(point))');
+  // 清空搜索回到本体类型推荐
+  expect(panel).toContain('function exitSearchMode()');
+  expect(panel).toContain('renderRecommendState(`没有找到与「${query}」匹配的知识。`)');
+  // 搜索/推荐面板折叠再展开后画布必须能收缩，否则会把推荐面板（含搜索框）挤出可视区
+  expect(css).toContain('/* 左右面板折叠/展开后画布要能收缩，否则会把右侧面板挤出可视区 */');
+});
+
+test('relation view moves every canvas tool into the top toolbar and bottom status bar', () => {
+  const page = readFileSync('public/index.html', 'utf8');
+  const css = readFileSync('public/assets/styles/app.css', 'utf8');
+  // 取消左右竖栏：按钮全部搬到画布上方工具条与下方状态栏，画布更宽
+  expect(page).not.toContain('vis-sidebar');
+  expect(css).not.toContain('.vis-sidebar');
+  expect(css).not.toContain('.vis-tool-group');
+  expect(css).not.toContain('.vis-tool-divider');
+  const topbarBlock = page.slice(
+    page.indexOf('class="vis-topbar"'),
+    page.indexOf('class="vis-canvas-area"'),
+  );
+  for (const id of [
+    'cy_btnLoadSnippet',
+    'cy_btnSaveSnapshot',
+    'cy_btnDeleteEdge',
+    'cy_btnPointer',
+    'cy_btnSelect',
+    'cy_btnComment',
+    'cy_btnFilter',
+    'cy_btnLegendToggle',
+    'cy_btnScreenshot',
+    'cyLayoutSelect',
+    'cy_btnRunLayout',
+    'cy_btnLayout',
+    'cy_btnSettings',
+  ]) {
+    expect(topbarBlock).toContain(`id="${id}"`);
+  }
+  // 目标按钮按功能分组，顺序为：数据 → 工具 → 显示 → 布局
+  const order = ['cy_btnLoadSnippet', 'cy_btnPointer', 'cy_btnFilter', 'cyLayoutSelect'].map((id) =>
+    topbarBlock.indexOf(`id="${id}"`),
+  );
+  expect(order).toEqual([...order].sort((a, b) => a - b));
+  expect(topbarBlock.split('class="vis-topbar-group"').length - 1).toBe(4);
+  // 视图控制（适应全图/缩放/全屏）放在下方状态栏右侧
+  const bottomBlock = page.slice(page.indexOf('class="vis-bottombar"'), page.indexOf('<!-- Inline detail panel'));
+  for (const id of ['cy_btnFit', 'cy_btnZoomOut', 'cy_btnZoomIn', 'cy_btnFullscreen']) {
+    expect(bottomBlock).toContain(`id="${id}"`);
+  }
+  expect(css).toContain('.vis-topbar-group {');
+  expect(css).toContain('.vis-bottom-tools {');
+  // 折叠/展开面板后画布要能收缩，避免把面板挤出可视区
+  expect(css).toContain('min-width: 0;');
+});
+
 test('relation view keeps the canvas clean until the user loads data', () => {
   const page = readFileSync('public/index.html', 'utf8');
   const css = readFileSync('public/assets/styles/app.css', 'utf8');
@@ -287,11 +404,17 @@ test('relation view keeps the canvas clean until the user loads data', () => {
   expect(css).not.toContain('.vis-empty-state');
   expect(page).not.toContain('scheduleVisAutoGraphLoad');
   expect(page).not.toContain('kbVisAutoGraphLoadDone');
-  // 加载图谱入口挪到右侧工具栏，并复用原有 id 保持绑定不变
-  const toolbarIndex = page.indexOf('class="vis-sidebar vis-sidebar-right"');
-  const loadButtonIndex = page.indexOf('id="cy_btnLoadSnippet"');
-  expect(toolbarIndex).toBeGreaterThan(-1);
-  expect(loadButtonIndex).toBeGreaterThan(toolbarIndex);
+  // 加载图谱入口在画布上方工具条里，并复用原有 id 保持绑定不变
+  const topbarBlock = page.slice(
+    page.indexOf('class="vis-topbar"'),
+    page.indexOf('class="vis-canvas-area"'),
+  );
+  expect(topbarBlock).toContain('id="cy_btnLoadSnippet"');
+  const canvasBlock = page.slice(
+    page.indexOf('class="vis-canvas-area"'),
+    page.indexOf('<!-- Bottom status bar'),
+  );
+  expect(canvasBlock).not.toContain('id="cy_btnLoadSnippet"');
   expect(page).toContain('cyBtnLoadSnippet.addEventListener(\'click\', () => { loadGraph(); });');
   // 选中节点时的行为不变：只展开该节点的一层关系
   expect(page).toContain('loadNodeNeighborhood(defaultVisNodeId, { replace: true });');
@@ -417,7 +540,7 @@ test('entity editor uses the post-composer hierarchy without changing existing c
   expect(page).toContain('id="btnCancelEdit"');
   expect(page).toContain('id="btnEntityImport"');
   expect(page).toContain('id="btnSubmit"');
-  expect(page).toContain('/assets/styles/app.css?v=20261010-vis-ontology3');
+  expect(page).toContain('/assets/styles/app.css?v=20261010-vis-ontology6');
   expect(css).toContain('.app-profile-actions { position: fixed; top: 24px; right: 24px;');
   expect(css).toContain('.app-inspiration-profile-layer.has-selection { z-index: 7; }');
   expect(css).toContain('.app-profile-node.is-selected { position: absolute !important;');

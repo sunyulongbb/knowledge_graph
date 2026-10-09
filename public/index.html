@@ -68,7 +68,7 @@
       customElements.whenDefined("media-video-layout"),
     ]).then(() => true);
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20261010-vis-ontology3" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20261010-vis-ontology6" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -3412,12 +3412,40 @@
           </div>
           <!-- Top search bar -->
           <div class="vis-topbar">
-            <div class="vis-search-wrap" style="position:relative;">
-              <i class="fa-solid fa-magnifying-glass vis-search-icon"></i>
-              <input id="visSearch" type="text" class="app-search-input vis-search-input" placeholder="搜索节点…" autocomplete="off" />
-              <div id="visSearchDropdown" class="vis-search-dropdown" style="display:none;"></div>
+            <div class="vis-topbar-group" role="group" aria-label="图谱数据">
+              <button id="cy_btnLoadSnippet" class="vis-tool-btn" title="加载图谱">
+                <i class="fa-solid fa-diagram-project"></i>
+              </button>
+              <button id="cy_btnSaveSnapshot" class="vis-tool-btn" title="保存关系图快照">
+                <i class="fa-regular fa-floppy-disk"></i>
+              </button>
+              <button id="cy_btnDeleteEdge" class="vis-tool-btn" title="删除选中边" disabled>
+                <i class="fa-regular fa-trash-can"></i>
+              </button>
             </div>
-            <div class="vis-topbar-layout">
+            <div class="vis-topbar-group" role="group" aria-label="选择工具">
+              <button id="cy_btnPointer" class="vis-tool-btn active" title="选择工具">
+                <i class="fa-solid fa-arrow-pointer"></i>
+              </button>
+              <button id="cy_btnSelect" class="vis-tool-btn" title="框选">
+                <i class="fa-solid fa-vector-square"></i>
+              </button>
+              <button id="cy_btnComment" class="vis-tool-btn" title="标注">
+                <i class="fa-regular fa-comment-dots"></i>
+              </button>
+            </div>
+            <div class="vis-topbar-group" role="group" aria-label="显示与筛选">
+              <button id="cy_btnFilter" class="vis-tool-btn" title="筛选节点">
+                <i class="fa-solid fa-filter"></i>
+              </button>
+              <button id="cy_btnLegendToggle" class="vis-tool-btn" title="图例">
+                <i class="fa-solid fa-chart-pie"></i>
+              </button>
+              <button id="cy_btnScreenshot" class="vis-tool-btn" title="截图导出">
+                <i class="fa-solid fa-scissors"></i>
+              </button>
+            </div>
+            <div class="vis-topbar-group" role="group" aria-label="布局">
               <select id="cyLayoutSelect" class="vis-layout-select">
                 <option value="cose" selected>力导向布局</option>
                 <option value="dagre">Dagre 层级布局</option>
@@ -3427,10 +3455,14 @@
                 <option value="concentric">同心圆布局</option>
                 <option value="random">随机布局</option>
               </select>
-              <button id="cy_btnRunLayout" class="vis-topbar-btn vis-topbar-layout-btn" title="应用布局">
+              <button id="cy_btnRunLayout" class="vis-tool-btn" title="应用布局">
                 <i class="fa-solid fa-sitemap"></i>
               </button>
+              <button id="cy_btnLayout" class="vis-tool-btn" title="重新布局">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+              </button>
             </div>
+            <div class="vis-topbar-spacer"></div>
             <button id="cy_btnSettings" class="vis-topbar-btn" title="筛选设置">
               <i class="fa-solid fa-sliders"></i>
             </button>
@@ -3452,38 +3484,11 @@
               <div id="visOntologyTree" class="vis-ontology-tree" aria-label="本体分类树"></div>
               <div id="visOntologyPanelStatus" class="vis-ontology-panel__status" role="status" aria-live="polite"></div>
             </aside>
-            <!-- Left vertical toolbar -->
-            <div class="vis-sidebar vis-sidebar-left">
-              <div class="vis-tool-group">
-                <button id="cy_btnFilter" class="vis-tool-btn" title="筛选节点">
-                  <i class="fa-solid fa-filter"></i>
-                </button>
-                <button id="cy_btnScreenshot" class="vis-tool-btn" title="截图导出">
-                  <i class="fa-solid fa-scissors"></i>
-                </button>
-              </div>
-              <div class="vis-tool-group">
-                <button id="cy_btnPointer" class="vis-tool-btn active" title="选择工具">
-                  <i class="fa-solid fa-arrow-pointer"></i>
-                </button>
-                <button id="cy_btnSelect" class="vis-tool-btn" title="框选">
-                  <i class="fa-solid fa-vector-square"></i>
-                </button>
-                <button id="cy_btnComment" class="vis-tool-btn" title="标注">
-                  <i class="fa-regular fa-comment-dots"></i>
-                </button>
-      </div>
       <div class="header-nav">
         <button id="btnMobileMenuToggle" class="mobile-menu-toggle" type="button" aria-label="切换导航菜单" aria-expanded="false" aria-controls="mobileNavMenu">
           <i class="fa-solid fa-bars" aria-hidden="true"></i>
         </button>
         <nav id="mobileNavMenu" class="view-toggle" role="tablist" aria-label="视图切换">
-              </div>
-              <div class="vis-tool-group vis-tool-footer">
-                <button id="cy_btnLegendToggle" class="vis-tool-btn" title="图例">
-                  <i class="fa-solid fa-chart-pie"></i>
-                </button>
-              </div>
             </div>
             <!-- Cytoscape canvas -->
             <div class="vis-graph-body">
@@ -3644,38 +3649,28 @@
               </div>
               <div id="cy"></div>
             </div>
-            <!-- Right vertical toolbar (zoom/tools) -->
-            <div class="vis-sidebar vis-sidebar-right">
-              <button id="cy_btnLoadSnippet" class="vis-tool-btn" title="加载图谱">
-                <i class="fa-solid fa-diagram-project"></i>
-              </button>
-              <div class="vis-tool-divider"></div>
-              <button id="cy_btnFit" class="vis-tool-btn" title="适应全图">
-                <i class="fa-solid fa-expand"></i>
-              </button>
-              <button id="cy_btnLayout" class="vis-tool-btn" title="重新布局">
-                <i class="fa-solid fa-sitemap"></i>
-              </button>
-              <button id="cy_btnSaveSnapshot" class="vis-tool-btn" title="保存关系图快照">
-                <i class="fa-regular fa-floppy-disk"></i>
-              </button>
-              <button id="cy_btnDeleteEdge" class="vis-tool-btn" title="删除选中边" disabled>
-                <i class="fa-regular fa-trash-can"></i>
-              </button>
-              <div class="vis-tool-divider"></div>
-              <button id="cy_btnZoomIn" class="vis-tool-btn" title="放大">
-                <i class="fa-solid fa-magnifying-glass-plus"></i>
-              </button>
-              <button id="cy_btnZoomOut" class="vis-tool-btn" title="缩小">
-                <i class="fa-solid fa-magnifying-glass-minus"></i>
-              </button>
-              <div class="vis-tool-divider"></div>
-              <button id="cy_btnFullscreen" class="vis-tool-btn" title="全屏">
-                <i class="fa-solid fa-up-right-and-down-left-from-center"></i>
-              </button>
-            </div>
+            <!-- 知识推荐：点击左侧本体树分类后列出该类型的知识，可拖到画布加入关系图 -->
+            <aside id="visRecommendPanel" class="vis-recommend-panel" aria-label="知识推荐">
+              <div class="vis-recommend-panel__head">
+                <span class="vis-recommend-panel__title">
+                  <i class="fa-solid fa-lightbulb" aria-hidden="true"></i>
+                  <span>知识推荐</span>
+                </span>
+                <button id="cy_btnRecommendPanel" class="vis-recommend-panel__toggle" type="button" title="收起知识推荐" aria-expanded="true" aria-controls="visRecommendList">
+                  <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+                </button>
+              </div>
+              <!-- 搜索节点：结果直接列在推荐列表里，不再弹出下拉浮层 -->
+              <div class="vis-search-wrap">
+                <i class="fa-solid fa-magnifying-glass vis-search-icon"></i>
+                <input id="visSearch" type="text" class="app-search-input vis-search-input" placeholder="搜索节点…" autocomplete="off" />
+              </div>
+              <p class="vis-recommend-panel__hint" id="visRecommendHint">点击左侧本体树上的分类，这里会列出该类型的知识；拖到画布即可加入关系图。</p>
+              <div id="visRecommendList" class="vis-recommend-list" aria-live="polite"></div>
+              <div id="visRecommendStatus" class="vis-recommend-panel__status" role="status"></div>
+            </aside>
           </div>
-          <!-- Bottom status bar -->
+          <!-- Bottom status bar：计数、状态与视图控制 -->
           <div class="vis-bottombar">
             <div class="vis-bottom-tabs">
               <span id="cyCountAll" class="vis-bottom-tab active">全部 (0)</span>
@@ -3683,6 +3678,20 @@
             </div>
             <div class="vis-bottom-status">
               <div id="visStatusText" class="vis-status-msg"></div>
+            </div>
+            <div class="vis-bottom-tools" role="group" aria-label="视图控制">
+              <button id="cy_btnFit" class="vis-tool-btn" title="适应全图">
+                <i class="fa-solid fa-expand"></i>
+              </button>
+              <button id="cy_btnZoomOut" class="vis-tool-btn" title="缩小">
+                <i class="fa-solid fa-magnifying-glass-minus"></i>
+              </button>
+              <button id="cy_btnZoomIn" class="vis-tool-btn" title="放大">
+                <i class="fa-solid fa-magnifying-glass-plus"></i>
+              </button>
+              <button id="cy_btnFullscreen" class="vis-tool-btn" title="全屏">
+                <i class="fa-solid fa-up-right-and-down-left-from-center"></i>
+              </button>
             </div>
           </div>
         </div>
@@ -13213,7 +13222,7 @@
     }
 
     // 关联视图默认是空画布，图谱实例也未创建；
-    // 让外部模块（如本体面板拖拽建节点）能用已有数据初始化实例，不必拉全量图谱。
+    // 让外部模块（如本体面板拖拽建节点、知识推荐拖拽入画布）能用已有数据初始化图谱。
     window.kbLoadGraphWithData = (data) => loadGraph(data);
 
     // 自动加载图谱（移除了手动加载按钮）
@@ -13269,35 +13278,24 @@
 
     // ── Vis panel: new feature bindings ──
     (function initVisPanelControls() {
-      // Search nodes
+      // Search nodes：结果不再弹出下拉浮层，直接交给右侧知识推荐面板的列表展示
       const visSearchInput = document.getElementById('visSearch');
-      const visSearchDropdown = document.getElementById('visSearchDropdown');
-      let visSearchSelectedIndex = -1;
       let visSearchItems = [];
       let visSearchDebounceTimer = null;
+      let visSearchQuery = '';
 
-      function clearVisSearchDropdown() {
-        if (!visSearchDropdown) return;
-        visSearchDropdown.innerHTML = '';
-        visSearchDropdown.style.display = 'none';
-        visSearchSelectedIndex = -1;
-        visSearchItems = [];
-      }
-
-      function setVisSearchDropdownActive(index) {
-        if (!visSearchDropdown) return;
-        const children = Array.from(visSearchDropdown.children);
-        children.forEach((child, idx) => {
-          const active = idx === index;
-          child.classList.toggle('active', active);
-          child.style.background = active ? 'rgba(255,255,255,0.08)' : 'transparent';
-        });
-        visSearchSelectedIndex = index;
+      // 把搜索结果/清空广播给关系图模块，由它复用推荐列表渲染
+      function publishVisSearchResults(query, nodes) {
+        visSearchQuery = String(query || '');
+        visSearchItems = Array.isArray(nodes) ? nodes : [];
+        window.dispatchEvent(new CustomEvent('kb:vis-search-results', {
+          detail: { query: visSearchQuery, nodes: visSearchItems },
+        }));
       }
 
       async function fetchVisSearchSuggestions(query) {
         if (!query) {
-          clearVisSearchDropdown();
+          publishVisSearchResults('', []);
           return;
         }
         const url = new URL('/api/kb/entity_search', window.location.origin);
@@ -13314,119 +13312,10 @@
           if (!resp.ok) throw new Error('HTTP ' + resp.status);
           const data = await resp.json();
           const nodes = Array.isArray(data.nodes) ? data.nodes : [];
-          renderVisSearchDropdown(nodes);
+          publishVisSearchResults(query, nodes);
         } catch (err) {
           console.error('graph search suggestions failed', err);
-          clearVisSearchDropdown();
-        }
-      }
-
-      function renderVisSearchDropdown(nodes) {
-        if (!visSearchDropdown) return;
-        visSearchDropdown.innerHTML = '';
-        visSearchItems = Array.isArray(nodes) ? nodes : [];
-        if (!visSearchItems.length) {
-          clearVisSearchDropdown();
-          return;
-        }
-        visSearchDropdown.style.position = 'absolute';
-        visSearchDropdown.style.top = '100%';
-        visSearchDropdown.style.left = '0';
-        visSearchDropdown.style.right = '0';
-        visSearchDropdown.style.zIndex = '3000';
-        visSearchDropdown.style.background = 'rgba(20, 22, 29, 0.98)';
-        visSearchDropdown.style.border = '1px solid rgba(255,255,255,0.08)';
-        visSearchDropdown.style.borderRadius = '10px';
-        visSearchDropdown.style.boxShadow = '0 16px 40px rgba(0,0,0,0.24)';
-        visSearchDropdown.style.maxHeight = '320px';
-        visSearchDropdown.style.overflowY = 'auto';
-        visSearchDropdown.style.padding = '4px 0';
-        visSearchItems.forEach((node, idx) => {
-          const item = document.createElement('div');
-          item.className = 'vis-search-item';
-          item.tabIndex = -1;
-          item.dataset.index = String(idx);
-          item.style.padding = '10px 14px';
-          item.style.cursor = 'pointer';
-          item.style.display = 'flex';
-          item.style.flexDirection = 'column';
-          item.style.gap = '2px';
-          item.style.transition = 'background-color 0.12s ease';
-          item.style.color = '#f8f9fa';
-          item.addEventListener('mouseenter', () => setVisSearchDropdownActive(idx));
-          item.addEventListener('click', (e) => {
-            e.stopPropagation();
-            selectVisSearchItem(idx);
-          });
-          const title = document.createElement('div');
-          title.className = 'vis-search-item-title';
-          title.style.fontSize = '13px';
-          title.style.fontWeight = '600';
-          title.style.color = '#ffffff';
-          title.textContent = node.label_zh || node.label || node.name || node.id || '未知节点';
-          const subtitle = document.createElement('div');
-          subtitle.className = 'vis-search-item-subtitle';
-          subtitle.style.fontSize = '12px';
-          subtitle.style.color = 'rgba(255,255,255,0.65)';
-          subtitle.style.overflow = 'hidden';
-          subtitle.style.textOverflow = 'ellipsis';
-          subtitle.style.whiteSpace = 'nowrap';
-          subtitle.textContent = node.id || '';
-          item.appendChild(title);
-          item.appendChild(subtitle);
-          visSearchDropdown.appendChild(item);
-        });
-        visSearchDropdown.style.display = 'block';
-        setVisSearchDropdownActive(0);
-      }
-
-      async function selectVisSearchItem(index) {
-        if (!visSearchItems || !visSearchItems[index]) return;
-        const node = visSearchItems[index];
-        const rawNodeId = (node.id || node._id || '').toString().trim();
-        if (!rawNodeId) return;
-        clearVisSearchDropdown();
-        if (visSearchInput) {
-          visSearchInput.value = node.label_zh || node.label || node.name || '';
-        }
-        try {
-          if (!window.kbCy) return;
-          if (typeof clearNeighborFilter === 'function') clearNeighborFilter();
-          const nodeId = rawNodeId;
-          const imageUrl =
-            (Array.isArray(node.images) && node.images[0]) ||
-            node.avatar ||
-            node.icon ||
-            node.img ||
-            node.logo ||
-            '';
-          const existing = window.kbCy.getElementById(nodeId);
-          if (existing && !existing.empty()) {
-            if (imageUrl && !existing.data('image')) {
-              existing.data('image', imageUrl);
-            }
-            return;
-          }
-          const pan = window.kbCy.pan ? window.kbCy.pan() : { x: 0, y: 0 };
-          const zoom = window.kbCy.zoom ? window.kbCy.zoom() : 1;
-          const position = {
-            x: pan.x + (window.kbCy.width ? (window.kbCy.width() || 600) : 600) / 2 / zoom,
-            y: pan.y + (window.kbCy.height ? (window.kbCy.height() || 400) : 400) / 2 / zoom,
-          };
-          window.kbCy.batch(() => {
-            window.kbCy.add({
-              group: 'nodes',
-              data: {
-                id: nodeId,
-                label: node.label_zh || node.label || node.name || rawNodeId,
-                name: node.name || node.label || node.label_zh || rawNodeId,
-                image: imageUrl,
-              },
-              position,
-            });
-          });
-        } catch (err) {
-          console.error('selectVisSearchItem failed', err);
+          publishVisSearchResults(query, []);
         }
       }
 
@@ -13434,6 +13323,11 @@
         visSearchInput.addEventListener('input', () => {
           const text = (visSearchInput.value || '').trim();
           const q = text.toLowerCase();
+          if (visSearchDebounceTimer) clearTimeout(visSearchDebounceTimer);
+          // 搜索结果不依赖画布实例，空白画布上也要能搜索
+          visSearchDebounceTimer = window.setTimeout(() => {
+            fetchVisSearchSuggestions(text);
+          }, 220);
           if (!window.kbCy) return;
           window.kbCy.nodes().forEach(n => {
             const label = (n.data('label') || n.data('name') || '').toLowerCase();
@@ -13453,46 +13347,16 @@
           if (!q) {
             window.kbCy.nodes().removeClass('highlight');
           }
-          if (visSearchDebounceTimer) clearTimeout(visSearchDebounceTimer);
-          visSearchDebounceTimer = window.setTimeout(() => {
-            fetchVisSearchSuggestions(text);
-          }, 220);
         });
 
         visSearchInput.addEventListener('keydown', (e) => {
-          if (!visSearchDropdown || visSearchDropdown.style.display === 'none') return;
-          const maxIndex = visSearchItems.length - 1;
-          if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            const next = visSearchSelectedIndex < maxIndex ? visSearchSelectedIndex + 1 : 0;
-            setVisSearchDropdownActive(next);
-            return;
-          }
-          if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            const prev = visSearchSelectedIndex > 0 ? visSearchSelectedIndex - 1 : maxIndex;
-            setVisSearchDropdownActive(prev);
-            return;
-          }
-          if (e.key === 'Enter') {
-            if (visSearchSelectedIndex >= 0 && visSearchItems.length > 0) {
-              e.preventDefault();
-              selectVisSearchItem(visSearchSelectedIndex);
-            }
-          }
           if (e.key === 'Escape') {
-            clearVisSearchDropdown();
-          }
-        });
-
-        document.addEventListener('click', (event) => {
-          const target = event.target;
-          if (visSearchDropdown && visSearchInput && !visSearchDropdown.contains(target) && target !== visSearchInput) {
-            clearVisSearchDropdown();
+            visSearchInput.value = '';
+            publishVisSearchResults('', []);
           }
         });
       }
-      // 加载图谱（右侧工具栏）
+      // 加载图谱（画布上方工具栏）
       const cyBtnLoadSnippet = document.getElementById('cy_btnLoadSnippet');
       if (cyBtnLoadSnippet) cyBtnLoadSnippet.addEventListener('click', () => { loadGraph(); });
 
@@ -17430,7 +17294,7 @@
   <script>
       window.kbOntologyTreeModuleReady = import("/assets/generated/ontology-tree.js?v=20261005-class-scroll");
   </script>
-  <script type="module" src="/assets/scripts/vis-ontology-panel.js?v=20261010-vis-ontology4"></script>
+  <script type="module" src="/assets/scripts/vis-ontology-panel.js?v=20261010-vis-ontology8"></script>
   <script src="/assets/scripts/property-panel.js?v=20260915-1"></script>
   <script src="/assets/scripts/table-panel.js?v=20261008-pagination"></script>
   <script src="/assets/scripts/table-selection.js?v=20261010-crumb-label"></script>

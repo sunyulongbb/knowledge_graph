@@ -1623,6 +1623,8 @@ body.global-page-active .header-bar::after { display: none !important; }
 .vis-graph-body {
   position: relative;
   flex: 1 1 auto;
+  /* 左右面板折叠/展开后画布要能收缩，否则会把右侧面板挤出可视区 */
+  min-width: 0;
   min-height: 0;
   display: flex;
 }
@@ -1757,22 +1759,32 @@ body.global-page-active .header-bar::after { display: none !important; }
   overflow: hidden;
 }
 
-/* Top search bar */
+/* 画布上方工具条：原来的左右两条竖栏合并到这里，画布横向空间更充足 */
 .vis-topbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 6px 10px;
   border-bottom: 1px solid var(--border);
   background: var(--surface-0);
   flex: 0 0 auto;
 }
 
-.vis-topbar-layout {
+.vis-topbar-group {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-0);
   flex: 0 0 auto;
+}
+
+.vis-topbar-spacer {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .vis-search-wrap {
   position: relative;
@@ -1828,49 +1840,15 @@ body.global-page-active .header-bar::after { display: none !important; }
   border-color: var(--border-strong);
 }
 
-.vis-topbar-layout-btn {
-  width: 32px;
-  height: 32px;
-}
-
 /* Canvas area wrapper */
 .vis-canvas-area {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
+  flex-direction: row;
   position: relative;
 }
 
-/* Vertical sidebars */
-.vis-sidebar {
-  display: flex;
-  flex-direction: column;
-  padding: 8px 4px;
-  gap: 4px;
-  align-items: center;
-  background: var(--surface-0);
-  z-index: 1100;
-  flex: 0 0 auto;
-}
-.vis-sidebar-left {
-  border-right: 1px solid var(--border);
-  padding: 10px 6px;
-  gap: 2px;
-}
-.vis-sidebar-right {
-  border-left: 1px solid var(--border);
-  padding: 10px 6px;
-  gap: 2px;
-}
-.vis-tool-group {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 4px 0;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-0);
-}
 .vis-tool-btn {
   width: 34px;
   height: 34px;
@@ -1895,19 +1873,14 @@ body.global-page-active .header-bar::after { display: none !important; }
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
 }
-.vis-tool-footer {
-  margin-top: auto;
+.vis-tool-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 .vis-tool-btn.sm {
   width: 28px;
   height: 28px;
   font-size: 12px;
-}
-.vis-tool-divider {
-  width: 22px;
-  height: 1px;
-  background: var(--border);
-  margin: 4px 0;
 }
 
 /* Vis graph body (canvas) */
@@ -2128,6 +2101,237 @@ body.global-page-active .header-bar::after { display: none !important; }
   color: var(--danger, #dc2626);
 }
 
+/* 知识推荐面板（画布右侧） */
+.vis-recommend-panel {
+  flex: 0 0 auto;
+  width: 264px;
+  min-width: 264px;
+  min-height: 0;
+  /* 画布区在窄屏会被压得很矮，裁掉溢出内容避免压住相邻面板 */
+  overflow: hidden;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 10px;
+  border-left: 1px solid var(--border);
+  background: var(--surface-0);
+  z-index: 1100;
+  transition:
+    width 0.18s ease,
+    min-width 0.18s ease,
+    padding 0.18s ease;
+}
+.vis-recommend-panel.is-collapsed {
+  width: 40px;
+  min-width: 40px;
+  padding: 8px 4px 10px;
+  align-items: center;
+}
+.vis-recommend-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 24px;
+}
+.vis-recommend-panel.is-collapsed .vis-recommend-panel__head {
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 8px;
+}
+.vis-recommend-panel__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 600;
+}
+.vis-recommend-panel__title > i {
+  color: var(--accent);
+}
+.vis-recommend-panel.is-collapsed .vis-recommend-panel__title > span {
+  display: none;
+}
+.vis-recommend-panel__toggle {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+.vis-recommend-panel__toggle:hover {
+  border-color: var(--border);
+  background: var(--surface-1);
+  color: var(--fg);
+}
+.vis-recommend-panel__hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+/* 搜索节点：面板内通栏，结果直接列在下面的推荐列表里 */
+.vis-recommend-panel .vis-search-wrap {
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: none;
+}
+.vis-recommend-panel .vis-search-input {
+  min-height: 32px;
+  font-size: 12px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+.vis-recommend-panel.is-collapsed .vis-search-wrap {
+  display: none;
+}
+.vis-recommend-panel__status {
+  min-height: 15px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.vis-recommend-panel__status.is-error {
+  color: var(--danger, #dc2626);
+}
+.vis-recommend-panel__status.is-success {
+  color: var(--accent);
+}
+.vis-recommend-panel.is-collapsed .vis-recommend-panel__hint,
+.vis-recommend-panel.is-collapsed .vis-recommend-panel__status,
+.vis-recommend-panel.is-collapsed .vis-recommend-list {
+  display: none;
+}
+.vis-recommend-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px;
+  font-size: 12px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.vis-recommend-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-1);
+  color: var(--fg);
+  cursor: grab;
+  text-align: left;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    transform 0.15s ease;
+}
+.vis-recommend-card:hover,
+.vis-recommend-card:focus-visible {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-1));
+}
+.vis-recommend-card:focus-visible {
+  outline: none;
+}
+.vis-recommend-card:active {
+  cursor: grabbing;
+  transform: translateY(1px);
+}
+.vis-recommend-card__thumb {
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  border-radius: 7px;
+  background: var(--surface-2, var(--surface-1));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+}
+.vis-recommend-card__thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.vis-recommend-card__body {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.vis-recommend-card__name {
+  font-weight: 600;
+  font-size: 12.5px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vis-recommend-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+.vis-recommend-card__dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--recommend-node-color, var(--muted));
+}
+.vis-recommend-card__type {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vis-recommend-card__desc {
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.35;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.vis-recommend-list .ontology-tree-state {
+  padding: 8px 2px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.vis-recommend-list .ontology-tree-state--error {
+  color: var(--danger, #dc2626);
+}
+body.vis-ontology-dragging .vis-recommend-card {
+  cursor: grabbing;
+}
+
 /* 拖拽到画布时的落点提示 */
 body.vis-ontology-dragging {
   cursor: grabbing;
@@ -2156,6 +2360,10 @@ body.vis-ontology-dragging {
 body.vis-ontology-dragging .vis-panel .vis-graph-body::after {
   opacity: 1;
   visibility: visible;
+}
+/* 拖已有知识入图时提示文案不同 */
+body.vis-ontology-dragging.is-recommend-drag .vis-panel .vis-graph-body::after {
+  content: "松开即可加入关系图";
 }
 body.vis-ontology-dragging .vis-panel .vis-graph-body.is-ontology-drop-target {
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
@@ -2239,6 +2447,10 @@ body.vis-ontology-dragging .vis-panel .vis-graph-body.is-ontology-drop-target::a
   .vis-ontology-panel {
     width: 180px;
     min-width: 180px;
+  }
+  .vis-recommend-panel {
+    width: 200px;
+    min-width: 200px;
   }
 }
 
@@ -2334,9 +2546,6 @@ body.vis-ontology-dragging .vis-panel .vis-graph-body.is-ontology-drop-target::a
 .vis-legend-toggle.active {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
-}
-.vis-sidebar-left #cy_btnLegend {
-  display: none;
 }
 .ontology-color-picker-row {
   display: flex;
@@ -2478,6 +2687,17 @@ body.vis-ontology-dragging .vis-panel .vis-graph-body.is-ontology-drop-target::a
 .vis-bottom-status {
   flex: 1 1 auto;
   min-width: 0;
+}
+/* 画布下方状态栏右侧的视图控制（缩小/放大/适应全图/全屏） */
+.vis-bottom-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-0);
+  flex: 0 0 auto;
 }
 .vis-status-msg {
   font-size: 12px;
