@@ -12,3 +12,9 @@ test('home cards prefer images and video covers, using metadata only when no ima
   const fallback = render({id:'c',videos:['/video.mp4']});
   expect(fallback).toContain('preload="metadata"');expect(fallback).not.toContain('preload="none"');
 });
+
+test('blank card names fall back to a usable label or default title', () => {
+  expect(render({ name: '  ', label: '知识标题' })).toContain('title="知识标题"');
+  expect(render({ _id: 'entity/123' })).toContain('title="entity/123"');
+  expect(render({})).toContain('title="未命名知识"');
+});

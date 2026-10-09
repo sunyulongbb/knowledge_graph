@@ -22,6 +22,7 @@
     return pages;
   }
   let dialog, refs, node, media = [], mediaIndex = 0, version = 0, requestController;
+  let imageDetailsVisible = false;
   let history = [];
   let journey = null;
   let portrait = null;
@@ -43,7 +44,16 @@
   function stopMedia() { refs?.stage.querySelectorAll('video').forEach((video) => { video.pause(); video.removeAttribute('src'); video.load(); }); }
   function updateVideoControls() {
     const video = refs.stage.querySelector('video');
-    refs.play.hidden = refs.mute.hidden = refs.seek.hidden = refs.playback.hidden = !video;
+    const playing = !!video && !video.paused;
+    const image = refs.stage.querySelector('img');
+    const detailsHidden = playing || (!!image && !imageDetailsVisible);
+    refs.main.classList.toggle('is-video-playing', playing);
+    refs.main.classList.toggle('is-details-hidden', detailsHidden);
+    refs.caption.hidden = refs.bottom.hidden = detailsHidden;
+    refs.stage.setAttribute('role', video || image ? 'button' : 'group');
+    refs.stage.tabIndex = video || image ? 0 : -1;
+    refs.stage.setAttribute('aria-label', video ? (playing ? '暂停视频并显示详情' : '播放视频') : image ? (imageDetailsVisible ? '隐藏图片详情' : '显示图片详情') : '知识媒体');
+    refs.play.hidden = refs.mute.hidden = refs.seek.hidden = refs.playback.hidden = !video || playing;
     refs.centerPlay.hidden = !video || !video.paused;
     if (video) {
       refs.play.textContent = video.paused ? '▶' : 'Ⅱ';
@@ -83,6 +93,7 @@
     }
   }
   function renderMedia() {
+    imageDetailsVisible = false;
     stopMedia(); refs.stage.replaceChildren(); message('');
     const item = media[mediaIndex];
     refs.counter.textContent = media.length ? `${mediaIndex + 1} / ${media.length}` : '图文知识';
@@ -272,8 +283,8 @@
       <div class="home-reel-stage" data-ref="stage"></div>
       <div class="home-reel-top"><span class="home-reel-brand">知识发现</span><div><button data-ref="fullscreen" aria-label="全屏">⛶</button><button data-ref="close" aria-label="关闭知识详情">×</button></div></div>
       <button class="home-reel-media-nav is-left" data-ref="left" aria-label="上一个媒体">‹</button><button class="home-reel-media-nav is-right" data-ref="right" aria-label="下一个媒体">›</button>
-      <div class="home-reel-caption"><span data-ref="identity"></span><h2 data-ref="title"></h2><p data-ref="description"></p><button data-action="info" class="home-reel-more">查看完整信息</button></div>
-      <div class="home-reel-bottom"><span data-ref="counter"></span><span>← → 切媒体 · ↑ 历史 · ↓ 随机</span></div>
+      <div class="home-reel-caption" data-ref="caption"><span data-ref="identity"></span><h2 data-ref="title"></h2><p data-ref="description"></p><button data-action="info" class="home-reel-more">查看完整信息</button></div>
+      <div class="home-reel-bottom" data-ref="bottom"><span data-ref="counter"></span><span>← → 切媒体 · ↑ 历史 · ↓ 随机</span></div>
       <button class="home-reel-center-play" data-ref="centerPlay" aria-label="播放视频" hidden>▶</button>
       <div class="home-reel-playback" data-ref="playback" hidden><button data-ref="play" aria-label="播放">▶</button><button data-ref="mute" aria-label="关闭声音">关闭声音</button><span data-ref="time" class="home-reel-time">0:00 / 0:00</span></div>
       <input data-ref="seek" class="home-reel-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="视频进度">
@@ -286,6 +297,15 @@
     refs.left.onclick = () => moveMedia(-1); refs.right.onclick = () => moveMedia(1);
     refs.up.onclick = () => randomPage(-1); refs.down.onclick = () => randomPage(1);
     refs.play.onclick = refs.centerPlay.onclick = () => { message(''); const video = refs.stage.querySelector('video'); if (video) video.paused ? void playVideo(video) : video.pause(); };
+    refs.stage.onclick = () => {
+      if (busy || overlayMode) return;
+      if (refs.stage.querySelector('img')) imageDetailsVisible = !imageDetailsVisible;
+      else refs.play.onclick();
+      updateVideoControls();
+    };
+    refs.stage.addEventListener('keydown', (event) => {
+      if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); refs.stage.onclick(); }
+    });
     refs.mute.onclick = () => {
       const video = refs.stage.querySelector('video');
       muted = video ? !video.muted : !muted;

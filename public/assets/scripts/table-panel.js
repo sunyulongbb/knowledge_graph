@@ -908,6 +908,7 @@
       tblPaginationController = new window.KbPaginationController(
         tblPaginationControls,
         {
+          showJump: false,
           page: tblPage,
           pageSize: tblPageSize,
           onPageChange: (page) => {

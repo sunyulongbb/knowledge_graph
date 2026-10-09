@@ -190,11 +190,11 @@
     const image = firstImage(node);
     const video = firstVideo(node);
     const cover = image || firstCover(node);
-    const title = node.name || node.label || node.id;
+    const title = [node.name, node.label, node.title, node.id, node._id].find(value => typeof value === 'string' && value.trim())?.trim() || '未命名知识';
     const id = node.id || node._id || '';
     return `<article class="app-home-knowledge-card" data-home-node-id="${escape(id)}">
       <button type="button" class="app-home-card-media${cover || video ? '' : ' is-placeholder'}" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}">${cover ? `<img src="${escape(cover)}" alt="" loading="lazy">` : video ? `<video src="${escape(video)}" muted playsinline preload="metadata"></video><span class="app-media-type"><i class="fa-solid fa-play" aria-hidden="true"></i> 视频</span>` : '<i class="fa-solid fa-lightbulb" aria-hidden="true"></i>'}</button>
-      <div class="app-home-card-body"><div class="app-home-card-meta"><span>${escape(node.typeLabel || node.type || '知识实体')}</span><time>${escape(shortDate(node.updated_at || node.created_at))}</time></div><button type="button" class="app-home-card-title" data-home-node-id="${escape(id)}">${escape(title)}</button><div class="app-home-card-footer"><span class="app-home-card-id">${escape(id)}</span><span>查看详情 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span></div></div>
+      <div class="app-home-card-body"><div class="app-home-card-meta"><span>${escape(node.typeLabel || node.type || '知识实体')}</span><time>${escape(shortDate(node.updated_at || node.created_at))}</time></div><button type="button" class="app-home-card-title" title="${escape(title)}" data-home-node-id="${escape(id)}">${escape(title)}</button><div class="app-home-card-footer"><span class="app-home-card-id">${escape(id)}</span><span>查看详情 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span></div></div>
     </article>`;
   }
   function applicationBanner() {

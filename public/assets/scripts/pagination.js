@@ -72,43 +72,39 @@
         this.options.onPageSizeChange?.(this.pageSize);
       });
 
-      const jumpLabel = document.createElement("label");
-      jumpLabel.className = "kb-pagination-jump";
-      jumpLabel.textContent = "前往 ";
-      const jump = document.createElement("input");
-      jump.type = "number";
-      jump.min = "1";
-      jump.max = String(maxPage);
-      jump.step = "1";
-      jump.className = "kb-input sm";
-      jump.setAttribute("aria-label", "输入页码");
-      const confirm = this.createButton("确定", "跳转到指定页");
-      const doJump = () => {
-        const page = Math.min(
-          maxPage,
-          Math.max(1, Math.trunc(Number(jump.value))),
-        );
-        if (Number.isFinite(page)) this.changePage(page);
-        jump.value = "";
-      };
-      confirm.addEventListener("click", doJump);
-      jump.addEventListener("keydown", (event) => {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          doJump();
-        }
-      });
-      jumpLabel.append(jump, " 页");
+      this.container.append(previous, info, numbers, next, pageSize);
+      if (this.options.showJump !== false) {
+        const jumpLabel = document.createElement("label");
+        jumpLabel.className = "kb-pagination-jump";
+        jumpLabel.textContent = "前往 ";
+        const jump = document.createElement("input");
+        jump.type = "number";
+        jump.min = "1";
+        jump.max = String(maxPage);
+        jump.step = "1";
+        jump.className = "kb-input sm";
+        jump.setAttribute("aria-label", "输入页码");
+        const confirm = this.createButton("确定", "跳转到指定页");
+        const doJump = () => {
+          const page = Math.min(
+            maxPage,
+            Math.max(1, Math.trunc(Number(jump.value))),
+          );
+          if (Number.isFinite(page)) this.changePage(page);
+          jump.value = "";
+        };
+        confirm.addEventListener("click", doJump);
+        jump.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            doJump();
+          }
+        });
+        jumpLabel.append(jump, " 页");
+  
+        this.container.append(jumpLabel, confirm);
+      }
 
-      this.container.append(
-        previous,
-        info,
-        numbers,
-        next,
-        pageSize,
-        jumpLabel,
-        confirm,
-      );
     }
 
     createButton(text, label) {

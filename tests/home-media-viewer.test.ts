@@ -216,3 +216,35 @@ test('explicit mute persists across vertical paging without attempting sound', a
   expect(h.refs.stage.querySelector('video').muted).toBe(true);
   expect(h.refs.stage.querySelector('video').paused).toBe(false);
 });
+
+test('playing hides details and progress; clicking the media reveals them on pause', async () => {
+  const h = setup(undefined, true);
+  h.viewer.open('one'); await tick();
+  expect(h.refs.caption.hidden).toBe(true);
+  expect(h.refs.bottom.hidden).toBe(true);
+  expect(h.refs.playback.hidden).toBe(true);
+  expect(h.refs.seek.hidden).toBe(true);
+  h.refs.stage.onclick();
+  expect(h.refs.stage.querySelector('video').paused).toBe(true);
+  expect(h.refs.caption.hidden).toBe(false);
+  expect(h.refs.playback.hidden).toBe(false);
+  expect(h.refs.seek.hidden).toBe(false);
+  h.refs.stage.onclick(); await tick();
+  expect(h.refs.caption.hidden).toBe(true);
+  expect(h.refs.playback.hidden).toBe(true);
+});
+
+test('image details default to hidden, toggle on click and reset for the next image', async () => {
+  const h = setup(); h.viewer.open('one'); await tick();
+  expect(h.refs.caption.hidden).toBe(true);
+  expect(h.refs.bottom.hidden).toBe(true);
+  h.refs.stage.onclick();
+  expect(h.refs.caption.hidden).toBe(false);
+  expect(h.refs.bottom.hidden).toBe(false);
+  h.refs.stage.onclick();
+  expect(h.refs.caption.hidden).toBe(true);
+  h.refs.stage.onclick();
+  h.refs.right.onclick();
+  expect(h.refs.caption.hidden).toBe(true);
+  expect(h.refs.playback.hidden).toBe(true);
+});

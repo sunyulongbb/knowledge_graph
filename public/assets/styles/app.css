@@ -13215,3 +13215,70 @@ table th {
     font-size: 13px;
   }
 }
+
+/* One continuous lower scrim, revealed with details when video is paused. */
+#homeMediaViewer .home-reel-main::after {
+  content: ''; position: absolute; inset: auto 0 0; height: min(55%, 380px);
+  background: linear-gradient(to bottom, transparent, var(--home-viewer-glass) 48%, var(--home-viewer-glass-strong));
+  pointer-events: none; z-index: 1;
+}
+#homeMediaViewer .home-reel-main.is-details-hidden::after { opacity: 0; }
+#homeMediaViewer .home-reel-caption,
+#homeMediaViewer .home-reel-playback {
+  background: transparent; border: 0; border-radius: 0; backdrop-filter: none; box-shadow: none;
+}
+#homeMediaViewer .home-reel-bottom { z-index: 3; }
+#homeMediaViewer .home-reel-caption[hidden],
+#homeMediaViewer .home-reel-bottom[hidden],
+#homeMediaViewer .home-reel-playback[hidden],
+#homeMediaViewer .home-reel-seek[hidden] { display: none; }
+#homeMediaViewer .home-reel-stage[role="button"] { cursor: pointer; }
+#homeMediaViewer .home-reel-stage:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; }
+#applicationHomePanel .app-home-card-title {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  white-space: normal; overflow-wrap: anywhere; overflow: hidden;
+  width: 100%; height: auto; min-height: 1.4em; max-height: 2.8em;
+  flex: none; line-height: 1.4; padding: 0; text-align: left;
+}
+/* Classification sidebar: clear branch hierarchy and compact leaf cards. */
+#clsTree { padding: 6px 4px 12px; font-size: 13px; }
+#clsTree ul.dhx_tree-list { gap: 4px; border-left-color: color-mix(in srgb, var(--border) 75%, transparent); padding-left: 8px; }
+#clsTree .ontology-dhtmlx-host > .dhx_tree > ul.dhx_tree-list { border-left: 0; margin-left: 0; padding-left: 0; }
+#clsTree .dhx_tree-list-item--parent > .dhx_tree-folder {
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--surface-1) 70%, var(--surface-0));
+}
+#clsTree .dhx_tree-folder__content { padding: 0 2px; min-width: 0; }
+#clsTree .dhx_tree-folder .class-tree-node { min-height: 30px; padding: 4px 7px; font-weight: 650; }
+#clsTree .class-tree-node { transition: background-color .15s ease, color .15s ease; }
+#clsTree .class-tree-node .ontology-node-label { color: inherit; line-height: 1.35; }
+#clsTree .ontology-node-folder { width: 16px; height: 16px; opacity: .8; }
+#clsTree .dhx_tree-list-item--parent > ul.dhx_tree-list { margin-top: 4px; margin-bottom: 6px; }
+#clsTree ul.dhx_tree-list > .dhx_tree-list-item:not(.dhx_tree-list-item--parent) {
+  border-color: color-mix(in srgb, var(--border) 75%, transparent);
+  border-radius: 9px; overflow: visible;
+  transition: border-color .15s ease, background-color .15s ease;
+}
+#clsTree .dhx_tree-list-item:not(.dhx_tree-list-item--parent) .class-tree-node {
+  min-height: 30px; height: 100%; padding: 5px 7px; gap: 5px; border-radius: 8px;
+}
+#clsTree .class-tree-node:hover { background: color-mix(in srgb, var(--accent) 7%, var(--surface-0)); }
+#clsTree .class-tree-node.is-assigned {
+  color: var(--accent); background: color-mix(in srgb, var(--accent) 23%, var(--surface-0));
+  box-shadow: inset 4px 0 0 var(--accent), inset 0 0 0 1px var(--accent); font-weight: 700;
+}
+#clsTree .class-tree-node small {
+  display: inline-flex; align-items: center; gap: 3px; padding: 2px 5px;
+  border-radius: 5px; line-height: 1.35; font-size: 10px; font-weight: 600;
+  color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+#clsTree .class-tree-node small::before { content: '✓'; }
+#clsTree .class-tree-node:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+#clsTree .dhx_tree-list-item:not(.dhx_tree-list-item--parent):has(.is-assigned) { border-color: var(--accent); }
+@media (prefers-reduced-motion: reduce) { #clsTree .class-tree-node, #clsTree .dhx_tree-list-item { transition: none; } }
+
+/* Classification is indicated by the node highlight, without a text badge. */
+#clsTree .class-tree-node small { display: none; }
+
+#clsTree .dhx_tree-list-item { min-height: 30px; }
+#clsTree .class-tree-node.is-assigned .ontology-node-folder { color: var(--accent); opacity: 1; }

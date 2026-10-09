@@ -68,7 +68,7 @@
       customElements.whenDefined("media-video-layout"),
     ]).then(() => true);
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20261008-media-detail-theme" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20261008-tree-compact" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -94,7 +94,7 @@
   </script>
   <script src="/assets/scripts/banner-upload.js?v=20260927-1"></script>
   <script src="/assets/scripts/app-settings.js?v=20260927-settings-layout"></script>
-  <script src="/assets/scripts/pagination.js"></script>
+  <script src="/assets/scripts/pagination.js?v=20261008-pagination"></script>
     <script src="/assets/scripts/timeline-panel.js?v=20260906-3"></script>
   <script type="module">
     import * as pdfjsLib from "/node_modules/pdfjs-dist/build/pdf.min.mjs?v=6.3.289";
@@ -2807,12 +2807,6 @@
                 flex: 0 0 auto;
               ">
             <div id="tblPaginationControls"></div>
-            <select id="tblPageSize" class="kb-select sm">
-              <option value="10">10条/页</option>
-              <option value="20" selected>20条/页</option>
-              <option value="50">50条/页</option>
-              <option value="100">100条/页</option>
-            </select>
           </div>
         </div>
         <div id="reportHomePanel" class="panel knowledge-report-page" style="display:none;">
@@ -17406,7 +17400,7 @@
       window.kbOntologyTreeModuleReady = import("/assets/generated/ontology-tree.js?v=20261005-class-scroll");
   </script>
   <script src="/assets/scripts/property-panel.js?v=20260915-1"></script>
-  <script src="/assets/scripts/table-panel.js?v=20260914-7"></script>
+  <script src="/assets/scripts/table-panel.js?v=20261008-pagination"></script>
   <script src="/assets/scripts/table-selection.js?v=20260925-jev-click-fix"></script>
   <script src="/assets/scripts/entity-manage-table.js?v=20260928-1"></script>
   <script src="/assets/scripts/attr-panel.js?v=20260925-tail-suggestions"></script>
@@ -17418,10 +17412,10 @@
   <script src="/assets/scripts/knowledge-access.js?v=20260922-4"></script>
   <script src="/assets/scripts/applications.js?v=20260927-settings-layout"></script>
   <script src="/assets/scripts/user-management.js?v=20260915-1"></script>
-  <script src="/assets/scripts/home-media-viewer.js?v=20261007-autoplay-fallback"></script>
+  <script src="/assets/scripts/home-media-viewer.js?v=20261008-image-toggle"></script>
   <script src="/assets/scripts/manual-classify.js?v=20260929-existing-classes"></script>
   <script src="/assets/scripts/knowledge-context-menu.js?v=20260928-3"></script>
-  <script src="/assets/scripts/application-pages.js?v=20261007-home-polish"></script>
+  <script src="/assets/scripts/application-pages.js?v=20261008-card-title"></script>
   <script src="/assets/scripts/user-profile.js?v=20260924-5"></script>
   <script src="/assets/scripts/sidebar-panel.js?v=20260924-4"></script>
   <script src="/assets/scripts/auth-panel.js?v=20260924-7"></script>
