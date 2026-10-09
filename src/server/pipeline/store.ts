@@ -5,6 +5,9 @@ export type FlowNode = { id: string; type: string; x: number; y: number; config:
 export type Flow = { id: string; name: string; nodes: FlowNode[]; edges: { from: string; to: string }[] };
 export const NODE_TYPES = ['input', 'ontology', 'properties', 'alignment', 'fusion', 'output'];
 export const MAX_ROWS = 10000;
+// A flow is a set of independent branches, so several nodes of the same type are allowed.
+export const MAX_FLOW_NODES = 24;
+export const MAX_FLOW_EDGES = 24;
 
 export function normalizeTable(input: any) {
   const name = String(input.name || '').trim();
@@ -21,6 +24,14 @@ export function normalizeTable(input: any) {
   });
   if (JSON.stringify(rows).length > 20 * 1024 * 1024) throw new Error('原型单表最大 20 MB');
   return { name, sourceType, sourceKey, columns, rows };
+}
+
+/** Row-level preview data is transient and can be very large: keep it out of the run history. */
+export function withoutRowDetails(result: any) {
+  const persisted = { ...result };
+  delete persisted.rows;
+  if (Array.isArray(persisted.branches)) persisted.branches = persisted.branches.map(({ rows, ...branch }: any) => branch);
+  return persisted;
 }
 
 /** All staging/flow access is scoped to an application and its author. */
@@ -71,7 +82,7 @@ export class PipelineStore {
   saveFlow(input: any) {
     const id = String(input.id || crypto.randomUUID()), name = String(input.name || '').trim();
     if (input.id) this.getFlow(id);
-    if (!name || name.length > 200 || !Array.isArray(input.nodes) || input.nodes.length > 6 || !Array.isArray(input.edges) || input.edges.length > 5) throw new Error('流程名称或节点数量无效');
+    if (!name || name.length > 200 || !Array.isArray(input.nodes) || input.nodes.length > MAX_FLOW_NODES || !Array.isArray(input.edges) || input.edges.length > MAX_FLOW_EDGES) throw new Error('流程名称或节点数量无效');
     const ids = new Set<string>();
     for (const n of input.nodes) {
       if (!n.id || ids.has(n.id) || !NODE_TYPES.includes(n.type) || !Number.isFinite(n.x) || !Number.isFinite(n.y) || !n.config || typeof n.config !== 'object') throw new Error('流程节点无效');
@@ -90,11 +101,7 @@ export class PipelineStore {
   }
   saveRun(flowId: string, mode: string, result: any) {
     const id = crypto.randomUUID(), status = mode === 'preview' ? 'previewed' : 'pending';
-    // Row-level preview data is transient and can be very large. Keep it in the
-    // current response, but never persist it in the run history.
-    const persistedResult = { ...result };
-    delete persistedResult.rows;
-    this.db.run('INSERT INTO cleaning_runs (id, flow_id, project_id, owner_id, mode, status, result_json) VALUES (?, ?, ?, ?, ?, ?, ?)', [id, flowId, this.projectId, this.userId, mode, status, JSON.stringify(persistedResult)]);
+    this.db.run('INSERT INTO cleaning_runs (id, flow_id, project_id, owner_id, mode, status, result_json) VALUES (?, ?, ?, ?, ?, ?, ?)', [id, flowId, this.projectId, this.userId, mode, status, JSON.stringify(withoutRowDetails(result))]);
     return { ...this.getRun(id), result };
   }
   listRuns() { return (this.db.query('SELECT id, flow_id AS flowId, mode, status, created_at AS createdAt, result_json FROM cleaning_runs WHERE project_id IS ? AND owner_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 100').all(this.projectId, this.userId) as any[]).map(({ result_json, ...r }) => ({ ...r, summary: JSON.parse(result_json).summary })); }

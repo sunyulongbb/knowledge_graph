@@ -45,8 +45,49 @@ export function parseJsonTable(text) {
   return { columns, rows: rows.map(r => Object.fromEntries(columns.map(c => [c, r[c] ?? null]))) };
 }
 
+export const NODE_TYPES = ['input', 'ontology', 'properties', 'alignment', 'fusion', 'output'];
+
+export const NODE_WIDTH = 208;
+export const NODE_HEIGHT = 88;
+const LAYOUT_ORIGIN_X = 36;
+const LAYOUT_ORIGIN_Y = 34;
+const LAYOUT_COLUMNS = 2;
+
+// Two columns following the six-step order; used by the default flow and by 自动整理 on the canvas.
+export function layoutFlow(nodes) {
+  const ordered = [...NODE_TYPES.map(type => nodes.find(node => node.type === type)), ...nodes.filter(node => !NODE_TYPES.includes(node.type))].filter(Boolean);
+  ordered.forEach((node, index) => {
+    node.x = LAYOUT_ORIGIN_X + (index % LAYOUT_COLUMNS) * (NODE_WIDTH + 40);
+    node.y = LAYOUT_ORIGIN_Y + Math.floor(index / LAYOUT_COLUMNS) * (NODE_HEIGHT + 52);
+  });
+  return nodes;
+}
+
+// One row per branch keeps fan-out readable when the canvas is tidied up.
+export function layoutBranches(nodes, branches) {
+  const byId = new Map(nodes.map(node => [node.id, node]));
+  const placed = new Set();
+  for (const [row, branch] of branches.entries()) {
+    branch.nodeIds.forEach((id, column) => {
+      const node = byId.get(id);
+      if (!node || placed.has(id)) return;
+      placed.add(id);
+      node.x = LAYOUT_ORIGIN_X + column * (NODE_WIDTH + 44);
+      node.y = LAYOUT_ORIGIN_Y + row * (NODE_HEIGHT + 56);
+    });
+  }
+  let extra = 0;
+  for (const node of nodes) {
+    if (placed.has(node.id)) continue;
+    node.x = LAYOUT_ORIGIN_X + (extra % 3) * (NODE_WIDTH + 44);
+    node.y = LAYOUT_ORIGIN_Y + (branches.length + Math.floor(extra / 3)) * (NODE_HEIGHT + 56);
+    extra += 1;
+  }
+  return nodes;
+}
+
 export function defaultFlow(tableId = '') {
-  const types = ['input', 'ontology', 'properties', 'alignment', 'fusion', 'output'];
-  const nodes = types.map((type, i) => ({ id: type, type, x: 36 + (i % 2) * 246, y: 34 + Math.floor(i / 2) * 142, config: type === 'input' ? { tableId } : type === 'properties' ? { mapping: {} } : type === 'fusion' ? { strategy: 'keep' } : {} }));
+  const nodes = NODE_TYPES.map(type => ({ id: type, type, x: 0, y: 0, config: type === 'input' ? { tableId } : type === 'properties' ? { mapping: {} } : type === 'fusion' ? { strategy: 'keep' } : {} }));
+  layoutFlow(nodes);
   return { name: '新建清洗流程', nodes, edges: nodes.slice(1).map((n, i) => ({ from: nodes[i].id, to: n.id })) };
 }

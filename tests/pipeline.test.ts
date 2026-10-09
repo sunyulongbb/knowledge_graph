@@ -356,3 +356,98 @@ test('HTTP APIs enforce authentication and scope, separate pending runs from con
   const restored: any=await (await request('runs/'+run.id))!.json();expect(restored.status).toBe('completed');
   const records: any=await (await request('runs'))!.json();expect(records.items[0].summary.created).toBe(2);
 });
+
+const flowNode = (id: string, type: string, config: any = {}) => ({ id, type, x: 0, y: 0, config });
+
+/** One entity table fanned out to two independent branches: 人物 and 国家. */
+function fanOutFixture() {
+  const f = fixture();
+  const flow: any = {
+    id: 'fan-out', name: '双支路',
+    nodes: [
+      flowNode('source', 'input', { tableId: f.table.id }),
+      flowNode('fields', 'properties', { idField: 'id', nameField: 'name', mapping: { birthday: '', country: '', job: '' } }),
+      flowNode('people', 'ontology', { ontologyId: 'person' }),
+      flowNode('people-out', 'output'),
+      flowNode('countries', 'ontology', { ontologyId: 'country' }),
+      flowNode('countries-out', 'output'),
+    ],
+    edges: [
+      { from: 'source', to: 'fields' },
+      { from: 'fields', to: 'people' },
+      { from: 'people', to: 'people-out' },
+      { from: 'source', to: 'countries' },
+      { from: 'countries', to: 'countries-out' },
+    ],
+  };
+  return { f, flow };
+}
+
+test('a flow can fan one entity table out into several independent branches', () => {
+  const { f, flow } = fanOutFixture();
+  expect(validateFlow(flow)).toBe(flow);
+  const plan: any = f.engine.plan(flow, 'full');
+  expect(plan.branches).toHaveLength(2);
+  expect(plan.branches.map((b: any) => b.id)).toEqual(['people-out', 'countries-out']);
+  expect(plan.branches.map((b: any) => b.name)).toEqual(['知识库输出 #1', '知识库输出 #2']);
+  expect(plan.branches.map((b: any) => b.ontology)).toEqual([{ id: 'person', name: '人物' }, { id: 'country', name: '国家' }]);
+  expect(plan.branches.map((b: any) => b.stages.map((s: any) => s.type))).toEqual([['input', 'properties', 'ontology', 'output'], ['input', 'ontology', 'output']]);
+  expect(plan.branches.map((b: any) => b.summary.created)).toEqual([1, 1]);
+  expect(plan.summary).toMatchObject({ input: 2, created: 2, failed: 0 });
+  expect(plan.branches[0].rows[0].action).toBe('新增');
+  // Branch B has no 属性对齐 node, so its mapping is inferred and extra columns are ignored.
+  expect(plan.branches[1].autoMapping).toBe(true);
+});
+
+test('branch decisions are namespaced per knowledge-base output', () => {
+  const { f, flow } = fanOutFixture();
+  const plan: any = f.engine.plan(flow, 'full', { 'countries-out:0': { action: 'skip' } });
+  expect(plan.branches[0].summary.skipped).toBe(0);
+  expect(plan.branches[1].summary.skipped).toBe(1);
+  expect(plan.branches[1].summary.created).toBe(0);
+});
+
+test('each knowledge-base output is confirmed on its own and branches confirm in order', () => {
+  const { f, flow } = fanOutFixture();
+  const saved = f.store.saveFlow({ ...flow, id: '' });
+  const run = f.store.saveRun(saved.id, 'full', f.engine.plan(saved, 'full'));
+  const [first, second] = run.result.branches.map((b: any) => b.id);
+  expect(() => f.engine.confirm(run.id, [second])).toThrow('请先确认写入');
+  expect(() => f.engine.confirm(run.id, ['missing-out'])).toThrow('支路不存在');
+  const partial = f.engine.confirm(run.id, [first]);
+  expect(partial.status).toBe('pending');
+  expect(partial.result.confirmed).toEqual([first]);
+  expect(f.raw.query('SELECT type FROM nodes ORDER BY type').all()).toEqual([{ type: 'person' }]);
+  const done = f.engine.confirm(run.id, [second]);
+  expect(done.status).toBe('completed');
+  expect(f.raw.query('SELECT type FROM nodes ORDER BY type').all()).toEqual([{ type: 'country' }, { type: 'person' }]);
+  expect(f.engine.confirm(run.id).status).toBe('completed');
+  expect(f.engine.confirm(run.id, [first]).status).toBe('completed');
+});
+
+test('flow validation accepts optional steps and rejects ambiguous or repeated chains', () => {
+  const { f, flow } = fanOutFixture();
+  const minimal: any = { id: 'minimal', name: '最简', nodes: [flowNode('source', 'input', { tableId: f.table.id }), flowNode('kind', 'ontology', { ontologyId: 'person' }), flowNode('out', 'output')], edges: [{ from: 'source', to: 'kind' }, { from: 'kind', to: 'out' }] };
+  const plan: any = f.engine.plan(minimal, 'full');
+  expect(plan.branches).toBeUndefined();
+  expect(plan.stages.map((s: any) => s.type)).toEqual(['input', 'ontology', 'output']);
+  expect(plan.summary.created).toBe(1);
+  // Two upstream connections make the chain ambiguous.
+  expect(() => validateFlow({ ...flow, edges: [...flow.edges, { from: 'source', to: 'people' }] })).toThrow('只能有一个上游连接');
+  // The same node type may not repeat inside one chain.
+  const repeated: any = { id: 'repeated', name: '重复类型', nodes: [flowNode('s', 'input', { tableId: f.table.id }), flowNode('o1', 'ontology', { ontologyId: 'person' }), flowNode('o2', 'ontology', { ontologyId: 'country' }), flowNode('o', 'output')], edges: [{ from: 's', to: 'o1' }, { from: 'o1', to: 'o2' }, { from: 'o2', to: 'o' }] };
+  expect(() => validateFlow(repeated)).toThrow('重复出现');
+  // Every node must reach an output.
+  expect(() => validateFlow({ ...flow, nodes: [...flow.nodes, flowNode('extra', 'fusion')] })).toThrow('缺少上游连接');
+  // The same table may not feed the same ontology twice.
+  const twin = { ...flow, nodes: flow.nodes.map(n => (n.id === 'countries' ? { ...n, config: { ontologyId: 'person' } } : n)) };
+  expect(() => validateFlow(twin)).toThrow('重复写入');
+  // A source cannot be a downstream node and an output cannot have successors.
+  expect(() => validateFlow({ ...flow, edges: [{ from: 'fields', to: 'source' }, ...flow.edges.slice(1)] })).toThrow();
+});
+
+test('branch failures name the branch that still needs configuration', () => {
+  const { f, flow } = fanOutFixture();
+  const broken: any = { ...flow, nodes: flow.nodes.map(n => (n.id === 'countries' ? { ...n, config: {} } : n)) };
+  expect(() => f.engine.plan(broken, 'full')).toThrow('支路「知识库输出 #2」：请选择目标本体');
+});

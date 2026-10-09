@@ -7,6 +7,12 @@ import { loadOntologyProperties } from '../ontology-properties.ts';
 
 export function createPipelineHandler(adminDb: Database, db: Database, getCurrentUser: (req: Request) => any, getProjectByIdentifier: (slug: string) => any) {
 let migrated = false;
+// Entity payloads stay on the server; only the plan outline is returned to the client.
+const publicPlan = (plan: any) => {
+  const { changes, bindings, fingerprint, ...result } = plan;
+  if (Array.isArray(result.branches)) result.branches = result.branches.map(({ changes, bindings, ...branch }: any) => branch);
+  return result;
+};
 return async function handlePipelineRoutes(req: Request, url: URL, method: string) {
   if (!url.pathname.startsWith('/api/kb/pipeline/')) return null;
   const user = getCurrentUser(req);
@@ -33,8 +39,7 @@ return async function handlePipelineRoutes(req: Request, url: URL, method: strin
     if (path === 'runs' && method === 'GET') return Response.json({ items: store.listRuns() });
     if (path.startsWith('runs/') && method === 'GET') {
       const run = store.getRun(decodeURIComponent(path.slice(5)));
-      const { changes, bindings, fingerprint, ...result } = run.result;
-      return Response.json({ ...run, result });
+      return Response.json({ ...run, result: publicPlan(run.result) });
     }
     if (path === 'run' && method === 'POST') {
       if (!['preview', 'full'].includes(body.mode)) throw new Error('运行方式无效');
@@ -43,14 +48,14 @@ return async function handlePipelineRoutes(req: Request, url: URL, method: strin
       if (typeof decisions !== 'object' || Array.isArray(decisions)) throw new Error('对齐决策无效');
       const plan = engine.plan(flow, body.mode, decisions);
       const run = store.saveRun(flow.id, body.mode, plan);
-      const { changes, bindings, fingerprint, ...result } = plan;
-      return Response.json({ ...run, result });
+      return Response.json({ ...run, result: publicPlan(plan) });
     }
     if (path === 'confirm' && method === 'POST') {
       if (body.confirm !== true) throw new Error('请确认执行结果后再保存知识库');
-      const run = engine.confirm(String(body.runId || ''));
-      const { changes, bindings, fingerprint, ...result } = run.result;
-      return Response.json({ ...run, result });
+      const outputIds = body.outputIds === undefined ? undefined : body.outputIds;
+      if (outputIds !== undefined && (!Array.isArray(outputIds) || outputIds.length > 24 || outputIds.some((id: any) => typeof id !== 'string'))) throw new Error('支路参数无效');
+      const run = engine.confirm(String(body.runId || ''), outputIds);
+      return Response.json({ ...run, result: publicPlan(run.result) });
     }
     return Response.json({ error: '接口不存在' }, { status: 404 });
   } catch (error) { return Response.json({ error: (error as Error).message || '操作失败' }, { status: 400 }); }
