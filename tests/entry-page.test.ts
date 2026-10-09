@@ -223,6 +223,18 @@ test('view menu switches reuse the mounted entity editor without repainting it',
   expect(page).toContain('window.kbDetailBreadcrumbs = path');
   expect(page).toContain('skipDetailBreadcrumbPush: true');
   expect(page).toContain('button.dataset.detailBreadcrumbIndex = String(index)');
+  // 面包屑：多层级时不换行、来源项点击后同步清空层级、当前项先用已知名称渲染
+  expect(page).toContain('function detailCrumbLabelFor(id, explicitLabel)');
+  expect(page).toContain('const detailCrumbLabel = String(options.detailCrumbLabel || "").trim();');
+  // 启动默认视图不算“上一页来源”，避免直接打开详情页时第一级显示“应用首页”
+  expect(page).toContain('window.kbRenderedViewMode === previousMode');
+  expect(page).toContain('window.kbRenderedViewMode = normalized;');
+  expect(/window\.kbDetailCurrentCrumb = null;\s*\n\s*renderDetailBreadcrumbs\(\);/.test(page)).toBe(true);
+  expect(readFileSync('public/assets/styles/app.css', 'utf8')).toContain('.detail-navigation-leading { min-width:0; display:flex; align-items:center; gap:10px; flex-wrap:nowrap; }');
+  const detailPanelForCrumbs = readFileSync('public/assets/scripts/detail-panel.js', 'utf8');
+  expect(detailPanelForCrumbs).toContain('if (!isLatestDetailLoad()) return;');
+  expect(detailPanelForCrumbs).toContain('detailCrumbLabel: targetLabel');
+  expect(readFileSync('public/assets/scripts/table-selection.js', 'utf8')).toContain('function tableNodeCrumbLabel(nodeId)');
   expect(readFileSync('public/assets/scripts/detail-panel.js', 'utf8')).toContain('window.updateDetailBreadcrumbCurrent(');
   expect(readFileSync('public/assets/styles/app.css', 'utf8')).toContain('.detail-breadcrumbs {');
   expect(readFileSync('public/assets/scripts/schema-panel.js', 'utf8')).toContain('defaultExpandAll: true');
@@ -356,7 +368,7 @@ test('entity editor uses the post-composer hierarchy without changing existing c
   expect(page).toContain('id="btnCancelEdit"');
   expect(page).toContain('id="btnEntityImport"');
   expect(page).toContain('id="btnSubmit"');
-  expect(page).toContain('/assets/styles/app.css?v=20260924-20');
+  expect(page).toContain('/assets/styles/app.css?v=20261010-detail-nav');
   expect(css).toContain('.app-profile-actions { position: fixed; top: 24px; right: 24px;');
   expect(css).toContain('.app-inspiration-profile-layer.has-selection { z-index: 7; }');
   expect(css).toContain('.app-profile-node.is-selected { position: absolute !important;');
@@ -370,7 +382,7 @@ test('entity editor uses the post-composer hierarchy without changing existing c
   expect(page).toContain('id="entityDisplayImageWrap" class="wd-entity-avatar-wrap empty social-avatar-wrap" hidden');
   expect(page).toContain('id="composerUserAvatar" class="composer-user-avatar" hidden');
   expect(page).toContain('/assets/scripts/entity-import.js?v=20260921-6');
-  expect(page).toContain('/assets/scripts/detail-panel.js?v=20260924-5');
+  expect(page).toContain('/assets/scripts/detail-panel.js?v=20261010-crumb-label');
   expect(readFileSync('public/assets/scripts/entity-import.js', 'utf8')).toContain("window.addEventListener('kb-auth-change'");
   expect(readFileSync('public/assets/scripts/entity-import.js', 'utf8')).toContain("document.getElementById('composerUserAvatar')");
   expect(readFileSync('public/assets/scripts/detail-panel.js', 'utf8')).toContain('extractImageUrls(val, isMediaAttrItem(it))');
@@ -388,6 +400,9 @@ test('entity editor uses the post-composer hierarchy without changing existing c
   expect(detailPanel).toContain('detail-related-children');
   expect(detailPanel).toContain('source.typeLabel || source.ontology?.name || source.classLabel');
   expect(css).toContain('.detail-related-list { display:block; }');
+  // 二级（叶子）关联实体在父级下方横向自动排列，竖线与父级圆点对齐
+  expect(css).toContain('.detail-related-children { margin:0 0 8px 6px; padding:2px 0 4px 12px; border-left:1px solid color-mix(in srgb,var(--accent) 26%,var(--border)); display:flex; flex-wrap:wrap;');
+  expect(css).toContain('.detail-related-item-child { width:auto; max-width:100%;');
   expect(detailPanel).toContain('zoomResetButton.textContent = "适合"');
   expect(detailPanel).toContain('openLink.setAttribute("aria-label", "在新窗口打开 PDF")');
   expect(detailPanel).toContain('wasmUrl: "/node_modules/pdfjs-dist/wasm/"');

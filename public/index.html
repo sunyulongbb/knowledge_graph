@@ -68,7 +68,7 @@
       customElements.whenDefined("media-video-layout"),
     ]).then(() => true);
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20261008-tree-compact" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20261010-detail-nav" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -5609,6 +5609,8 @@
     window.kbActiveVisNodeId = ""; // raw id mirrored into vis routing
     window.kbVisRestrictToOneHop = true; // vis renders one-hop neighborhood only
     window.kbSuppressNextHashChange = false;
+    // 记录真正渲染过的视图：启动默认值是 app_home，不能当作“上一页”来源
+    window.kbRenderedViewMode = "";
     let kbViewModeInitialized = false;
     const btnViewEntry = document.getElementById("btnViewEntry");
     const btnViewTable = document.getElementById("btnViewTable");
@@ -6934,6 +6936,22 @@
       })[view] || "知识";
     }
 
+    // 实体 id → 名称缓存：进入详情时先用已知名称渲染面包屑，避免闪现实体 id
+    window.kbDetailCrumbLabels =
+      window.kbDetailCrumbLabels instanceof Map ? window.kbDetailCrumbLabels : new Map();
+    function rememberDetailCrumbLabel(id, label) {
+      const key = ensureEntityIdPrefix(id);
+      const text = String(label || "").trim();
+      if (!key || !text) return;
+      window.kbDetailCrumbLabels.set(key, text);
+    }
+    function detailCrumbLabelFor(id, explicitLabel) {
+      const raw = String(id || "").trim();
+      const known = String(explicitLabel || "").trim() || window.kbDetailCrumbLabels.get(ensureEntityIdPrefix(raw));
+      if (known) return known;
+      return raw.replace(/^entity\//, "");
+    }
+
     function renderDetailBreadcrumbs() {
       const host = document.getElementById("detailBreadcrumbs");
       if (!host) return;
@@ -6970,6 +6988,7 @@
       }
     }
     window.updateDetailBreadcrumbCurrent = (id, label) => {
+      rememberDetailCrumbLabel(id, label);
       window.kbDetailCurrentCrumb = {
         id: String(id || "").trim(),
         label: String(label || id || "知识详情").trim(),
@@ -6998,6 +7017,7 @@
         options.targetNodeId === undefined || options.targetNodeId === null
           ? ""
           : String(options.targetNodeId).trim();
+      const detailCrumbLabel = String(options.detailCrumbLabel || "").trim();
       const previousMode = window.kbViewMode;
       window.closeHomeDetailDrawer?.();
       const enteringDetail = normalized === "detail" || normalized === "knowledge_detail";
@@ -7005,7 +7025,7 @@
       if (leavingDetail && !enteringDetail) {
         stopDetailMediaPlayback();
       }
-      if (enteringDetail && previousMode && !leavingDetail) {
+      if (enteringDetail && previousMode && !leavingDetail && window.kbRenderedViewMode === previousMode) {
         const previousRoute = typeof getRouteStateFromHash === "function"
           ? getRouteStateFromHash()
           : { view: "", node: "" };
@@ -7023,6 +7043,7 @@
           id: String(window.kbActiveDetailRouteId || window.kbActiveDetailNodeId || "").trim(),
           label: String(document.getElementById("wikiTopTitle")?.textContent || "").trim(),
         };
+        if (previousCrumb.id) rememberDetailCrumbLabel(previousCrumb.id, previousCrumb.label);
         if (previousCrumb.id && ensureEntityIdPrefix(previousCrumb.id) !== ensureEntityIdPrefix(targetNodeIdRaw)) {
           const path = Array.isArray(window.kbDetailBreadcrumbs) ? window.kbDetailBreadcrumbs : [];
           if (ensureEntityIdPrefix(path.at(-1)?.id || "") !== ensureEntityIdPrefix(previousCrumb.id)) {
@@ -7032,7 +7053,10 @@
         }
       }
       if (enteringDetail && targetNodeIdRaw) {
-        window.kbDetailCurrentCrumb = { id: targetNodeIdRaw, label: targetNodeIdRaw.replace(/^entity\//, "") };
+        window.kbDetailCurrentCrumb = {
+          id: targetNodeIdRaw,
+          label: detailCrumbLabelFor(targetNodeIdRaw, detailCrumbLabel),
+        };
         renderDetailBreadcrumbs();
       }
       const hasTargetNode = Boolean(targetNodeIdRaw);
@@ -7181,6 +7205,7 @@
       }
 
       window.kbViewMode = normalized;
+      window.kbRenderedViewMode = normalized;
       kbViewModeInitialized = true;
 
       const isEntry = normalized === "entry";
@@ -7591,6 +7616,8 @@
       if (!target) return;
       if (target.dataset.detailBreadcrumbSource === "true") {
         window.kbDetailBreadcrumbs = [];
+        window.kbDetailCurrentCrumb = null;
+        renderDetailBreadcrumbs();
         btnDetailBack?.click();
         return;
       }
@@ -17401,13 +17428,13 @@
   </script>
   <script src="/assets/scripts/property-panel.js?v=20260915-1"></script>
   <script src="/assets/scripts/table-panel.js?v=20261008-pagination"></script>
-  <script src="/assets/scripts/table-selection.js?v=20260925-jev-click-fix"></script>
+  <script src="/assets/scripts/table-selection.js?v=20261010-crumb-label"></script>
   <script src="/assets/scripts/entity-manage-table.js?v=20260928-1"></script>
   <script src="/assets/scripts/attr-panel.js?v=20260925-tail-suggestions"></script>
   <script src="/assets/scripts/entity-import.js?v=20260921-6"></script>
   <!-- relation-panel.js 已移除，使用 edgehandles 拖拽创建关系 -->
   <script src="/assets/scripts/schema-panel.js?v=20261005-class-scroll"></script>
-  <script src="/assets/scripts/detail-panel.js?v=20260924-5"></script>
+  <script src="/assets/scripts/detail-panel.js?v=20261010-crumb-label"></script>
   <script src="/assets/scripts/knowledge-interactions.js?v=20260904-1"></script>
   <script src="/assets/scripts/knowledge-access.js?v=20260922-4"></script>
   <script src="/assets/scripts/applications.js?v=20260927-settings-layout"></script>
@@ -17591,9 +17618,9 @@
     });
   </script>
   <link rel="stylesheet" href="/node_modules/drawflow/dist/drawflow.min.css" />
-  <link rel="stylesheet" href="/assets/styles/pipeline.css?v=20261010-branches">
+  <link rel="stylesheet" href="/assets/styles/pipeline.css?v=20261010-merge">
   <script src="/node_modules/drawflow/dist/drawflow.min.js"></script>
-  <script type="module" src="/assets/scripts/pipeline-ui.js?v=20261010-branches"></script>
+  <script type="module" src="/assets/scripts/pipeline-ui.js?v=20261010-merge3"></script>
   <script src="/assets/scripts/ui-shell.js?v=20260928-tree-management"></script>
 </body>
 

@@ -84,14 +84,15 @@ function nodeSummary(node) {
   if (node.type === 'ontology') return ontologies.find(o => o.id === node.config.ontologyId)?.name || '选择目标本体';
   if (node.type === 'properties') {
     const mappings = Object.values(node.config.mapping || {}).filter(Boolean).length;
-    const shared = flowAnalysis.branches.filter(item => item.nodeIds.includes(node.id)).length;
-    return [node.config.nameField ? '名称：' + node.config.nameField : '配置基础字段与属性', mappings ? `${mappings} 个属性` : '', shared > 1 ? `${shared} 条支路共用` : ''].filter(Boolean).join(' · ');
+    const shared = flowAnalysis.branches.reduce((total, item) => total + item.routes.filter(route => route.nodeIds.includes(node.id)).length, 0);
+    return [node.config.nameField ? '名称：' + node.config.nameField : '配置基础字段与属性', mappings ? `${mappings} 个属性` : '', shared > 1 ? `${shared} 条路线共用` : ''].filter(Boolean).join(' · ');
   }
   if (node.type === 'alignment') return '来源 ID / 名称匹配';
   if (node.type === 'fusion') return { keep: '冲突保留原值', replace: '冲突使用新值', merge: '合并为多值' }[node.config.strategy] || '设置融合策略';
   if (branch && !branch.ready && branch.issues.length) return branch.issues[0];
-  const target = ontologies.find(ontology => ontology.id === branch?.ontology?.config.ontologyId);
-  return target ? `写入 ${target.name}` : '确认后写入知识库';
+  const targets = [...new Set((branch?.routes || []).map(route => ontologies.find(ontology => ontology.id === route.ontology?.config.ontologyId)?.name).filter(Boolean))];
+  if (targets.length) return `写入 ${targets.join('、')}`;
+  return '确认后写入知识库';
 }
 function listMappingControls(node, key) {
   const option = node.config.mappingOptions?.[key] || {};
@@ -114,7 +115,6 @@ function analyzeFlow(input) {
     const ins = inbound.get(node.id).length, outs = outbound.get(node.id).length;
     if (node.type === 'input' && ins) warn(node.id, '数据源不能再接入上游节点');
     if (node.type !== 'input' && !ins) warn(node.id, '缺少上游连接');
-    if (node.type !== 'input' && ins > 1) warn(node.id, '只能有一个上游连接');
     if (node.type === 'output' && outs) warn(node.id, '输出节点不能再连接下游');
     if (node.type !== 'output' && !outs) warn(node.id, '缺少下游连接');
   }
@@ -132,45 +132,71 @@ function analyzeFlow(input) {
   const cyclic = settled !== nodes.length;
   const branches = [], used = new Set();
   for (const output of nodes.filter(node => node.type === 'output')) {
-    const branch = { id: output.id, name: nodeLabel(output, nodes), nodeIds: [], nodes: [], issues: [], ready: false };
-    const chain = [output], types = new Set([output.type]), visited = new Set([output.id]);
-    let current = output;
-    while (current.type !== 'input') {
-      const parents = inbound.get(current.id);
-      if (parents.length !== 1) { branch.issues.push(parents.length ? '上游存在多条连接，只能保留一条' : '支路缺少上游连接'); break; }
-      const parent = byId.get(parents[0]);
-      if (visited.has(parent.id)) { branch.issues.push('支路存在循环连接'); break; }
-      if (types.has(parent.type)) { branch.issues.push(`支路里重复出现“${labels[parent.type]}”节点`); break; }
-      visited.add(parent.id);
-      types.add(parent.type); chain.unshift(parent); current = parent;
+    const ancestors = new Set();
+    const collect = id => { for (const parent of inbound.get(id)) if (!ancestors.has(parent)) { ancestors.add(parent); collect(parent); } };
+    collect(output.id);
+    // Every ancestor feeds this output, so only nodes outside all branches are dead ends.
+    for (const id of ancestors) used.add(id);
+    used.add(output.id);
+    const branch = { id: output.id, name: nodeLabel(output, nodes), nodeIds: [], nodes: [], routes: [], issues: [], ready: false };
+    for (const input of nodes.filter(node => ancestors.has(node.id) && node.type === 'input')) {
+      const found = simplePaths(input.id, output.id, outbound);
+      if (found.length > 1) { branch.issues.push(`“${nodeLabel(input, nodes)}”的数据分叉后又汇合到该输出，同一批记录会被处理两次，请删除多余连接或改用不同输出`); continue; }
+      if (!found.length) continue;
+      const chain = found[0].map(id => byId.get(id));
+      const route = { input, nodes: chain, nodeIds: chain.map(node => node.id), tableId: String(input.config.tableId || ''), ontology: null, properties: null, fusion: null, strategy: 'keep', issues: [] };
+      const seen = new Map();
+      for (const node of chain) {
+        const previous = seen.get(node.type);
+        if (previous) route.issues.push(`同一条路线上重复出现“${labels[previous.type]}”和“${labels[node.type]}”节点，请拆分成不同路线`);
+        else seen.set(node.type, node);
+      }
+      route.ontology = chain.find(node => node.type === 'ontology') || null;
+      route.properties = chain.find(node => node.type === 'properties') || null;
+      route.fusion = chain.find(node => node.type === 'fusion') || null;
+      route.strategy = String(route.fusion?.config.strategy || 'keep');
+      if (!route.tableId) route.issues.push('请选择二维实体表');
+      if (!route.ontology) route.issues.push('缺少“本体对齐”节点');
+      else if (!route.ontology.config.ontologyId) route.issues.push('请选择目标本体');
+      if (route.properties && !route.properties.config.nameField) route.issues.push('请选择名称字段');
+      branch.routes.push(route);
+      for (const id of route.nodeIds) used.add(id);
     }
-    branch.nodes = chain;
-    branch.nodeIds = chain.map(node => node.id);
-    branch.input = chain.find(node => node.type === 'input') || null;
-    branch.ontology = chain.find(node => node.type === 'ontology') || null;
-    branch.properties = chain.find(node => node.type === 'properties') || null;
-    branch.fusion = chain.find(node => node.type === 'fusion') || null;
-    branch.strategy = String(branch.fusion?.config.strategy || 'keep');
-    if (!chain.some(node => node.type === 'input')) branch.issues.push('支路没有接到“实体表输入”');
-    if (branch.input && !branch.input.config.tableId) branch.issues.push('请选择二维实体表');
-    if (!branch.ontology) branch.issues.push('缺少“本体对齐”节点');
-    else if (!branch.ontology.config.ontologyId) branch.issues.push('请选择目标本体');
-    if (branch.properties && !branch.properties.config.nameField) branch.issues.push('请选择名称字段');
-    for (const id of branch.nodeIds) used.add(id);
+    if (!branch.routes.length) branch.issues.push('这条支路还没有连接到“实体表输入”');
+    branch.nodeIds = [...new Set(branch.routes.flatMap(route => route.nodeIds))];
+    branch.nodes = nodes.filter(node => node.id === output.id || branch.nodeIds.includes(node.id));
     branches.push(branch);
   }
   for (const node of nodes) if (!used.has(node.id) && !issues.some(issue => issue.id === node.id)) warn(node.id, '该节点没有通向“知识库输出”的连接');
+  // One table may only feed one ontology: anything else would write the same entities twice.
   const tableOntology = new Map();
-  for (const branch of branches) {
-    const tableId = branch.input?.config.tableId, ontologyId = branch.ontology?.config.ontologyId;
-    if (!tableId || !ontologyId) continue;
-    const key = tableId + '\u0000' + ontologyId;
-    if (tableOntology.has(key)) branch.issues.push(`与“${tableOntology.get(key).name}”使用同一张实体表和同一个本体`);
-    else tableOntology.set(key, branch);
+  for (const branch of branches) for (const route of branch.routes) {
+    if (!route.tableId || !route.ontology?.config.ontologyId) continue;
+    const key = `${route.tableId}\u0000${route.ontology.config.ontologyId}`;
+    const previous = tableOntology.get(key);
+    if (previous) route.issues.push(`与${previous}使用同一张输入表和同一个目标本体，会重复写入同一批实体`);
+    else tableOntology.set(key, `“${nodeLabel(route.input, nodes)} → ${branch.name}”`);
   }
-  for (const branch of branches) branch.ready = branch.issues.length === 0;
+  for (const branch of branches) {
+    branch.issues = [...new Set([...branch.issues, ...branch.routes.flatMap(route => route.issues)])];
+    branch.ready = branch.issues.length === 0;
+  }
   if (cyclic) issues.push({ id: '', message: '流程存在循环连接' });
   return { branches, issues, cyclic, valid: !cyclic && !issues.length && branches.length > 0 && branches.every(branch => branch.ready) };
+}
+/** Simple paths between two nodes, capped at two because a second one already means a diamond. */
+function simplePaths(from, to, outbound) {
+  const found = [];
+  const walk = (id, path, seen) => {
+    if (found.length > 1) return;
+    if (id === to) { found.push(path); return; }
+    for (const next of outbound.get(id) || []) {
+      if (seen.has(next)) continue;
+      walk(next, [...path, next], new Set([...seen, next]));
+    }
+  };
+  walk(from, [from], new Set([from]));
+  return found;
 }
 function nodeLabel(node, nodes) {
   const same = nodes.filter(item => item.type === node.type);
@@ -397,9 +423,17 @@ async function loadCatalog() {
   await loadFlowData();
 }
 function refreshAnalysis() { flowAnalysis = analyzeFlow(flow); return flowAnalysis; }
-function branchTable(branch) { return branch ? tableCache.get(String(branch.input?.config.tableId || '')) || null : null; }
-function branchProperties(branch) { return branch ? propertyCache.get(String(branch.ontology?.config.ontologyId || '')) || [] : []; }
-function previewBranch() { return branchOfNode(selected) || flowAnalysis.branches[0] || null; }
+function routeTable(route) { return route ? tableCache.get(String(route.tableId || '')) || null : null; }
+function routeProperties(route) { return route ? propertyCache.get(String(route.ontology?.config.ontologyId || '')) || [] : []; }
+function routeOfNode(id) {
+  for (const branch of flowAnalysis.branches) {
+    const route = branch.routes.find(item => item.nodeIds.includes(id));
+    if (route) return route;
+  }
+  return null;
+}
+function routesOfNode(id) { return flowAnalysis.branches.flatMap(branch => branch.routes.filter(route => route.nodeIds.includes(id))); }
+function previewRoute() { return routeOfNode(selected) || flowAnalysis.branches[0]?.routes[0] || null; }
 /** Loads every entity table and ontology property list the current branches reference. */
 async function loadFlowData() {
   refreshAnalysis();
@@ -409,10 +443,9 @@ async function loadFlowData() {
     ...tableIds.filter(id => !tableCache.has(id)).map(async id => { try { tableCache.set(id, await api('tables/' + encodeURIComponent(id))); } catch { tableCache.set(id, null); } }),
     ...ontologyIds.filter(id => !propertyCache.has(id)).map(async id => { try { propertyCache.set(id, (await api('properties?ontologyId=' + encodeURIComponent(id))).items); } catch { propertyCache.set(id, []); } }),
   ]);
-  // Infer basic fields per 属性对齐 node from the table of the branch it belongs to.
+  // Infer basic fields per 属性对齐 node from the table of the first route it belongs to.
   for (const propertiesNode of flow.nodes.filter(n => n.type === 'properties')) {
-    const branch = flowAnalysis.branches.find(item => item.nodeIds.includes(propertiesNode.id));
-    const table = branchTable(branch);
+    const table = routeTable(routeOfNode(propertiesNode.id));
     if (table) propertiesNode.config = inferBasicFields(table.columns, propertiesNode.config);
   }
 }
@@ -420,7 +453,7 @@ function editor() {
   closePipelineTree(); canvasObserver?.disconnect(); destroyGrids(cleanRoot);
   drawflowEditor = null; locked = false;
   const body=cleanRoot.querySelector('[data-body]'); body.className='pipeline-editor-layout';
-  body.innerHTML = `<div class="pipeline-toolbar"><label class="pipeline-flow-title"><span class="sr-only">流程名称</span><input data-flow-name aria-label="流程名称" value="${esc(flow.name)}"></label><select data-flow-select aria-label="已有流程">${options(flows,flow.id,'打开已有流程')}</select><span class="pipeline-branch-summary" data-branch-summary></span><span class="pipeline-flow-state" data-flow-state hidden></span><div class="pipeline-actions">${tool('new-flow','新建流程')}${tool('save-flow','保存流程')}<span class="pipeline-divider"></span>${tool('preview','预览运行（前100条）')}${tool('full','正式运行（全量预览）')}${tool('confirm','确认保存知识库','disabled')}</div></div><div class="pipeline-workbench"><aside class="pipeline-palette" aria-label="节点库"><p class="pipeline-palette-head">节点库</p>${NODE_TYPES.map((type,index)=>`<button type="button" class="btn pipeline-palette-node pipeline-type-${type}" draggable="true" data-add-node="${type}" title="拖拽或点击添加：${labels[type]}" aria-label="添加${labels[type]}"><span class="pipeline-palette-index">${index+1}</span><span class="pipeline-node-icon">${icon(type)}</span><span class="pipeline-palette-name">${labels[type]}</span><span class="pipeline-palette-count" hidden></span></button>`).join('')}<p class="pipeline-palette-tip">同一个节点可重复添加，用来分出多条支路。</p></aside><div class="pipeline-canvas-wrap"><div class="pipeline-canvas-tools">${tool('connect-all','按六步顺序串联全部节点')}${tool('disconnect','清空全部连接')}${tool('layout','自动整理节点位置')}${tool('clear-canvas','清空画布')}<span class="pipeline-divider"></span>${tool('export-flow','导出流程 JSON')}${tool('import-flow','导入流程 JSON')}<span class="pipeline-divider"></span>${tool('lock','锁定画布')}<span class="pipeline-divider"></span>${tool('zoom-out','缩小画布')}<button type="button" class="btn pipeline-zoom-reset" data-zoom-reset title="重置为 100%" aria-label="重置缩放"><span data-zoom>100%</span></button>${tool('zoom-in','放大画布')}${tool('fit-canvas','适应画布')}</div><div class="pipeline-canvas-scroll"><div class="pipeline-canvas-space"><div class="pipeline-canvas" data-canvas></div></div></div><p class="pipeline-canvas-empty" data-canvas-empty hidden>从左侧节点库拖入节点开始构建流程：输入 → 本体 → 输出</p><span class="pipeline-canvas-hint">拖动节点移动 · 点击端口连线 · Delete 删除选中 · Ctrl + 滚轮缩放</span><input type="file" accept=".json,application/json" data-import-flow hidden></div><aside class="pipeline-config" data-config></aside></div><section class="pipeline-dock" data-dock=""><nav><button class="btn" data-dock-tab="branches" aria-expanded="false">${icon('link')} 支路</button><button class="btn" data-dock-tab="input" aria-expanded="false">${icon('table')} 输入预览</button><button class="btn" data-dock-tab="results" aria-expanded="false">${icon('list-check')} 运行结果</button><button class="btn pipeline-icon-btn" data-dock-close title="收起预览" aria-label="收起预览">${icon('chevron-down')}</button></nav><div data-branch-list></div><div data-input-preview></div><div data-results></div></section>`;
+  body.innerHTML = `<div class="pipeline-toolbar"><label class="pipeline-flow-title"><span class="sr-only">流程名称</span><input data-flow-name aria-label="流程名称" value="${esc(flow.name)}"></label><select data-flow-select aria-label="已有流程">${options(flows,flow.id,'打开已有流程')}</select><span class="pipeline-branch-summary" data-branch-summary></span><span class="pipeline-flow-state" data-flow-state hidden></span><div class="pipeline-actions">${tool('new-flow','新建流程')}${tool('save-flow','保存流程')}<span class="pipeline-divider"></span>${tool('preview','预览运行（前100条）')}${tool('full','正式运行（全量预览）')}${tool('confirm','确认保存知识库','disabled')}</div></div><div class="pipeline-workbench"><aside class="pipeline-palette" aria-label="节点库"><p class="pipeline-palette-head">节点库</p>${NODE_TYPES.map((type,index)=>`<button type="button" class="btn pipeline-palette-node pipeline-type-${type}" draggable="true" data-add-node="${type}" title="拖拽或点击添加：${labels[type]}" aria-label="添加${labels[type]}"><span class="pipeline-palette-index">${index+1}</span><span class="pipeline-node-icon">${icon(type)}</span><span class="pipeline-palette-name">${labels[type]}</span><span class="pipeline-palette-count" hidden></span></button>`).join('')}<p class="pipeline-palette-tip">同一个节点可重复添加，用来分出多条支路。</p></aside><div class="pipeline-canvas-wrap"><div class="pipeline-canvas-tools">${tool('connect-all','按六步顺序串联全部节点')}${tool('disconnect','清空全部连接')}${tool('layout','自动整理节点位置')}${tool('clear-canvas','清空画布')}<span class="pipeline-divider"></span>${tool('export-flow','导出流程 JSON')}${tool('import-flow','导入流程 JSON')}<span class="pipeline-divider"></span>${tool('lock','锁定画布')}<span class="pipeline-divider"></span>${tool('zoom-out','缩小画布')}<button type="button" class="btn pipeline-zoom-reset" data-zoom-reset title="重置为 100%" aria-label="重置缩放"><span data-zoom>100%</span></button>${tool('zoom-in','放大画布')}${tool('fit-canvas','适应画布')}</div><div class="pipeline-canvas-scroll"><div class="pipeline-canvas-space"><div class="pipeline-canvas" data-canvas></div></div></div><p class="pipeline-canvas-empty" data-canvas-empty hidden>从左侧节点库拖入节点开始构建流程：输入 → 本体 → 输出</p><span class="pipeline-canvas-hint">拖动节点移动 · 从节点右侧圆点拖到目标左侧圆点连线 · Delete 删除选中 · Ctrl + 滚轮缩放</span><input type="file" accept=".json,application/json" data-import-flow hidden></div><aside class="pipeline-config" data-config></aside></div><section class="pipeline-dock" data-dock=""><nav><button class="btn" data-dock-tab="branches" aria-expanded="false">${icon('link')} 支路</button><button class="btn" data-dock-tab="input" aria-expanded="false">${icon('table')} 输入预览</button><button class="btn" data-dock-tab="results" aria-expanded="false">${icon('list-check')} 运行结果</button><button class="btn pipeline-icon-btn" data-dock-close title="收起预览" aria-label="收起预览">${icon('chevron-down')}</button></nav><div data-branch-list></div><div data-input-preview></div><div data-results></div></section>`;
   renderCanvas(); renderConfig(); renderInput(); renderBranches(); if(result) renderResult(); else showDock(dock);
   refreshEditorState();
   canvasObserver = new ResizeObserver(()=>{ fitCanvas(); for(const grid of grids.values()) grid.resize?.(); });
@@ -468,6 +501,47 @@ function syncFlowFromDrawflow() {
     }
   }
 }
+/**
+ * Explains why a new connection is not allowed, or '' when it is allowed.
+ * Only the new edge is judged, so a half-finished flow can still be wired up step by step.
+ * Nodes may take several upstream connections; the rows of every upstream table are merged.
+ */
+function connectionIssue(edges, from, to, nodes) {
+  if (edges.some(edge => edge.from === from.id && edge.to === to.id)) return '';
+  if (from.id === to.id) return '同一个节点不能连接到自己';
+  if (to.type === 'input') return '“实体表输入”是数据源，不能接入上游';
+  if (from.type === 'output') return '“知识库输出”是最终输出，不能再连接下游';
+  const byId = new Map(nodes.map(node => [node.id, node]));
+  const outbound = new Map(nodes.map(node => [node.id, []]));
+  for (const edge of edges) outbound.get(edge.from)?.push(edge.to);
+  // A path running from the target back to the source would close a cycle.
+  if (simplePaths(to.id, from.id, outbound).length) return '该连接会形成循环，请检查上下游';
+  // The same data would flow twice into one output when a route already exists.
+  if (simplePaths(from.id, to.id, outbound).length) return `“${nodeLabel(from, nodes)}”已经有通往“${nodeLabel(to, nodes)}”的路线，再连一条会让同一批记录被处理两次`;
+  // Every route through the new edge must not repeat a node type.
+  const upstream = new Map();
+  for (const input of nodes.filter(node => node.type === 'input')) {
+    const path = simplePaths(input.id, from.id, outbound)[0];
+    if (!path) continue;
+    for (const id of path) upstream.set(byId.get(id).type, id);
+  }
+  const queue = [to.id], seen = new Set();
+  while (queue.length) {
+    const id = queue.pop();
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const node = byId.get(id), repeated = upstream.get(node.type);
+    if (repeated) return `“${nodeLabel(byId.get(repeated), nodes)}”和“${nodeLabel(node, nodes)}”是同一条路线上的重复节点，请拆分成不同路线`;
+    queue.push(...outbound.get(id));
+  }
+  return '';
+}
+/** Refusing a connection leaves drawflow's dragged line behind; drop the unregistered svg. */
+function clearDanglingConnections() {
+  const container = drawflowEditor?.precanvas || cleanRoot?.querySelector('.drawflow');
+  if (!container) return;
+  for (const svg of container.querySelectorAll('svg.connection')) if (!svg.getAttribute('class')?.includes('node_in_')) svg.remove();
+}
 function bindDrawflow() {
   const canvas = cleanRoot.querySelector('[data-canvas]');
   canvas.addEventListener('dragover', event => event.preventDefault());
@@ -505,17 +579,13 @@ function bindDrawflow() {
     const fromId = String(connection.output_id), toId = String(connection.input_id);
     const reject = reason => {
       drawflowEditor.removeSingleConnection(connection.output_id, connection.input_id, connection.output_class, connection.input_class);
+      clearDanglingConnections();
       message(cleanRoot, reason, true);
     };
     const from = flow.nodes.find(n => n.id === fromId), to = flow.nodes.find(n => n.id === toId);
     if (!from || !to) return reject('连接引用了不存在的节点');
-    if (to.type === 'input') return reject('“实体表输入”是数据源，不能接入上游');
-    if (from.type === 'output') return reject('“知识库输出”是最终输出，不能再连接下游');
-    // Only newly introduced problems block the link, so a flow can be completed step by step.
-    const next = analyzeFlow({ nodes: flow.nodes, edges: [...flow.edges, { from: fromId, to: toId }] });
-    if (next.cyclic && !flowAnalysis.cyclic) return reject('该连接会形成循环，请检查上下游');
-    const added = next.issues.find(issue => !flowAnalysis.issues.some(old => old.id === issue.id && old.message === issue.message));
-    if (added) return reject(added.message);
+    const issue = connectionIssue(flow.edges, from, to, flow.nodes);
+    if (issue) return reject(issue);
     syncFlowFromDrawflow();
     invalidate();
     message(cleanRoot, `已连接 ${nodeLabel(from, flow.nodes)} → ${nodeLabel(to, flow.nodes)}`);
@@ -577,13 +647,13 @@ function renderConfig() {
   }
   if (node.type === 'ontology') body = `<label>目标本体<input type="hidden" data-config-key="ontologyId" value="${esc(node.config.ontologyId || '')}"><button type="button" class="pipeline-tree-trigger" data-ontology-tree aria-haspopup="tree" aria-expanded="false" aria-controls="pipelineOntologyPopup"><span>${esc(ontologies.find(o=>o.id===node.config.ontologyId)?.name || '请选择目标本体')}</span>${icon('chevron-down')}</button></label><p class="muted">本体来自当前应用，每条支路对应一个本体。</p>`;
   if (node.type === 'properties') {
-    const branch = flowAnalysis.branches.find(item => item.nodeIds.includes(node.id));
-    const table = branchTable(branch);
-    const propertyList = branchProperties(branch);
+    const route = routeOfNode(node.id);
+    const table = routeTable(route);
+    const propertyList = routeProperties(route);
     const fields = (table?.columns || []).map(c => ({ id: c, name: c }));
-    const shared = flowAnalysis.branches.filter(item => item.nodeIds.includes(node.id));
+    const shared = routesOfNode(node.id);
     const baseColumns = new Set(BASIC_FIELDS.map(f => node.config[f.key]).filter(Boolean));
-    body = `${!table ? '<p class="muted">先为上游“实体表输入”选择实体表，再配置字段映射。</p>' : ''}${shared.length > 1 ? `<p class="muted">该节点被 ${shared.length} 条支路共用：${shared.map(item => esc(item.name)).join('、')}。映射需要同时适用于这些支路的目标本体。</p>` : ''}<h3>基础字段对齐</h3><p class="muted">自动识别中英文字段名，可手动调整。名称、别名和描述支持 Wikidata 多语言对象；标签和分类支持多值及分隔符。</p>${BASIC_FIELDS.map(f => `<label>${f.label}${f.required ? ' *' : ''}<select data-config-key="${f.key}">${options(fields.filter(c => c.id === node.config[f.key] || !baseColumns.has(c.id) || (f.key === 'idField' && c.id === node.config.nameField) || (f.key === 'nameField' && c.id === node.config.idField)), node.config[f.key], f.required ? '请选择' : '不导入此基础字段')}</select>${['aliasesField', 'tagsField', 'categoriesField'].includes(f.key) && node.config[f.key] ? listMappingControls(node, f.key) : ''}</label>`).join('')}<label>基础字段语言<select data-config-key="language"><option value="zh" ${node.config.language !== 'en' ? 'selected' : ''}>中文（zh）</option><option value="en" ${node.config.language === 'en' ? 'selected' : ''}>English（en）</option></select></label><h3>字段 → 知识库属性</h3>${fields.filter(f => !baseColumns.has(f.id)).map(f => `<label>${esc(f.name)}<select data-map-field="${esc(f.id)}"><option value="__unmapped__" ${!Object.hasOwn(node.config.mapping || {}, f.id) ? 'selected' : ''}>请选择映射或忽略</option>${options(propertyList, node.config.mapping?.[f.id], '忽略此字段')}</select>${Object.hasOwn(node.config.mapping || {}, f.id) ? listMappingControls(node, f.id) : ''}</label>`).join('')}<p class="muted">基础字段直接写入实体信息，不需要在本体中创建同名属性。其他属性来自目标本体（含继承）。没有该节点时按字段名自动识别基础字段，其余字段忽略。</p>`;
+    body = `${!table ? '<p class="muted">先为上游“实体表输入”选择实体表，再配置字段映射。</p>' : ''}${shared.length > 1 ? `<p class="muted">该节点被 ${shared.length} 条路线共用：${shared.map(item => esc(`${nodeLabel(item.input, flow.nodes)}（${routeTable(item)?.name || '未选表'}）`)).join('、')}。映射需要同时适用于这些路线的目标本体。</p>` : ''}<h3>基础字段对齐</h3><p class="muted">自动识别中英文字段名，可手动调整。名称、别名和描述支持 Wikidata 多语言对象；标签和分类支持多值及分隔符。</p>${BASIC_FIELDS.map(f => `<label>${f.label}${f.required ? ' *' : ''}<select data-config-key="${f.key}">${options(fields.filter(c => c.id === node.config[f.key] || !baseColumns.has(c.id) || (f.key === 'idField' && c.id === node.config.nameField) || (f.key === 'nameField' && c.id === node.config.idField)), node.config[f.key], f.required ? '请选择' : '不导入此基础字段')}</select>${['aliasesField', 'tagsField', 'categoriesField'].includes(f.key) && node.config[f.key] ? listMappingControls(node, f.key) : ''}</label>`).join('')}<label>基础字段语言<select data-config-key="language"><option value="zh" ${node.config.language !== 'en' ? 'selected' : ''}>中文（zh）</option><option value="en" ${node.config.language === 'en' ? 'selected' : ''}>English（en）</option></select></label><h3>字段 → 知识库属性</h3>${fields.filter(f => !baseColumns.has(f.id)).map(f => `<label>${esc(f.name)}<select data-map-field="${esc(f.id)}"><option value="__unmapped__" ${!Object.hasOwn(node.config.mapping || {}, f.id) ? 'selected' : ''}>请选择映射或忽略</option>${options(propertyList, node.config.mapping?.[f.id], '忽略此字段')}</select>${Object.hasOwn(node.config.mapping || {}, f.id) ? listMappingControls(node, f.id) : ''}</label>`).join('')}<p class="muted">基础字段直接写入实体信息，不需要在本体中创建同名属性。其他属性来自目标本体（含继承）。没有该节点时按字段名自动识别基础字段，其余字段忽略。</p>`;
   }
   if (node.type === 'alignment') body = '<p>来源标识和来源 ID 相同 → 已对齐</p><p>名称和本体相同 → 疑似对齐（自动关联）</p><p>没有匹配 → 未对齐（自动创建新实体）</p><p class="muted">运行后在结果明细中查看自动对齐情况。</p>';
   if (node.type === 'fusion') body = `<label>默认冲突策略<select data-config-key="strategy">${[['keep','保留原值'],['replace','使用新值'],['merge','合并为多值']].map(([v,n]) => `<option value="${v}" ${node.config.strategy === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label><p>原值为空时填入新值；相同值自动去重。</p><p>名称冲突保留原名称，新名称加入别名。</p>`;
@@ -607,16 +677,22 @@ function renderBranches() {
     return;
   }
   host.innerHTML = flowAnalysis.branches.map(branch => {
-    const table = branchTable(branch);
-    const ontology = ontologies.find(item => item.id === branch.ontology?.config.ontologyId);
-    const steps = branch.nodes.map(node => `<span class="pipeline-branch-step pipeline-type-${node.type}">${esc(nodeLabel(node, flow.nodes))}</span>`).join('<i>→</i>');
-    return `<div class="pipeline-branch-card ${branch.ready ? 'is-ready' : 'is-problem'}"><header><strong>${esc(branch.name)}</strong><span>${branch.ready ? '就绪' : '待完善'}</span></header><div class="pipeline-branch-steps">${steps}</div><p class="muted">${esc(table ? `输入表 ${table.name}` : '未选择实体表')} · ${esc(ontology ? `目标本体 ${ontology.name}` : '未选择目标本体')} · 融合策略 ${esc({ keep: '保留原值', replace: '使用新值', merge: '合并为多值' }[branch.strategy] || branch.strategy)}</p>${branch.issues.length ? `<ul class="pipeline-branch-issues">${branch.issues.map(issue => `<li>${esc(issue)}</li>`).join('')}</ul>` : ''}<button class="btn" data-branch-focus="${esc(branch.id)}">定位到该输出节点</button></div>`;
+    const branchIssues = branch.issues.filter(issue => !branch.routes.some(route => route.issues.includes(issue)));
+    const routes = branch.routes.map(route => {
+      const table = routeTable(route);
+      const ontology = ontologies.find(item => item.id === route.ontology?.config.ontologyId);
+      const steps = route.nodes.map(node => `<span class="pipeline-branch-step pipeline-type-${node.type}">${esc(nodeLabel(node, flow.nodes))}</span>`).join('<i>→</i>');
+      return `<div class="pipeline-branch-route ${route.issues.length ? 'is-problem' : ''}"><div class="pipeline-branch-steps">${steps}</div><p class="muted">${esc(table ? `输入表 ${table.name}` : '未选择实体表')} · ${esc(ontology ? `目标本体 ${ontology.name}` : '未选择目标本体')} · 融合策略 ${esc({ keep: '保留原值', replace: '使用新值', merge: '合并为多值' }[route.strategy] || route.strategy)}</p>${route.issues.length ? `<ul class="pipeline-branch-issues">${route.issues.map(issue => `<li>${esc(issue)}</li>`).join('')}</ul>` : ''}</div>`;
+    }).join('');
+    const count = branch.routes.length > 1 ? `<span class="pipeline-branch-count">${branch.routes.length} 张输入表合并</span>` : '';
+    return `<div class="pipeline-branch-card ${branch.ready ? 'is-ready' : 'is-problem'}"><header><strong>${esc(branch.name)}</strong><span>${branch.ready ? '就绪' : '待完善'}</span>${count}</header>${branchIssues.length ? `<ul class="pipeline-branch-issues">${branchIssues.map(issue => `<li>${esc(issue)}</li>`).join('')}</ul>` : ''}${routes || '<p class="muted">这条支路还没有连接到“实体表输入”。</p>'}<button class="btn" data-branch-focus="${esc(branch.id)}">定位到该输出节点</button></div>`;
   }).join('');
 }
 function renderInput() {
   const host = cleanRoot.querySelector('[data-input-preview]'); destroyGrids(host);
-  const branch = previewBranch();
-  const table = branchTable(branch);
+  const route = previewRoute();
+  const table = routeTable(route);
+  const branch = route ? branchOfNode(route.input.id) : null;
   host.innerHTML = table ? `<h3>输入预览：${esc(table.name)} · ${table.rowCount} 条${branch ? ` · 支路 ${esc(branch.name)}` : ''}</h3><div data-preview-grid></div>` : '<p class="muted">为“实体表输入”节点选择实体表后显示输入预览。</p>';
   if (table) preview(host.querySelector('[data-preview-grid]'), table.columns, table.rows);
 }
@@ -664,7 +740,7 @@ function resultBranches() {
   if (Array.isArray(plan.branches) && plan.branches.length) return plan.branches.map(branch => ({ ...branch, confirmed: confirmed.includes(branch.id) }));
   const nodes = plan.flow?.nodes || [], output = nodes.find(node => node.type === 'output');
   const id = output?.id || 'output';
-  return [{ id, name: output ? nodeLabel(output, nodes) : '知识库输出', summary: plan.summary || {}, stages: plan.stages || [], rows: plan.rows || [], tableName: '', strategy: '', ontology: null, confirmed: confirmed.includes(id) }];
+  return [{ id, name: output ? nodeLabel(output, nodes) : '知识库输出', summary: plan.summary || {}, stages: plan.stages || [], rows: plan.rows || [], tableName: plan.tableName || '', strategy: plan.strategy || '', ontology: plan.ontology || null, routes: plan.routes || [], confirmed: confirmed.includes(id) }];
 }
 /** Legacy runs stored decisions by row number; qualify them with their single output. */
 function normalizeResult(payload) {
@@ -689,9 +765,9 @@ function branchConfirmable(branch) {
 function branchRowsMarkup(branch) {
   const { rows, page, slice } = branchPaged(branch);
   if (!rows.length) return '<p class="muted">该支路没有行级明细（历史运行只保留汇总）。</p>';
-  return `<div class="pipeline-scroll"><table><thead><tr>${['行','原始数据','目标本体','属性映射结果','匹配实体 / 对齐状态','决策','融合 / 冲突','错误'].map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${slice.map(r => {
+  return `<div class="pipeline-scroll"><table><thead><tr>${['行 / 来源表','原始数据','目标本体','属性映射结果','匹配实体 / 对齐状态','决策','融合 / 冲突','错误'].map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${slice.map(r => {
     const key = `${branch.id}:${r.index}`, decision = decisions[key];
-    return `<tr><td>${r.index + 1}</td><td><pre>${esc(JSON.stringify(r.raw,null,2))}</pre></td><td>${esc(r.ontology?.name || '')}</td><td><pre>${esc(JSON.stringify({ 基础字段: r.basic || {}, 属性: r.mapped },null,2))}</pre></td><td>${esc(r.match?.name || '')}<br>${esc(r.match?.id || '')}<br>${esc(r.status)}</td><td>${r.status === '疑似对齐' && result.status !== 'completed' ? `<select data-decision="${esc(key)}"><option value="">请选择处理方式</option><option value="new" ${decision?.action === 'new' ? 'selected' : ''}>创建新实体</option><option value="skip" ${decision?.action === 'skip' ? 'selected' : ''}>跳过</option>${(r.candidates || []).map(c => `<option value="link:${esc(c.id)}" ${decision?.entityId === c.id ? 'selected' : ''}>关联 ${esc(c.name)} (${esc(c.id)})</option>`).join('')}</select>` : esc(r.action)}</td><td>${esc({keep:'保留原值',replace:'使用新值',merge:'合并多值'}[r.strategy])}<details><summary>${(r.conflicts || []).length} 个冲突</summary><pre>${esc(JSON.stringify(r.conflicts,null,2))}</pre></details></td><td>${esc(r.error)}</td></tr>`;
+    return `<tr><td>${r.index + 1}${r.tableName ? `<small>${esc(r.tableName)}</small>` : ''}</td><td><pre>${esc(JSON.stringify(r.raw,null,2))}</pre></td><td>${esc(r.ontology?.name || '')}</td><td><pre>${esc(JSON.stringify({ 基础字段: r.basic || {}, 属性: r.mapped },null,2))}</pre></td><td>${esc(r.match?.name || '')}<br>${esc(r.match?.id || '')}<br>${esc(r.status)}</td><td>${r.status === '疑似对齐' && result.status !== 'completed' ? `<select data-decision="${esc(key)}"><option value="">请选择处理方式</option><option value="new" ${decision?.action === 'new' ? 'selected' : ''}>创建新实体</option><option value="skip" ${decision?.action === 'skip' ? 'selected' : ''}>跳过</option>${(r.candidates || []).map(c => `<option value="link:${esc(c.id)}" ${decision?.entityId === c.id ? 'selected' : ''}>关联 ${esc(c.name)} (${esc(c.id)})</option>`).join('')}</select>` : esc(r.action)}</td><td>${esc({keep:'保留原值',replace:'使用新值',merge:'合并多值'}[r.strategy])}<details><summary>${(r.conflicts || []).length} 个冲突</summary><pre>${esc(JSON.stringify(r.conflicts,null,2))}</pre></details></td><td>${esc(r.error)}</td></tr>`;
   }).join('')}</tbody></table></div><div class="pipeline-actions"><button class="btn" data-branch-page="${esc(branch.id)}" data-branch-page-step="-1" ${page === 0 ? 'disabled' : ''}>上一页</button><span>${page + 1} / ${Math.max(1, Math.ceil(rows.length / 50))}</span><button class="btn" data-branch-page="${esc(branch.id)}" data-branch-page-step="1" ${(page + 1) * 50 >= rows.length ? 'disabled' : ''}>下一页</button></div>`;
 }
 function renderResult() {
@@ -700,11 +776,11 @@ function renderResult() {
   const title = result.mode === 'preview' ? '预览运行（不写入知识库）' : result.status === 'completed' ? '知识库保存完成' : '全量执行预览（尚未写入）';
   const summary = result.result.summary || {};
   const cards = branches.map(branch => {
-    const rows = branch.rows || [];
     const meta = [branch.tableName && `输入表 ${branch.tableName}`, branch.ontology?.name && `目标本体 ${branch.ontology.name}`, branch.strategy && `融合 ${({keep:'保留原值',replace:'使用新值',merge:'合并多值'}[branch.strategy] || branch.strategy)}`].filter(Boolean);
+    const routes = (branch.routes || []).length > 1 ? `<ul class="pipeline-route-list">${branch.routes.map(route => `<li><b>${esc(route.tableName)}</b> → ${esc(route.ontologyName)}${route.strategy ? ` · 融合 ${esc({keep:'保留原值',replace:'使用新值',merge:'合并多值'}[route.strategy] || route.strategy)}` : ''} · 输入 ${route.summary?.input || 0} / 新增 ${route.summary?.created || 0} / 更新 ${route.summary?.updated || 0} / 失败 ${route.summary?.failed || 0}</li>`).join('')}</ul>` : '';
     const state = branch.confirmed ? '已写入知识库' : result.status === 'completed' ? '已写入知识库' : result.mode === 'preview' ? '仅预览' : (branch.summary?.unresolved ? `待确认 ${branch.summary.unresolved} 条` : '待确认写入');
     const confirmable = branchConfirmable(branch);
-    return `<section class="pipeline-branch-result ${branch.confirmed ? 'is-done' : ''}"><header><div><strong>${esc(branch.name)}</strong>${meta.length ? `<small>${esc(meta.join(' · '))}</small>` : ''}</div><span class="pipeline-branch-state">${esc(state)}</span><button class="btn" data-branch-confirm="${esc(branch.id)}" ${confirmable ? '' : 'disabled'}>确认写入本条支路</button></header><div class="pipeline-metrics">${Object.entries(RESULT_METRICS).map(([key,name]) => `<div>${name}<strong>${(branch.summary || {})[key] || 0}</strong></div>`).join('')}</div><div class="pipeline-stages">${(branch.stages || []).map(stage => `<span><b>${esc(labels[stage.type] || stage.type)}</b><br>${esc(stage.summary)}</span>`).join('')}</div>${branchRowsMarkup(branch)}</section>`;
+    return `<section class="pipeline-branch-result ${branch.confirmed ? 'is-done' : ''}"><header><div><strong>${esc(branch.name)}</strong>${meta.length ? `<small>${esc(meta.join(' · '))}</small>` : ''}</div><span class="pipeline-branch-state">${esc(state)}</span><button class="btn" data-branch-confirm="${esc(branch.id)}" ${confirmable ? '' : 'disabled'}>确认写入本条支路</button></header>${routes}<div class="pipeline-metrics">${Object.entries(RESULT_METRICS).map(([key,name]) => `<div>${name}<strong>${(branch.summary || {})[key] || 0}</strong></div>`).join('')}</div><div class="pipeline-stages">${(branch.stages || []).map(stage => `<span>${stage.route ? `<i>${esc(stage.route)}</i>` : ''}<b>${esc(labels[stage.type] || stage.type)}</b><br>${esc(stage.summary)}</span>`).join('')}</div>${branchRowsMarkup(branch)}</section>`;
   });
   host.innerHTML = `<h3>${title}</h3><div class="pipeline-metrics">${Object.entries(RESULT_METRICS).map(([key,name]) => `<div>${name}<strong>${summary[key] || 0}</strong></div>`).join('')}</div><p class="muted">${multiple ? `共 ${branches.length} 条支路，可以逐条核对并写入；写入顺序与支路顺序一致。` : ''}疑似对齐已自动关联首个候选实体，未对齐已自动创建新实体。可手动调整决策后重新运行。</p><div class="pipeline-branch-results">${cards.join('')}</div>`;
   decorate(host); showDock('results'); updateConfirm();
@@ -797,9 +873,8 @@ function initialize() {
       if (BASIC_FIELDS.some(f => f.key === t.dataset.configKey) && t.value) delete n.config.mapping?.[t.value];
       if (['tableId','ontologyId'].includes(t.dataset.configKey)) {
         if (t.dataset.configKey === 'tableId') tableCache.delete(t.value); else propertyCache.delete(t.value);
-        // The mapping of the branch 属性对齐 node belongs to the previous table/ontology.
-        const branch = flowAnalysis.branches.find(item => item.nodeIds.includes(n.id));
-        if (branch?.properties) branch.properties.config = { ...branch.properties.config, mapping: {} };
+        // The mapping of a 属性对齐 node belongs to the previous table and ontology.
+        for (const route of routesOfNode(n.id)) if (route.properties) route.properties.config = { ...route.properties.config, mapping: {} };
         await loadFlowData(); renderInput();
       }
       invalidate(); renderCanvas(); renderConfig();
@@ -845,7 +920,13 @@ function initialize() {
       else if (cmd === 'new-flow') { flow = defaultFlow(); selected = 'input'; branchPages.clear(); invalidate(); editor(); }
       else if (cmd === 'export-flow') { const name = downloadJson(flow.name || 'pipeline-flow', { version: 1, name: flow.name, nodes: flow.nodes.map(({ id, type, x, y, config }) => ({ id, type, x, y, config })), edges: flow.edges.map(({ from, to }) => ({ from, to })) }); message(cleanRoot, `已导出 ${name}（${flow.nodes.length} 个节点 / ${flow.edges.length} 条连接）。`); return; }
       else if (cmd === 'import-flow') { cleanRoot.querySelector('[data-import-flow]').click(); message(cleanRoot,'选择要导入的流程 JSON 文件。'); return; }
-      else if (cmd === 'layout') { const branches = refreshAnalysis().branches; if (branches.length > 1) layoutBranches(flow.nodes, branches); else layoutFlow(flow.nodes); invalidate(); renderCanvas(); fitCanvas(); message(cleanRoot, branches.length > 1 ? '已按支路分行整理节点位置。' : '已按六步顺序整理节点位置。'); return; }
+      else if (cmd === 'layout') {
+        const branches = refreshAnalysis().branches;
+        const rows = branches.flatMap(branch => branch.routes.length ? branch.routes.map(route => ({ nodeIds: route.nodeIds })) : [{ nodeIds: branch.nodeIds }]);
+        if (rows.length > 1) layoutBranches(flow.nodes, rows); else layoutFlow(flow.nodes);
+        invalidate(); renderCanvas(); fitCanvas();
+        message(cleanRoot, rows.length > 1 ? '已按支路和输入表分行整理节点位置。' : '已按六步顺序整理节点位置。'); return;
+      }
       else if (cmd === 'clear-canvas') {
         if (!flow.nodes.length) { message(cleanRoot,'画布已经是空的。'); return; }
         if (!window.confirm('清空画布上的全部节点和连接？')) { message(cleanRoot,'已取消清空画布。'); return; }

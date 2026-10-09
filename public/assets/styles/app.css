@@ -3824,7 +3824,7 @@ body {
 /* Knowledge detail interactions */
 .knowledge-interaction-bar { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
 .detail-navigation { display:flex; align-items:center; justify-content:space-between; gap:10px; }
-.detail-navigation-leading { min-width:0; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.detail-navigation-leading { min-width:0; display:flex; align-items:center; gap:10px; flex-wrap:nowrap; }
 .detail-entity-navigation { display:flex; align-items:center; gap:6px; flex-shrink:0; }
 .detail-entity-navigation .btn { white-space:nowrap; }
 .detail-entity-navigation .btn:disabled { opacity:0.4; cursor:not-allowed; }
@@ -3832,10 +3832,16 @@ body {
 .knowledge-detail-page__host > #detailPanel .detail-navigation {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  container-type: inline-size;
+  container-name: detail-nav;
 }
 .detail-entity-navigation { justify-self: center; }
 #detailPanel .detail-navigation > .knowledge-interaction-bar { justify-self: end; }
 #homeKnowledgeDrawer .detail-entity-navigation { display: none; }
+/* 详情导航较窄时（如内联详情卡片）允许面包屑独占第二行，避免层级被压缩省略 */
+@container detail-nav (max-width: 900px) {
+  .detail-navigation-leading { flex-wrap: wrap; row-gap: 4px; }
+}
 @media (max-width: 720px) {
   .center-col > #detailPanel .detail-navigation,
   .knowledge-detail-page__host > #detailPanel .detail-navigation {
@@ -3843,11 +3849,13 @@ body {
   }
   #detailPanel .detail-entity-navigation { grid-column: 1 / -1; grid-row: 2; }
   #detailPanel .detail-navigation > .knowledge-interaction-bar { grid-column: 2; grid-row: 1; }
+  /* 窄屏上把面包屑放到第二行，避免与“返回”挤在一行里过度省略 */
+  .detail-navigation-leading { flex-wrap:wrap; row-gap:4px; }
 }
 .detail-breadcrumbs { min-width:0; display:flex; align-items:center; gap:7px; overflow:hidden; color:var(--muted); font-size:11px; white-space:nowrap; }
 .detail-breadcrumbs button { min-width:0; max-width:150px; padding:3px 2px; overflow:hidden; border:0; color:var(--link); background:transparent; cursor:pointer; font:inherit; text-overflow:ellipsis; white-space:nowrap; }
 .detail-breadcrumbs button:hover { text-decoration:underline; }
-.detail-breadcrumbs > i { flex:0 0 auto; color:color-mix(in srgb,var(--muted) 65%,transparent); font-size:7px; }
+.detail-breadcrumbs > i { flex:0 0 auto; color:color-mix(in srgb,var(--muted) 72%,transparent); font-size:9px; }
 .detail-breadcrumbs > span { min-width:0; max-width:210px; overflow:hidden; color:var(--fg); font-weight:600; text-overflow:ellipsis; white-space:nowrap; }
 .knowledge-interaction-btn { display:inline-flex; align-items:center; gap:6px; border:0; padding:5px 7px; border-radius:6px; background:transparent; color:var(--muted); cursor:pointer; font:inherit; font-size:13px; }
 .knowledge-interaction-btn:hover, .knowledge-interaction-btn.is-active { color:var(--accent); background:color-mix(in srgb, var(--accent) 10%, transparent); }
@@ -3860,25 +3868,29 @@ body {
 .detail-related-heading > span { color:var(--muted); font-size:11px; }
 .detail-related-groups { margin-top:16px; display:grid; gap:20px; }
 .detail-related-group { min-width:0; }
-.detail-related-group-heading { margin:0 0 5px; padding:0 0 6px; display:flex; align-items:baseline; justify-content:space-between; gap:12px; border-bottom:1px solid var(--border); color:var(--fg); font-family:"Segoe UI","Microsoft YaHei UI",sans-serif; }
-.detail-related-group-heading strong { font-size:16px; font-weight:650; line-height:1.45; }
-.detail-related-group-heading small { color:var(--muted); font-size:10px; font-weight:400; }
+.detail-related-group-heading { position:relative; margin:0 0 5px; padding:0 0 6px 11px; display:flex; align-items:baseline; justify-content:space-between; gap:12px; border-bottom:1px solid var(--border); color:var(--fg); font-family:"Segoe UI","Microsoft YaHei UI",sans-serif; }
+.detail-related-group-heading::before { content:""; position:absolute; left:0; top:3px; bottom:9px; width:3px; border-radius:2px; background:color-mix(in srgb,var(--accent) 72%,var(--border)); }
+.detail-related-group-heading strong { font-size:15px; font-weight:700; line-height:1.45; letter-spacing:.01em; }
+.detail-related-group-heading small { color:var(--muted); font-size:11px; font-weight:400; }
 .detail-related-list { display:block; }
 .detail-related-item { position:relative; width:100%; min-width:0; min-height:36px; padding:6px 4px 6px 18px; display:grid; grid-template-columns:minmax(0,1fr) 12px; align-items:center; gap:10px; border:0; color:var(--fg); background:transparent; text-align:left; cursor:pointer; font-family:"Segoe UI","Microsoft YaHei UI",sans-serif; }
 .detail-related-item::before { content:""; position:absolute; left:4px; top:50%; width:5px; height:5px; border-radius:50%; background:var(--detail-related-color,var(--accent)); transform:translateY(-50%); }
-.detail-related-item + .detail-related-item { border-top:1px solid color-mix(in srgb,var(--border) 70%,transparent); }
 .detail-related-item:hover { background:color-mix(in srgb,var(--accent) 4%,transparent); }
 .detail-related-marker { display:none; }
 .detail-related-item-body { min-width:0; display:block; }
-.detail-related-item-body strong { display:block; overflow:hidden; color:var(--link); font-size:13px; font-weight:600; line-height:1.55; text-overflow:ellipsis; white-space:nowrap; }
-.detail-related-item:hover .detail-related-item-body strong { text-decoration:underline; }
+.detail-related-item-body strong { display:block; overflow:hidden; color:var(--fg); font-size:13.5px; font-weight:650; line-height:1.55; text-overflow:ellipsis; white-space:nowrap; }
+.detail-related-item:hover .detail-related-item-body strong { color:var(--accent); text-decoration:underline; }
 .detail-related-item > i { color:var(--muted); font-size:9px; }
-.detail-related-node { min-width:0; }
+.detail-related-node { min-width:0; padding:2px 0; }
 .detail-related-node + .detail-related-node { border-top:1px solid color-mix(in srgb,var(--border) 70%,transparent); }
-.detail-related-children { margin:0 0 6px 18px; padding-left:10px; border-left:1px solid color-mix(in srgb,var(--border) 80%,transparent); }
-.detail-related-item-child { min-height:30px; padding:4px 4px 4px 14px; }
-.detail-related-item-child::before { left:4px; width:4px; height:4px; }
-.detail-related-item-child .detail-related-item-body strong { font-size:12px; font-weight:500; }
+.detail-related-children { margin:0 0 8px 6px; padding:2px 0 4px 12px; border-left:1px solid color-mix(in srgb,var(--accent) 26%,var(--border)); display:flex; flex-wrap:wrap; align-items:flex-start; gap:6px; }
+.detail-related-item-child { width:auto; max-width:100%; min-height:0; padding:4px 10px 4px 16px; grid-template-columns:minmax(0,1fr) 10px; gap:8px; border:1px solid color-mix(in srgb,var(--border) 92%,transparent); border-radius:999px; background:color-mix(in srgb,var(--surface-1) 70%,transparent); }
+.detail-related-item-child::before { left:7px; width:4px; height:4px; }
+.detail-related-item-child:hover { background:color-mix(in srgb,var(--accent) 12%,var(--surface-1)); border-color:color-mix(in srgb,var(--accent) 45%,var(--border)); }
+.detail-related-item-child .detail-related-item-body { display:flex; align-items:baseline; gap:6px; }
+.detail-related-item-child .detail-related-item-body strong { color:var(--link); font-size:12px; font-weight:600; }
+.detail-related-item-child .detail-related-relation { display:inline-flex; align-items:center; padding:0 6px; border-radius:999px; background:color-mix(in srgb,var(--muted) 13%,transparent); font-size:10px; line-height:16px; }
+.detail-related-item-child > i { font-size:8px; opacity:.7; }
 .detail-related-relation { display:block; overflow:hidden; color:var(--muted); font-size:11px; line-height:1.45; text-overflow:ellipsis; white-space:nowrap; }
 .knowledge-comment-compose { display:flex; gap:8px; align-items:flex-end; }
 .knowledge-comment-compose textarea { min-height:70px; flex:1; resize:vertical; border:1px solid var(--border); border-radius:7px; padding:8px; color:var(--fg); background:var(--surface-0); font:inherit; }
@@ -12195,6 +12207,7 @@ table th {
   padding: 4px 2px;
   border-radius: 3px;
   color: var(--muted);
+  transition: color .15s ease, background .15s ease;
 }
 
 .detail-breadcrumbs button:hover {
@@ -12204,8 +12217,16 @@ table th {
 }
 
 .detail-breadcrumbs > span {
+  max-width: min(240px, 50%);
+  /* 当前层级比上层路径更慢收缩，长路径下优先保证可读 */
+  flex: 0 0.5 auto;
   color: var(--fg);
   font-weight: 600;
+}
+
+.detail-breadcrumbs > button:first-child {
+  color: var(--muted-2);
+  font-weight: 500;
 }
 
 .center-col > #detailPanel .knowledge-interaction-bar,

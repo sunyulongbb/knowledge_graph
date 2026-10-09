@@ -42,17 +42,25 @@ export function mergeValues(old: any[], incoming: any[], strategy: string) {
 }
 const NODE_LABELS: Record<string, string> = { input: '实体表输入', ontology: '本体对齐', properties: '属性对齐', alignment: '实体对齐', fusion: '知识融合', output: '知识库输出' };
 
-export type FlowBranch = {
-  /** Knowledge-base output node id; also the branch identity inside a run. */
-  id: string;
-  name: string;
-  /** Chain node ids ordered from the data source to the output. */
-  nodeIds: string[];
+export type FlowRoute = {
+  /** Entity-table input that starts this route. */
   inputId: string;
   tableId: string;
   ontologyId: string;
   properties: Record<string, any> | null;
   strategy: string;
+  /** Route node ids ordered from the input to the knowledge-base output. */
+  nodeIds: string[];
+};
+
+export type FlowBranch = {
+  /** Knowledge-base output node id; also the branch identity inside a run. */
+  id: string;
+  name: string;
+  /** Every node feeding this output, in flow order. */
+  nodeIds: string[];
+  /** One entry per upstream entity table; their rows are merged into this output. */
+  routes: FlowRoute[];
 };
 
 /** Label every node, disambiguating repeated types so validation messages stay actionable. */
@@ -68,9 +76,10 @@ function nodeLabels(flow: Flow) {
 }
 
 /**
- * A flow is a set of independent branches: every knowledge-base output owns one chain that
- * starts at an entity-table input. Nodes take at most one upstream connection so a chain is
- * unambiguous, repeated node types allow fan-out, and cycles are rejected.
+ * A flow is a set of independent branches: every knowledge-base output owns all of its upstream
+ * nodes, and every upstream entity table contributes one route whose rows are merged into that
+ * output. Nodes accept several incoming connections, but a branch may not fan out and merge back
+ * again, because the same rows would then be processed twice.
  */
 export function resolveBranches(flow: Flow): FlowBranch[] {
   const labels = nodeLabels(flow);
@@ -89,7 +98,7 @@ export function resolveBranches(flow: Flow): FlowBranch[] {
   for (const node of flow.nodes) {
     const label = labels.get(node.id), inCount = inbound.get(node.id)!.length, outCount = outbound.get(node.id)!.length;
     if (node.type === 'input' && inCount) throw new Error(`“${label}”是数据源，不能再接入上游节点`);
-    if (node.type !== 'input' && inCount !== 1) throw new Error(inCount ? `“${label}”只能有一个上游连接` : `“${label}”缺少上游连接`);
+    if (node.type !== 'input' && !inCount) throw new Error(`“${label}”缺少上游连接`);
     if (node.type === 'output' && outCount) throw new Error(`“${label}”是最终输出，不能再连接下游节点`);
     if (node.type !== 'output' && !outCount) throw new Error(`“${label}”缺少下游连接`);
   }
@@ -105,36 +114,60 @@ export function resolveBranches(flow: Flow): FlowBranch[] {
     }
   }
   if (settled !== flow.nodes.length) throw new Error('流程存在循环连接，请检查连线');
+  /** All simple paths from one node to another, capped because two already mean a diamond. */
+  const paths = (from: string, to: string) => {
+    const found: string[][] = [];
+    const walk = (id: string, path: string[], seen: Set<string>) => {
+      if (found.length > 1) return;
+      if (id === to) { found.push(path); return; }
+      for (const next of outbound.get(id)!) {
+        if (seen.has(next)) continue;
+        walk(next, [...path, next], new Set([...seen, next]));
+      }
+    };
+    walk(from, [from], new Set([from]));
+    return found;
+  };
   const branches: FlowBranch[] = [];
   for (const output of flow.nodes.filter(node => node.type === 'output')) {
-    const chain = [output];
-    const types = new Set([output.type]);
-    let current = output;
-    while (current.type !== 'input') {
-      const parent = nodeById.get(inbound.get(current.id)![0]!)!;
-      if (types.has(parent.type)) throw new Error(`“${labels.get(output.id)}”所在支路重复出现“${labels.get(parent.id)}”节点，请拆分为不同路线`);
-      types.add(parent.type);
-      chain.unshift(parent);
-      current = parent;
+    const ancestors = new Set<string>();
+    const collect = (id: string) => { for (const parent of inbound.get(id)!) if (!ancestors.has(parent)) { ancestors.add(parent); collect(parent); } };
+    collect(output.id);
+    const routes: FlowRoute[] = [];
+    for (const input of flow.nodes.filter(node => ancestors.has(node.id) && node.type === 'input')) {
+      const found = paths(input.id, output.id);
+      if (found.length > 1) throw new Error(`“${labels.get(input.id)}”到“${labels.get(output.id)}”之间分叉后又汇合，同一批记录会被处理两次，请拆分成不同输出或删除多余连接`);
+      if (!found.length) continue;
+      const chain = found[0]!.map(id => nodeById.get(id)!);
+      const types = new Map<string, string>();
+      for (const node of chain) {
+        const previous = types.get(node.type);
+        if (previous) throw new Error(`“${labels.get(output.id)}”的“${labels.get(input.id)}”路线重复出现“${labels.get(previous)}”和“${labels.get(node.id)}”节点，请拆分成不同路线`);
+        types.set(node.type, node.id);
+      }
+      routes.push({
+        inputId: input.id,
+        tableId: String(input.config.tableId || ''),
+        ontologyId: String(chain.find(node => node.type === 'ontology')?.config.ontologyId || ''),
+        properties: chain.find(node => node.type === 'properties')?.config ?? null,
+        strategy: String(chain.find(node => node.type === 'fusion')?.config.strategy || 'keep'),
+        nodeIds: chain.map(node => node.id),
+      });
     }
-    branches.push({
-      id: output.id,
-      name: labels.get(output.id)!,
-      nodeIds: chain.map(node => node.id),
-      inputId: chain[0]!.id,
-      tableId: String(chain[0]!.config.tableId || ''),
-      ontologyId: String(chain.find(node => node.type === 'ontology')?.config.ontologyId || ''),
-      properties: chain.find(node => node.type === 'properties')?.config ?? null,
-      strategy: String(chain.find(node => node.type === 'fusion')?.config.strategy || 'keep'),
-    });
+    if (!routes.length) throw new Error(`“${labels.get(output.id)}”没有连接到“实体表输入”，无法确定数据来源`);
+    const nodeIds: string[] = [];
+    for (const node of flow.nodes) if (node.id === output.id || routes.some(route => route.nodeIds.includes(node.id))) nodeIds.push(node.id);
+    branches.push({ id: output.id, name: labels.get(output.id)!, nodeIds, routes });
   }
-  const tableOntology = new Map<string, FlowBranch>();
+  const tableOntology = new Map<string, { name: string; inputId: string }>();
   for (const branch of branches) {
-    if (!branch.tableId || !branch.ontologyId) continue;
-    const key = `${branch.tableId}\u0000${branch.ontologyId}`;
-    const previous = tableOntology.get(key);
-    if (previous) throw new Error(`“${previous.name}”和“${branch.name}”使用同一张实体表和同一个本体，会重复写入同一批实体，请改为不同本体或删除重复支路`);
-    tableOntology.set(key, branch);
+    for (const route of branch.routes) {
+      if (!route.tableId || !route.ontologyId) continue;
+      const key = `${route.tableId}\u0000${route.ontologyId}`;
+      const previous = tableOntology.get(key);
+      if (previous) throw new Error(`“${previous.name}”和“${labels.get(route.inputId)}”使用同一张实体表和同一个本体，会重复写入同一批实体，请改为不同本体或删除重复支路`);
+      tableOntology.set(key, { name: labels.get(route.inputId)!, inputId: route.inputId });
+    }
   }
   return branches;
 }
@@ -148,6 +181,24 @@ function storedValues(raw: string, datatype: string) {
   if (!raw) return [];
   try { const value = JSON.parse(raw); return Array.isArray(value) ? value : [datatype === 'string' && (typeof value !== 'object' || value === null) ? String(value ?? '') : value]; }
   catch { return datatype === 'wikibase-entityid' ? [] : [raw]; }
+}
+
+/** Shared display value when every entry agrees, otherwise null. */
+function singleValue<T>(items: T[]): T | null {
+  return items.length && items.every(item => item === items[0]) ? items[0]! : null;
+}
+
+function sharedOntology(routes: any[]) {
+  const id = singleValue(routes.map(route => route.ontologyId));
+  return id ? { id, name: routes[0].ontology.name } : null;
+}
+
+function describeRoute(route: any) {
+  return {
+    inputId: route.inputId, tableId: route.tableId, tableName: route.tableName,
+    ontologyId: route.ontologyId, ontologyName: route.ontology.name,
+    strategy: route.strategy, autoMapping: route.autoMapping, nodeIds: route.nodeIds, summary: route.summary,
+  };
 }
 
 /** Old runs stored a flat plan; newer ones list one entry per knowledge-base output. */
@@ -185,7 +236,7 @@ export class CleaningEngine {
       if (entity) entity.attributes[a.key] = unique([...(entity.attributes[a.key] || []), ...storedValues(a.value, a.datatype)]);
     }
     const sourceIndex = new Map(snapshot.sources.map(s => [stable([s.source_key, s.source_id, s.ontology_id]), s.node_id]));
-    const results = branches.map(branch => this.runBranch(this.prepareBranch(branch, cloned, multiple), { mode, snapshot, entities, sourceIndex, decisions, multiple }));
+    const results = branches.map(branch => this.runBranch(branch, cloned, { mode, snapshot, entities, sourceIndex, decisions, multiple }));
     const summary = { input: 0, aligned: 0, suspected: 0, unaligned: 0, created: 0, updated: 0, skipped: 0, attributesAdded: 0, conflicts: 0, failed: 0, unresolved: 0 };
     for (const result of results) for (const key of Object.keys(summary) as (keyof typeof summary)[]) summary[key] += result.summary[key];
     // Branches share one entity map, so an entity already written by an earlier branch is
@@ -206,32 +257,39 @@ export class CleaningEngine {
       tokens.add(token); bindings.push(binding);
     }
     const first = results[0]!;
-    const shared = { fingerprint, changes, bindings, tableId: first.table.id, flow: cloned, decisions, confirmed: [] as string[] };
+    const display = { tableId: first.routes[0]!.tableId, tableName: first.routes.map(route => route.tableName).join('、'), strategy: singleValue(first.routes.map(route => route.strategy)), ontology: sharedOntology(first.routes), routes: first.routes.map(route => describeRoute(route)) };
+    const shared = { fingerprint, changes, bindings, tableId: first.routes[0]!.tableId, flow: cloned, decisions, confirmed: [] as string[] };
     // A single branch keeps the flat shape older runs and clients already understand.
-    if (!multiple) return { ...shared, summary, rows: first.rows, stages: first.stages };
+    if (!multiple) return { ...shared, summary, rows: first.rows, stages: first.stages, ...display };
     return {
       ...shared, summary,
       branches: results.map(result => ({
         id: result.branch.id, name: result.branch.name, nodeIds: result.branch.nodeIds,
-        tableId: result.table.id, tableName: result.table.name, strategy: result.branch.strategy, autoMapping: result.autoMapping,
-        ontology: { id: result.ontologyId, name: result.ontology.name },
+        tableId: result.routes[0]!.tableId, tableName: result.routes.map(route => route.tableName).join('、'),
+        strategy: singleValue(result.routes.map(route => route.strategy)), ontology: sharedOntology(result.routes),
+        autoMapping: result.routes.every(route => route.autoMapping),
+        routes: result.routes.map(route => describeRoute(route)),
         summary: result.summary, stages: result.stages, rows: result.rows, changes: result.changes, bindings: result.bindings,
       })),
     };
   }
-  /** Validates one branch and resolves its source table, ontology and field mapping. */
-  private prepareBranch(branch: FlowBranch, cloned: Flow, multiple: boolean) {
-    const fail = (message: string): never => { throw new Error(multiple ? `支路「${branch.name}」：${message}` : message); };
-    if (!branch.tableId) fail('请选择二维实体表');
-    if (!branch.ontologyId) fail('请选择目标本体');
-    if (!['keep', 'replace', 'merge'].includes(branch.strategy)) fail('请选择默认融合策略');
-    if (branch.properties && (typeof branch.properties.mapping !== 'object' || Array.isArray(branch.properties.mapping))) fail('请配置基础字段和属性映射');
-    const table = this.store.getTable(branch.tableId);
-    const basicConfig: Record<string, any> = inferBasicFields(table.columns, branch.properties || {});
-    const ontologyId = branch.ontologyId, { idField, nameField, mapping } = basicConfig;
+  /** Validates one route of a branch and resolves its table, ontology and field mapping. */
+  private prepareRoute(branch: FlowBranch, route: FlowRoute, cloned: Flow, multiple: boolean) {
+    const inputLabel = nodeLabels(cloned).get(route.inputId) || '实体表输入';
+    const fail = (message: string): never => {
+      const prefix = [multiple ? `支路「${branch.name}」` : '', branch.routes.length > 1 ? `路线「${inputLabel}」` : ''].filter(Boolean).join('');
+      throw new Error(prefix ? `${prefix}：${message}` : message);
+    };
+    if (!route.tableId) fail('请选择二维实体表');
+    if (!route.ontologyId) fail('请选择目标本体');
+    if (!['keep', 'replace', 'merge'].includes(route.strategy)) fail('融合策略无效');
+    if (route.properties && (typeof route.properties.mapping !== 'object' || Array.isArray(route.properties.mapping))) fail('请配置基础字段和属性映射');
+    const table = this.store.getTable(route.tableId);
+    const basicConfig: Record<string, any> = inferBasicFields(table.columns, route.properties || {});
+    const ontologyId = route.ontologyId, { idField, nameField, mapping } = basicConfig;
     const language = String(basicConfig.language || 'zh');
     // Persist the inferred mapping so reopening the run shows the configuration that ran.
-    const propertiesNode = cloned.nodes.find(node => branch.nodeIds.includes(node.id) && node.type === 'properties');
+    const propertiesNode = cloned.nodes.find(node => route.nodeIds.includes(node.id) && node.type === 'properties');
     if (propertiesNode) propertiesNode.config = basicConfig;
     if ((idField && !table.columns.includes(idField)) || !table.columns.includes(nameField)) fail('名称字段不存在，或已选择的唯一标识字段不存在');
     const baseColumns = BASIC_FIELDS.map(f => basicConfig[f.key]).filter(Boolean);
@@ -239,10 +297,37 @@ export class CleaningEngine {
     const distinctColumns = BASIC_FIELDS.filter(f => f.key !== 'idField' || idField !== nameField).map(f => basicConfig[f.key]).filter(Boolean);
     if (baseColumns.some(c => !table.columns.includes(c)) || new Set(distinctColumns).size !== distinctColumns.length) fail('基础字段必须选择存在且不重复的来源列（唯一标识可与名称共用）');
     if (typeof mapping !== 'object' || Array.isArray(mapping)) fail('属性映射无效');
-    return { branch, table, basicConfig, ontologyId, idField, nameField, mapping, language, baseColumns, strategy: branch.strategy, autoMapping: !branch.properties, chainTypes: branch.nodeIds.map(id => cloned.nodes.find(node => node.id === id)!.type), fail };
+    return { branch, route, table, tableName: table.name, basicConfig, ontologyId, idField, nameField, mapping, language, baseColumns, strategy: route.strategy, autoMapping: !route.properties, chainTypes: route.nodeIds.map(id => cloned.nodes.find(node => node.id === id)!.type), inputId: route.inputId, nodeIds: route.nodeIds, fail };
   }
-  /** Executes the row loop of one branch against the shared knowledge snapshot. */
-  private runBranch(item: ReturnType<CleaningEngine['prepareBranch']>, context: { mode: 'preview' | 'full'; snapshot: { nodes: any[]; attributes: any[]; sources: any[]; ontologies: any[] }; entities: Map<string, Entity>; sourceIndex: Map<string, string>; decisions: Record<string, Decision>; multiple: boolean }) {
+  /** Runs every route of one branch and merges their rows into a single plan. */
+  private runBranch(branch: FlowBranch, cloned: Flow, context: { mode: 'preview' | 'full'; snapshot: { nodes: any[]; attributes: any[]; sources: any[]; ontologies: any[] }; entities: Map<string, Entity>; sourceIndex: Map<string, string>; decisions: Record<string, Decision>; multiple: boolean }) {
+    const { entities, snapshot } = context;
+    const items = branch.routes.map(route => this.prepareRoute(branch, route, cloned, context.multiple));
+    // Entities already touched by an earlier branch stay part of this branch's start state.
+    const initial = new Map([...entities].map(([id, n]) => [id, stable(n)]));
+    const summary = { input: 0, aligned: 0, suspected: 0, unaligned: 0, created: 0, updated: 0, skipped: 0, attributesAdded: 0, conflicts: 0, failed: 0, unresolved: 0 };
+    const rows: any[] = [], stages: any[] = [], bindings: any[] = [], routes: any[] = [];
+    for (const item of items) {
+      const result = this.runRoute(item, context, rows.length);
+      for (const key of Object.keys(summary) as (keyof typeof summary)[]) summary[key] += result.summary[key];
+      routes.push(result);
+      rows.push(...result.rows);
+      stages.push(...result.stages);
+      bindings.push(...result.bindings);
+    }
+    // Only entities this branch actually touched: statuses written by earlier branches are
+    // already part of the branch-start snapshot and must not be counted again here.
+    const changes = [...entities.values()].filter(n => stable(n) !== initial.get(n.id)).map(n => structuredClone(n));
+    summary.created = changes.filter(n => n.fresh && !initial.has(n.id)).length;
+    summary.updated = changes.length - summary.created;
+    summary.attributesAdded = 0;
+    for (const n of changes) for (const [pid, values] of Object.entries(n.attributes)) {
+      if (values.length && !snapshot.attributes.some(a => a.node_id === n.id && a.key === pid)) summary.attributesAdded++;
+    }
+    return { branch, routes, summary, rows, stages, changes, bindings };
+  }
+  /** Executes the row loop of one route against the shared knowledge snapshot. */
+  private runRoute(item: ReturnType<CleaningEngine['prepareRoute']>, context: { mode: 'preview' | 'full'; snapshot: { nodes: any[]; attributes: any[]; sources: any[]; ontologies: any[] }; entities: Map<string, Entity>; sourceIndex: Map<string, string>; decisions: Record<string, Decision>; multiple: boolean }, offset: number) {
     const { branch, table, basicConfig, ontologyId, idField, nameField, mapping, language, baseColumns, strategy, autoMapping, chainTypes, fail } = item;
     const { mode, snapshot, entities, sourceIndex, decisions, multiple } = context;
     const ontology = snapshot.ontologies.find(o => o.id === ontologyId);
@@ -260,7 +345,7 @@ export class CleaningEngine {
       if (baseColumns.includes(field) && property) fail(`字段 ${field} 已映射为基础字段，不能重复映射到属性`);
       if (!table.columns.includes(field) || (property !== '' && !propertyMap.has(property))) fail(`字段 ${field} 的属性不属于目标本体`);
     }
-    const initial = new Map([...entities].map(([id, n]) => [id, stable(n)]));
+    const routeInitial = new Map([...entities].map(([id, n]) => [id, stable(n)]));
     const bindings: any[] = [], rows: any[] = [];
     const summary = { input: mode === 'preview' ? Math.min(100, table.rows.length) : table.rows.length, aligned: 0, suspected: 0, unaligned: 0, created: 0, updated: 0, skipped: 0, attributesAdded: 0, conflicts: 0, failed: 0, unresolved: 0 };
     let currentRow = 0;
@@ -301,7 +386,7 @@ export class CleaningEngine {
     for (let index = 0; index < summary.input; index++) {
       const raw = table.rows[index]!, sourceId = idField ? String(raw[idField] ?? '').trim() : '';
       let name = '';
-      const detail: any = { index, raw, ontology: { id: ontology.id, name: ontology.name }, basic: {}, mapped: {}, status: '未对齐', candidates: [], action: '', strategy, conflicts: [], error: '' };
+      const detail: any = { index: offset + index, raw, tableName: table.name, ontology: { id: ontology.id, name: ontology.name }, basic: {}, mapped: {}, status: '未对齐', candidates: [], action: '', strategy, conflicts: [], error: '' };
       // A bad row must not leave planned tail entities or partial attribute mutations.
       currentRow = index; createdInRow = [];
       let targetBefore: Entity | undefined;
@@ -322,7 +407,7 @@ export class CleaningEngine {
         detail.status = target ? '已对齐' : candidates.length ? '疑似对齐' : '未对齐';
         detail.candidates = candidates.map(n => ({ id: n.id, name: n.name }));
         if (target) summary.aligned++; else if (candidates.length) summary.suspected++; else summary.unaligned++;
-        const decision = decisions[`${branch.id}:${index}`] ?? (multiple ? undefined : decisions[String(index)]);
+        const decision = decisions[`${branch.id}:${offset + index}`] ?? (multiple ? undefined : decisions[String(index)]);
         if (decision && !['skip', 'new', 'link'].includes(decision.action)) throw new Error('对齐决策无效');
         if (decision?.action === 'skip') { detail.action = '跳过'; summary.skipped++; rows.push(detail); continue; }
         // Auto-align: for suspected alignment, automatically link to the first candidate
@@ -391,16 +476,17 @@ export class CleaningEngine {
       }
       rows.push(detail);
     }
-    // Only entities this branch actually touched: statuses written by earlier branches are
-    // already part of the branch-start snapshot and must not be counted again here.
-    const changes = [...entities.values()].filter(n => stable(n) !== initial.get(n.id)).map(n => structuredClone(n));
-    summary.created = changes.filter(n => n.fresh && !initial.has(n.id)).length;
-    summary.updated = changes.length - summary.created;
-    for (const n of changes) for (const [pid, values] of Object.entries(n.attributes)) {
+    // Only entities this route touched: entities planned by an earlier route of the same branch
+    // are part of this route's start state and must not be counted again here.
+    const touched = [...entities.values()].filter(n => stable(n) !== routeInitial.get(n.id));
+    summary.created = touched.filter(n => n.fresh && !routeInitial.has(n.id)).length;
+    summary.updated = touched.length - summary.created;
+    for (const n of touched) for (const [pid, values] of Object.entries(n.attributes)) {
       if (values.length && !snapshot.attributes.some(a => a.node_id === n.id && a.key === pid)) summary.attributesAdded++;
     }
-    const stages = chainTypes.map(type => ({ type, input: summary.input, output: type === 'alignment' ? summary.aligned + summary.unaligned : summary.input - summary.failed, summary: type === 'input' ? `${table.name} · ${table.columns.length} 个字段` : type === 'ontology' ? ontology.name : type === 'properties' ? `${baseColumns.length} 个基础字段 / ${Object.values(mapping).filter(Boolean).length} 个属性映射` : type === 'alignment' ? `确定 ${summary.aligned} / 疑似 ${summary.suspected} / 未对齐 ${summary.unaligned}` : type === 'fusion' ? `${summary.conflicts} 个冲突 · ${strategy}` : `新增 ${summary.created} / 更新 ${summary.updated} / 待确认 ${summary.unresolved}` }));
-    return { branch, table, ontologyId, ontology, autoMapping, summary, rows, stages, changes, bindings };
+    const route = branch.routes.length > 1 ? table.name : '';
+    const stages = chainTypes.map(type => ({ type, route, input: summary.input, output: type === 'alignment' ? summary.aligned + summary.unaligned : summary.input - summary.failed, summary: type === 'input' ? `${table.name} · ${table.columns.length} 个字段` : type === 'ontology' ? ontology.name : type === 'properties' ? `${baseColumns.length} 个基础字段 / ${Object.values(mapping).filter(Boolean).length} 个属性映射` : type === 'alignment' ? `确定 ${summary.aligned} / 疑似 ${summary.suspected} / 未对齐 ${summary.unaligned}` : type === 'fusion' ? `${summary.conflicts} 个冲突 · ${strategy}` : `新增 ${summary.created} / 更新 ${summary.updated} / 待确认 ${summary.unresolved}` }));
+    return { branch, route: item.route, table, tableId: table.id, tableName: table.name, ontologyId, ontology, autoMapping, inputId: item.inputId, nodeIds: item.nodeIds, strategy, summary, rows, stages, bindings };
   }
 
   /** Writes the requested branches (default: all pending ones) into the knowledge base. */

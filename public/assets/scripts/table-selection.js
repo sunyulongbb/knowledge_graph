@@ -419,6 +419,16 @@ function __kbInitTableSelection() {
     }
   }
 
+  function tableNodeCrumbLabel(nodeId) {
+    const node = getTableNodeById(nodeId);
+    if (!node) return "";
+    const nameFirst = (node.label_zh || node.label || node.name || "").trim();
+    const descFull = (node.desc_zh || node.description || "").trim();
+    const source = descFull && descFull !== nameFirst ? descFull : nameFirst;
+    const firstLine = source.split(/\r?\n+/)[0].trim() || nameFirst.split(/\r?\n+/)[0].trim();
+    return (hideInlineHashTags(firstLine) || firstLine).trim();
+  }
+
   function getTableNodeById(nodeId) {
     const id = String(nodeId || "").trim();
     if (!id) return null;
@@ -2851,7 +2861,7 @@ function __kbInitTableSelection() {
       skipSidebarSync: true,
     });
     if (typeof setViewMode === "function") {
-      setViewMode("detail", { targetNodeId: rid });
+      setViewMode("detail", { targetNodeId: rid, detailCrumbLabel: tableNodeCrumbLabel(rid) });
     }
   }
 
@@ -2964,7 +2974,7 @@ function __kbInitTableSelection() {
           skipSidebarSync: true,
         });
         if (typeof setViewMode === "function") {
-          setViewMode("detail", { targetNodeId: rid });
+          setViewMode("detail", { targetNodeId: rid, detailCrumbLabel: tableNodeCrumbLabel(rid) });
         }
         return;
       }
@@ -3003,7 +3013,7 @@ function __kbInitTableSelection() {
       }
       setTableSelection(rid);
       if (typeof setViewMode === "function") {
-        setViewMode("detail", { targetNodeId: rid });
+        setViewMode("detail", { targetNodeId: rid, detailCrumbLabel: tableNodeCrumbLabel(rid) });
       }
     });
 

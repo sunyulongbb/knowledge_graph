@@ -690,10 +690,14 @@
     const sortedGroups = Array.from(groups.entries()).sort(([left], [right]) =>
       left.localeCompare(right, "zh-CN"),
     );
-    const openRelatedEntity = (targetId) => {
+    const openRelatedEntity = (targetId, targetLabel) => {
       const nextView = window.kbViewMode === "knowledge_detail" ? "knowledge_detail" : "detail";
       if (typeof window.setViewMode === "function") {
-        window.setViewMode(nextView, { targetNodeId: targetId, focusDetailOnly: nextView === "knowledge_detail" });
+        window.setViewMode(nextView, {
+          targetNodeId: targetId,
+          focusDetailOnly: nextView === "knowledge_detail",
+          detailCrumbLabel: targetLabel,
+        });
       } else {
         showNodeDetailInline(targetId);
       }
@@ -720,7 +724,7 @@
       arrow.className = "fa-solid fa-arrow-right";
       arrow.setAttribute("aria-hidden", "true");
       button.append(marker, body, arrow);
-      button.addEventListener("click", () => openRelatedEntity(sourceId));
+      button.addEventListener("click", () => openRelatedEntity(sourceId, name.textContent));
       return button;
     };
     let renderedCount = 0;
@@ -1114,6 +1118,9 @@
       options && options.preserveSidebarState === true;
     const routeId = (nodeId ?? "").toString().trim();
     const fullId = normalizeEntityIdForApi(routeId);
+    // 迟到的详情响应不能覆盖后发起的详情（否则标题、关联信息与面包屑会串实体）
+    const detailLoadSeq = (window.kbDetailLoadSeq = Number(window.kbDetailLoadSeq || 0) + 1);
+    const isLatestDetailLoad = () => Number(window.kbDetailLoadSeq || 0) === detailLoadSeq;
     const dp = document.getElementById("detailPanel");
     const inner = document.getElementById("detailInner");
     if (!dp || !inner) return;
@@ -1171,6 +1178,7 @@
       const resp = await fetch(url.toString());
       if (!resp.ok) throw new Error("HTTP " + resp.status);
       const data = await resp.json();
+      if (!isLatestDetailLoad()) return;
       const doc = data && data.node;
       const neighbors = data && data.neighbors;
       if (!doc) {

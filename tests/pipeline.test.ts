@@ -432,8 +432,10 @@ test('flow validation accepts optional steps and rejects ambiguous or repeated c
   expect(plan.branches).toBeUndefined();
   expect(plan.stages.map((s: any) => s.type)).toEqual(['input', 'ontology', 'output']);
   expect(plan.summary.created).toBe(1);
-  // Two upstream connections make the chain ambiguous.
-  expect(() => validateFlow({ ...flow, edges: [...flow.edges, { from: 'source', to: 'people' }] })).toThrow('只能有一个上游连接');
+  // Several upstream connections are allowed, but a branch may not fan out and merge back.
+  expect(() => validateFlow({ ...flow, edges: [...flow.edges, { from: 'source', to: 'people' }] })).toThrow('分叉后又汇合');
+  const merged: any = { id: 'merged', name: '合流', nodes: [flowNode('s', 'input', { tableId: f.table.id }), flowNode('o1', 'ontology', { ontologyId: 'person' }), flowNode('o2', 'ontology', { ontologyId: 'person' }), flowNode('o', 'output')], edges: [{ from: 's', to: 'o1' }, { from: 's', to: 'o2' }, { from: 'o1', to: 'o' }, { from: 'o2', to: 'o' }] };
+  expect(() => validateFlow(merged)).toThrow('分叉后又汇合');
   // The same node type may not repeat inside one chain.
   const repeated: any = { id: 'repeated', name: '重复类型', nodes: [flowNode('s', 'input', { tableId: f.table.id }), flowNode('o1', 'ontology', { ontologyId: 'person' }), flowNode('o2', 'ontology', { ontologyId: 'country' }), flowNode('o', 'output')], edges: [{ from: 's', to: 'o1' }, { from: 'o1', to: 'o2' }, { from: 'o2', to: 'o' }] };
   expect(() => validateFlow(repeated)).toThrow('重复出现');
@@ -450,4 +452,65 @@ test('branch failures name the branch that still needs configuration', () => {
   const { f, flow } = fanOutFixture();
   const broken: any = { ...flow, nodes: flow.nodes.map(n => (n.id === 'countries' ? { ...n, config: {} } : n)) };
   expect(() => f.engine.plan(broken, 'full')).toThrow('支路「知识库输出 #2」：请选择目标本体');
+});
+
+/** Two entity tables merged into one knowledge-base output through a shared 本体对齐 node. */
+function mergeFixture() {
+  const f = fixture();
+  const second = f.store.saveTable({ name: '外包表', sourceType: 'file', sourceKey: 'contractors', columns: ['id', 'name', 'job'], rows: [{ id: 'a1', name: '李四', job: '顾问' }, { id: 'a2', name: '张三', job: '顾问' }] });
+  const flow: any = {
+    id: 'merge', name: '合并两张表',
+    nodes: [
+      flowNode('staff', 'input', { tableId: f.table.id }),
+      flowNode('staff-fields', 'properties', { idField: 'id', nameField: 'name', mapping: { birthday: '', country: '', job: '' } }),
+      flowNode('contractors', 'input', { tableId: second.id }),
+      flowNode('people', 'ontology', { ontologyId: 'person' }),
+      flowNode('out', 'output'),
+    ],
+    edges: [
+      { from: 'staff', to: 'staff-fields' },
+      { from: 'staff-fields', to: 'people' },
+      { from: 'contractors', to: 'people' },
+      { from: 'people', to: 'out' },
+    ],
+  };
+  return { f, flow, second };
+}
+
+test('several entity tables merge into one knowledge-base output', () => {
+  const { f, flow } = mergeFixture();
+  expect(validateFlow(flow)).toBe(flow);
+  const plan: any = f.engine.plan(flow, 'full');
+  expect(plan.branches).toBeUndefined();
+  expect(plan.routes.map((r: any) => r.tableName)).toEqual(['人物表', '外包表']);
+  expect(plan.routes.map((r: any) => r.summary.input)).toEqual([1, 2]);
+  expect(plan.routes.map((r: any) => r.autoMapping)).toEqual([false, true]);
+  expect(plan.summary).toMatchObject({ input: 3, created: 2, updated: 0, failed: 0, suspected: 1, unaligned: 2 });
+  // Rows of every route land in one table with a branch-wide index, so decisions stay unique.
+  expect(plan.rows.map((r: any) => r.tableName)).toEqual(['人物表', '外包表', '外包表']);
+  expect(plan.rows.map((r: any) => r.index)).toEqual([0, 1, 2]);
+  expect(plan.rows[1].ontology.name).toBe('人物');
+  expect(plan.rows[2].status).toBe('疑似对齐');
+  // The second table's 张三 reuses the entity planned by the first route instead of duplicating it.
+  expect(plan.rows[2].autoAligned).toBe(true);
+  expect(plan.rows[2].match.id).toBe(plan.rows[0].match.id);
+  // The ontology and the output are shared by both routes, so the stage list covers each route.
+  expect(plan.stages.filter((s: any) => s.type === 'input').map((s: any) => s.route)).toEqual(['人物表', '外包表']);
+  const decided: any = f.engine.plan(flow, 'full', { 'out:2': { action: 'skip' }, 'out:1': { action: 'new' } });
+  expect(decided.routes.map((r: any) => r.summary.skipped)).toEqual([0, 1]);
+  expect(decided.rows[1].action).toBe('新增');
+  expect(decided.routes.map((r: any) => r.summary.input)).toEqual([1, 2]);
+  // One table cannot feed the same ontology through two routes: the rows would be written twice.
+  const twin: any = { ...flow, nodes: flow.nodes.map(n => (n.id === 'contractors' ? { ...n, config: { tableId: f.table.id } } : n)) };
+  expect(() => validateFlow(twin)).toThrow('重复写入');
+});
+
+test('a route that still needs configuration is named inside its branch', () => {
+  const { f, flow } = mergeFixture();
+  const broken: any = {
+    ...flow,
+    nodes: [...flow.nodes, flowNode('other', 'ontology', {})],
+    edges: [...flow.edges.filter(edge => !(edge.from === 'contractors' && edge.to === 'people')), { from: 'contractors', to: 'other' }, { from: 'other', to: 'out' }],
+  };
+  expect(() => f.engine.plan(broken, 'full')).toThrow('路线「实体表输入 #2」：请选择目标本体');
 });
