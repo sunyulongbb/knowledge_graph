@@ -248,6 +248,55 @@ test('view menu switches reuse the mounted entity editor without repainting it',
   expect(attrPanel).toContain("attrList.dataset.loadState = rendered ? 'ready' : 'error'");
 });
 
+test('relation view ships a draggable ontology palette next to the canvas', () => {
+  const page = readFileSync('public/index.html', 'utf8');
+  const panel = readFileSync('public/assets/scripts/vis-ontology-panel.js', 'utf8');
+  const css = readFileSync('public/assets/styles/app.css', 'utf8');
+  expect(page).toContain('id="visOntologyPanel" class="vis-ontology-panel"');
+  expect(page).toContain('id="visOntologyTree" class="vis-ontology-tree"');
+  expect(page).toContain('id="cy_btnOntologyPanel"');
+  expect(page).toContain('拖动分类到画布，即可新建该类型节点');
+  expect(page.indexOf('id="visOntologyPanel"')).toBeLessThan(page.indexOf('class="vis-sidebar vis-sidebar-left"'));
+  expect(page).toContain('/assets/scripts/vis-ontology-panel.js?v=20261010-vis-ontology4');
+  // 复用分类面板的本体树组件，拖拽时由本模块负责落点与创建
+  expect(panel).toContain('new module.OntologyTreeController(host, {');
+  // DHTMLX 会在按下时重绘行，原生 HTML5 拖拽会被取消，因此用 pointer 事件自己实现
+  expect(panel).toContain('host.addEventListener("pointerdown", onTreePointerDown)');
+  expect(panel).toContain('window.addEventListener("pointerup", onPointerUp)');
+  expect(panel).toContain('export function resolveTreePayload(target)');
+  // 画布还没初始化时用新节点初始化图谱实例，创建后立即可见
+  expect(panel).toContain('window.kbLoadGraphWithData({');
+  expect(panel).toContain('await addCreatedNodeToGraph(node, name, graphPoint)');
+  expect(page).toContain('window.kbLoadGraphWithData = (data) => loadGraph(data);');
+  expect(panel).toContain('const response = await window.apiPost("/api/kb/nodes", body);');
+  expect(panel).toContain('typeId: ontologyId');
+  expect(panel).toContain('window.kbVisOntologyPanel = {');
+  expect(css).toContain('.vis-ontology-panel {');
+  expect(css).toContain('.vis-node-popover {');
+  expect(css).toContain('body.vis-ontology-dragging .vis-panel .vis-graph-body::after');
+  // 内联 SVG 图标必须显式定尺寸，否则会撑成默认大小
+  expect(css).toContain('.ontology-node-folder > svg {');
+});
+
+test('relation view keeps the canvas clean until the user loads data', () => {
+  const page = readFileSync('public/index.html', 'utf8');
+  const css = readFileSync('public/assets/styles/app.css', 'utf8');
+  // 没有选中节点时保持一张空白画布：不自动拉全量图谱，也不盖一层提示卡片
+  expect(page).not.toContain('cyEmptyState');
+  expect(page).not.toContain('vis-empty-state');
+  expect(css).not.toContain('.vis-empty-state');
+  expect(page).not.toContain('scheduleVisAutoGraphLoad');
+  expect(page).not.toContain('kbVisAutoGraphLoadDone');
+  // 加载图谱入口挪到右侧工具栏，并复用原有 id 保持绑定不变
+  const toolbarIndex = page.indexOf('class="vis-sidebar vis-sidebar-right"');
+  const loadButtonIndex = page.indexOf('id="cy_btnLoadSnippet"');
+  expect(toolbarIndex).toBeGreaterThan(-1);
+  expect(loadButtonIndex).toBeGreaterThan(toolbarIndex);
+  expect(page).toContain('cyBtnLoadSnippet.addEventListener(\'click\', () => { loadGraph(); });');
+  // 选中节点时的行为不变：只展开该节点的一层关系
+  expect(page).toContain('loadNodeNeighborhood(defaultVisNodeId, { replace: true });');
+});
+
 test('knowledge pages and ontology tree hide auto-created reference entities', () => {
   const pageScript = readFileSync('public/assets/scripts/application-pages.js', 'utf8');
   const tableScript = readFileSync('public/assets/scripts/table-panel.js', 'utf8');
@@ -368,7 +417,7 @@ test('entity editor uses the post-composer hierarchy without changing existing c
   expect(page).toContain('id="btnCancelEdit"');
   expect(page).toContain('id="btnEntityImport"');
   expect(page).toContain('id="btnSubmit"');
-  expect(page).toContain('/assets/styles/app.css?v=20261010-detail-nav');
+  expect(page).toContain('/assets/styles/app.css?v=20261010-vis-ontology3');
   expect(css).toContain('.app-profile-actions { position: fixed; top: 24px; right: 24px;');
   expect(css).toContain('.app-inspiration-profile-layer.has-selection { z-index: 7; }');
   expect(css).toContain('.app-profile-node.is-selected { position: absolute !important;');

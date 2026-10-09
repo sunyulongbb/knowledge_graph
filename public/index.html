@@ -68,7 +68,7 @@
       customElements.whenDefined("media-video-layout"),
     ]).then(() => true);
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20261010-detail-nav" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20261010-vis-ontology3" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -3437,6 +3437,21 @@
           </div>
           <!-- Main canvas area with left/right toolbars -->
           <div class="vis-canvas-area">
+            <!-- 本体树：拖拽分类到画布即可新建该类型节点 -->
+            <aside id="visOntologyPanel" class="vis-ontology-panel" aria-label="本体分类，可拖拽到画布新建节点">
+              <div class="vis-ontology-panel__head">
+                <span class="vis-ontology-panel__title">
+                  <i class="fa-solid fa-sitemap" aria-hidden="true"></i>
+                  <span>本体</span>
+                </span>
+                <button id="cy_btnOntologyPanel" class="vis-ontology-panel__toggle" type="button" title="收起本体面板" aria-expanded="true" aria-controls="visOntologyTree">
+                  <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+                </button>
+              </div>
+              <p class="vis-ontology-panel__hint">拖动分类到画布，即可新建该类型节点</p>
+              <div id="visOntologyTree" class="vis-ontology-tree" aria-label="本体分类树"></div>
+              <div id="visOntologyPanelStatus" class="vis-ontology-panel__status" role="status" aria-live="polite"></div>
+            </aside>
             <!-- Left vertical toolbar -->
             <div class="vis-sidebar vis-sidebar-left">
               <div class="vis-tool-group">
@@ -3472,18 +3487,6 @@
             </div>
             <!-- Cytoscape canvas -->
             <div class="vis-graph-body">
-              <!-- Empty state overlay -->
-              <div id="cyEmptyState" class="vis-empty-state">
-                <div class="vis-empty-illustration">
-                  <i class="fa-solid fa-diagram-project"></i>
-                </div>
-                <h3>探索知识图谱</h3>
-                <p>加载图谱数据或搜索节点开始探索</p>
-                <div class="vis-empty-actions">
-                  <button id="cy_btnLoadSnippet" class="btn btn-primary vis-empty-btn">加载图谱</button>
-                  <button id="cy_btnSearchGraph" class="btn vis-empty-btn vis-empty-btn-outline">搜索图谱</button>
-                </div>
-              </div>
               <!-- Loading overlay -->
               <div id="cyLoadingOverlay" class="vis-loading-overlay" style="display:none">
                 <div class="vis-loading-spinner"></div>
@@ -3643,6 +3646,10 @@
             </div>
             <!-- Right vertical toolbar (zoom/tools) -->
             <div class="vis-sidebar vis-sidebar-right">
+              <button id="cy_btnLoadSnippet" class="vis-tool-btn" title="加载图谱">
+                <i class="fa-solid fa-diagram-project"></i>
+              </button>
+              <div class="vis-tool-divider"></div>
               <button id="cy_btnFit" class="vis-tool-btn" title="适应全图">
                 <i class="fa-solid fa-expand"></i>
               </button>
@@ -13056,9 +13063,6 @@
         try {
           const nodeCount = counts?.nodes ?? nodesRaw.length;
           const edgeCount = counts?.edges ?? edgesRaw.length;
-          // Hide empty state when data loaded
-          const emptyEl = document.getElementById('cyEmptyState');
-          if (emptyEl) emptyEl.classList.toggle('hidden', nodeCount > 0);
           // Update bottom bar counts
           const elCountAll = document.getElementById('cyCountAll');
           if (elCountAll) elCountAll.textContent = `全部 (${nodeCount})`;
@@ -13207,6 +13211,10 @@
         alert("加载失败: " + (e.message || e));
       }
     }
+
+    // 关联视图默认是空画布，图谱实例也未创建；
+    // 让外部模块（如本体面板拖拽建节点）能用已有数据初始化实例，不必拉全量图谱。
+    window.kbLoadGraphWithData = (data) => loadGraph(data);
 
     // 自动加载图谱（移除了手动加载按钮）
     function clearKnowledgeNodeContextForCreate() {
@@ -13484,13 +13492,9 @@
           }
         });
       }
-      // Empty state buttons
+      // 加载图谱（右侧工具栏）
       const cyBtnLoadSnippet = document.getElementById('cy_btnLoadSnippet');
       if (cyBtnLoadSnippet) cyBtnLoadSnippet.addEventListener('click', () => { loadGraph(); });
-      const cyBtnSearchGraph = document.getElementById('cy_btnSearchGraph');
-      if (cyBtnSearchGraph) cyBtnSearchGraph.addEventListener('click', () => {
-        if (visSearchInput) { visSearchInput.focus(); visSearchInput.select(); }
-      });
 
       // Screenshot export
       const cyBtnScreenshot = document.getElementById('cy_btnScreenshot');
@@ -17426,6 +17430,7 @@
   <script>
       window.kbOntologyTreeModuleReady = import("/assets/generated/ontology-tree.js?v=20261005-class-scroll");
   </script>
+  <script type="module" src="/assets/scripts/vis-ontology-panel.js?v=20261010-vis-ontology4"></script>
   <script src="/assets/scripts/property-panel.js?v=20260915-1"></script>
   <script src="/assets/scripts/table-panel.js?v=20261008-pagination"></script>
   <script src="/assets/scripts/table-selection.js?v=20261010-crumb-label"></script>
