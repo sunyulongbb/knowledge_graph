@@ -4334,7 +4334,9 @@ body {
 .detail-related-section[hidden] { display:none; }
 .detail-related-heading { display:flex; align-items:baseline; justify-content:space-between; gap:12px; padding-bottom:8px; border-bottom:1px solid var(--border-strong); }
 .detail-related-heading .detail-attr-title { margin:0; color:var(--fg); font-family:"Segoe UI","Microsoft YaHei UI",sans-serif; font-size:20px; font-weight:650; line-height:1.35; }
-.detail-related-heading > span { color:var(--muted); font-size:11px; }
+.detail-related-heading-meta { display:flex; align-items:baseline; gap:10px; color:var(--muted); font-size:11px; }
+.detail-related-order-status { color:var(--muted); font-size:11px; }
+.detail-related-order-status:empty { display:none; }
 .detail-related-groups { margin-top:16px; display:grid; gap:20px; }
 .detail-related-group { min-width:0; }
 .detail-related-group-heading { position:relative; margin:0 0 5px; padding:0 0 6px 11px; display:flex; align-items:baseline; justify-content:space-between; gap:12px; border-bottom:1px solid var(--border); color:var(--fg); font-family:"Segoe UI","Microsoft YaHei UI",sans-serif; }
@@ -4360,6 +4362,20 @@ body {
 .detail-related-item-child .detail-related-item-body strong { color:var(--link); font-size:12px; font-weight:600; }
 .detail-related-item-child .detail-related-relation { display:inline-flex; align-items:center; padding:0 6px; border-radius:999px; background:color-mix(in srgb,var(--muted) 13%,transparent); font-size:10px; line-height:16px; }
 .detail-related-item-child > i { font-size:8px; opacity:.7; }
+/* 关联信息拖拽排序：可拖拽的条目/分组标题 + 落点标记 */
+.detail-related-item[draggable="true"] { cursor:grab; }
+.detail-related-item[draggable="true"]:active { cursor:grabbing; }
+.detail-related-group-heading[draggable="true"] { cursor:grab; user-select:none; -webkit-user-select:none; }
+.detail-related-group-heading[draggable="true"]:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.detail-related-node.relation-drop-before, .detail-related-group.relation-drop-before { box-shadow:0 -2px 0 var(--accent); }
+.detail-related-node.relation-drop-after, .detail-related-group.relation-drop-after { box-shadow:0 2px 0 var(--accent); }
+.detail-related-node.is-relation-dragging, .detail-related-group.is-relation-dragging { opacity:.45; }
+/* 二级关联是横向排布，落点标记用左右边线 */
+.detail-related-item-child[draggable="true"] { cursor:grab; }
+.detail-related-item-child[draggable="true"]:active { cursor:grabbing; }
+.detail-related-item-child.relation-drop-before { box-shadow:-2px 0 0 var(--accent); }
+.detail-related-item-child.relation-drop-after { box-shadow:2px 0 0 var(--accent); }
+.detail-related-item-child.is-relation-dragging { opacity:.45; }
 .detail-related-relation { display:block; overflow:hidden; color:var(--muted); font-size:11px; line-height:1.45; text-overflow:ellipsis; white-space:nowrap; }
 .knowledge-comment-compose { display:flex; gap:8px; align-items:flex-end; }
 .knowledge-comment-compose textarea { min-height:70px; flex:1; resize:vertical; border:1px solid var(--border); border-radius:7px; padding:8px; color:var(--fg); background:var(--surface-0); font:inherit; }

@@ -68,7 +68,7 @@
       customElements.whenDefined("media-video-layout"),
     ]).then(() => true);
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20261010-vis-ontology6" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20261010-related-order3" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -3771,7 +3771,10 @@
                 <section id="detailIncomingRelations" class="detail-related-section" hidden>
                   <div class="detail-related-heading">
                     <div class="detail-attr-title">关联信息</div>
-                    <span id="detailIncomingRelationCount"></span>
+                    <div class="detail-related-heading-meta">
+                      <span id="detailIncomingRelationStatus" class="detail-related-order-status" role="status"></span>
+                      <span id="detailIncomingRelationCount"></span>
+                    </div>
                   </div>
                   <div id="detailIncomingRelationGroups" class="detail-related-groups"></div>
                 </section>
@@ -17303,7 +17306,7 @@
   <script src="/assets/scripts/entity-import.js?v=20260921-6"></script>
   <!-- relation-panel.js 已移除，使用 edgehandles 拖拽创建关系 -->
   <script src="/assets/scripts/schema-panel.js?v=20261005-class-scroll"></script>
-  <script src="/assets/scripts/detail-panel.js?v=20261010-crumb-label"></script>
+  <script src="/assets/scripts/detail-panel.js?v=20261010-related-order3"></script>
   <script src="/assets/scripts/knowledge-interactions.js?v=20260904-1"></script>
   <script src="/assets/scripts/knowledge-access.js?v=20260922-4"></script>
   <script src="/assets/scripts/applications.js?v=20260927-settings-layout"></script>

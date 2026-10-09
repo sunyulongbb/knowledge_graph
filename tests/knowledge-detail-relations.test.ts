@@ -10,7 +10,7 @@ const nodeRoute = coreKbSource.slice(
 
 const detailPanelSource = readFileSync(new URL('../public/assets/scripts/detail-panel.js', import.meta.url), 'utf8');
 const incomingRelationsBlock = detailPanelSource.slice(
-  detailPanelSource.indexOf('  function renderIncomingRelations(relations) {'),
+  detailPanelSource.indexOf('  function renderIncomingRelations(relations, options = {}) {'),
   detailPanelSource.indexOf('  function renderNativePdfFallback('),
 );
 
@@ -126,7 +126,7 @@ class StubElement {
   addEventListener() {}
 }
 
-function renderRelations(relations: unknown) {
+function renderRelations(relations: unknown, options: Record<string, unknown> = {}) {
   const host = new StubElement('div');
   const section = new StubElement('section');
   const count = new StubElement('span');
@@ -135,13 +135,13 @@ function renderRelations(relations: unknown) {
       id === 'detailIncomingRelationGroups' ? host : id === 'detailIncomingRelations' ? section : count,
     createElement: (tag: string) => new StubElement(tag),
   };
-  const render: (value: unknown) => void = new Function(
+  const render: (value: unknown, opts?: unknown) => void = new Function(
     'window',
     'document',
     'showNodeDetailInline',
     `${incomingRelationsBlock}\nreturn renderIncomingRelations;`,
   )({}, document, () => {});
-  render(relations);
+  render(relations, options);
   return { host, section, count };
 }
 
@@ -188,4 +188,72 @@ test('detail panel lists every first-level related entity', () => {
   const [group] = host.children;
   expect(group.children[0].children[1].textContent).toBe('7 条');
   expect(group.children[1].children).toHaveLength(7);
+});
+
+const related = (id: string, name: string, typeLabel: string, classId: string) => ({
+  source: { id, name, typeLabel, classId },
+  propertyId: 'p1',
+  propertyName: 'related',
+});
+
+const withChildren = (id: string, name: string, children: Array<[string, string]>) => ({
+  ...related(id, name, 'Person', 'person'),
+  secondLevel: children.map(([childId, childName]) => ({ source: { id: childId, name: childName }, propertyName: 'child' })),
+});
+
+const groupHeading = (group: StubElement) => group.children[0].children[0].textContent;
+
+test('detail panel renders groups and entries in the stored order', () => {
+  const { host } = renderRelations(
+    [
+      related('b', 'Bee', 'Person', 'person'),
+      related('a', 'Ant', 'Person', 'person'),
+      related('c', 'Cat', 'Org', 'org'),
+    ],
+    { order: { groups: ['org', 'person'], items: { person: ['a', 'b'] } }, nodeId: 'one', canEdit: false },
+  );
+  expect(host.children.map(groupHeading)).toEqual(['Org', 'Person']);
+  expect(host.children[1].children[1].children.map(relatedName)).toEqual(['Ant', 'Bee']);
+});
+
+test('detail panel appends entities missing from the stored order', () => {
+  const { host } = renderRelations(
+    [related('b', 'Bee', 'Person', 'person'), related('c', 'Cat', 'Person', 'person'), related('a', 'Ant', 'Person', 'person')],
+    { order: { groups: [], items: { person: ['b'] } }, nodeId: 'one', canEdit: false },
+  );
+  expect(host.children[0].children[1].children.map(relatedName)).toEqual(['Bee', 'Ant', 'Cat']);
+});
+
+test('detail panel only enables drag ordering for editors', () => {
+  const entries = [related('a', 'Ant', 'Person', 'person'), related('b', 'Bee', 'Org', 'org')];
+  const itemOf = (host: StubElement) => host.children[0].children[1].children[0].children[0];
+  const { host: locked } = renderRelations(entries, { order: null, nodeId: 'one', canEdit: false });
+  expect(itemOf(locked).draggable).toBeUndefined();
+  expect(locked.children[0].children[0].draggable).toBeUndefined();
+  const { host: editable } = renderRelations(entries, { order: null, nodeId: 'one', canEdit: true });
+  expect(itemOf(editable).draggable).toBe(true);
+  expect(itemOf(editable).title).toBe('拖拽调整顺序（Alt + ↑ / ↓）');
+  expect(editable.children[0].children[0].draggable).toBe(true);
+  // 没有节点 ID 时无法保存，同样不暴露拖拽
+  const { host: noNode } = renderRelations(entries, { order: null, nodeId: '', canEdit: true });
+  expect(itemOf(noNode).draggable).toBeUndefined();
+});
+
+test('detail panel renders the second level in the stored order', () => {
+  const entries = [
+    withChildren('b', 'Bee', [['d', 'Dog'], ['e', 'Eel'], ['f', 'Fox']]),
+    withChildren('g', 'Gnu', [['h', 'Hen'], ['i', 'Ibis']]),
+  ];
+  const { host } = renderRelations(entries, {
+    order: { groups: [], items: {}, children: { b: ['f', 'd'] } },
+    nodeId: 'one',
+    canEdit: true,
+  });
+  const nested = (index: number) => host.children[0].children[1].children[index].children[1];
+  // 已保存的排前面，其它保持原有顺序追加在后面
+  expect(nested(0).children.map(relatedName)).toEqual(['Fox', 'Dog', 'Eel']);
+  // 没有自定义顺序的父级保持后端返回的顺序
+  expect(nested(1).children.map(relatedName)).toEqual(['Hen', 'Ibis']);
+  expect(nested(0).children[0].draggable).toBe(true);
+  expect(nested(0).children[0].title).toBe('拖拽调整顺序（Alt + ← / →）');
 });

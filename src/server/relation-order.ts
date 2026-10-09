@@ -2,7 +2,11 @@ import type { Database } from 'bun:sqlite';
 import { createHash } from 'node:crypto';
 import { canAccessKnowledge, knowledgeId, type KnowledgeUser } from './knowledge-access.ts';
 
-type Order = { properties: string[]; values: Record<string, string[]>; snapshots: Record<string, string[]> };
+type IncomingOrder = { groups: string[]; items: Record<string, string[]>; children: Record<string, string[]> };
+type Order = { properties: string[]; values: Record<string, string[]>; snapshots: Record<string, string[]>; incoming?: IncomingOrder };
+
+const INCOMING_ORDER_LIMITS = { groups: 200, entries: 500, keyLength: 120 };
+
 export function relationPropertyKey(value: unknown) {
   const raw = String(value ?? '').trim().split('/').pop()!.toUpperCase();
   const numeric = raw.match(/^(?:P\s*)?0*(\d+)$/);
@@ -75,11 +79,72 @@ export function relationAttributeResponse(items: any[], stored: unknown) {
   const order = resolveRelationOrder(items, stored);
   return { items: rankRelationItems(items, order), row_order: order.properties.flatMap((key) => order.values[key]!) };
 }
+
+function cleanOrderKeys(value: unknown, limit = INCOMING_ORDER_LIMITS.entries) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const keys: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'string') continue;
+    const key = entry.trim();
+    if (!key || key.length > INCOMING_ORDER_LIMITS.keyLength || seen.has(key)) continue;
+    seen.add(key);
+    keys.push(key);
+    if (keys.length >= limit) break;
+  }
+  return keys;
+}
+
+/**
+ * 详情页「关联信息」的顺序：分组顺序 + 每个分组内条目的顺序 + 每个条目下二级关联的顺序。
+ * 条目由客户端按当前数据生成，读取时对不上的键会被忽略，
+ * 因此删掉的知识不会让顺序失效，新知识则按默认排序追加在末尾。
+ */
+export function normalizeIncomingOrder(raw: unknown): IncomingOrder {
+  const source = raw && typeof raw === 'object' ? (raw as any) : {};
+  const groups = cleanOrderKeys(source.groups, INCOMING_ORDER_LIMITS.groups);
+  const collect = (value: unknown) => {
+    const out: Record<string, string[]> = {};
+    const record: Record<string, unknown> =
+      value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+    for (const rawKey of Object.keys(record).slice(0, INCOMING_ORDER_LIMITS.groups)) {
+      const key = String(rawKey).trim();
+      if (!key || key.length > INCOMING_ORDER_LIMITS.keyLength) continue;
+      const entries = cleanOrderKeys(record[rawKey]);
+      if (entries.length) out[key] = entries;
+    }
+    return out;
+  };
+  return { groups, items: collect(source.items), children: collect(source.children) };
+}
+
+function saveIncomingOrder(
+  db: Database,
+  user: KnowledgeUser,
+  id: string,
+  body: any,
+  error: (message: string, status?: number) => Response,
+) {
+  const incoming = normalizeIncomingOrder(body?.incoming);
+  const empty = !incoming.groups.length && !Object.keys(incoming.items).length && !Object.keys(incoming.children).length;
+  if (empty) return error('排序数据无效');
+  return db.transaction(() => {
+    const node = db.query('SELECT relation_order FROM nodes WHERE id=?').get(id) as any;
+    if (!node) return error('知识不存在', 404);
+    let stored: any = {};
+    try { stored = JSON.parse(node.relation_order || '{}'); } catch { stored = {}; }
+    if (!stored || typeof stored !== 'object') stored = {};
+    const next = { ...stored, incoming };
+    db.run('UPDATE nodes SET relation_order=?, updated_by_user_id=? WHERE id=?', [JSON.stringify(next), user.id, id]);
+    return Response.json({ success: true, relation_order: next });
+  })();
+}
 export function saveRelationOrder(db: Database, user: KnowledgeUser | null, body: any, format: (row: any) => any = (row) => row) {
   const error = (message: string, status = 400) => Response.json({ error: message }, { status });
   if (!user) return error('请先登录', 401);
   const id = knowledgeId(body?.id);
   if (!canAccessKnowledge(db, user, id, 'edit')) return error('无权调整此知识的关系顺序', 403);
+  if (body?.kind === 'incoming') return saveIncomingOrder(db, user, id, body, error);
   if (!['property', 'value'].includes(body?.kind) || !['before', 'after'].includes(body?.placement) || typeof body.source !== 'string' || typeof body.target !== 'string') return error('排序参数无效');
   return db.transaction(() => {
     const node = db.query('SELECT relation_order FROM nodes WHERE id=?').get(id) as any;

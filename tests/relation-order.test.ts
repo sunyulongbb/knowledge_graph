@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { expect, test } from 'bun:test';
 import { createKnowledgeDatabase, ensureKnowledgeAccessSchema, knowledgeContext } from '../src/server/knowledge-access.ts';
-import { orderedRelationItems, relationAttributeResponse, resolveRelationOrder, saveRelationOrder } from '../src/server/relation-order.ts';
+import { orderedRelationItems, relationAttributeResponse, resolveRelationOrder, saveRelationOrder, normalizeIncomingOrder } from '../src/server/relation-order.ts';
 
 function setup() {
   const db = new Database(':memory:');
@@ -70,6 +70,72 @@ test('deleting an array value retains the custom order of surviving values', () 
   order.values['1'] = ['a::2', 'a::0', 'a::1'];
   const next = resolveRelationOrder([{ id: 'a', key: 'P1', value: ['b', 'c'] }], order);
   expect(next.values['1']).toEqual(['a::1', 'a::0']);
+});
+
+test('detail relation order saves groups and per-group entries without touching attribute order', async () => {
+  const { db, move, saved } = setup();
+  const user = { id: 1, username: 'owner' };
+  try {
+    expect(move({ kind: 'property', source: '2', target: '1' }).status).toBe(200);
+    const response = saveRelationOrder(db, user, {
+      id: 'one',
+      kind: 'incoming',
+      incoming: {
+        groups: ['role', 'person'],
+        items: { person: ['b', 'a'], role: ['c'] },
+        children: { b: ['d', 'e'] },
+      },
+    });
+    expect(response.status).toBe(200);
+    const order = saved();
+    // 属性顺序保持不变，只新增管理详情页关联信息的 incoming 段
+    expect(order.properties).toEqual(['2', '1']);
+    expect(order.incoming).toEqual({
+      groups: ['role', 'person'],
+      items: { person: ['b', 'a'], role: ['c'] },
+      children: { b: ['d', 'e'] },
+    });
+    // 只更新二级关联顺序时其它段继续保留
+    expect(saveRelationOrder(db, user, {
+      id: 'one',
+      kind: 'incoming',
+      incoming: { groups: ['role', 'person'], items: { person: ['b', 'a'], role: ['c'] }, children: { b: ['e', 'd'] } },
+    }).status).toBe(200);
+    expect(saved().incoming.children).toEqual({ b: ['e', 'd'] });
+    expect(saved().properties).toEqual(['2', '1']);
+  } finally { db.close(); }
+});
+
+test('detail relation order rejects unauthorized, missing and malformed payloads', () => {
+  const { db, move, saved } = setup();
+  const payload = { id: 'entity/one', kind: 'incoming', incoming: { groups: ['person'], items: { person: ['b'] } } };
+  try {
+    expect(saveRelationOrder(db, null, payload).status).toBe(401);
+    expect(saveRelationOrder(db, { id: 2, username: 'reader' }, payload).status).toBe(403);
+    expect(saveRelationOrder(db, { id: 1, username: 'owner' }, { ...payload, id: 'entity/missing' }).status).toBe(403);
+    const owner = { id: 1, username: 'owner' };
+    for (const incoming of [null, {}, { groups: [] }, { groups: 'x', items: 1 }, { groups: [1, 2], items: { person: [null] } }]) {
+      expect(saveRelationOrder(db, owner, { id: 'entity/one', kind: 'incoming', incoming }).status).toBe(400);
+    }
+    expect(saved()).toEqual({});
+    // 只带 kind 不带整体顺序的请求（旧的单条移动协议）同样被拒
+    expect(move({ kind: 'incoming', source: 'a', target: 'b' }).status).toBe(400);
+    expect(saved()).toEqual({});
+  } finally { db.close(); }
+});
+
+test('incoming order normalizes keys, drops duplicates and caps stored entries', () => {
+  const order = normalizeIncomingOrder({
+    groups: ['person', 'person', 42, '', 'x'.repeat(200), 'role'],
+    items: { person: ['a', 'a', 'b', '', 7], role: ['c'], '': ['d'] },
+    children: { b: ['d', 'd', 'e'], '': ['f'], c: [] },
+  });
+  expect(order.groups).toEqual(['person', 'role']);
+  expect(order.items).toEqual({ person: ['a', 'b'], role: ['c'] });
+  expect(order.children).toEqual({ b: ['d', 'e'] });
+  const many = normalizeIncomingOrder({ groups: Array.from({ length: 400 }, (_, index) => `g${index}`) });
+  expect(many.groups).toHaveLength(200);
+  expect(many.children).toEqual({});
 });
 
 test('sorting works through the request-scoped database used by the server', () => {

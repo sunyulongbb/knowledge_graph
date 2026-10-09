@@ -619,6 +619,7 @@
       if (relatedSection) relatedSection.hidden = true;
       if (relatedGroups) relatedGroups.replaceChildren();
       if (relatedCount) relatedCount.textContent = "";
+      resetIncomingRelationOrderState();
       const pdfView = document.getElementById("wikiTopPdf");
       if (pdfView) {
         pdfView.innerHTML = "";
@@ -646,11 +647,19 @@
     } catch {}
   }
 
-  function renderIncomingRelations(relations) {
+  function renderIncomingRelations(relations, options = {}) {
     const section = document.getElementById("detailIncomingRelations");
     const host = document.getElementById("detailIncomingRelationGroups");
     const count = document.getElementById("detailIncomingRelationCount");
     if (!section || !host) return;
+    if (options && typeof options === "object" && ("order" in options || "nodeId" in options || "canEdit" in options)) {
+      incomingRelationOrderState.nodeId = String(options.nodeId || "").trim();
+      incomingRelationOrderState.canEdit = Boolean(options.canEdit);
+      incomingRelationOrderState.order = normalizeIncomingOrder(options.order);
+      incomingRelationOrderState.statusText = "";
+    }
+    incomingRelationOrderState.relations = Array.isArray(relations) ? relations : [];
+    const storedOrder = incomingRelationOrderState.order;
     host.replaceChildren();
     const candidates = [];
     const seen = new Set();
@@ -663,6 +672,9 @@
       const typeName = String(
         source.typeLabel || source.ontology?.name || source.classLabel || source.type || "未分类",
       ).trim() || "未分类";
+      const groupKey = String(
+        source.classId || source.typeId || source.type || "",
+      ).trim() || typeName;
       const secondLevel = [];
       const secondLevelSeen = new Set();
       for (const entry of Array.isArray(relation?.secondLevel) ? relation.secondLevel : []) {
@@ -676,20 +688,46 @@
           relationName: String(entry?.propertyName || "").trim(),
         });
       }
-      candidates.push({ source, sourceId, typeName, secondLevel });
+      const childOrder = (storedOrder.children && storedOrder.children[sourceId]) || [];
+      // 没有自定义顺序时保持后端返回的排序，只有拖动过的父级才重排
+      if (childOrder.length) {
+        secondLevel.sort((left, right) =>
+          incomingOrderRank(childOrder, left.sourceId) - incomingOrderRank(childOrder, right.sourceId),
+        );
+      }
+      candidates.push({ source, sourceId, typeName, groupKey, secondLevel });
     }
-    candidates.sort((left, right) =>
-      left.typeName.localeCompare(right.typeName, "zh-CN") ||
-      String(left.source.name || left.source.label_zh || left.sourceId).localeCompare(String(right.source.name || right.source.label_zh || right.sourceId), "zh-CN"),
-    );
-    const groups = new Map();
+    const grouped = new Map();
     candidates.forEach((item) => {
-      if (!groups.has(item.typeName)) groups.set(item.typeName, []);
-      groups.get(item.typeName).push(item);
+      if (!grouped.has(item.groupKey)) {
+        grouped.set(item.groupKey, { key: item.groupKey, typeName: item.typeName, items: [] });
+      }
+      grouped.get(item.groupKey).items.push(item);
     });
-    const sortedGroups = Array.from(groups.entries()).sort(([left], [right]) =>
-      left.localeCompare(right, "zh-CN"),
+    const groupList = Array.from(grouped.values()).sort((left, right) =>
+      incomingOrderRank(storedOrder.groups, left.key) - incomingOrderRank(storedOrder.groups, right.key) ||
+      left.typeName.localeCompare(right.typeName, "zh-CN"),
     );
+    groupList.forEach((group) => {
+      const itemOrder = storedOrder.items[group.key] || [];
+      group.items.sort((left, right) =>
+        incomingOrderRank(itemOrder, left.sourceId) - incomingOrderRank(itemOrder, right.sourceId) ||
+        incomingItemLabel(left).localeCompare(incomingItemLabel(right), "zh-CN"),
+      );
+    });
+    // 拖拽在完整序列上移动，所以渲染后把当前顺序回写成排序基准
+    incomingRelationOrderState.order = {
+      groups: groupList.map((group) => group.key),
+      items: Object.fromEntries(groupList.map((group) => [group.key, group.items.map((item) => item.sourceId)])),
+      children: Object.fromEntries(
+        groupList.flatMap((group) =>
+          group.items
+            .filter((item) => item.secondLevel.length)
+            .map((item) => [item.sourceId, item.secondLevel.map((child) => child.sourceId)]),
+        ),
+      ),
+    };
+    const canSort = incomingRelationOrderState.canEdit && Boolean(incomingRelationOrderState.nodeId);
     const openRelatedEntity = (targetId, targetLabel) => {
       const nextView = window.kbViewMode === "knowledge_detail" ? "knowledge_detail" : "detail";
       if (typeof window.setViewMode === "function") {
@@ -724,48 +762,424 @@
       arrow.className = "fa-solid fa-arrow-right";
       arrow.setAttribute("aria-hidden", "true");
       button.append(marker, body, arrow);
-      button.addEventListener("click", () => openRelatedEntity(sourceId, name.textContent));
+      button.addEventListener("click", () => {
+        // 拖拽结束后浏览器仍会发一次 click，这里忽略它，避免误跳转
+        if (Date.now() < incomingRelationOrderState.suppressClickUntil) return;
+        openRelatedEntity(sourceId, name.textContent);
+      });
       return button;
     };
     let renderedCount = 0;
     let renderedSecondLevelCount = 0;
-    for (const [typeName, items] of sortedGroups) {
-      const group = document.createElement("section");
-      group.className = "detail-related-group";
+    for (const group of groupList) {
+      const groupEl = document.createElement("section");
+      groupEl.className = "detail-related-group";
       const heading = document.createElement("h3");
       heading.className = "detail-related-group-heading";
       const title = document.createElement("strong");
-      title.textContent = typeName;
+      title.textContent = group.typeName;
       const total = document.createElement("small");
-      total.textContent = `${items.length} 条`;
+      total.textContent = `${group.items.length} 条`;
       heading.append(title, total);
+      if (canSort) attachIncomingGroupDrag(heading, groupEl, group.key);
       const list = document.createElement("div");
       list.className = "detail-related-list";
-      items.forEach(({ source, sourceId, secondLevel }) => {
+      group.items.forEach(({ source, sourceId, secondLevel }) => {
         const node = document.createElement("div");
         node.className = "detail-related-node";
-        node.appendChild(createRelatedItem({ source, sourceId }, false));
+        const item = createRelatedItem({ source, sourceId }, false);
+        node.appendChild(item);
+        if (canSort) attachIncomingItemDrag(item, node, sourceId, group.key);
         renderedCount += 1;
         if (secondLevel.length) {
           const children = document.createElement("div");
           children.className = "detail-related-children";
           secondLevel.forEach((child) => {
-            children.appendChild(createRelatedItem(child, true));
+            const childItem = createRelatedItem(child, true);
+            children.appendChild(childItem);
+            if (canSort) attachIncomingChildDrag(childItem, sourceId, child.sourceId);
             renderedSecondLevelCount += 1;
           });
           node.appendChild(children);
         }
         list.appendChild(node);
       });
-      group.append(heading, list);
-      host.appendChild(group);
+      groupEl.append(heading, list);
+      host.appendChild(groupEl);
     }
     section.hidden = renderedCount === 0;
+    incomingRelationOrderState.renderedCount = renderedCount;
+    const orderStatus = document.getElementById("detailIncomingRelationStatus");
+    if (orderStatus && orderStatus !== count) orderStatus.textContent = incomingOrderStatusText();
     if (count) {
       count.textContent = renderedCount
         ? `${renderedCount} 条指向当前知识${renderedSecondLevelCount ? ` · 二级关联 ${renderedSecondLevelCount} 条` : ""}`
         : "";
     }
+  }
+
+  /* ── 详情页「关联信息」顺序：拖拽调整并写回后端 ─────────────── */
+  const incomingRelationOrderState = {
+    nodeId: "",
+    canEdit: false,
+    order: { groups: [], items: {}, children: {} },
+    previousOrder: null,
+    relations: null,
+    renderedCount: 0,
+    saving: false,
+    dragged: null,
+    suppressClickUntil: 0,
+    statusText: "",
+  };
+  const INCOMING_ORDER_KEY_LIMIT = 120;
+  const INCOMING_ORDER_MAX_KEYS = 500;
+
+  function cleanIncomingOrderKeys(value, limit = INCOMING_ORDER_MAX_KEYS) {
+    if (!Array.isArray(value)) return [];
+    const seen = new Set();
+    const keys = [];
+    for (const entry of value) {
+      if (typeof entry !== "string") continue;
+      const key = entry.trim();
+      if (!key || key.length > INCOMING_ORDER_KEY_LIMIT || seen.has(key)) continue;
+      seen.add(key);
+      keys.push(key);
+      if (keys.length >= limit) break;
+    }
+    return keys;
+  }
+
+  function normalizeIncomingOrder(raw) {
+    const source = raw && typeof raw === "object" ? raw : {};
+    const collect = (value) => {
+      const out = {};
+      const record = value && typeof value === "object" ? value : {};
+      Object.keys(record).slice(0, INCOMING_ORDER_MAX_KEYS).forEach((rawKey) => {
+        const key = String(rawKey).trim();
+        if (!key || key.length > INCOMING_ORDER_KEY_LIMIT) return;
+        const entries = cleanIncomingOrderKeys(record[rawKey]);
+        if (entries.length) out[key] = entries;
+      });
+      return out;
+    };
+    return { groups: cleanIncomingOrderKeys(source.groups), items: collect(source.items), children: collect(source.children) };
+  }
+
+  function incomingOrderRank(sequence, key) {
+    const index = sequence.indexOf(key);
+    return index < 0 ? Number.MAX_SAFE_INTEGER : index;
+  }
+
+  function incomingItemLabel(item) {
+    const source = item?.source || {};
+    return String(source.name || source.label_zh || source.label || source.title || item?.sourceId || "");
+  }
+
+  function incomingOrderCanSort() {
+    return Boolean(incomingRelationOrderState.canEdit) && Boolean(incomingRelationOrderState.nodeId) &&
+      !incomingRelationOrderState.saving;
+  }
+
+  function copyOrderRecord(record) {
+    return Object.fromEntries(Object.entries(record || {}).map(([key, list]) => [key, [...list]]));
+  }
+
+  function incomingOrderStatusText() {
+    if (incomingRelationOrderState.statusText) return incomingRelationOrderState.statusText;
+    return incomingOrderCanSort() && incomingRelationOrderState.renderedCount
+      ? "可拖拽条目、二级关联或分组标题调整顺序"
+      : "";
+  }
+
+  function setIncomingOrderStatus(text) {
+    incomingRelationOrderState.statusText = String(text || "");
+    try {
+      const status = document.getElementById("detailIncomingRelationStatus");
+      if (status) status.textContent = incomingRelationOrderState.statusText || incomingOrderStatusText();
+    } catch {}
+  }
+
+  function resetIncomingRelationOrderState() {
+    incomingRelationOrderState.nodeId = "";
+    incomingRelationOrderState.canEdit = false;
+    incomingRelationOrderState.order = { groups: [], items: {}, children: {} };
+    incomingRelationOrderState.previousOrder = null;
+    incomingRelationOrderState.relations = null;
+    incomingRelationOrderState.renderedCount = 0;
+    incomingRelationOrderState.dragged = null;
+    incomingRelationOrderState.statusText = "";
+    setIncomingOrderStatus("");
+  }
+
+  function clearIncomingDropMarks() {
+    try {
+      document
+        .querySelectorAll("#detailIncomingRelationGroups .relation-drop-before, #detailIncomingRelationGroups .relation-drop-after, #detailIncomingRelationGroups .is-relation-dragging")
+        .forEach((element) => element.classList.remove("relation-drop-before", "relation-drop-after", "is-relation-dragging"));
+    } catch {}
+  }
+
+  function markIncomingDrop(element, placement) {
+    clearIncomingDropMarks();
+    element.classList.add(placement === "before" ? "relation-drop-before" : "relation-drop-after");
+  }
+
+  function incomingDropPlacement(element, clientY) {
+    const bounds = element.getBoundingClientRect();
+    return clientY < bounds.top + bounds.height / 2 ? "before" : "after";
+  }
+
+  function incomingSequence(kind, groupKey, parentId) {
+    const order = incomingRelationOrderState.order;
+    if (kind === "group") return order.groups;
+    if (kind === "child") return order.children[parentId];
+    return order.items[groupKey];
+  }
+
+  function moveIncomingOrderEntry(move) {
+    if (!incomingOrderCanSort()) return;
+    const sequence = incomingSequence(move.kind, move.groupKey, move.parentId);
+    if (!Array.isArray(sequence)) return;
+    if (move.source === move.target) return;
+    if (!sequence.includes(move.source) || !sequence.includes(move.target)) return;
+    incomingRelationOrderState.previousOrder = {
+      groups: [...incomingRelationOrderState.order.groups],
+      items: copyOrderRecord(incomingRelationOrderState.order.items),
+      children: copyOrderRecord(incomingRelationOrderState.order.children),
+    };
+    const previousSequence = [...sequence];
+    sequence.splice(sequence.indexOf(move.source), 1);
+    sequence.splice(sequence.indexOf(move.target) + (move.placement === "after" ? 1 : 0), 0, move.source);
+    // 拖回原位就不必写回后端
+    if (sequence.length === previousSequence.length && sequence.every((key, index) => key === previousSequence[index])) return;
+    void persistIncomingOrderMove();
+  }
+
+  async function persistIncomingOrderMove() {
+    incomingRelationOrderState.saving = true;
+    setIncomingOrderStatus("正在保存顺序…");
+    renderIncomingRelations(incomingRelationOrderState.relations || []);
+    const saved = await persistIncomingRelationOrder();
+    incomingRelationOrderState.saving = false;
+    if (!saved && incomingRelationOrderState.previousOrder) {
+      incomingRelationOrderState.order = incomingRelationOrderState.previousOrder;
+    }
+    incomingRelationOrderState.previousOrder = null;
+    renderIncomingRelations(incomingRelationOrderState.relations || []);
+  }
+
+  async function persistIncomingRelationOrder() {
+    const nodeId = incomingRelationOrderState.nodeId;
+    if (!nodeId) return false;
+    try {
+      let url = new URL("/api/kb/node/relation-order", window.location.origin);
+      if (typeof window.appendCurrentDbParam === "function") {
+        const scoped = window.appendCurrentDbParam(url);
+        if (scoped instanceof URL) url = scoped;
+      }
+      const response = await fetch(String(url), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: nodeId,
+          kind: "incoming",
+          incoming: incomingRelationOrderState.order,
+        }),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) throw new Error((result && result.error) || "顺序保存失败");
+      if (result && result.relation_order) {
+        incomingRelationOrderState.order = normalizeIncomingOrder(result.relation_order.incoming);
+      }
+      setIncomingOrderStatus("顺序已保存");
+      return true;
+    } catch (error) {
+      setIncomingOrderStatus((error && error.message) || "顺序保存失败");
+      return false;
+    }
+  }
+
+  function attachIncomingItemDrag(item, node, sourceId, groupKey) {
+    item.draggable = true;
+    item.title = "拖拽调整顺序（Alt + ↑ / ↓）";
+    item.addEventListener("dragstart", (event) => {
+      if (!incomingOrderCanSort()) {
+        event.preventDefault();
+        return;
+      }
+      incomingRelationOrderState.dragged = { kind: "item", key: sourceId, groupKey };
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", sourceId);
+      }
+      try { clearIncomingDropMarks(); node.classList.add("is-relation-dragging"); } catch {}
+    });
+    item.addEventListener("dragend", () => {
+      incomingRelationOrderState.dragged = null;
+      incomingRelationOrderState.suppressClickUntil = Date.now() + 250;
+      clearIncomingDropMarks();
+    });
+    item.addEventListener("keydown", (event) => {
+      if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+      if (!incomingOrderCanSort()) return;
+      event.preventDefault();
+      const sequence = incomingSequence("item", groupKey) || [];
+      const target = sequence[sequence.indexOf(sourceId) + (event.key === "ArrowUp" ? -1 : 1)];
+      if (target) {
+        moveIncomingOrderEntry({
+          kind: "item",
+          source: sourceId,
+          target,
+          placement: event.key === "ArrowUp" ? "before" : "after",
+          groupKey,
+        });
+      }
+    });
+    node.addEventListener("dragover", (event) => {
+      const dragged = incomingRelationOrderState.dragged;
+      if (!dragged || dragged.kind !== "item" || dragged.groupKey !== groupKey || !incomingOrderCanSort()) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+      markIncomingDrop(node, incomingDropPlacement(node, event.clientY));
+    });
+    node.addEventListener("drop", (event) => {
+      const dragged = incomingRelationOrderState.dragged;
+      clearIncomingDropMarks();
+      if (!dragged || dragged.kind !== "item" || dragged.groupKey !== groupKey || !incomingOrderCanSort()) return;
+      event.preventDefault();
+      event.stopPropagation();
+      incomingRelationOrderState.dragged = null;
+      moveIncomingOrderEntry({
+        kind: "item",
+        source: dragged.key,
+        target: sourceId,
+        placement: incomingDropPlacement(node, event.clientY),
+        groupKey,
+      });
+    });
+  }
+
+  /** 二级关联：横向排列，落点按左/右半边判断，只在同一个父级内排序。 */
+  function attachIncomingChildDrag(child, parentId, childId) {
+    child.draggable = true;
+    child.title = "拖拽调整顺序（Alt + ← / →）";
+    child.addEventListener("dragstart", (event) => {
+      if (!incomingOrderCanSort()) {
+        event.preventDefault();
+        return;
+      }
+      incomingRelationOrderState.dragged = { kind: "child", key: childId, parentId };
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", childId);
+      }
+      try { clearIncomingDropMarks(); child.classList.add("is-relation-dragging"); } catch {}
+    });
+    child.addEventListener("dragend", () => {
+      incomingRelationOrderState.dragged = null;
+      incomingRelationOrderState.suppressClickUntil = Date.now() + 250;
+      clearIncomingDropMarks();
+    });
+    child.addEventListener("keydown", (event) => {
+      if (!event.altKey) return;
+      const back = event.key === "ArrowLeft" || event.key === "ArrowUp";
+      const forward = event.key === "ArrowRight" || event.key === "ArrowDown";
+      if (!back && !forward) return;
+      if (!incomingOrderCanSort()) return;
+      event.preventDefault();
+      const sequence = incomingSequence("child", undefined, parentId) || [];
+      const target = sequence[sequence.indexOf(childId) + (back ? -1 : 1)];
+      if (target) {
+        moveIncomingOrderEntry({
+          kind: "child",
+          source: childId,
+          target,
+          placement: back ? "before" : "after",
+          parentId,
+        });
+      }
+    });
+    const sameParentDrag = () =>
+      Boolean(incomingRelationOrderState.dragged && incomingRelationOrderState.dragged.kind === "child" &&
+        incomingRelationOrderState.dragged.parentId === parentId) && incomingOrderCanSort();
+    const childPlacement = (event) => {
+      const bounds = child.getBoundingClientRect();
+      return event.clientX < bounds.left + bounds.width / 2 ? "before" : "after";
+    };
+    child.addEventListener("dragover", (event) => {
+      if (!sameParentDrag()) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+      markIncomingDrop(child, childPlacement(event));
+    });
+    child.addEventListener("drop", (event) => {
+      if (!sameParentDrag()) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const dragged = incomingRelationOrderState.dragged;
+      const placement = childPlacement(event);
+      clearIncomingDropMarks();
+      incomingRelationOrderState.dragged = null;
+      moveIncomingOrderEntry({ kind: "child", source: dragged.key, target: childId, placement, parentId });
+    });
+  }
+
+  function attachIncomingGroupDrag(heading, groupEl, groupKey) {    heading.draggable = true;
+    heading.tabIndex = 0;
+    heading.title = "拖拽调整分组顺序（Alt + ↑ / ↓）";
+    heading.addEventListener("dragstart", (event) => {
+      if (!incomingOrderCanSort()) {
+        event.preventDefault();
+        return;
+      }
+      incomingRelationOrderState.dragged = { kind: "group", key: groupKey };
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", groupKey);
+      }
+      try { clearIncomingDropMarks(); groupEl.classList.add("is-relation-dragging"); } catch {}
+    });
+    heading.addEventListener("dragend", () => {
+      incomingRelationOrderState.dragged = null;
+      clearIncomingDropMarks();
+    });
+    heading.addEventListener("keydown", (event) => {
+      if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+      if (!incomingOrderCanSort()) return;
+      event.preventDefault();
+      const sequence = incomingSequence("group") || [];
+      const target = sequence[sequence.indexOf(groupKey) + (event.key === "ArrowUp" ? -1 : 1)];
+      if (target) {
+        moveIncomingOrderEntry({
+          kind: "group",
+          source: groupKey,
+          target,
+          placement: event.key === "ArrowUp" ? "before" : "after",
+        });
+      }
+    });
+    groupEl.addEventListener("dragover", (event) => {
+      const dragged = incomingRelationOrderState.dragged;
+      if (!dragged || dragged.kind !== "group" || !incomingOrderCanSort()) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+      markIncomingDrop(groupEl, incomingDropPlacement(groupEl, event.clientY));
+    });
+    groupEl.addEventListener("drop", (event) => {
+      const dragged = incomingRelationOrderState.dragged;
+      clearIncomingDropMarks();
+      if (!dragged || dragged.kind !== "group" || !incomingOrderCanSort()) return;
+      event.preventDefault();
+      event.stopPropagation();
+      incomingRelationOrderState.dragged = null;
+      moveIncomingOrderEntry({
+        kind: "group",
+        source: dragged.key,
+        target: groupKey,
+        placement: incomingDropPlacement(groupEl, event.clientY),
+      });
+    });
   }
 
   function renderNativePdfFallback(root, resolvedUrl, message = "") {
@@ -1186,7 +1600,11 @@
           '<div class="muted">未找到详情</div>';
         return;
       }
-      renderIncomingRelations(data && data.incomingRelations);
+      renderIncomingRelations(data && data.incomingRelations, {
+        nodeId: String((doc && (doc._id || doc.id)) || fullId || "").trim(),
+        canEdit: typeof window.canEditCurrentKnowledge === "function" ? Boolean(window.canEditCurrentKnowledge()) : false,
+        order: doc && doc.relation_order ? doc.relation_order.incoming : null,
+      });
       // prefer authoritative id from doc if available
       try {
         const canonicalIdRaw =

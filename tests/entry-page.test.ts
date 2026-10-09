@@ -540,7 +540,7 @@ test('entity editor uses the post-composer hierarchy without changing existing c
   expect(page).toContain('id="btnCancelEdit"');
   expect(page).toContain('id="btnEntityImport"');
   expect(page).toContain('id="btnSubmit"');
-  expect(page).toContain('/assets/styles/app.css?v=20261010-vis-ontology6');
+  expect(page).toContain('/assets/styles/app.css?v=20261010-related-order3');
   expect(css).toContain('.app-profile-actions { position: fixed; top: 24px; right: 24px;');
   expect(css).toContain('.app-inspiration-profile-layer.has-selection { z-index: 7; }');
   expect(css).toContain('.app-profile-node.is-selected { position: absolute !important;');
@@ -554,7 +554,7 @@ test('entity editor uses the post-composer hierarchy without changing existing c
   expect(page).toContain('id="entityDisplayImageWrap" class="wd-entity-avatar-wrap empty social-avatar-wrap" hidden');
   expect(page).toContain('id="composerUserAvatar" class="composer-user-avatar" hidden');
   expect(page).toContain('/assets/scripts/entity-import.js?v=20260921-6');
-  expect(page).toContain('/assets/scripts/detail-panel.js?v=20261010-crumb-label');
+  expect(page).toContain('/assets/scripts/detail-panel.js?v=20261010-related-order3');
   expect(readFileSync('public/assets/scripts/entity-import.js', 'utf8')).toContain("window.addEventListener('kb-auth-change'");
   expect(readFileSync('public/assets/scripts/entity-import.js', 'utf8')).toContain("document.getElementById('composerUserAvatar')");
   expect(readFileSync('public/assets/scripts/detail-panel.js', 'utf8')).toContain('extractImageUrls(val, isMediaAttrItem(it))');
@@ -566,15 +566,28 @@ test('entity editor uses the post-composer hierarchy without changing existing c
   expect(detailPanel).toContain('stage.dataset.activeMedia = key');
   expect(page).toContain('id="detailMediaTabs" class="detail-media-tabs"');
   expect(page).toContain('id="detailIncomingRelations" class="detail-related-section"');
-  expect(detailPanel).toContain('function renderIncomingRelations(relations)');
+  expect(detailPanel).toContain('function renderIncomingRelations(relations, options = {})');
   expect(detailPanel).toContain('items.forEach(({ source, sourceId, secondLevel }) => {');
-  expect(detailPanel).toContain('total.textContent = `${items.length} 条`;');
+  expect(detailPanel).toContain('total.textContent = `${group.items.length} 条`;');
   expect(detailPanel).toContain('detail-related-children');
   expect(detailPanel).toContain('source.typeLabel || source.ontology?.name || source.classLabel');
   expect(css).toContain('.detail-related-list { display:block; }');
   // 二级（叶子）关联实体在父级下方横向自动排列，竖线与父级圆点对齐
   expect(css).toContain('.detail-related-children { margin:0 0 8px 6px; padding:2px 0 4px 12px; border-left:1px solid color-mix(in srgb,var(--accent) 26%,var(--border)); display:flex; flex-wrap:wrap;');
   expect(css).toContain('.detail-related-item-child { width:auto; max-width:100%;');
+  // 关联信息支持拖拽调整顺序，顺序写回后端（与属性面板共用接口）
+  expect(page).toContain('id="detailIncomingRelationStatus" class="detail-related-order-status"');
+  expect(detailPanel).toContain('function attachIncomingItemDrag(item, node, sourceId, groupKey)');
+  expect(detailPanel).toContain('function attachIncomingGroupDrag(heading, groupEl, groupKey)');
+  expect(detailPanel).toContain('function attachIncomingChildDrag(child, parentId, childId)');
+  expect(detailPanel).toContain('kind: "incoming"');
+  expect(detailPanel).toContain('kind: "child"');
+  expect(detailPanel).toContain('incomingRelationOrderState.order = normalizeIncomingOrder(options.order);');
+  expect(css).toContain('.detail-related-heading-meta {');
+  expect(css).toContain('.detail-related-node.relation-drop-before, .detail-related-group.relation-drop-before { box-shadow:0 -2px 0 var(--accent); }');
+  expect(css).toContain('.detail-related-item-child.relation-drop-before { box-shadow:-2px 0 0 var(--accent); }');
+  expect(detailPanel).toContain('children: Object.fromEntries(');
+  expect(detailPanel).toContain('可拖拽条目、二级关联或分组标题调整顺序');
   expect(detailPanel).toContain('zoomResetButton.textContent = "适合"');
   expect(detailPanel).toContain('openLink.setAttribute("aria-label", "在新窗口打开 PDF")');
   expect(detailPanel).toContain('wasmUrl: "/node_modules/pdfjs-dist/wasm/"');
