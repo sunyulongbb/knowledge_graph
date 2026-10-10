@@ -9840,31 +9840,10 @@
                   if (e && !e.empty()) e.addClass("new-edge");
                 } catch { }
               }
-              // run layout but restrict to affected elements for smoother interaction
+              // 加载下级关系时保留现有节点位置，仅对新加入的节点做局部摆放
               try {
                 syncGraphLayoutAppearance();
-                const layoutName = String(getCurrentGraphLayoutName() || "cose").trim();
-                if (layoutName === "dagre" && newNodeIds.size) {
-                  placeNewNodesForDagreMerge(toAdd, newNodeIds, fullId);
-                } else {
-                  const willRestoreSnapshot = restoreGraphSnapshotAfterNextLayout(snapshotScopeId, {
-                    restoreViewport: restoreSnapshotViewport,
-                  });
-                  const layout = window.kbCy.layout(
-                    getSelectedGraphLayoutOpts({
-                      animate: true,
-                      randomize: false,
-                      fit: false,
-                    })
-                  );
-                  layout.run();
-                  if (willRestoreSnapshot && restoreSnapshotViewport) {
-                    try {
-                      window.kbSkipAutoFocusAfterSnapshot = true;
-                      window.kbLastRestoredGraphSnapshotScopeId = snapshotScopeId;
-                    } catch { }
-                  }
-                }
+                placeMergedNodesPreservingLayout(newNodeIds, fullId);
               } catch (e) {
                 console.error("layout run failed", e);
               }
@@ -9899,6 +9878,11 @@
       } catch (e) {
         console.error("loadNodeNeighborhood error", e);
       } finally {
+        try {
+          if (typeof window.kbApplyTailTypeFilter === "function") {
+            window.kbApplyTailTypeFilter();
+          }
+        } catch { }
         showGraphLoading(false);
       }
     }
@@ -9957,113 +9941,91 @@
       return Object.assign({}, base, extra || {});
     }
 
-    function placeNewNodesForDagreMerge(addedElements, addedNodeIds, anchorNodeId) {
+    // 加载下级关系时的局部摆放：只移动新加入的节点，保留现有节点位置不变。
+    function placeMergedNodesPreservingLayout(addedNodeIds, anchorNodeId) {
       if (!window.kbCy) return;
-      const layoutName = String(getCurrentGraphLayoutName() || "cose").trim();
-      if (layoutName !== "dagre") return;
       const nodeIds = Array.isArray(addedNodeIds)
         ? addedNodeIds
         : Array.from(addedNodeIds || []);
       if (!nodeIds.length) return;
 
-      const anchorCandidates = [];
-      const anchorFullId = ensureEntityIdPrefix(anchorNodeId || "");
-      const anchorShortId = stripEntityIdPrefix(anchorNodeId || "") || String(anchorNodeId || "").trim();
-      if (anchorFullId) anchorCandidates.push(anchorFullId);
-      if (anchorShortId && !anchorCandidates.includes(anchorShortId)) anchorCandidates.push(anchorShortId);
-      let anchor = null;
-      for (const candidate of anchorCandidates) {
-        try {
-          const found = window.kbCy.getElementById(candidate);
-          if (found && !found.empty()) {
-            anchor = found;
-            break;
-          }
-        } catch { }
-      }
-      const anchorPos = anchor && !anchor.empty() ? anchor.position() : null;
-      if (!anchorPos) return;
-      const normalizedAnchorIds = new Set(
-        anchorCandidates
-          .map((id) => getCurrentGraphSnapshotScopeId(id))
-          .filter(Boolean),
-      );
-
-      const nodesToPlace = [];
-      nodeIds.forEach((id) => {
-        try {
-          const idCandidates = [];
-          const fullId = ensureEntityIdPrefix(id || "");
-          const shortId = stripEntityIdPrefix(id || "") || String(id || "").trim();
-          if (fullId) idCandidates.push(fullId);
-          if (shortId && !idCandidates.includes(shortId)) idCandidates.push(shortId);
-          let node = null;
-          for (const candidate of idCandidates) {
+      const resolveNode = (id) => {
+        const candidates = [];
+        const fullId = ensureEntityIdPrefix(id || "");
+        const shortId =
+          stripEntityIdPrefix(id || "") || String(id || "").trim();
+        if (fullId) candidates.push(fullId);
+        if (shortId && !candidates.includes(shortId)) candidates.push(shortId);
+        for (const candidate of candidates) {
+          try {
             const found = window.kbCy.getElementById(candidate);
-            if (found && !found.empty()) {
-              node = found;
-              break;
-            }
-          }
-          if (!node || node.empty()) return;
-          const isChildOfAnchor = Array.from(node.connectedEdges?.() || []).some((edge) => {
-            const sourceId = getCurrentGraphSnapshotScopeId(edge.source?.().id?.() || "");
-            const targetId = getCurrentGraphSnapshotScopeId(edge.target?.().id?.() || "");
-            return normalizedAnchorIds.has(sourceId) || normalizedAnchorIds.has(targetId);
-          });
-          if (isChildOfAnchor) {
-            nodesToPlace.push(node);
-          }
-        } catch { }
-      });
+            if (found && !found.empty()) return found;
+          } catch { }
+        }
+        return null;
+      };
 
+      const nodesToPlace = nodeIds
+        .map((id) => resolveNode(id))
+        .filter((node) => node && !node.empty());
       if (!nodesToPlace.length) return;
 
-      const directChildren = [];
-      try {
-        const seen = new Set();
-        window.kbCy.edges().forEach((edge) => {
-          const sourceId = getCurrentGraphSnapshotScopeId(edge.source?.().id?.() || "");
-          if (!normalizedAnchorIds.has(sourceId)) return;
-          const targetNode = edge.target?.();
-          if (!targetNode || targetNode.empty?.()) return;
-          const targetId = String(targetNode.id?.() || "").trim();
-          if (!targetId || seen.has(targetId)) return;
-          seen.add(targetId);
-          directChildren.push(targetNode);
+      const anchor = resolveNode(anchorNodeId);
+      let anchorPos = anchor ? anchor.position() : null;
+      if (!anchorPos) {
+        let sumX = 0;
+        let sumY = 0;
+        let count = 0;
+        window.kbCy.nodes().forEach((node) => {
+          const pos = node.position();
+          sumX += Number(pos.x) || 0;
+          sumY += Number(pos.y) || 0;
+          count += 1;
         });
-      } catch { }
+        anchorPos = count ? { x: sumX / count, y: sumY / count } : { x: 0, y: 0 };
+      }
 
-      const nodesToArrange = directChildren.length ? directChildren : nodesToPlace;
-      if (!nodesToArrange.length) return;
+      // 锚点及其邻居的位置作为避让参考，避免新节点互相重叠
+      const occupied = [{ x: anchorPos.x, y: anchorPos.y }];
+      if (anchor && !anchor.empty()) {
+        anchor.neighborhood("node").forEach((neighbor) => {
+          if (neighbor.id() === anchor.id()) return;
+          const pos = neighbor.position();
+          occupied.push({ x: Number(pos.x) || 0, y: Number(pos.y) || 0 });
+        });
+      }
 
-      nodesToArrange.sort((a, b) => {
-        const ax = Number(a.position?.().x || 0);
-        const bx = Number(b.position?.().x || 0);
-        if (Math.abs(ax - bx) > 4) return ax - bx;
-        const al = String(a.data?.("label") || a.id?.() || "");
-        const bl = String(b.data?.("label") || b.id?.() || "");
-        return al.localeCompare(bl, "zh-Hans-CN");
-      });
-
+      const radii = [170, 250, 330];
+      const angleSteps = 16;
       window.kbCy.batch(() => {
-        const total = nodesToArrange.length;
-        const columns = total <= 3 ? total : total <= 8 ? 4 : 5;
-        const columnGap = columns >= 5 ? 170 : 190;
-        const rowGap = 120;
-        const startX = anchorPos.x - ((columns - 1) * columnGap) / 2;
-        const startY = anchorPos.y + 170;
-        nodesToArrange.forEach((node, index) => {
-          try {
-            const column = index % columns;
-            const row = Math.floor(index / columns);
-            const targetX = startX + column * columnGap;
-            const targetY = startY + row * rowGap;
-            node.position({ x: targetX, y: targetY });
-          } catch { }
+        nodesToPlace.forEach((node) => {
+          let bestPos = null;
+          let bestScore = -Infinity;
+          for (const radius of radii) {
+            for (let i = 0; i < angleSteps; i += 1) {
+              const angle = (i / angleSteps) * Math.PI * 2;
+              const x = anchorPos.x + Math.cos(angle) * radius;
+              const y = anchorPos.y + Math.sin(angle) * radius;
+              let nearest = Infinity;
+              for (const point of occupied) {
+                const distance = Math.hypot(point.x - x, point.y - y);
+                if (distance < nearest) nearest = distance;
+              }
+              if (nearest > bestScore) {
+                bestScore = nearest;
+                bestPos = { x, y };
+              }
+            }
+          }
+          if (bestPos) {
+            node.position(bestPos);
+            occupied.push(bestPos);
+          }
         });
       });
-      scheduleDagreEdgeLabelVisibilityRefresh();
+      if (String(getCurrentGraphLayoutName() || "cose").trim() === "dagre") {
+        scheduleDagreEdgeLabelVisibilityRefresh();
+      }
       scheduleGraphSnapshotPersist();
     }
 
@@ -10332,6 +10294,107 @@
         console.warn("syncGraphLayoutAppearance failed", err);
       }
     }
+
+    // ── 关系图尾实体类型筛选 ─────────────────────────────
+    // 选中左侧本体类型时，仅展示目标实体（尾实体）类型属于所选本体（含下级）的关系。
+    function graphNodeTailTypeIds(node) {
+      if (!node || (typeof node.empty === "function" && node.empty())) return [];
+      const data = (typeof node.data === "function" ? node.data() : null) || {};
+      const ontologyId =
+        data.ontology && typeof data.ontology === "object" ? data.ontology.id : "";
+      return [data.typeId, data.type, data.classId, ontologyId]
+        .map((value) => String(value || "").trim())
+        .filter(Boolean);
+    }
+
+    function applyTailTypeFilterToGraph() {
+      if (!window.kbCy) return;
+      const cy = window.kbCy;
+      const filter = window.kbTailTypeFilter;
+      const active = filter && typeof filter.has === "function" && filter.size > 0;
+      try {
+        cy.batch(() => {
+          if (!active) {
+            cy.elements().removeClass("kb-tail-type-hidden");
+            return;
+          }
+          const visibleEdges = cy.collection();
+          cy.edges().forEach((edge) => {
+            const target = edge.target();
+            if (!target || target.empty()) return;
+            if (graphNodeTailTypeIds(target).some((id) => filter.has(id))) {
+              visibleEdges.merge(edge);
+            }
+          });
+          cy.elements().addClass("kb-tail-type-hidden");
+          visibleEdges.removeClass("kb-tail-type-hidden");
+          visibleEdges.forEach((edge) => {
+            try {
+              edge.source().removeClass("kb-tail-type-hidden");
+              edge.target().removeClass("kb-tail-type-hidden");
+            } catch { }
+          });
+        });
+      } catch (err) {
+        console.warn("applyTailTypeFilterToGraph failed", err);
+      }
+    }
+
+    function updateTailTypeFilterBadge() {
+      const body = document.querySelector(".vis-panel .vis-graph-body");
+      let badge = document.getElementById("tailTypeFilterBadge");
+      const meta = window.kbTailTypeFilterMeta;
+      if (!body || !window.kbTailTypeFilter || !meta) {
+        if (badge) badge.remove();
+        return;
+      }
+      if (!badge) {
+        badge = document.createElement("div");
+        badge.id = "tailTypeFilterBadge";
+        badge.style.cssText =
+          "position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:20;display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:rgba(37,99,235,0.92);color:#fff;font-size:12px;box-shadow:0 4px 12px rgba(15,23,42,0.18);";
+        const text = document.createElement("span");
+        text.id = "tailTypeFilterBadgeText";
+        const close = document.createElement("button");
+        close.type = "button";
+        close.textContent = "✕";
+        close.title = "清除尾实体类型筛选";
+        close.setAttribute("aria-label", "清除尾实体类型筛选");
+        close.style.cssText =
+          "border:none;background:transparent;color:#fff;cursor:pointer;font-size:12px;line-height:1;padding:0;";
+        close.addEventListener("click", () => {
+          try {
+            const api = window.kbOntologyTailTypeFilter;
+            if (api && typeof api.clear === "function") {
+              api.clear();
+            } else {
+              window.kbFilterRelationsByTailType(null);
+            }
+          } catch { }
+        });
+        badge.append(text, close);
+        body.appendChild(badge);
+      }
+      const label = badge.querySelector("#tailTypeFilterBadgeText");
+      if (label) {
+        const name = String(meta.label || meta.typeId || "").trim() || "已筛选";
+        label.textContent = `尾实体类型：${name}`;
+      }
+    }
+
+    // typeIds 为 null/空数组时清除筛选；否则只展示「尾实体类型」命中的关系。
+    function setTailTypeFilter(typeIds, meta) {
+      const list = Array.isArray(typeIds)
+        ? typeIds.map((value) => String(value || "").trim()).filter(Boolean)
+        : [];
+      window.kbTailTypeFilter = list.length ? new Set(list) : null;
+      window.kbTailTypeFilterMeta = window.kbTailTypeFilter ? meta || {} : null;
+      applyTailTypeFilterToGraph();
+      updateTailTypeFilterBadge();
+    }
+
+    window.kbFilterRelationsByTailType = setTailTypeFilter;
+    window.kbApplyTailTypeFilter = applyTailTypeFilterToGraph;
 
     // Re-fit graph on container resize to keep canvas synced
     function observeResize(instance, container) {
@@ -11290,6 +11353,13 @@
             'z-index': 999,
           }
         },
+        // 尾实体类型筛选：隐藏不是目标类型的关系及其孤立节点
+        {
+          selector: '.kb-tail-type-hidden',
+          style: {
+            display: 'none',
+          }
+        },
       ];
     }
 
@@ -11451,6 +11521,8 @@
             const edgePropertyModal = document.getElementById('edgePropertyModal');
             const edgePropertyList = document.getElementById('edgePropertyList');
             const edgePropertySearch = document.getElementById('edgePropertySearch');
+            const edgeCustomPropertyName = document.getElementById('edgeCustomPropertyName');
+            const btnEdgeCustomCreate = document.getElementById('btnEdgeCustomCreate');
             const btnEdgePropertyCancel = document.getElementById('btnEdgePropertyCancel');
             let pendingEdgeData = null; // 暂存待创建的边信息
             let allProperties = []; // 缓存属性列表
@@ -11542,10 +11614,24 @@
             }
 
             // 选择属性创建关系
-            async function selectPropertyForEdge(propId, propName) {
+            async function selectPropertyForEdge(propId, propName, isCustom = false) {
               if (!pendingEdgeData) return;
               const { sourceId, targetId, addedEdge } = pendingEdgeData;
               const selectionLabel = propName || propId;
+              if (!selectionLabel) return;
+
+              const payload = {
+                source: sourceId,
+                target: targetId,
+                type: propId,
+                label: propName
+              };
+              if (isCustom) {
+                // 自定义关系类型：按名称复用或新建属性，并同步到本体
+                payload.custom = true;
+                payload.type = selectionLabel;
+                payload.label = selectionLabel;
+              }
 
               try {
                 const url = new URL('/api/kb/relations/create', window.location.origin);
@@ -11556,12 +11642,7 @@
                 const resp = await fetch(url.toString(), {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    source: sourceId,
-                    target: targetId,
-                    type: propId,
-                    label: propName
-                  })
+                  body: JSON.stringify(payload)
                 });
 
                 if (!resp.ok) throw new Error('创建关系失败: ' + resp.status);
@@ -11625,6 +11706,7 @@
               }
               pendingEdgeData = null;
               edgePropertySearch.value = '';
+              if (edgeCustomPropertyName) edgeCustomPropertyName.value = '';
             }
 
             // 显示模态框
@@ -11659,6 +11741,7 @@
               allProperties = [];
               await loadPropertiesForEdge(sourceId);
               renderPropertyList();
+              if (edgeCustomPropertyName) edgeCustomPropertyName.value = '';
               edgePropertySearch.focus();
             }
 
@@ -11673,6 +11756,34 @@
             edgePropertySearch.addEventListener('input', (e) => {
               renderPropertyList(e.target.value);
             });
+
+            // 自定义关系类型：填写名称后新增并使用，自动同步到本体
+            async function createCustomPropertyForEdge() {
+              const name = (edgeCustomPropertyName?.value || '').trim();
+              if (!name) {
+                alert('请输入自定义关系类型名称');
+                if (edgeCustomPropertyName) edgeCustomPropertyName.focus();
+                return;
+              }
+              if (!pendingEdgeData) return;
+              if (btnEdgeCustomCreate) btnEdgeCustomCreate.disabled = true;
+              try {
+                await selectPropertyForEdge(name, name, true);
+              } finally {
+                if (btnEdgeCustomCreate) btnEdgeCustomCreate.disabled = false;
+              }
+            }
+            if (btnEdgeCustomCreate) {
+              btnEdgeCustomCreate.addEventListener('click', createCustomPropertyForEdge);
+            }
+            if (edgeCustomPropertyName) {
+              edgeCustomPropertyName.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  createCustomPropertyForEdge();
+                }
+              });
+            }
 
             window.kbEdgehandles = window.kbCy.edgehandles({
               preview: true,
@@ -17265,7 +17376,7 @@
   <div id="edgePropertyModal" class="modal-overlay"
     style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 2000; align-items: center; justify-content: center;">
     <div class="modal-content"
-      style="padding: 20px; border-radius: 8px; width: 420px; max-height: 520px; display: flex; flex-direction: column;">
+      style="padding: 20px; border-radius: 8px; width: 420px; max-height: 600px; display: flex; flex-direction: column;">
       <h3 id="edgeModalTitle" style="margin-top: 0; margin-bottom: 8px; color: var(--fg);">选择关系类型</h3>
       <div id="edgeNodeInfo"
         style="margin-bottom: 12px; padding: 10px; background: var(--surface-2, #f8fafc); border-radius: 6px; font-size: 13px;">
@@ -17282,6 +17393,14 @@
       <div id="edgePropertyList"
         style="flex: 1; overflow-y: auto; max-height: 280px; border: 1px solid var(--border); border-radius: 4px;">
         <div class="muted" style="padding: 12px; text-align: center;">加载中...</div>
+      </div>
+      <div style="margin-top: 10px;">
+        <div style="font-size: 12px; color: var(--muted); margin-bottom: 6px;">未找到合适的关系类型？可自定义新增，并自动同步到本体</div>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="edgeCustomPropertyName" class="kb-input" placeholder="自定义关系类型名称，如：任职于" autocomplete="off"
+            style="flex: 1; padding: 8px; border: 1px solid var(--border); border-radius: 4px;">
+          <button type="button" id="btnEdgeCustomCreate" class="btn primary" style="padding: 8px 14px; white-space: nowrap;">新增并使用</button>
+        </div>
       </div>
       <div style="display: flex; gap: 8px; margin-top: 12px; justify-content: space-between; align-items: center;">
         <span style="font-size: 12px; color: var(--muted);">提示：选中边后按 Delete 可删除</span>

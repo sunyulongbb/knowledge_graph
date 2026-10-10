@@ -5430,6 +5430,8 @@ export async function handleCoreKbRoutes(
       const target = normalizeNodeId(body.target);
       const type = body.type || "related";
       const label = body.label || type;
+      const isCustomProperty =
+        body.custom === true || body.custom === "true";
 
       if (!source || !target) {
         return new Response("Missing source or target", { status: 400 });
@@ -5453,7 +5455,7 @@ export async function handleCoreKbRoutes(
       let propId = String(explicitExisting?.id || "").trim();
       let propName = String(explicitExisting?.name || "").trim();
 
-      if (!propId && picked.propertyId) {
+      if (!propId && !isCustomProperty && picked.propertyId) {
         propId = String(picked.propertyId || "").trim();
         propName = String(
           picked.propertyName || picked.propertyId || "",
@@ -5461,12 +5463,16 @@ export async function handleCoreKbRoutes(
       }
 
       if (!propId) {
-        const fallbackLabel =
-          picked.headTypeName && picked.tailTypeName
+        const customLabel = String(label || type || "").trim();
+        const fallbackLabel = isCustomProperty
+          ? customLabel || "related"
+          : picked.headTypeName && picked.tailTypeName
             ? `${picked.headTypeName}关联${picked.tailTypeName}`
-            : String(label || type || "related").trim() || "related";
+            : customLabel || "related";
         const fallbackKey =
-          canonicalizePropertyKey(String(type || "").trim()) ||
+          canonicalizePropertyKey(
+            isCustomProperty ? customLabel : String(type || "").trim(),
+          ) ||
           canonicalizePropertyKey(fallbackLabel) ||
           "related";
         const propRec = ensurePropertyRecord(

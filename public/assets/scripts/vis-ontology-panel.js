@@ -35,6 +35,8 @@ let recommendTypeId = "";
 let recommendTypeLabel = "";
 let recommendMode = "type";
 let searchQuery = "";
+let treeFlat = [];
+let tailTypeFilterId = "";
 const recommendCache = new Map();
 const recommendNodesById = new Map();
 
@@ -232,13 +234,52 @@ function buildController(module, host) {
     nodeIcon: "folder",
     defaultExpandAll: true,
     expandOnFirstRender: true,
-    // 点击分类 → 右侧知识推荐列出该类型的知识
-    onSelect: (id) => void loadRecommendations(id),
+    // 点击分类 → 右侧知识推荐列出该类型的知识，同时按「尾实体类型」筛选关系图
+    onSelect: (id) => handleOntologySelect(id),
     onEdit: () => {},
     onAddChild: () => {},
     onDelete: () => {},
     onReload: () => void refreshTree(),
   });
+}
+
+// 选中本体类型：右侧列出该类型知识，同时按「尾实体类型」筛选关系图。
+function handleOntologySelect(id) {
+  const typeId = String(id || "").trim();
+  void loadRecommendations(typeId);
+  tailTypeFilterId = typeId;
+  applyTailTypeFilter(typeId);
+}
+
+// 汇总所选本体及其所有下级本体 id，保证与后端「含下级」的筛选语义一致。
+function collectTailTypeFilterIds(typeId) {
+  const root = String(typeId || "").trim();
+  if (!root) return [];
+  const byParent = new Map();
+  for (const item of treeFlat) {
+    const parentId = String(item?.parent_id || "").trim();
+    if (!byParent.has(parentId)) byParent.set(parentId, []);
+    byParent.get(parentId).push(String(item?.id || "").trim());
+  }
+  const result = [];
+  const seen = new Set();
+  const walk = (id) => {
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    result.push(id);
+    for (const child of byParent.get(id) || []) walk(child);
+  };
+  walk(root);
+  return result.length ? result : [root];
+}
+
+function applyTailTypeFilter(typeId) {
+  if (typeof window.kbFilterRelationsByTailType !== "function") return;
+  const ids = typeId ? collectTailTypeFilterIds(typeId) : null;
+  window.kbFilterRelationsByTailType(
+    ids,
+    typeId ? { typeId, label: ontologyLabelFor(typeId) } : null,
+  );
 }
 
 async function ensureTree() {
@@ -258,6 +299,7 @@ async function ensureTree() {
     }
     controller = buildController(module, inner);
     const data = await module.loadOntologyTree();
+    treeFlat = Array.isArray(data?.flat) ? data.flat : [];
     if (!controller) {
       treeState = "idle";
       return;
@@ -1119,6 +1161,18 @@ function init() {
     if (recommendTypeId) void loadRecommendations(recommendTypeId);
   });
   window.addEventListener("hashchange", closePopover);
+  // 供图谱上的筛选标记清除筛选：同时取消本体树选中，便于再次点击同一类型重新筛选
+  window.kbOntologyTailTypeFilter = {
+    clear() {
+      tailTypeFilterId = "";
+      if (controller && typeof controller.clearSelection === "function") {
+        try {
+          controller.clearSelection();
+        } catch {}
+      }
+      applyTailTypeFilter("");
+    },
+  };
   watchGraphVisibility();
 }
 

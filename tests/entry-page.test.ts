@@ -297,8 +297,14 @@ test('relation view recommends knowledge for the clicked ontology and lets it be
   expect(panelIndex).toBeGreaterThan(page.indexOf('class="vis-graph-body"'));
   expect(panelIndex).toBeLessThan(page.indexOf('<!-- Bottom status bar'));
   // 点击本体树 → 只按本体类型拉推荐（未分类的知识也要推荐）
-  expect(panel).toContain('onSelect: (id) => void loadRecommendations(id)');
+  expect(panel).toContain('onSelect: (id) => handleOntologySelect(id)');
+  expect(panel).toContain('void loadRecommendations(typeId);');
   expect(panel).toContain('url.searchParams.set("type", typeId);');
+  // 选中本体类型时，关系图只展示「尾实体类型」命中该类型的关系
+  expect(panel).toContain('window.kbFilterRelationsByTailType');
+  expect(panel).toContain('function collectTailTypeFilterIds(typeId)');
+  expect(page).toContain('window.kbFilterRelationsByTailType = setTailTypeFilter');
+  expect(page).toContain('.kb-tail-type-hidden');
   expect(panel).not.toContain('defined_class_only');
   expect(panel).not.toContain('hide_entity');
   expect(panel).toContain('// 只按本体类型筛选，未分类的知识一样推荐');
