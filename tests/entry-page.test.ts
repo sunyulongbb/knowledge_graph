@@ -305,6 +305,8 @@ test('relation view recommends knowledge for the clicked ontology and lets it be
   expect(panel).toContain('function collectTailTypeFilterIds(typeId)');
   expect(page).toContain('window.kbFilterRelationsByTailType = setTailTypeFilter');
   expect(page).toContain('.kb-tail-type-hidden');
+  // 命中类型的实体始终保留，即使它没有任何关系
+  expect(page).toContain('// 所选本体类型的实体始终保留，即使它没有任何关系');
   expect(panel).not.toContain('defined_class_only');
   expect(panel).not.toContain('hide_entity');
   expect(panel).toContain('// 只按本体类型筛选，未分类的知识一样推荐');

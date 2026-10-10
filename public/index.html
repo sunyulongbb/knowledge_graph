@@ -10334,6 +10334,12 @@
               edge.target().removeClass("kb-tail-type-hidden");
             } catch { }
           });
+          // 所选本体类型的实体始终保留，即使它没有任何关系
+          cy.nodes().forEach((node) => {
+            if (graphNodeTailTypeIds(node).some((id) => filter.has(id))) {
+              node.removeClass("kb-tail-type-hidden");
+            }
+          });
         });
       } catch (err) {
         console.warn("applyTailTypeFilterToGraph failed", err);
