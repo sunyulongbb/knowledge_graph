@@ -25,6 +25,7 @@
   let imageDetailsVisible = false;
   let history = [];
   let journey = null;
+  let embedded = null;
   let portrait = null;
   let feed = [], category = '', animations = [], departing = null;
   let scope = '', recent = [], busy = false, wheelAt = 0, wheelSum = 0, touchStart, muted = false;
@@ -49,7 +50,7 @@
     const detailsHidden = playing || (!!image && !imageDetailsVisible);
     refs.main.classList.toggle('is-video-playing', playing);
     refs.main.classList.toggle('is-details-hidden', detailsHidden);
-    refs.caption.hidden = refs.bottom.hidden = detailsHidden;
+    refs.caption.hidden = refs.bottom.hidden = embedded ? false : detailsHidden;
     refs.stage.setAttribute('role', video || image ? 'button' : 'group');
     refs.stage.tabIndex = video || image ? 0 : -1;
     refs.stage.setAttribute('aria-label', video ? (playing ? '暂停视频并显示详情' : '播放视频') : image ? (imageDetailsVisible ? '隐藏图片详情' : '显示图片详情') : '知识媒体');
@@ -145,7 +146,8 @@
     refs.identity.textContent = category + (node.creator_username ? ' · @' + node.creator_username : '');
     comments = []; counts({}); refs.commentInput.value = '';
     renderMedia();
-    void loadInteractions(version);
+    if (!embedded) void loadInteractions(version);
+    embedded?.onNodeChange?.(idOf(node));
     journey?.onNodeChange?.(idOf(node));
     portrait?.onNodeChange?.(node);
   }
@@ -193,12 +195,15 @@
   async function randomPage(direction = 1) {
     if (busy || overlayMode || !node || !dialog.open) return;
     if (currentScope() !== scope) return close();
-    if (journey) {
+    if (journey || embedded) {
       const index = feed.findIndex(item => idOf(item) === idOf(node));
-      const target = feed[index + direction];
+      if (embedded && (index < 0 || feed.length < 2)) return;
+      const target = embedded
+        ? feed[(index + direction + feed.length) % feed.length]
+        : feed[index + direction];
       if (!target) {
         message(direction < 0 ? '已经到达起点站' : '已经到达终点站');
-        if (direction > 0) journey.onFinish?.();
+        if (direction > 0) journey?.onFinish?.();
         return;
       }
       return goTo(idOf(target), direction);
@@ -226,7 +231,7 @@
     finally { if (token === version) busy = false; }
   }
   async function goTo(id, direction = 1) {
-    if (!journey || busy || overlayMode || !dialog.open || !feed.some(item => idOf(item) === id)) return;
+    if ((!journey && !embedded) || busy || overlayMode || !dialog.open || !feed.some(item => idOf(item) === id)) return;
     if (currentScope() !== scope) return close();
     if (idOf(node) === id) return;
     busy = true; const token = ++version; message('正在加载知识…');
@@ -276,6 +281,10 @@
     const endedPortrait = portrait; portrait = null;
     dialog?.classList.toggle('is-knowledge-portrait', false);
     endedPortrait?.onClose?.();
+    const endedEmbedded = embedded; embedded = null;
+    dialog?.classList.toggle('is-canvas-preview', false);
+    if (endedEmbedded) document.body.append(dialog);
+    endedEmbedded?.onClose?.();
   }
   function create() {
     dialog = document.createElement('dialog'); dialog.id = 'homeMediaViewer'; dialog.setAttribute('aria-label', '知识媒体详情');
@@ -348,13 +357,19 @@
     dialog.addEventListener('pointerdown', (event) => { if (!event.target.closest('button,input,textarea,.home-reel-overlay,[data-journey-sidebar],[data-portrait-content]')) touchStart = { x: event.clientX, y: event.clientY }; });
     dialog.addEventListener('pointerup', (event) => { if (!touchStart) return; const dx = event.clientX - touchStart.x, dy = event.clientY - touchStart.y; touchStart = null; if (Math.max(Math.abs(dx), Math.abs(dy)) < 50) return; if (Math.abs(dx) > Math.abs(dy)) moveMedia(dx < 0 ? 1 : -1); else void randomPage(dy < 0 ? 1 : -1); });
     dialog.addEventListener('pointercancel', () => { touchStart = null; });
-    window.addEventListener('hashchange', close); window.addEventListener('popstate', close);
+    // Canvas selection updates the node hash while the same embedded viewer stays open.
+    window.addEventListener('hashchange', () => { if (!embedded || window.kbViewMode !== 'vis') close(); });
+    window.addEventListener('popstate', close);
   }
   function open(id, options = {}) {
+    if (dialog?.open) close();
     clearTransition();
     feed = Array.from(new Map((options.nodes || []).filter((item) => idOf(item)).map((item) => [idOf(item), item])).values());
     category = options.category || '当前分类';
     if (!dialog) create();
+    embedded = options.embedded || null;
+    dialog.classList.toggle('is-canvas-preview', !!embedded);
+    if (embedded?.host) embedded.host.appendChild(dialog);
     journey = options.journey || null;
     portrait?.onClose?.();
     portrait = options.portrait || null;
@@ -362,14 +377,18 @@
     if (portrait?.element) dialog.append(portrait.element);
     dialog.classList.toggle('is-knowledge-journey', !!journey);
     if (journey?.sidebar) dialog.append(journey.sidebar);
-    refs.up.setAttribute('aria-label', journey ? '上一站' : '返回上一条浏览历史');
-    refs.down.setAttribute('aria-label', journey ? '下一站，终点继续滑动完成旅程' : '向下随机翻页');
+    refs.up.setAttribute('aria-label', embedded ? '上一个画布节点' : journey ? '上一站' : '返回上一条浏览历史');
+    refs.down.setAttribute('aria-label', embedded ? '下一个画布节点' : journey ? '下一站，终点继续滑动完成旅程' : '向下随机翻页');
     const upLabel = refs.up.querySelector('small'), downLabel = refs.down.querySelector('small');
-    if (upLabel) upLabel.textContent = journey ? '上一站' : '上一条历史';
-    if (downLabel) downLabel.textContent = journey ? '下一站' : '随机下一条';
+    if (upLabel) upLabel.textContent = embedded ? '上一条' : journey ? '上一站' : '上一条历史';
+    if (downLabel) downLabel.textContent = embedded ? '下一条' : journey ? '下一站' : '随机下一条';
     const hint = dialog.querySelector('.home-reel-bottom > span:last-child');
-    if (hint) hint.textContent = journey ? '← → 切媒体 · ↑ ↓ 沿线路漫游' : '← → 切媒体 · ↑ 历史 · ↓ 随机';
-    if (!dialog.open) { focusBefore = document.activeElement; oldOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; dialog.showModal(); }
+    if (hint) hint.textContent = embedded ? '左右切媒体 · 上下切节点' : journey ? '← → 切媒体 · ↑ ↓ 沿线路漫游' : '← → 切媒体 · ↑ 历史 · ↓ 随机';
+    if (!dialog.open) {
+      focusBefore = document.activeElement;
+      if (embedded) dialog.show();
+      else { oldOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; dialog.showModal(); }
+    }
     muted = false;
     scope = currentScope(); recent = []; history = []; overlayMode = ''; refs.overlay.hidden = true; wheelAt = Date.now(); wheelSum = 0;
     void loadNode(id);
@@ -382,7 +401,7 @@
   } catch {}
   window.addEventListener('pagehide', () => {
     try {
-      if (dialog?.open && node && !journey && !portrait) sessionStorage.setItem('kb-home-detail-reload', JSON.stringify({ id: idOf(node), scope, category, nodes: feed.map((item) => ({id:idOf(item)})) }));
+      if (dialog?.open && node && !journey && !portrait && !embedded) sessionStorage.setItem('kb-home-detail-reload', JSON.stringify({ id: idOf(node), scope, category, nodes: feed.map((item) => ({id:idOf(item)})) }));
       else sessionStorage.removeItem('kb-home-detail-reload');
     } catch {}
   });
@@ -390,5 +409,8 @@
     if (reloadDetail && reloadDetail.scope === currentScope()) open(reloadDetail.id, {nodes:reloadDetail.nodes || [],category:reloadDetail.category});
     reloadDetail = null;
   }, {once:true});
-  window.homeKnowledgeMediaViewer = { open, close, goTo, collectMedia, textPages };
+  window.homeKnowledgeMediaViewer = { open, close, goTo, collectMedia, textPages,
+    isEmbedded: () => !!embedded,
+    updateFeed: (nodes) => { if (embedded) feed = nodes; },
+  };
 })();

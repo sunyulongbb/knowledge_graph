@@ -111,7 +111,13 @@ test('table sorting and saved graph snapshots respect visibility', () => {
 function accessRoutes(raw: Database, projects: Record<string, any> = {}) {
   const source = readFileSync(new URL('../src/server/routes/knowledge-access.ts', import.meta.url), 'utf8').replace(/^import .*;\r?\n/gm, '').replace(/export /g, '');
   const getCurrentUser = (req: Request) => req.headers.get('test-user') === 'owner' ? owner : req.headers.get('test-user') === 'reader' ? reader : null;
-  const getKnowledgeUser = (req: Request) => new URL(req.url).searchParams.get('db') === 'default' ? { ...(getCurrentUser(req) || { id: 0, username: 'anonymous' }), role: 'admin', fullAccess: true } : getCurrentUser(req);
+  const getKnowledgeUser = (req: Request) => {
+    const user = getCurrentUser(req);
+    if (new URL(req.url).searchParams.get('db') === 'default') return { ...(user || {id:0,username:'anonymous'}), role:'admin',fullAccess:true };
+    if (!user) return null;
+    const hasMembers = raw.query("SELECT 1 FROM sqlite_master WHERE name='application_members'").get();
+    return {...user, memberProjectIds: hasMembers ? (raw.query('SELECT project_id FROM application_members WHERE user_id=?').all(user.id) as {project_id:number}[]).map(m=>m.project_id) : []};
+  };
   return new Function('db', 'getKnowledgeUser', 'canAccessKnowledge', 'knowledgeId', 'getProjectByIdentifier', 'applicationPermissions', new Bun.Transpiler({ loader: 'ts' }).transformSync(source + '\nreturn { handleKnowledgeAccessRoutes, guardKnowledgeRequest };'))(raw, getKnowledgeUser, canAccessKnowledge, knowledgeId, (slug: string) => projects[slug] || null, applicationPermissions);
 }
 
@@ -211,5 +217,83 @@ test('schema management is granted only in the owned application', async () => {
       if (slug === 'mine') expect(result).toBeNull();
       else expect(result.status).toBe(403);
     }
+  } finally { raw.close(); }
+});
+
+test('LAN classification allows regular creators and maintainers, with no admin requirement', async () => {
+  const { raw } = setup();
+  const { guardKnowledgeRequest } = accessRoutes(raw);
+  try {
+    const call = (username: string, method = 'POST', scope = 'private-app') => {
+      const url = new URL(`http://192.168.1.10:8080/api/kb/entity/class?db=${scope}&entity_id=entity/public&class_id=class/a`);
+      const req = new Request(url, { method, headers: { 'Content-Type': 'application/json', 'test-user': username },
+        ...(method === 'POST' ? {body:JSON.stringify({entity_id:'entity/public',class_id:'class/a'})} : {}) });
+      return guardKnowledgeRequest(req, url, method);
+    };
+    expect(await call('owner')).toBeNull();
+    expect((await call('reader')).status).toBe(403);
+    raw.run("INSERT INTO knowledge_maintainers(node_id,user_id,approved_by) VALUES('public',3,1)");
+    expect(await call('reader')).toBeNull();
+    expect(await call('reader', 'DELETE')).toBeNull();
+    expect(await call('', 'POST', 'default')).toBeNull();
+  } finally { raw.close(); }
+});
+
+test('application members can read, edit and manage all application knowledge, including other creators private items', () => {
+  const { raw, db } = setup();
+  try {
+    raw.run('ALTER TABLE nodes ADD COLUMN project_id INTEGER');
+    raw.run("UPDATE nodes SET project_id=10 WHERE id IN ('public','private')");
+    raw.run("UPDATE nodes SET project_id=20 WHERE id='other'");
+    const member = { ...reader, memberProjectIds: [10] };
+    for (const mode of ['read', 'edit', 'manage'] as const) {
+      expect(canAccessKnowledge(raw, member, 'private', mode)).toBe(true);
+      expect(canAccessKnowledge(raw, member, 'other', mode)).toBe(false);
+    }
+    knowledgeContext.run({ user: member }, () => {
+      expect(db.query('SELECT id FROM nodes ORDER BY id').all()).toEqual([{ id: 'private' }, { id: 'public' }]);
+    });
+    expect(canAccessKnowledge(raw, { ...member, memberProjectIds: [] }, 'private', 'edit')).toBe(false);
+  } finally { raw.close(); }
+});
+
+test('ordinary application members can maintain categories and schema only in their application', async () => {
+  const { raw } = setup();
+  try {
+    raw.run('CREATE TABLE application_members(project_id INTEGER,user_id INTEGER)');
+    raw.run('INSERT INTO application_members VALUES(10,3)');
+    const { guardKnowledgeRequest } = accessRoutes(raw, { mine: { id:10, owner_user_id:1 }, other:{id:20,owner_user_id:2} });
+    for (const scope of ['mine','other']) {
+      for (const path of ['classes/update', 'ontologies', 'nodes/clear']) {
+        const url = new URL(`http://192.168.1.10:8080/api/kb/${path}?db=${scope}`);
+        const req = new Request(url,{method:'POST',headers:{'test-user':'reader','Content-Type':'application/json'},body:JSON.stringify({id:'class/a'})});
+        const result = await guardKnowledgeRequest(req,url,'POST');
+        if (scope === 'mine') expect(result).toBeNull(); else expect(result.status).toBe(403);
+      }
+    }
+  } finally { raw.close(); }
+});
+
+test('member can classify, edit and delete another creator entity over LAN, and revocation takes effect', async () => {
+  const { raw } = setup();
+  try {
+    raw.run('ALTER TABLE nodes ADD COLUMN project_id INTEGER');
+    raw.run("UPDATE nodes SET project_id=10 WHERE id='private'");
+    raw.run("UPDATE nodes SET project_id=20 WHERE id='other'");
+    raw.run('CREATE TABLE application_members(project_id INTEGER,user_id INTEGER)');
+    raw.run('INSERT INTO application_members VALUES(10,3)');
+    const { guardKnowledgeRequest } = accessRoutes(raw);
+    const call = (path: string, method: string, body: any = {}) => {
+      const url = new URL('http://192.168.1.10:8080'+path);
+      const req = new Request(url,{method,headers:{'test-user':'reader','Content-Type':'application/json'},body:JSON.stringify(body)});
+      return guardKnowledgeRequest(req,url,method);
+    };
+    expect(await call('/api/kb/entity/class?db=mine','POST',{entity_id:'entity/private',class_id:'class/a'})).toBeNull();
+    expect(await call('/api/kb/entity/class?db=mine&entity_id=private&class_id=class/a','DELETE')).toBeNull();
+    expect(await call('/api/kb/nodes/update?db=mine','POST',{id:'private'})).toBeNull();
+    expect(await call('/api/kb/nodes?db=mine&id=private','DELETE')).toBeNull();
+    expect((await call('/api/kb/entity/class?db=other','POST',{entity_id:'other',class_id:'class/a'})).status).toBe(403);
+    raw.run('DELETE FROM application_members');
+    expect((await call('/api/kb/entity/class?db=mine','POST',{entity_id:'private',class_id:'class/a'})).status).toBe(403);
   } finally { raw.close(); }
 });

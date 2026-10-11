@@ -49,6 +49,7 @@
   }
 
   function hideDetailPanel() {
+    if (window.kbGraphDetails?.isActive()) { window.kbGraphDetails.close(); return; }
     try {
       const dp = document.getElementById("detailPanel");
       if (dp) {
@@ -729,6 +730,10 @@
     };
     const canSort = incomingRelationOrderState.canEdit && Boolean(incomingRelationOrderState.nodeId);
     const openRelatedEntity = (targetId, targetLabel) => {
+      if (window.kbGraphDetails?.isActive()) {
+        window.kbGraphDetails.open(targetId);
+        return;
+      }
       const nextView = window.kbViewMode === "knowledge_detail" ? "knowledge_detail" : "detail";
       if (typeof window.setViewMode === "function") {
         window.setViewMode(nextView, {
@@ -1475,6 +1480,7 @@
   let detailNavigationLoading = false;
 
   function getDetailNavigationTargets() {
+    if (window.kbGraphDetails?.isActive()) return window.kbGraphDetails.targets();
     // The rendered list already reflects the active filters and sort order.
     const ids = [...new Set(Array.from(document.querySelectorAll(
       "#tblNodes .entity-list-item[data-id]",
@@ -1499,7 +1505,9 @@
     document.getElementById(id)?.addEventListener("click", () => {
       if (detailNavigationLoading) return;
       const target = getDetailNavigationTargets()[direction];
-      if (!target || typeof window.setViewMode !== "function") return;
+      if (!target) return;
+      if (window.kbGraphDetails?.isActive()) { window.kbGraphDetails.open(target); return; }
+      if (typeof window.setViewMode !== "function") return;
       const view = window.kbViewMode === "knowledge_detail" ? "knowledge_detail" : "detail";
       window.setViewMode(view, {
         targetNodeId: target,
@@ -1539,10 +1547,13 @@
     const inner = document.getElementById("detailInner");
     if (!dp || !inner) return;
     const appHomePanel = document.getElementById("applicationHomePanel");
-    const shouldOpenHomeDrawer = Boolean(appHomePanel) && (window.kbViewMode === "app_home" || appHomePanel.style.display !== "none");
+    const embeddedGraph = options.embeddedGraph === true;
+    const shouldOpenHomeDrawer = !embeddedGraph && Boolean(appHomePanel) && (window.kbViewMode === "app_home" || appHomePanel.style.display !== "none");
     try {
-      tablePanel.style.display = "none";
-      cywrap.style.display = "none";
+      if (!embeddedGraph) {
+        tablePanel.style.display = "none";
+        cywrap.style.display = "none";
+      }
     } catch {}
     dp.style.display = "";
     dp.classList.toggle("app-home-detail-open", shouldOpenHomeDrawer);

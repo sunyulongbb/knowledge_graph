@@ -1,5 +1,6 @@
+import { createGraphCanvasHandler } from './graph-canvases.ts';
 import { networkInterfaces } from "node:os";
-import { switchDatabase, adminDb, hashPassword } from "./db.ts";
+import { switchDatabase, adminDb, hashPassword, getProjectByIdentifier } from "./db.ts";
 import { ensureInitialAdminAccount } from "./initial-admin.ts";
 import { createApplicationHandler } from './application-access.ts';
 import { createUserProfileHandler } from './user-profile.ts';
@@ -32,6 +33,7 @@ if (initialAdmin) {
   console.log("请登录后立即修改密码，并妥善保存该凭据。");
   console.log("此密码只会在本次创建时显示。\n============================================================\n");
 }
+const handleGraphCanvases = createGraphCanvasHandler(adminDb, getKnowledgeUser, getProjectByIdentifier);
 const handleApplications = createApplicationHandler(adminDb, getCurrentUser);
 const handleUserProfile = createUserProfileHandler(adminDb, getCurrentUser);
 
@@ -68,6 +70,8 @@ const server = Bun.serve({
       const requestUrl = url;
       const response = await knowledgeContext.run({ user: getKnowledgeUser(req) }, async () => {
       const url = requestUrl;
+      const canvasResponse = await handleGraphCanvases(req, url);
+      if (canvasResponse) return canvasResponse;
       const profileResponse = await handleUserProfile(req, url, method);
       if (profileResponse) return profileResponse;
       const applicationResponse = await handleApplications(req, url, method);

@@ -86,7 +86,7 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
       if (created && assignedRole) adminDb.run("INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)", [created.id, assignedRole.id]);
       const user = adminDb
         .query(
-          "SELECT username, display_name, avatar, panel_state, created_at FROM users WHERE username = ?"
+          "SELECT id, username, display_name, avatar, panel_state, created_at FROM users WHERE username = ?"
         )
         .get(username);
       return Response.json({ success: true, user });
@@ -113,7 +113,7 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
 
       const u = adminDb
         .query(
-          "SELECT username, display_name, password_hash, password_salt, avatar, panel_state, role, status, is_admin, jev_api_key FROM users WHERE username = ?"
+          "SELECT id, username, display_name, password_hash, password_salt, avatar, panel_state, role, status, is_admin, jev_api_key FROM users WHERE username = ?"
         )
         .get(username);
       if (!u) {
@@ -154,6 +154,7 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
         JSON.stringify({
           success: true,
           user: {
+            id: u.id,
             username: u.username,
             displayName: u.display_name,
             avatar: u.avatar,
@@ -185,7 +186,7 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
       if (!s) return Response.json({ user: null });
 
       const u = adminDb
-        .query("SELECT username, display_name, avatar, panel_state, role, status, is_admin, jev_api_key FROM users WHERE username = ?")
+        .query("SELECT id, username, display_name, avatar, panel_state, role, status, is_admin, jev_api_key FROM users WHERE username = ?")
         .get(s.username) as any;
       if (!u) return Response.json({ user: null });
       if (u.status === "disabled") return Response.json({ user: null });
@@ -199,6 +200,7 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
       const access = getCurrentUser(req);
       return Response.json({
         user: {
+          id: u.id,
           username: u.username,
           displayName: u.display_name,
           avatar: u.avatar,
@@ -316,7 +318,7 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
       } catch {}
 
       const u = adminDb
-        .query("SELECT username, display_name, avatar, panel_state, jev_api_key FROM users WHERE username = ?")
+        .query("SELECT id, username, display_name, avatar, panel_state, jev_api_key FROM users WHERE username = ?")
         .get(s.username);
       let updatePanelState = null;
       try {
@@ -327,6 +329,7 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
       return Response.json({
         success: true,
         user: {
+          id: u.id,
           username: u.username,
           displayName: u.display_name,
           avatar: u.avatar,

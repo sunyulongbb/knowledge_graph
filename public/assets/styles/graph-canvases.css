@@ -1,0 +1,11 @@
+.graph-canvas-bar { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--border); background:var(--surface-0); min-width:0; }
+.graph-canvas-tabs { display:flex; gap:4px; overflow-x:auto; flex:1; min-width:0; scrollbar-width:thin; }
+.graph-canvas-tabs button { flex:none; min-height:40px; max-width:190px; padding:8px 16px; border:1px solid transparent; border-radius:9px; background:transparent; color:var(--muted); cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.graph-canvas-tabs button[aria-selected=true] { background:color-mix(in srgb,var(--accent) 10%,var(--surface-0)); border-color:color-mix(in srgb,var(--accent) 28%,var(--border)); color:var(--accent); font-weight:600; }
+.graph-canvas-bar > button { min-height:40px; white-space:nowrap; }
+.graph-canvas-status { font-size:11px; color:var(--muted); max-width:180px; }
+.graph-canvas-status.is-error { color:var(--danger,#dc2626); }
+@media(max-width:900px) { .graph-canvas-bar { flex-wrap:wrap; } .graph-canvas-tabs { flex-basis:100%; } .graph-canvas-bar > button { min-height:44px; } .graph-canvas-status { max-width:none; } }
+.graph-canvas-empty { position:absolute; left:50%; top:45%; transform:translate(-50%,-50%); display:flex; flex-direction:column; gap:10px; text-align:center; color:var(--muted); pointer-events:none; width:min(320px,80%); line-height:1.7; font-size:13px; }
+.graph-canvas-empty strong { font-size:18px; color:var(--fg); font-weight:600; }
+.graph-canvas-empty[hidden] { display:none; }

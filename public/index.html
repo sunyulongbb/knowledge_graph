@@ -68,7 +68,7 @@
       customElements.whenDefined("media-video-layout"),
     ]).then(() => true);
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20261010-related-order3" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20261012-classification" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -92,6 +92,9 @@
       if (typeof cytoscapeDagre !== 'undefined') cytoscape.use(cytoscapeDagre);
     }
   </script>
+  <link rel="stylesheet" href="/assets/styles/graph-canvases.css?v=20261011" />
+  <link rel="stylesheet" href="/assets/styles/graph-connect.css?v=20261011" />
+  <script src="/assets/scripts/graph-connect.js?v=20261012-canvas-details"></script>
   <script src="/assets/scripts/banner-upload.js?v=20260927-1"></script>
   <script src="/assets/scripts/app-settings.js?v=20260927-settings-layout"></script>
   <script src="/assets/scripts/pagination.js?v=20261008-pagination"></script>
@@ -3410,6 +3413,7 @@
           <div id="status" style="display:none">
             <div class="spinner" style="display:none"></div><span></span>
           </div>
+          <div class="graph-canvas-bar"><div id="graphCanvasTabs" class="graph-canvas-tabs" role="tablist" aria-label="关系画布"></div><button id="graphCanvasRefresh" type="button" class="btn sm" title="刷新当前画布" aria-label="刷新当前画布">刷新</button><button id="graphCanvasNew" type="button" class="btn sm">＋ 新建画布</button><button id="graphCanvasDetach" type="button" class="btn sm" hidden title="只移出画布，不删除知识或关系">移出选中</button><button id="graphCanvasRename" type="button" class="btn sm" disabled>重命名</button><button id="graphCanvasDelete" type="button" class="btn sm" disabled>删除画布</button><span id="graphCanvasStatus" class="graph-canvas-status" role="status"></span></div>
           <!-- Top search bar -->
           <div class="vis-topbar">
             <div class="vis-topbar-group" role="group" aria-label="图谱数据">
@@ -3480,7 +3484,7 @@
                   <i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
                 </button>
               </div>
-              <p class="vis-ontology-panel__hint">拖动分类到画布，即可新建该类型节点</p>
+              <p class="vis-ontology-panel__hint">选中画布节点，点击分类可添加或取消分类；拖动分类到画布可新建节点</p>
               <div id="visOntologyTree" class="vis-ontology-tree" aria-label="本体分类树"></div>
               <div id="visOntologyPanelStatus" class="vis-ontology-panel__status" role="status" aria-live="polite"></div>
             </aside>
@@ -3648,6 +3652,7 @@
                 </div>
               </div>
               <div id="cy"></div>
+              <div id="graphCanvasEmpty" class="graph-canvas-empty" hidden><strong>从一条知识开始</strong><span>选中右侧推荐卡片，拖入画布；也可从左侧本体新建节点。</span></div>
             </div>
             <!-- 知识推荐：点击左侧本体树分类后列出该类型的知识，可拖到画布加入关系图 -->
             <aside id="visRecommendPanel" class="vis-recommend-panel" aria-label="知识推荐">
@@ -3660,14 +3665,24 @@
                   <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
                 </button>
               </div>
+              <div class="vis-sidebar-tabs" role="tablist" aria-label="画布知识">
+                <button id="visRecommendTab" type="button" role="tab" aria-selected="true" aria-controls="visRecommendContent">知识推荐</button>
+                <button id="visDetailTab" type="button" role="tab" aria-selected="false" aria-controls="visDetailContent">知识详情</button>
+              </div>
+              <div id="visRecommendContent" class="vis-sidebar-content" role="tabpanel" aria-labelledby="visRecommendTab">
               <!-- 搜索节点：结果直接列在推荐列表里，不再弹出下拉浮层 -->
               <div class="vis-search-wrap">
                 <i class="fa-solid fa-magnifying-glass vis-search-icon"></i>
                 <input id="visSearch" type="text" class="app-search-input vis-search-input" placeholder="搜索节点…" autocomplete="off" />
               </div>
-              <p class="vis-recommend-panel__hint" id="visRecommendHint">点击左侧本体树上的分类，这里会列出该类型的知识；拖到画布即可加入关系图。</p>
+              <p class="vis-recommend-panel__hint" id="visRecommendHint">点击左侧本体树上的分类，这里会列出该类型的知识；点击选中知识，拖到画布。</p>
               <div id="visRecommendList" class="vis-recommend-list" aria-live="polite"></div>
               <div id="visRecommendStatus" class="vis-recommend-panel__status" role="status"></div>
+              </div>
+              <div id="visDetailContent" class="vis-sidebar-content" role="tabpanel" aria-labelledby="visDetailTab" hidden>
+                <p id="visDetailEmpty" class="vis-recommend-panel__hint">点击画布上的节点查看知识详情。</p>
+                <div id="visDetailHost"></div>
+              </div>
             </aside>
           </div>
           <!-- Bottom status bar：计数、状态与视图控制 -->
@@ -5700,6 +5715,7 @@
     const knowledgeDetailPageHost = document.getElementById("knowledgeDetailPageHost");
     function mountDetailPanelStandalone(standalone) {
       if (!detailPanel) return;
+      window.kbGraphDetails?.release();
       if (standalone && knowledgeDetailPageHost) {
         if (detailPanel.parentElement !== knowledgeDetailPageHost) {
           knowledgeDetailPageHost.appendChild(detailPanel);
@@ -7398,7 +7414,8 @@
             (document.getElementById("fId")?.value || "").trim() ||
             "";
         }
-        if (!window.kbCy || window.kbCy.elements().length === 0 || hasResolvedVisNode) {
+        if (window.kbGraphCanvases?.activeId) { window.kbCy?.resize(); }
+        else if (!window.kbCy || window.kbCy.elements().length === 0 || hasResolvedVisNode) {
           // 默认只加载选中节点的一层关系
           const defaultVisNodeId = ensureEntityIdPrefix(
             window.kbActiveVisNodeId ||
@@ -9639,6 +9656,9 @@
 
     // Load one-hop neighborhood for a specific node from backend and update cytoscape
     async function loadNodeNeighborhood(nodeId, options = {}) {
+      const canvasId = window.kbGraphCanvases?.activeId;
+      const canvasContext = window.kbGraphCanvases?.contextKey;
+      if (canvasId) options = { ...options, replace: false, preserveSnapshotOwner: true };
       if (!nodeId) return;
       const opts = options || {};
       const direction = String(opts.direction || "both").trim().toLowerCase();
@@ -9653,10 +9673,10 @@
       showGraphLoading(true, loadingText);
       try {
         const shouldReplaceAll =
-          opts.replace === true ||
+          !canvasId && (opts.replace === true ||
           (window.kbViewMode === "vis" &&
             window.kbVisRestrictToOneHop === true &&
-            opts.replace !== false);
+            opts.replace !== false));
         // normalize id to include entity/ prefix
         const fullId = ensureEntityIdPrefix(nodeId);
         const url = new URL("/api/kb/node/graph", window.location.origin);
@@ -9667,6 +9687,7 @@
         const resp = await fetch(url);
         if (!resp.ok) throw new Error("HTTP " + resp.status);
         const data = await resp.json();
+        if (canvasContext !== window.kbGraphCanvases?.contextKey) return;
         const elements = [];
 
         const nodesRaw = data.nodes || (data.elements && data.elements.nodes) || [];
@@ -10226,6 +10247,7 @@
 
     let graphSnapshotPersistTimer = 0;
     function scheduleGraphSnapshotPersist(scopeId) {
+      if (window.kbGraphCanvases?.activeId) { window.kbGraphCanvases.changed(); return; }
       const targetScopeId = getCurrentGraphSnapshotScopeId(scopeId);
       if (!targetScopeId) return;
       if (graphSnapshotPersistTimer) window.clearTimeout(graphSnapshotPersistTimer);
@@ -10660,6 +10682,7 @@
     }
 
     function readGraphSnapshot(scopeId) {
+      if (window.kbGraphCanvases?.activeId) return null;
       const serverSnapshot = findServerGraphSnapshot(scopeId);
       const key = getGraphSnapshotStorageKey(scopeId);
       if (!key) return serverSnapshot || null;
@@ -10681,6 +10704,7 @@
     }
 
     function persistGraphSnapshot(scopeId) {
+      if (window.kbGraphCanvases?.activeId) return;
       const key = getGraphSnapshotStorageKey(scopeId);
       if (!key || !window.kbCy) return;
       try {
@@ -10735,6 +10759,7 @@
     }
 
     function getPreferredRouteViewportNodeId() {
+      if (window.kbGraphCanvases?.activeId) return "";
       try {
         if (!shouldPreferRouteNodeViewport()) return "";
         const pinnedNode = String(window.kbVisRouteNodeId || "").trim();
@@ -10750,6 +10775,7 @@
     }
 
     function forceCenterGraphNode(nodeId) {
+      if (window.kbGraphCanvases?.activeId) return false;
       try {
         if (!window.kbCy) return false;
         const fullId = ensureEntityIdPrefix(nodeId);
@@ -10787,6 +10813,7 @@
     }
 
     function schedulePersistentRouteNodeCenter(nodeId, options = {}) {
+      if (window.kbGraphCanvases?.activeId && !options.clearOnly) return false;
       try {
         const routeNodeId = ensureEntityIdPrefix(nodeId || getPreferredRouteViewportNodeId());
         if (!routeNodeId) return false;
@@ -11306,7 +11333,7 @@
         },
         // edgehandles 来源节点样式
         {
-          selector: '.eh-source',
+          selector: '.eh-source, .graph-connect-source',
           style: {
             'border-color': palette.accent,
             'border-width': 3,
@@ -11382,6 +11409,8 @@
     }
 
     async function loadGraph(prefetchedData) {
+      if (window.kbGraphCanvases?.activeId && !prefetchedData) return;
+      const canvasId = window.kbGraphCanvases?.activeId;
       showGraphLoading(true, '加载图谱数据…');
       try {
         // 关联视图默认只加载选中节点的一层关系，避免一次性载入全部关系
@@ -11398,6 +11427,7 @@
           }
         }
         const data = prefetchedData || await fetchGraph();
+        if (canvasId !== window.kbGraphCanvases?.activeId) return;
 
         const nodesRaw = data.nodes || (data.elements && data.elements.nodes) || [];
         const edgesRaw = data.edges || (data.elements && data.elements.edges) || [];
@@ -11621,6 +11651,7 @@
 
             // 选择属性创建关系
             async function selectPropertyForEdge(propId, propName, isCustom = false) {
+              const canvasContext = window.kbGraphCanvases?.contextKey;
               if (!pendingEdgeData) return;
               const { sourceId, targetId, addedEdge } = pendingEdgeData;
               const selectionLabel = propName || propId;
@@ -11654,6 +11685,7 @@
                 if (!resp.ok) throw new Error('创建关系失败: ' + resp.status);
 
                 const result = await resp.json();
+                if (canvasContext !== window.kbGraphCanvases?.contextKey) return;
 
                 const edgeLabel = result.label || selectionLabel;
 
@@ -11753,6 +11785,7 @@
 
             // 暴露给外部使用
             window.showEdgePropertyModal = showEdgePropertyModal;
+            window.kbGraphConnect = window.installGraphConnect(window.kbCy, container, showEdgePropertyModal);
 
             // 绑定事件
             btnEdgePropertyCancel.addEventListener('click', closeEdgePropertyModal);
@@ -11826,42 +11859,13 @@
               }
             });
 
-            window.kbEdgehandles.enable();
+            window.kbEdgehandles.disable();
             // drawMode 关闭，节点可拖动
             console.log('edgehandles enabled:', window.kbEdgehandles);
 
-            // 手动实现悬停手柄 - 因为 edgehandles 内置悬停可能不工作
-            let hoverHandle = null;
-            let currentHoverNode = null;
-            let isDraggingEdge = false;
-            let isDraggingNode = false; // 节点拖拽状态
-            let currentTargetNode = null; // 当前悬停的目标节点
-
-            // 创建悬停手柄元素
-            function createHoverHandle() {
-              if (hoverHandle) return hoverHandle;
-              hoverHandle = document.createElement('div');
-              hoverHandle.id = 'customEdgeHandle';
-              hoverHandle.style.cssText = `
-                  position: absolute;
-                  width: 16px;
-                  height: 16px;
-                  background: #ef4444;
-                  border: 2px solid #fff;
-                  border-radius: 50%;
-                  cursor: crosshair;
-                  z-index: 9999;
-                  display: none;
-                  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                  pointer-events: auto;
-                  transition: transform 0.1s ease;
-                `;
-              hoverHandle.title = '拖拽到目标节点创建关系';
-              container.appendChild(hoverHandle);
-              return hoverHandle;
-            }
-
-            createHoverHandle();
+            // Node movement and right-button box selection remain available.
+            let isDraggingNode = false;
+            function hideHandle() {}
             let multiDragState = null;
             let rightBoxSelectState = null;
             let rightBoxSelectOverlay = null;
@@ -11983,44 +11987,6 @@
               startRightBoxSelection(evt.originalEvent || null);
             });
 
-            // 高亮目标节点
-            function highlightTargetNode(node) {
-              if (currentTargetNode && currentTargetNode !== node) {
-                currentTargetNode.removeClass('edge-drop-target');
-              }
-              currentTargetNode = node;
-              if (node) {
-                node.addClass('edge-drop-target');
-              }
-            }
-
-            // 清除目标节点高亮
-            function clearTargetHighlight() {
-              if (currentTargetNode) {
-                currentTargetNode.removeClass('edge-drop-target');
-                currentTargetNode = null;
-              }
-            }
-
-            // 显示手柄
-            function showHandle(node) {
-              if (!hoverHandle || isDraggingEdge || isDraggingNode) return;
-              currentHoverNode = node;
-              const pos = node.renderedPosition();
-              const zoom = window.kbCy.zoom();
-              const nodeHeight = node.renderedHeight ? node.renderedHeight() : 40;
-              hoverHandle.style.left = (pos.x - 8) + 'px';
-              hoverHandle.style.top = (pos.y - nodeHeight / 2 - 20) + 'px';
-              hoverHandle.style.display = 'block';
-            }
-
-            // 隐藏手柄
-            function hideHandle() {
-              if (!hoverHandle) return;
-              hoverHandle.style.display = 'none';
-              currentHoverNode = null;
-            }
-
             // 监听节点拖拽
             window.kbCy.on('grab', 'node', function (e) {
               isDraggingNode = true;
@@ -12077,137 +12043,6 @@
               scheduleDagreEdgeLabelVisibilityRefresh();
             });
 
-            // 监听节点悬停
-            window.kbCy.on('mouseover', 'node', function (e) {
-              if (!isDraggingNode) {
-                showHandle(e.target);
-              }
-            });
-
-            window.kbCy.on('mouseout', 'node', function (e) {
-              // 延迟隐藏，给用户时间移动到手柄
-              setTimeout(() => {
-                if (!hoverHandle.matches(':hover') && !isDraggingEdge && !isDraggingNode) {
-                  hideHandle();
-                }
-              }, 100);
-            });
-
-            // 手柄鼠标离开
-            hoverHandle.addEventListener('mouseleave', function () {
-              if (!isDraggingEdge && !isDraggingNode) {
-                hideHandle();
-              }
-            });
-
-            // 手柄拖拽开始
-            hoverHandle.addEventListener('mousedown', function (e) {
-              if (!currentHoverNode) return;
-              e.preventDefault();
-              e.stopPropagation();
-              isDraggingEdge = true;
-
-              const sourceNode = currentHoverNode;
-              const sourceId = sourceNode.id();
-
-              // 创建临时边预览线
-              const previewLine = document.createElement('div');
-              previewLine.id = 'edgePreviewLine';
-              previewLine.style.cssText = `
-                  position: absolute;
-                  height: 2px;
-                  background: #3b82f6;
-                  transform-origin: left center;
-                  z-index: 9998;
-                  pointer-events: none;
-                `;
-              container.appendChild(previewLine);
-
-              const startPos = sourceNode.renderedPosition();
-
-              function onMouseMove(ev) {
-                const rect = container.getBoundingClientRect();
-                const endX = ev.clientX - rect.left;
-                const endY = ev.clientY - rect.top;
-
-                const dx = endX - startPos.x;
-                const dy = endY - startPos.y;
-                const length = Math.sqrt(dx * dx + dy * dy);
-                const angle = Math.atan2(dy, dx) * 180 / Math.PI;
-
-                previewLine.style.left = startPos.x + 'px';
-                previewLine.style.top = startPos.y + 'px';
-                previewLine.style.width = length + 'px';
-                previewLine.style.transform = `rotate(${angle}deg)`;
-
-                // 检测悬停的目标节点并高亮
-                const hoveredNode = window.kbCy.nodes().filter(n => {
-                  if (n.id() === sourceId) return false;
-                  const npos = n.renderedPosition();
-                  const nw = n.renderedWidth ? n.renderedWidth() : 40;
-                  const nh = n.renderedHeight ? n.renderedHeight() : 40;
-                  return Math.abs(endX - npos.x) < nw / 2 + 10 &&
-                    Math.abs(endY - npos.y) < nh / 2 + 10;
-                }).first();
-
-                if (hoveredNode && hoveredNode.length > 0) {
-                  highlightTargetNode(hoveredNode);
-                  previewLine.style.background = '#22c55e'; // 绿色表示可连接
-                } else {
-                  clearTargetHighlight();
-                  previewLine.style.background = '#3b82f6'; // 蓝色正常状态
-                }
-              }
-
-              function onMouseUp(ev) {
-                document.removeEventListener('mousemove', onMouseMove);
-                document.removeEventListener('mouseup', onMouseUp);
-                previewLine.remove();
-                isDraggingEdge = false;
-                hideHandle();
-                clearTargetHighlight();
-
-                // 检查是否释放在节点上
-                const rect = container.getBoundingClientRect();
-                const dropX = ev.clientX - rect.left;
-                const dropY = ev.clientY - rect.top;
-
-                const targetNode = window.kbCy.nodes().filter(n => {
-                  if (n.id() === sourceId) return false;
-                  const npos = n.renderedPosition();
-                  const nw = n.renderedWidth ? n.renderedWidth() : 40;
-                  const nh = n.renderedHeight ? n.renderedHeight() : 40;
-                  return Math.abs(dropX - npos.x) < nw / 2 + 10 &&
-                    Math.abs(dropY - npos.y) < nh / 2 + 10;
-                }).first();
-
-                if (targetNode && targetNode.length > 0) {
-                  const targetId = targetNode.id();
-                  // 显示属性选择弹窗
-                  showEdgePropertyModal(sourceId, targetId, null);
-                }
-              }
-
-              document.addEventListener('mousemove', onMouseMove);
-              document.addEventListener('mouseup', onMouseUp);
-            });
-
-            // 调试：监听 edgehandles 事件
-            window.kbCy.on('ehstart', function (event, sourceNode) {
-              console.log('ehstart - 开始拖拽边', sourceNode.id());
-            });
-            window.kbCy.on('ehshow', function (event, sourceNode) {
-              console.log('ehshow - 手柄显示', sourceNode.id());
-            });
-            window.kbCy.on('ehhide', function (event, sourceNode) {
-              console.log('ehhide - 手柄隐藏', sourceNode.id());
-            });
-
-            // 手动添加一个测试：检查节点上是否有 eh-handle
-            setTimeout(() => {
-              const handles = window.kbCy.$('.eh-handle');
-              console.log('eh-handle elements count:', handles.length);
-            }, 1000);
           } else {
             console.warn('edgehandles not available on cytoscape instance');
           }
@@ -13066,39 +12901,14 @@
             const ele = evt.target;
             const id = ele?.data("id");
             if (!id) return;
-            const alreadySelected =
-              (window.kbSelectedRowIds &&
-                window.kbSelectedRowIds.size === 1 &&
-                window.kbSelectedRowIds.has(id)) ||
-              (!window.kbSelectedRowIds && window.kbSelectedRowId === id);
-            if (alreadySelected) {
-              try {
-                window.kbCy.elements(":selected").unselect();
-              } catch (e) { }
-              try {
-                setTableSelection("", false, {
-                  skipDetailRefresh: true,
-                  skipSidebarSync: true,
-                });
-              } catch (e) { }
-              try {
-                window.kbSelectedNodeId = "";
-                window.kbSelectedRowId = "";
-                window.kbSelectedRowIds = new Set();
-                window.kbCurrentNodeId = "";
-              } catch (e) { }
-              try {
-                syncHashForView('vis', { nodeId: '', includeNode: true });
-              } catch (e) { }
-              return;
-            }
+            window.kbGraphDetails?.open(id);
             try {
               if (typeof setTableSelection === "function") {
                 setTableSelection(id, false, { skipDetailRefresh: true });
               }
             } catch (e) { }
             try {
-              focusNode(id, { fit: false, duration: 180 });
+              if (!window.kbGraphCanvases?.activeId) focusNode(id, { fit: false, duration: 180 });
             } catch (e) { }
             // default: normal node click flows to left panel edit
             enterEditById(id);
@@ -13124,6 +12934,7 @@
 
           // double click node to toggle outgoing relations
           window.kbCy.on("dbltap", "node", (evt) => {
+            if (window.kbGraphConnect?.isActive()) return;
             const ele = evt.target;
             const id = ele?.data("id");
             if (!id) return;
@@ -13201,6 +13012,8 @@
         } catch (e) { }
 
         showGraphLoading(false);
+        window.kbGraphCanvases?.bind();
+        if (canvasId) return;
 
         // If table mode active, render table with latest data
         if ((window.kbViewMode || "table") === "table") {
@@ -13478,7 +13291,7 @@
       }
       // 加载图谱（画布上方工具栏）
       const cyBtnLoadSnippet = document.getElementById('cy_btnLoadSnippet');
-      if (cyBtnLoadSnippet) cyBtnLoadSnippet.addEventListener('click', () => { loadGraph(); });
+      if (cyBtnLoadSnippet) cyBtnLoadSnippet.addEventListener('click', () => { if (window.kbGraphCanvases) window.kbGraphCanvases.reload(); else loadGraph(); });
 
       // Screenshot export
       const cyBtnScreenshot = document.getElementById('cy_btnScreenshot');
@@ -13498,6 +13311,7 @@
       if (cyBtnSaveSnapshot) cyBtnSaveSnapshot.addEventListener('click', async () => {
         try {
           if (!window.kbCy) return;
+          if (window.kbGraphCanvases?.activeId) { await window.kbGraphCanvases.save(); return; }
           const scopeId = getCurrentGraphSnapshotScopeId();
           if (!scopeId) {
             if (typeof showToast === 'function') showToast('当前没有可保存的关系图节点');
@@ -17076,6 +16890,18 @@
       }
     }
 
+    // Detail paging selects the existing canvas node without reloading its neighborhood.
+    window.kbSelectGraphDetailNode = (id) => {
+      if (window.kbViewMode !== "vis" || !id) return;
+      window.setTableSelection?.(id, false, {
+        skipDetailRefresh: true,
+        skipSidebarSync: true,
+        skipGraphFocus: true,
+      });
+      focusNode(id, { fit: false, duration: 180 });
+      syncHashForView('vis', { nodeId: id, includeNode: true, replace: true });
+    };
+
     function focusNode(nodeId, options = {}) {
       try {
         if (!window.kbCy) return;
@@ -17419,10 +17245,11 @@
   <link rel="stylesheet" href="/assets/styles/knowledge-portrait.css?v=20260928-1" />
   <script type="module" src="/assets/scripts/knowledge-roam.js?v=20260929-metro-train"></script>
   <script src="/assets/scripts/app-shared.js"></script>
+  <script src="/assets/scripts/graph-canvases.js?v=20261012-refresh"></script>
   <script>
       window.kbOntologyTreeModuleReady = import("/assets/generated/ontology-tree.js?v=20261005-class-scroll");
   </script>
-  <script type="module" src="/assets/scripts/vis-ontology-panel.js?v=20261010-vis-ontology8"></script>
+  <script type="module" src="/assets/scripts/vis-ontology-panel.js?v=20261012-classification"></script>
   <script src="/assets/scripts/property-panel.js?v=20260915-1"></script>
   <script src="/assets/scripts/table-panel.js?v=20261008-pagination"></script>
   <script src="/assets/scripts/table-selection.js?v=20261010-crumb-label"></script>
@@ -17430,19 +17257,21 @@
   <script src="/assets/scripts/attr-panel.js?v=20260925-tail-suggestions"></script>
   <script src="/assets/scripts/entity-import.js?v=20260921-6"></script>
   <!-- relation-panel.js 已移除，使用 edgehandles 拖拽创建关系 -->
-  <script src="/assets/scripts/schema-panel.js?v=20261005-class-scroll"></script>
-  <script src="/assets/scripts/detail-panel.js?v=20261010-related-order3"></script>
+  <script src="/assets/scripts/schema-panel.js?v=20261011-member-access"></script>
+  <script src="/assets/scripts/detail-panel.js?v=20261012-canvas-details"></script>
+  <script src="/assets/scripts/graph-classification.js?v=20261012"></script>
+  <script src="/assets/scripts/graph-details.js?v=20261012-classification"></script>
   <script src="/assets/scripts/knowledge-interactions.js?v=20260904-1"></script>
-  <script src="/assets/scripts/knowledge-access.js?v=20260922-4"></script>
+  <script src="/assets/scripts/knowledge-access.js?v=20261011-member-access"></script>
   <script src="/assets/scripts/applications.js?v=20260927-settings-layout"></script>
   <script src="/assets/scripts/user-management.js?v=20260915-1"></script>
-  <script src="/assets/scripts/home-media-viewer.js?v=20261008-image-toggle"></script>
+  <script src="/assets/scripts/home-media-viewer.js?v=20261012-canvas-loop"></script>
   <script src="/assets/scripts/manual-classify.js?v=20260929-existing-classes"></script>
   <script src="/assets/scripts/knowledge-context-menu.js?v=20260928-3"></script>
   <script src="/assets/scripts/application-pages.js?v=20261008-card-title"></script>
   <script src="/assets/scripts/user-profile.js?v=20260924-5"></script>
   <script src="/assets/scripts/sidebar-panel.js?v=20260924-4"></script>
-  <script src="/assets/scripts/auth-panel.js?v=20260924-7"></script>
+  <script src="/assets/scripts/auth-panel.js?v=20261012-user-id"></script>
   <script src="/assets/scripts/db-modal.js?v=20261005-class-click"></script>
   <script>
     // The initial hash route is handled before these dependent sidebar scripts

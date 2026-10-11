@@ -13880,3 +13880,80 @@ table th {
 
 #clsTree .dhx_tree-list-item { min-height: 30px; }
 #clsTree .class-tree-node.is-assigned .ontology-node-folder { color: var(--accent); opacity: 1; }
+
+/* Compact recommendation rows: image and name only. */
+.vis-recommend-panel__hint { line-height:1.5; font-size:11px; margin:2px 0 6px; }
+.vis-recommend-list { gap:4px; padding:2px; overscroll-behavior:contain; }
+.vis-recommend-card { touch-action:none; -webkit-touch-callout:none; padding:6px 8px; gap:9px; min-height:46px; border-radius:8px; box-shadow:none; position:relative; }
+.vis-recommend-card__thumb { width:34px; height:34px; flex:0 0 34px; border-radius:6px; }
+.vis-recommend-card__name { font-weight:500; font-size:12px; line-height:1.4; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.vis-recommend-card.is-selected { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 10%,var(--surface-1)); }
+.vis-recommend-card.is-dragging { border-color:var(--accent); opacity:.5; }
+.vis-ontology-drag-chip { max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* Graph sidebar shares the existing knowledge detail renderer. */
+.vis-sidebar-tabs { display:flex; gap:4px; padding:6px 10px; border-bottom:1px solid var(--border,#e5e7eb); }
+.vis-sidebar-tabs button { flex:1; border:0; border-radius:6px; padding:8px 4px; background:transparent; color:inherit; cursor:pointer; }
+.vis-sidebar-tabs button[aria-selected="true"] { background:#eaf2ff; color:#2563eb; font-weight:600; }
+.vis-sidebar-content { display:flex; flex-direction:column; flex:1; min-height:0; overflow:hidden; }
+.vis-sidebar-content[hidden], .vis-recommend-panel.is-collapsed .vis-sidebar-content, .vis-recommend-panel.is-collapsed .vis-sidebar-tabs { display:none; }
+.vis-recommend-panel.is-detail:not(.is-collapsed) { width:clamp(280px,32vw,420px); flex-basis:clamp(280px,32vw,420px); }
+#visDetailHost { flex:1; min-height:0; overflow:hidden; }
+#visDetailHost #detailPanel.vis-embedded-detail { width:100%; height:100%; max-height:none!important; min-height:0; margin:0; border:0; border-radius:0; overflow:auto!important; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+.vis-embedded-detail .detail-navigation-leading { display:none; }
+.vis-embedded-detail .detail-navigation { flex-wrap:wrap; gap:8px; padding:10px; }
+.vis-embedded-detail .detail-hero { grid-template-columns:1fr; }
+#visDetailEmpty[hidden] { display:none; }
+#visDetailHost #detailInner { overscroll-behavior:contain; -webkit-overflow-scrolling:touch; padding:12px!important; }
+.vis-embedded-detail .detail-top-media-stage { --detail-media-card-height:240px; }
+
+/* Compact canvas sidebar for the shared home media viewer. */
+.vis-recommend-panel.is-detail:not(.is-collapsed) {
+  width:clamp(280px,29vw,370px);
+  flex-basis:clamp(280px,29vw,370px);
+  padding:8px;
+  gap:4px;
+}
+.vis-recommend-panel.is-detail .vis-recommend-panel__head { display:none; }
+.vis-sidebar-tabs { padding:3px; gap:3px; border:0; border-radius:9px; background:var(--surface-1); }
+.vis-sidebar-tabs button { padding:7px 8px; font-size:12px; }
+.vis-sidebar-tabs button[aria-selected="true"] { background:var(--surface-0); color:var(--accent); box-shadow:0 1px 3px #0000000b; }
+/* Reuse the home card media viewer inside the canvas sidebar. */
+#homeMediaViewer.is-canvas-preview {
+  position:relative; inset:auto; width:100%; max-width:none; height:100%; max-height:none;
+  margin:0; padding:0; border:1px solid var(--border); border-radius:12px;
+  box-shadow:none; background:var(--surface-1); color:var(--fg); animation:none;
+}
+#homeMediaViewer.is-canvas-preview[open] { display:block; }
+#homeMediaViewer.is-canvas-preview .home-reel-viewport,
+#homeMediaViewer.is-canvas-preview .home-reel-main { height:100%; border-radius:11px; }
+#homeMediaViewer.is-canvas-preview .home-reel-stage > img { object-fit:contain; }
+#homeMediaViewer.is-canvas-preview .home-reel-caption {
+  inset:auto 8px 54px; padding:10px 12px; border-radius:10px; pointer-events:none;
+}
+#homeMediaViewer.is-canvas-preview .home-reel-caption h2 { margin:0; font-size:17px; line-height:1.45; -webkit-line-clamp:3; }
+#homeMediaViewer.is-canvas-preview .home-reel-caption > span,
+#homeMediaViewer.is-canvas-preview .home-reel-caption p,
+#homeMediaViewer.is-canvas-preview .home-reel-more,
+#homeMediaViewer.is-canvas-preview .home-reel-brand,
+#homeMediaViewer.is-canvas-preview .home-reel-rail [data-action] { display:none; }
+#homeMediaViewer.is-canvas-preview .home-reel-top { padding:8px; justify-content:flex-end; }
+#homeMediaViewer.is-canvas-preview .home-reel-top button { width:30px; height:30px; font-size:18px; }
+#homeMediaViewer.is-canvas-preview .home-reel-rail {
+  position:absolute; inset:auto 8px 8px auto; display:flex; flex-direction:row; gap:4px; padding:0; z-index:4;
+}
+#homeMediaViewer.is-canvas-preview .home-reel-rail button { width:32px!important; padding:0; gap:0; }
+#homeMediaViewer.is-canvas-preview .home-reel-rail i { width:30px; height:30px; font-size:13px; border-radius:8px; }
+#homeMediaViewer.is-canvas-preview .home-reel-rail small { display:none; }
+#homeMediaViewer.is-canvas-preview .home-reel-bottom { inset:auto 8px 13px; font-size:10px; padding-right:70px; gap:4px; }
+#homeMediaViewer.is-canvas-preview .home-reel-bottom > span:last-child { display:none; }
+#homeMediaViewer.is-canvas-preview .home-reel-status { top:48px; left:8px; right:8px; font-size:12px; }
+#homeMediaViewer.is-canvas-preview .home-reel-media-nav { width:28px; height:28px; font-size:22px; }
+#homeMediaViewer.is-canvas-preview .home-reel-empty { padding:18px; }
+#homeMediaViewer.is-canvas-preview .home-reel-empty p { display:none; }
+#visDetailHost:has(#homeMediaViewer.is-canvas-preview[open]) { min-height:220px; }
+#visOntologyTree .class-tree-node { display:flex; align-items:center; gap:6px; padding:3px 6px; border-radius:6px; cursor:pointer; }
+#visOntologyTree .class-tree-node.is-assigned { color:var(--accent); background:color-mix(in srgb,var(--accent) 12%,var(--surface-0)); box-shadow:inset 3px 0 0 var(--accent); font-weight:600; }
+#visOntologyTree .class-tree-node small { display:none; }
+#visOntologyTree .class-tree-node.is-assigned .ontology-node-folder { color:var(--accent); opacity:1; }
+#visOntologyTree .class-tree-node:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }

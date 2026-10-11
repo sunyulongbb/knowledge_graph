@@ -28,7 +28,8 @@ export function getKnowledgeUser(req: Request): any | null {
   } catch {}
   if (current) {
     const ownedProjectIds = (adminDb.query('SELECT id FROM projects WHERE owner_user_id=?').all(current.id) as { id: number }[]).map((project) => project.id);
-    return { ...current, ownedProjectIds };
+    const memberProjectIds = (adminDb.query('SELECT project_id FROM application_members WHERE user_id=?').all(current.id) as { project_id: number }[]).map((member) => member.project_id);
+    return { ...current, ownedProjectIds, memberProjectIds };
   }
   return current;
 }

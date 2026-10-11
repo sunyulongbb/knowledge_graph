@@ -395,7 +395,25 @@
       const scopedUrl = window.appendCurrentDbParam(url);
       if (scopedUrl instanceof URL) return scopedUrl;
     }
+    const db = new URL(window.location.href).searchParams.get("db");
+    if (db) url.searchParams.set("db", db);
     return url;
+  }
+
+  async function readEntityClassResponse(resp) {
+    if (resp.ok) return await resp.json();
+    const text = await resp.text().catch(() => "");
+    let message = text;
+    try {
+      const body = JSON.parse(text);
+      message = body.error || body.message || "";
+    } catch {}
+    if (resp.status === 401) {
+      message = "请先在当前访问地址登录。电脑的 localhost 登录状态不会共享到平板的局域网地址。";
+    } else if (resp.status === 403) {
+      message = (message || "无权修改该知识") + "。请确认当前账号和应用；应用成员可操作本应用内的知识，也可由实体创建者授权维护权限。";
+    }
+    throw new Error(message || `HTTP ${resp.status}`);
   }
 
   function openClassModal(options = {}) {
@@ -1249,14 +1267,14 @@
 
   async function removeEntityClass(entityId, classId) {
     try {
-      const url = new URL("/api/kb/entity/class", window.location.origin);
+      const url = appendCurrentDbToUrl(new URL("/api/kb/entity/class", window.location.origin));
       url.searchParams.set("entity_id", entityId);
       url.searchParams.set("class_id", classId);
       const resp = await fetch(url, { method: "DELETE" });
-      if (!resp.ok) throw new Error("Failed to remove class");
+      await readEntityClassResponse(resp);
     } catch (e) {
       console.error(e);
-      alert("移除分类失败");
+      alert(`移除分类失败: ${e?.message || e}`);
     }
   }
 
@@ -1435,8 +1453,7 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ entity_id: entityId, class_id: classId }),
     });
-    if (!resp.ok) throw new Error("HTTP " + resp.status);
-    return await resp.json();
+    return await readEntityClassResponse(resp);
   }
 
   async function assignSelectedEntityClass(entityId, classId) {
@@ -1463,8 +1480,7 @@
     url.searchParams.set("entity_id", entityId);
     if (classId) url.searchParams.set("class_id", classId);
     const resp = await fetch(url.toString(), { method: "DELETE" });
-    if (!resp.ok) throw new Error("HTTP " + resp.status);
-    return await resp.json();
+    return await readEntityClassResponse(resp);
   }
 
   function updateSchemaRemoveButtonState() {

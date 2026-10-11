@@ -69,7 +69,10 @@ export async function guardKnowledgeRequest(req: Request, url: URL, method: stri
     return null;
   }
   if (method === 'GET') {
-    if (path.startsWith('/api/kb/entry/tasks') && user?.role !== 'admin') return response('该操作需要管理员权限', 403);
+    if (path.startsWith('/api/kb/entry/tasks') && user?.role !== 'admin') {
+      const project = getProjectByIdentifier(url.searchParams.get('db') || '');
+      if (!project || !applicationPermissions(db, user, project).member) return response('该操作需要应用成员权限', 403);
+    }
     if (['/api/kb/node', '/api/kb/node/graph', '/api/kb/node/attributes', '/api/kb/node/relations', '/api/wiki/page'].includes(path)) {
       const id = url.searchParams.get('id') || url.searchParams.get('entityId') || url.searchParams.get('entity_id');
       if (id && denied(id)) return response('知识不存在或无权访问', 404);
@@ -150,9 +153,9 @@ export async function guardKnowledgeRequest(req: Request, url: URL, method: stri
     const project = appSlug ? getProjectByIdentifier(appSlug) : null;
     return project && applicationPermissions(db, user, project).member ? null : response('仅应用成员可以导入实体', 403);
   }
-  // Schema changes, bulk import/cleanup and task execution remain administrative.
+  // Application members can maintain the application's schema and knowledge.
   const project = getProjectByIdentifier(url.searchParams.get('db') || '');
-  const ownsApplication = project && applicationPermissions(db, user, project).owner;
-  if (user.role !== 'admin' && !ownsApplication) return response('该操作需要应用创建者或管理员权限', 403);
+  const memberOfApplication = project && applicationPermissions(db, user, project).member;
+  if (user.role !== 'admin' && !memberOfApplication) return response('该操作需要应用成员或管理员权限', 403);
   return null;
 }

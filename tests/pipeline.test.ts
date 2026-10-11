@@ -338,6 +338,7 @@ test('source adapters expose demo separately, reject writes, and build validated
 
 test('HTTP APIs enforce authentication and scope, separate pending runs from confirmation and hide internal plans', async () => {
   const f = fixture();
+  f.raw.run('CREATE TABLE application_members(project_id INTEGER,user_id INTEGER)');
   const handler = createPipelineHandler(f.raw,f.db,req=>req.headers.get('test-user')==='admin'?user:req.headers.get('test-user')==='user'?{...user,role:'user'}:null,slug=>slug==='demo'?{id:1}:null);
   const request = (path: string, body?: any, identity='admin', project='demo') => {
     const url=new URL('http://test/api/kb/pipeline/'+path);url.searchParams.set('db',project);
@@ -345,6 +346,11 @@ test('HTTP APIs enforce authentication and scope, separate pending runs from con
     return knowledgeContext.run({user},()=>handler(req,url,req.method));
   };
   expect((await request('tables',undefined,''))?.status).toBe(401);
+  expect((await request('tables',undefined,'user'))?.status).toBe(403);
+  f.raw.run('INSERT INTO application_members VALUES(1,1)');
+  expect((await request('tables',undefined,'user'))?.status).toBe(200);
+  expect((await request('tables',undefined,'user','app'))?.status).toBe(403);
+  f.raw.run('DELETE FROM application_members');
   expect((await request('tables',undefined,'user'))?.status).toBe(403);
   expect((await request('tables',undefined,'admin','missing'))?.status).toBe(404);
   expect((await request('tables/'+f.table.id,undefined,'admin','app'))?.status).toBe(400);

@@ -4,6 +4,7 @@ import { PipelineStore } from './store.ts';
 import { CleaningEngine } from './engine.ts';
 import { readMysql, readWikidata } from './sources.ts';
 import { loadOntologyProperties } from '../ontology-properties.ts';
+import { applicationPermissions } from '../application-access.ts';
 
 export function createPipelineHandler(adminDb: Database, db: Database, getCurrentUser: (req: Request) => any, getProjectByIdentifier: (slug: string) => any) {
 let migrated = false;
@@ -17,10 +18,10 @@ return async function handlePipelineRoutes(req: Request, url: URL, method: strin
   if (!url.pathname.startsWith('/api/kb/pipeline/')) return null;
   const user = getCurrentUser(req);
   if (!user) return Response.json({ error: '请先登录' }, { status: 401 });
-  if (user.role !== 'admin') return Response.json({ error: '批量录入和清洗需要管理员权限' }, { status: 403 });
   const slug = url.searchParams.get('db');
   const project = slug && slug !== 'app' ? getProjectByIdentifier(slug) : null;
   if (slug && slug !== 'app' && !project) return Response.json({ error: '应用不存在' }, { status: 404 });
+  if (user.role !== 'admin' && (!project || !applicationPermissions(adminDb, user, project).member)) return Response.json({ error: '批量录入和清洗需要当前应用成员权限' }, { status: 403 });
   if (!migrated) { PipelineStore.migrate(adminDb); migrated = true; }
   const store = new PipelineStore(adminDb, project?.id || null, user.id);
   const engine = new CleaningEngine(store, db, user);

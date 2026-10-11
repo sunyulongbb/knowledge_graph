@@ -15,7 +15,7 @@ function setup(play?: (video: any) => Promise<void>, videosOnly = false) {
     querySelector(selector: string) { return this.querySelectorAll(selector)[0] || null; }
     addEventListener(name: string, fn: Function) { (this.handlers[name] ||= []).push(fn); }
     setAttribute() {} removeAttribute() {} load() {} pause() { this.paused = true; } play() { if (play) return play(this); this.paused = false; return Promise.resolve(); }
-    showModal() { this.open = true; } close() { this.open = false; this.handlers.close?.forEach((fn) => fn()); } focus() {}
+    show() { this.open = true; } showModal() { this.open = true; } close() { this.open = false; this.handlers.close?.forEach((fn) => fn()); } focus() {}
   }
   const window: any = { addEventListener() {} };
   const body = new Element('body'); body.style.overflow = 'auto';
@@ -247,4 +247,28 @@ test('image details default to hidden, toggle on click and reset for the next im
   h.refs.right.onclick();
   expect(h.refs.caption.hidden).toBe(true);
   expect(h.refs.playback.hidden).toBe(true);
+});
+
+test('canvas mode embeds home viewer, pages only through its feed, and keeps media title visible', async () => {
+  const h = setup(), seen:string[]=[]; let closed=0;
+  const host:any={appendChild:(dialog:any)=>{dialog.parentNode=host;}};
+  h.viewer.open('one',{nodes:[{id:'one'},{id:'two'}],embedded:{host,onNodeChange:(id:string)=>seen.push(id),onClose:()=>closed++}});
+  await tick();
+  expect(h.viewer.isEmbedded()).toBe(true);
+  expect(h.body.style.overflow).toBe('auto');
+  expect(h.refs.caption.hidden).toBe(false);
+  expect(h.requests.filter(url=>url.includes('/comments'))).toHaveLength(0);
+  await h.refs.down.onclick();expect(seen).toEqual(['one','two']);
+  await h.refs.down.onclick();expect(seen).toEqual(['one','two','one']);
+  await h.refs.up.onclick();expect(seen).toEqual(['one','two','one','two']);
+  expect(h.refs.status.textContent).toBe('');
+  await h.refs.down.onclick();expect(seen.at(-1)).toBe('one');
+  h.viewer.updateFeed([{id:'one'}]);
+  const requestCount = h.requests.length;
+  await h.refs.down.onclick();await h.refs.up.onclick();
+  expect(seen).toHaveLength(5);
+  expect(h.requests).toHaveLength(requestCount);
+  expect(h.refs.status.textContent).toBe('');
+  h.viewer.close();expect(closed).toBe(1);expect(h.viewer.isEmbedded()).toBe(false);
+  h.viewer.open('two');await tick();expect(h.body.style.overflow).toBe('hidden');
 });

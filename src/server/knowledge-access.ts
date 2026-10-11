@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Database } from 'bun:sqlite';
 
-export type KnowledgeUser = { id: number; username: string; displayName?: string; role?: string; fullAccess?: boolean; ownedProjectIds?: number[] };
+export type KnowledgeUser = { id: number; username: string; displayName?: string; role?: string; fullAccess?: boolean; ownedProjectIds?: number[]; memberProjectIds?: number[] };
 export const knowledgeContext = new AsyncLocalStorage<{ user: KnowledgeUser | null }>();
 export const knowledgeId = (value: unknown) => String(value || '').replace(/^entity\//, '').trim();
 export class KnowledgeAccessError extends Error {}
@@ -28,7 +28,7 @@ export function accessCondition(user: KnowledgeUser | null, alias = 'n', edit = 
   const uid = Number.isSafeInteger(user?.id) ? Number(user!.id) : -1;
   if (user?.role === 'admin' || user?.fullAccess) return '1';
   const member = `(${alias}.owner_user_id = ${uid} OR EXISTS (SELECT 1 FROM main.knowledge_maintainers km WHERE km.node_id = ${alias}.id AND km.user_id = ${uid}))`;
-  const ownedIds = (user?.ownedProjectIds || []).filter((id) => Number.isSafeInteger(id) && id > 0);
+  const ownedIds = [...new Set([...(user?.ownedProjectIds || []), ...(user?.memberProjectIds || [])])].filter((id) => Number.isSafeInteger(id) && id > 0);
   const access = ownedIds.length ? `(${member} OR ${alias}.project_id IN (${ownedIds.join(',')}))` : member;
   return edit ? (user ? access : '0') : `(${alias}.visibility = 'public' OR ${access})`;
 }
@@ -38,6 +38,7 @@ export function canAccessKnowledge(db: Database, user: KnowledgeUser | null, id:
   if (!node) return false;
   if (user?.fullAccess) return true;
   if (user?.ownedProjectIds?.includes(Number(node.project_id))) return true;
+  if (user?.memberProjectIds?.includes(Number(node.project_id))) return true;
   // Administrators may read for system management, but editing an owned
   // knowledge item still requires ownership or approved maintenance access.
   if (user?.role === 'admin' && (mode === 'read' || !node.owner_user_id)) return true;

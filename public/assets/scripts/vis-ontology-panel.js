@@ -11,7 +11,7 @@ const RECOMMEND_TOGGLE_ID = "cy_btnRecommendPanel";
 const RECOMMEND_COLLAPSE_STORAGE_KEY = "kb-vis-recommend-panel-collapsed";
 const RECOMMEND_LIMIT = 12;
 const DEFAULT_RECOMMEND_HINT =
-  "点击左侧本体树上的分类，这里会列出该类型的知识；拖到画布即可加入关系图。";
+  "点击左侧本体树上的分类，这里会列出该类型的知识；点击选中知识，拖到画布。";
 const GRAPH_HOST_ID = "cy";
 const GRAPH_WRAP_ID = "cywrap";
 const GRAPH_BODY_SELECTOR = ".vis-panel .vis-graph-body";
@@ -26,6 +26,8 @@ let treeState = "idle";
 let pointerDrag = null;
 let dragChip = null;
 let dragWindowBound = false;
+let suppressDragClickUntil = 0;
+let selectedRecommendId = "";
 let popover = null;
 let popoverCleanup = null;
 let statusTimer = null;
@@ -36,7 +38,9 @@ let recommendTypeLabel = "";
 let recommendMode = "type";
 let searchQuery = "";
 let treeFlat = [];
-let tailTypeFilterId = "";
+let syncingClassification = false;
+let classificationEntityId = '';
+let classificationSelectionPending = false;
 const recommendCache = new Map();
 const recommendNodesById = new Map();
 
@@ -232,10 +236,11 @@ function buildController(module, host) {
     toggleSelection: false,
     storageKey: "kb:ontology-tree-state:vis-panel",
     nodeIcon: "folder",
+    nodeIconFilled: (id) => window.kbGraphClassification?.has(id) || false,
+    onActivate: (id) => window.kbGraphClassification?.toggle(id),
     defaultExpandAll: true,
     expandOnFirstRender: true,
-    // 点击分类 → 右侧知识推荐列出该类型的知识，同时按「尾实体类型」筛选关系图
-    onSelect: (id) => handleOntologySelect(id),
+    onSelect: (id) => { if (!syncingClassification) handleOntologySelect(id); },
     onEdit: () => {},
     onAddChild: () => {},
     onDelete: () => {},
@@ -243,43 +248,15 @@ function buildController(module, host) {
   });
 }
 
-// 选中本体类型：右侧列出该类型知识，同时按「尾实体类型」筛选关系图。
+// 分类只更新推荐，不筛选画布。
 function handleOntologySelect(id) {
   const typeId = String(id || "").trim();
   void loadRecommendations(typeId);
-  tailTypeFilterId = typeId;
-  applyTailTypeFilter(typeId);
+  applyTailTypeFilter("");
 }
 
-// 汇总所选本体及其所有下级本体 id，保证与后端「含下级」的筛选语义一致。
-function collectTailTypeFilterIds(typeId) {
-  const root = String(typeId || "").trim();
-  if (!root) return [];
-  const byParent = new Map();
-  for (const item of treeFlat) {
-    const parentId = String(item?.parent_id || "").trim();
-    if (!byParent.has(parentId)) byParent.set(parentId, []);
-    byParent.get(parentId).push(String(item?.id || "").trim());
-  }
-  const result = [];
-  const seen = new Set();
-  const walk = (id) => {
-    if (!id || seen.has(id)) return;
-    seen.add(id);
-    result.push(id);
-    for (const child of byParent.get(id) || []) walk(child);
-  };
-  walk(root);
-  return result.length ? result : [root];
-}
-
-function applyTailTypeFilter(typeId) {
-  if (typeof window.kbFilterRelationsByTailType !== "function") return;
-  const ids = typeId ? collectTailTypeFilterIds(typeId) : null;
-  window.kbFilterRelationsByTailType(
-    ids,
-    typeId ? { typeId, label: ontologyLabelFor(typeId) } : null,
-  );
+function applyTailTypeFilter() {
+  window.kbFilterRelationsByTailType?.(null, null);
 }
 
 async function ensureTree() {
@@ -306,6 +283,12 @@ async function ensureTree() {
     }
     controller.update(Array.isArray(data?.items) ? data.items : [], "");
     treeState = "ready";
+    controller.refreshAssignedStates();
+    syncingClassification = true;
+    try {
+      const assignedId = window.kbGraphClassification?.assignedIds()[0];
+      if (assignedId) controller.select(assignedId);
+    } finally { syncingClassification = false; }
     bindTreeDrag(inner);
   } catch (error) {
     treeState = "error";
@@ -459,19 +442,20 @@ function recommendNodeImage(node) {
 function buildRecommendCard(node) {
   const id = recommendNodeId(node);
   const label = String(node?.name || node?.label || node?.label_zh || id).trim();
-  const typeLabel = String(node?.classLabel || node?.typeLabel || node?.type || "").trim();
-  const description = String(node?.description || "").replace(/\s+/g, " ").trim();
   const color = normalizeOntologyColor(node?.color);
   const image = recommendNodeImage(node);
 
   const card = document.createElement("div");
   card.className = "vis-recommend-card";
   card.setAttribute("role", "button");
+  card.setAttribute("aria-pressed", String(id === selectedRecommendId));
+  card.classList.toggle("is-selected", id === selectedRecommendId);
+  card.setAttribute("aria-label", label || id);
   card.tabIndex = 0;
   card.dataset.recommendNodeId = id;
   card.dataset.recommendNodeLabel = label;
   card.style.setProperty("--recommend-node-color", color);
-  card.title = "拖到画布加入关系图（或按回车）";
+  card.title = "点击选中，拖到画布（也可按回车）";
   recommendNodesById.set(id, node);
 
   const thumb = document.createElement("div");
@@ -481,6 +465,7 @@ function buildRecommendCard(node) {
     img.src = image;
     img.alt = "";
     img.loading = "lazy";
+    img.draggable = false;
     thumb.appendChild(img);
   } else {
     const icon = document.createElement("i");
@@ -495,24 +480,6 @@ function buildRecommendCard(node) {
   name.className = "vis-recommend-card__name";
   name.textContent = label || id;
   body.appendChild(name);
-  if (typeLabel) {
-    const meta = document.createElement("span");
-    meta.className = "vis-recommend-card__meta";
-    const dot = document.createElement("span");
-    dot.className = "vis-recommend-card__dot";
-    const type = document.createElement("span");
-    type.className = "vis-recommend-card__type";
-    type.textContent = typeLabel;
-    meta.append(dot, type);
-    body.appendChild(meta);
-  }
-  if (description) {
-    const desc = document.createElement("span");
-    desc.className = "vis-recommend-card__desc";
-    desc.textContent = description;
-    body.appendChild(desc);
-  }
-
   card.append(thumb, body);
   return card;
 }
@@ -545,11 +512,11 @@ function applyRecommendHint() {
   const hint = byId(RECOMMEND_HINT_ID);
   if (!hint) return;
   if (recommendMode === "search") {
-    hint.textContent = `搜索「${searchQuery}」的结果，拖到画布即可加入关系图。`;
+    hint.textContent = `搜索「${searchQuery}」的结果，点击选中知识，拖到画布。`;
     return;
   }
   hint.textContent = recommendTypeId
-    ? `「${recommendTypeLabel}」的推荐知识，拖到画布即可加入关系图。`
+    ? `「${recommendTypeLabel}」的推荐知识，点击选中知识，拖到画布。`
     : DEFAULT_RECOMMEND_HINT;
 }
 
@@ -744,14 +711,23 @@ function isPointInside(point, rect) {
 
 function positionDragChip(clientX, clientY) {
   if (!dragChip) return;
-  dragChip.style.left = `${Math.round(clientX + DRAG_CHIP_OFFSET)}px`;
-  dragChip.style.top = `${Math.round(clientY + DRAG_CHIP_OFFSET)}px`;
+  const touch = pointerDrag?.pointerType !== "mouse";
+  dragChip.style.left = `${Math.round(Math.max(8, Math.min(window.innerWidth - dragChip.offsetWidth - 8, clientX + (touch ? -dragChip.offsetWidth / 2 : DRAG_CHIP_OFFSET))))}px`;
+  dragChip.style.top = `${Math.round(Math.max(8, clientY + (touch ? -64 : DRAG_CHIP_OFFSET)))}px`;
+}
+
+function isGraphDropPoint(point) {
+  const host = byId(GRAPH_HOST_ID);
+  if (!host || !isPointInside(point, host.getBoundingClientRect())) return false;
+  const hit = document.elementFromPoint(point.clientX, point.clientY);
+  return Boolean(hit && (hit === host || host.contains(hit)));
 }
 
 function startPointerDrag(event) {
   const payload = pointerDrag?.payload;
   if (!payload) return;
   pointerDrag.started = true;
+  pointerDrag.source?.classList.add("is-dragging");
   closePopover();
   dragChip = buildDragChip(payload);
   document.body.classList.add("vis-ontology-dragging");
@@ -776,35 +752,70 @@ function currentGraphPoint(point) {
   );
 }
 
+function selectRecommendation(id) {
+  selectedRecommendId = id;
+  byId(RECOMMEND_LIST_ID)?.querySelectorAll?.("[data-recommend-node-id]").forEach(card => {
+    const selected = card.dataset.recommendNodeId === id;
+    card.classList.toggle("is-selected", selected);
+    card.setAttribute("aria-pressed", String(selected));
+  });
+}
+
 function onPanelPointerDown(event) {
+  if (pointerDrag) { clearDragState(); return; }
   if (event.button !== 0 || event.isPrimary === false) return;
   // 展开箭头沿用树自身的展开/收起行为
   if (event.target instanceof Element && event.target.closest(".dhx_tree-toggle-button")) return;
   const payload = resolveDragPayload(event.target);
   if (!payload) return;
+  const card = event.target.closest?.("[data-recommend-node-id]");
+  const handle = payload.kind === "node" ? card : null;
   pointerDrag = {
+    source: event.target.closest?.("[data-recommend-node-id]"),
+    capture: handle,
+    pointerType: event.pointerType || "mouse",
+    list: card?.closest?.(".vis-recommend-list"),
+    scrollTop: card?.closest?.(".vis-recommend-list")?.scrollTop || 0,
+    scrolling: false,
+    selected: payload.id === selectedRecommendId,
     payload,
     pointerId: event.pointerId,
     startX: event.clientX,
     startY: event.clientY,
     started: false,
   };
+  if (handle) {
+    event.preventDefault();
+    handle.setPointerCapture?.(event.pointerId);
+
+  }
 }
 
 function onPointerMove(event) {
   if (!pointerDrag) return;
   if (pointerDrag.pointerId !== undefined && event.pointerId !== pointerDrag.pointerId) return;
+  if (pointerDrag.capture || pointerDrag.started) event.preventDefault();
+  if (pointerDrag.scrolling) {
+    if (pointerDrag.list) pointerDrag.list.scrollTop = pointerDrag.scrollTop + pointerDrag.startY - event.clientY;
+    return;
+  }
   if (!pointerDrag.started) {
     const moved =
       Math.abs(event.clientX - pointerDrag.startX) + Math.abs(event.clientY - pointerDrag.startY);
-    if (moved < DRAG_THRESHOLD) return;
+    if (moved < (pointerDrag.pointerType === "mouse" ? DRAG_THRESHOLD : 8)) return;
+    if (pointerDrag.payload.kind === "node" && pointerDrag.pointerType !== "mouse" && !pointerDrag.selected && Math.abs(event.clientY - pointerDrag.startY) > Math.abs(event.clientX - pointerDrag.startX)) {
+      pointerDrag.scrolling = true;
+      if (pointerDrag.list) pointerDrag.list.scrollTop = pointerDrag.scrollTop + pointerDrag.startY - event.clientY;
+      return;
+    }
+    if (pointerDrag.payload.kind === "node") selectRecommendation(pointerDrag.payload.id);
     startPointerDrag(event);
   }
   positionDragChip(event.clientX, event.clientY);
   const body = graphBodyEl();
   body?.classList.toggle(
     "is-ontology-drop-target",
-    isPointInside(event, body.getBoundingClientRect()),
+    isGraphDropPoint(event),
   );
 }
 
@@ -813,11 +824,15 @@ function onPointerUp(event) {
   if (pointerDrag.pointerId !== undefined && event.pointerId !== pointerDrag.pointerId) return;
   const payload = pointerDrag.payload;
   const started = pointerDrag.started;
+  const scrolling = pointerDrag.scrolling;
   const point = { clientX: event.clientX, clientY: event.clientY };
   clearDragState();
-  if (!started) return;
+  if (!started) {
+    if (!scrolling && payload.kind === "node") selectRecommendation(payload.id);
+    return;
+  }
   const body = graphBodyEl();
-  if (!body || !isPointInside(point, body.getBoundingClientRect())) return;
+  if (!body || !isGraphDropPoint(point)) return;
   if (payload.kind === "node") {
     void addRecommendedNodeToGraph(payload, currentGraphPoint(point));
     return;
@@ -826,7 +841,7 @@ function onPointerUp(event) {
 }
 
 function onDragKeydown(event) {
-  if (event.key === "Escape" && pointerDrag?.started) clearDragState();
+  if (event.key === "Escape" && pointerDrag) clearDragState();
 }
 
 function bindTreeDrag(host) {
@@ -837,7 +852,22 @@ function bindTreeDrag(host) {
   // 树会随刷新重建，所以在 document 上统一代理；推荐卡片也走同一套逻辑
   document.addEventListener("pointerdown", onPanelPointerDown);
   // 拖拽过程中指针会移出面板，因此监听挂在 window 上
-  window.addEventListener("pointermove", onPointerMove, { passive: true });
+  window.addEventListener("pointermove", onPointerMove, { passive: false });
+  document.addEventListener("click", (event) => {
+    if (Date.now() < suppressDragClickUntil && resolveDragPayload(event.target)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  }, true);
+  document.addEventListener("lostpointercapture", (event) => {
+    if (pointerDrag?.pointerId === event.pointerId) clearDragState();
+  });
+  document.addEventListener("dragstart", (event) => {
+    if (resolveRecommendPayload(event.target)) event.preventDefault();
+  });
+  document.addEventListener("contextmenu", (event) => {
+    if (resolveRecommendPayload(event.target)) event.preventDefault();
+  });
   window.addEventListener("pointerup", onPointerUp);
   window.addEventListener("pointercancel", clearDragState);
   window.addEventListener("blur", clearDragState);
@@ -845,7 +875,13 @@ function bindTreeDrag(host) {
 }
 
 function clearDragState() {
+  const previous = pointerDrag;
   pointerDrag = null;
+  if (previous?.started) suppressDragClickUntil = Date.now() + 500;
+  previous?.source?.classList.remove("is-dragging");
+  if (previous?.capture?.hasPointerCapture?.(previous.pointerId)) {
+    previous.capture.releasePointerCapture(previous.pointerId);
+  }
   document.body.classList.remove("vis-ontology-dragging");
   document.body.classList.remove("is-recommend-drag");
   graphBodyEl()?.classList.remove("is-ontology-drop-target");
@@ -1037,6 +1073,7 @@ async function createNode(ontologyId, name) {
  * 否则直接 add —— 不拉取关系、也不触发重新布局。
  */
 async function placeNodeInGraph(spec, graphPoint) {
+  const canvasId = window.kbGraphCanvases?.activeId;
   const hadGraph = Boolean(window.kbCy);
   if (!hadGraph) {
     if (typeof window.kbLoadGraphWithData !== "function") return false;
@@ -1051,8 +1088,10 @@ async function placeNodeInGraph(spec, graphPoint) {
       return false;
     }
   }
+  if (canvasId !== window.kbGraphCanvases?.activeId) return false;
   const cy = window.kbCy;
   if (!cy) return false;
+  window.kbGraphCanvases?.bind();
   try {
     const existing = cy.getElementById(spec.data.id);
     if (existing && existing.length) existing.data(spec.data);
@@ -1139,13 +1178,31 @@ function bindRecommendListEvents() {
   const list = byId(RECOMMEND_LIST_ID);
   if (!list || list.dataset.bound === "true") return;
   list.dataset.bound = "true";
-  // 只能拖拽入画布：点击不把知识加进关系图
   list.addEventListener("keydown", onRecommendListKeydown);
+
 }
 
 function init() {
   const panel = byId(PANEL_ID);
   if (!panel) return;
+  window.addEventListener('kb:graph-classification', (event) => {
+    const state = event.detail || {};
+    controller?.refreshAssignedStates();
+    if (classificationEntityId !== state.entityId) {
+      classificationEntityId = state.entityId;
+      classificationSelectionPending = true;
+    }
+    if (classificationSelectionPending) {
+      syncingClassification = true;
+      try {
+        if (state.ids?.length) controller?.select(state.ids[0]);
+        else controller?.clearSelection();
+      } finally { syncingClassification = false; }
+      if (!state.loading) classificationSelectionPending = false;
+    }
+    byId(TREE_HOST_ID)?.setAttribute('aria-busy', String(!!state.loading || !!state.pending));
+    if (state.message) setPanelStatus(state.message, state.error ? 'error' : 'success');
+  });
   bindPanelToggle();
   setCollapsed(readCollapsedState());
   bindRecommendPanel();
@@ -1161,10 +1218,9 @@ function init() {
     if (recommendTypeId) void loadRecommendations(recommendTypeId);
   });
   window.addEventListener("hashchange", closePopover);
-  // 供图谱上的筛选标记清除筛选：同时取消本体树选中，便于再次点击同一类型重新筛选
+  // 兼容旧的清除筛选入口。
   window.kbOntologyTailTypeFilter = {
     clear() {
-      tailTypeFilterId = "";
       if (controller && typeof controller.clearSelection === "function") {
         try {
           controller.clearSelection();
