@@ -5,8 +5,9 @@ import { createContext, runInContext } from 'node:vm';
 function setup(user: any = {id:1}) {
   class Element {
     textContent='';disabled=false;hidden=false;tabIndex=0;dataset:any={};style:any={display:'none'};children:any[]=[];listeners=new Map();
-    classList={add(){},remove(){}};
-    setAttribute(){} replaceChildren(){this.children=[];}append(item:any){this.children.push(item);}focus(){}querySelectorAll(){return this.children;}
+    attributes:any={};classes=new Set<string>();
+    classList={add:(name:string)=>this.classes.add(name),remove:(name:string)=>this.classes.delete(name),toggle:(name:string,on:boolean)=>on?this.classes.add(name):this.classes.delete(name),contains:(name:string)=>this.classes.has(name)};
+    setAttribute(name:string,value:string){this.attributes[name]=value;} replaceChildren(){this.children=[];}append(item:any){this.children.push(item);}focus(){}querySelectorAll(){return this.children;}
     addEventListener(name:string,fn:any){this.listeners.set(name,fn);}click(){return this.listeners.get('click')?.({});}
   }
   const elements=new Map<string,Element>();const get=(id:string)=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id)!;};
@@ -38,12 +39,25 @@ test('canvas tabs create an empty workspace, autosave layout, restore it, and de
   await h.window.kbGraphCanvases.save();
   expect(h.saved.get('c1').graph.nodes[0].position).toEqual({x:123,y:456});
   await h.get('graphCanvasNew').click();expect(h.window.kbGraphCanvases.activeId).toBe('c2');expect(cy.nodes().length).toBe(0);
-  await h.get('graphCanvasTabs').children[1].click();
+  await h.get('graphCanvasTabs').children[2].click();
   expect(cy.nodes().length).toBe(1);expect(cy.getElementById('entity/a').position()).toEqual({x:123,y:456});expect(cy.zoom()).toBe(1.5);
   await h.get('graphCanvasRename').click();expect(h.saved.get('c1').name).toBe('改名');
   await h.get('graphCanvasDelete').click();expect(h.saved.has('c1')).toBe(false);expect(h.window.kbGraphCanvases.activeId).toBeNull();
   expect(cy.nodes().length).toBe(1); // Original relationship browsing is restored.
   cy.destroy();
+});
+
+test('relationship edit is a fixed default tab that opens the editable canvas workspace',async()=>{
+  const h=setup();await new Promise(resolve=>setTimeout(resolve,0));
+  const tabs=h.get('graphCanvasTabs').children;
+  expect(tabs.map((tab:any)=>tab.textContent)).toEqual(['关系浏览','关系编辑']);
+  expect(tabs[0].attributes['aria-selected']).toBe('true');
+  await tabs[1].click();
+  expect(h.get('graphCanvasTabs').children[1].attributes['aria-selected']).toBe('true');
+  expect(h.get('cywrap').classList.contains('is-canvas-browse')).toBe(false);
+  expect(h.window.kbGraphCanvases.activeId).toBeNull();
+  expect(h.storage.get('kb-canvas-active:1:mine')).toBe('__relationship_edit__');
+  h.window.kbCy.destroy();
 });
 
 test('login with a legacy username-only response refreshes canvases and enables creation',async()=>{

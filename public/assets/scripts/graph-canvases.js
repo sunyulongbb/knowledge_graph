@@ -8,7 +8,7 @@
   const remove = document.getElementById('graphCanvasDelete');
   const detach = document.getElementById('graphCanvasDetach');
   const saveButton = document.getElementById('graphCanvasSave');
-  let items = [], active = null, scope = '', identity = '', busy = false, applying = false, dirty = false;
+  let items = [], active = null, defaultView = 'browse', scope = '', identity = '', busy = false, applying = false, dirty = false;
   let explore = null, timer = 0, generation = 0, viewGeneration = 0, version = 0, saving = null, bound = null;
   let cleanSignature = '', idleScheduled = false;
   const currentScope = () => new URLSearchParams(location.search).get('db') || 'default';
@@ -32,12 +32,12 @@
     const response=await fetch(url,{method,headers:{'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
     const data=await response.json(); if(!response.ok) throw Error(data.error || `HTTP ${response.status}`); return data;
   }
-  // 关系浏览（未选择画布）时只保留画布：隐藏左侧本体树与右侧知识推荐/知识详情
+  // 关系浏览只显示画布；关系编辑和用户画布显示本体树与知识推荐/详情。
   function syncMode() {
     const wrap = document.getElementById('cywrap');
     const list = wrap && wrap.classList;
     if (!list || typeof list.toggle !== 'function') return;
-    const browse = !active;
+    const browse = !active && defaultView === 'browse';
     if (typeof list.contains === 'function' && list.contains('is-canvas-browse') === browse) return;
     list.toggle('is-canvas-browse', browse);
     if (typeof window.requestAnimationFrame === 'function') {
@@ -47,11 +47,12 @@
   function render() {
     syncMode();
     tabs.replaceChildren();
-    for(const item of [{id:null,name:'关系浏览'},...items]) {
+    for(const item of [{id:null,name:'关系浏览',view:'browse'},{id:null,name:'关系编辑',view:'edit'},...items]) {
       const button=document.createElement('button'); button.type='button';button.setAttribute('role','tab');
-      button.setAttribute('aria-selected',String(item.id===(active?.id || null)));button.tabIndex=item.id===(active?.id || null)?0:-1;
+      const selected=item.id ? item.id===active?.id : !active && item.view===defaultView;
+      button.setAttribute('aria-selected',String(selected));button.tabIndex=selected?0:-1;
       button.textContent=item.name;button.disabled=busy;button.dataset.canvasId=item.id || '';
-      button.addEventListener('click',()=>switchTo(item.id).catch(fail));tabs.append(button);
+      button.addEventListener('click',()=>item.id ? switchTo(item.id).catch(fail) : switchDefaultView(item.view).catch(fail));tabs.append(button);
     }
     add.disabled=busy || !window.authUser;
     if(reloadButton) reloadButton.disabled=busy;
@@ -147,6 +148,25 @@
       localStorage.setItem(`kb-canvas-active:${identity}:${scope}`,id || '');
     } finally {busy=false;render();}
   }
+  async function switchDefaultView(view) {
+    if(busy || !['browse','edit'].includes(view) || (!active && defaultView===view)) return;
+    busy=true;render();
+    const token=generation;
+    try {
+      if(active) {
+        viewGeneration++;active=null;dirty=false;
+        await apply(explore || {nodes:[],edges:[],zoom:1,pan:{x:0,y:0}});
+      } else {
+        viewGeneration++;
+        defaultView=view;
+      }
+      if(token!==generation)return;
+      defaultView=view;
+      localStorage.setItem(`kb-canvas-active:${identity}:${scope}`,view==='edit'?'__relationship_edit__':'');
+      status.classList.remove('is-error');
+      status.textContent=view==='edit'?'关系编辑':'关系浏览';
+    } finally {busy=false;render();}
+  }
   async function create() {
     if(busy || !window.authUser) return;
     busy=true;render();
@@ -217,15 +237,17 @@
   async function refresh() {
     const next=currentScope(), uid=window.authUser ? String(window.authUser.id || `user:${window.authUser.username}`) : 'anonymous';
     if(next===scope && uid===identity) {bind();return;}
-    generation++;clearTimeout(timer);scope=next;identity=uid;active=null;items=[];dirty=false;explore=null;
+    generation++;clearTimeout(timer);scope=next;identity=uid;active=null;defaultView='browse';items=[];dirty=false;explore=null;
     const token=generation;render();
     status.textContent=window.authUser?'正在读取画布…':'登录后可保存个人画布';
     if(!window.authUser)return;
     try{const data=await api();if(token!==generation)return;items=data.items;render();status.textContent='关系浏览';
-      const last=localStorage.getItem(`kb-canvas-active:${identity}:${scope}`);if(items.some(i=>i.id===last))await switchTo(last);
+      const last=localStorage.getItem(`kb-canvas-active:${identity}:${scope}`);
+      if(items.some(i=>i.id===last))await switchTo(last);
+      else if(last==='__relationship_edit__')await switchDefaultView('edit');
     }catch(error){if(token===generation)fail(error);}
   }
-  window.kbGraphCanvases={get activeId(){return active?.id || null;},get applying(){return applying;},get contextKey(){return `${identity}:${scope}:${active?.id || 'browse'}:${generation}:${viewGeneration}`;},save,changed,bind,refresh,reload:reloadCanvas};
+  window.kbGraphCanvases={get activeId(){return active?.id || null;},get applying(){return applying;},get contextKey(){return `${identity}:${scope}:${active?.id || defaultView}:${generation}:${viewGeneration}`;},save,changed,bind,refresh,reload:reloadCanvas};
   window.addEventListener('kb-auth-change',refresh);
   window.addEventListener('kb-application-access-change',refresh);
   window.addEventListener('kb:url-param-changed',refresh);
