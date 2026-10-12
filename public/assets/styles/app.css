@@ -13026,6 +13026,13 @@ table th {
 .knowledge-report-empty i { color: var(--accent); font-size: 30px; }
 .knowledge-report-error { padding: 24px; color: #dc2626; }
 
+/* 报告概述下方的关联画布关系图（与报告同名时自动加载） */
+.knowledge-report-canvas { margin: 0 0 44px; }
+.knowledge-report-canvas[hidden] { display: none; }
+.knowledge-report-canvas h2 { margin: 0 0 8px; font-size: 17px; font-weight: 650; }
+.knowledge-report-canvas-hint { margin: 0 0 14px; color: var(--muted); font-size: 12px; }
+.report-canvas-graph { height: 440px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1); overflow: hidden; }
+
 .knowledge-report-edit { width: min(760px, calc(100% - 32px)); margin: 24px auto; display: grid; gap: 14px; }
 .knowledge-report-edit[hidden] { display: none; }
 .knowledge-report-edit label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; }
@@ -13045,6 +13052,7 @@ table th {
   .knowledge-report-list-item { grid-template-columns: 1fr; gap: 8px; }
   .knowledge-report-list-meta { justify-content: flex-start; }
   .knowledge-report-document { width: calc(100% - 28px); padding-top: 30px; }
+  .report-canvas-graph { height: 300px; }
   .knowledge-report-item.has-media { grid-template-columns:96px minmax(0,1fr); gap:11px; }
   .knowledge-report-item-media { width:96px; height:72px; }
   .knowledge-report-detail-actions { align-items: flex-start; }

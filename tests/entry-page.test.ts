@@ -148,6 +148,14 @@ test('knowledge reports replace the legacy dashboard with title and keyword gene
   expect(page).toContain("image.addEventListener('error', removeUnavailableImage");
   expect(page).toContain("item?.classList.remove('has-media')");
   expect(page).not.toContain('id="reportTemplatePanel"');
+  // 报告概述下方自动加载「与报告同名」的关联页面画布关系图
+  expect(page).toContain('id="reportCanvasSection"');
+  expect(page).toContain('id="reportCanvasGraph"');
+  expect(page).toContain('async function loadReportCanvasGraph(detail)');
+  expect(page).toContain("scopedUrl('/api/graph-canvases')");
+  expect(page).toContain("String(item?.name || '').trim() === wantedName");
+  expect(css).toContain('.knowledge-report-canvas');
+  expect(css).toContain('.report-canvas-graph');
   expect(css).toContain('.knowledge-report-document-header');
   expect(css).toContain('.knowledge-report-item.has-media');
   expect(routes).toContain("url.pathname.startsWith('/api/kb/reports')");

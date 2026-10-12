@@ -5914,6 +5914,7 @@
 
     function renderReportDetailFromData(detail) {
       if (!reportDetailContent) return;
+      destroyReportCanvasGraph();
       currentReportDetail = detail;
       const keywords = Array.isArray(detail.keywords) ? detail.keywords : [];
       const sections = Array.isArray(detail.sections) ? detail.sections : [];
@@ -5948,6 +5949,11 @@
           <div class="knowledge-report-document-meta"><span>更新于 ${escapeHtml(reportDate(detail.updatedAt))}</span>${keywords.map((keyword) => `<span>${escapeHtml(keyword)}</span>`).join('')}</div>
         </header>
         <section class="knowledge-report-summary"><h2>概述</h2><p>${escapeHtml(detail.summary || '')}</p></section>
+        <section class="knowledge-report-canvas" id="reportCanvasSection" hidden>
+          <h2>关系图</h2>
+          <p class="knowledge-report-canvas-hint">与报告同名的关联画布「<span id="reportCanvasName"></span>」自动加载。</p>
+          <div id="reportCanvasGraph" class="report-canvas-graph" role="img" aria-label="关联画布关系图"></div>
+        </section>
         ${sectionHtml || '<p class="knowledge-report-empty">暂无可整理的知识内容。</p>'}
         <footer class="knowledge-report-sources"><h2>资料来源</h2><ol>${sources.map((source) => { const sourceUrl = safeReportExternalUrl(source.link); return `<li><button type="button" data-report-source-id="${escapeHtml(source.id || '')}">${escapeHtml(source.name || source.id || '')}</button>${sourceUrl ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener">原始链接</a>` : ''}</li>`; }).join('')}</ol></footer>`;
       reportDetailContent.querySelectorAll('.knowledge-report-item-media img').forEach((image) => {
@@ -5959,10 +5965,86 @@
         image.addEventListener('error', removeUnavailableImage, { once: true });
         if (image.complete && image.naturalWidth === 0) removeUnavailableImage();
       });
+      void loadReportCanvasGraph(detail);
+    }
+
+    let reportCanvasCy = null;
+
+    function destroyReportCanvasGraph() {
+      if (!reportCanvasCy) return;
+      try { reportCanvasCy.destroy(); } catch { }
+      reportCanvasCy = null;
+    }
+
+    // 报告概述下方自动加载「与报告同名」的关联页面画布（用户创建的关系图）
+    async function loadReportCanvasGraph(detail) {
+      destroyReportCanvasGraph();
+      const section = document.getElementById('reportCanvasSection');
+      const host = document.getElementById('reportCanvasGraph');
+      if (!section || !host) return;
+      const wantedName = String(detail?.title || '').trim();
+      if (!wantedName || typeof window.cytoscape !== 'function') {
+        section.hidden = true;
+        return;
+      }
+      const dbScope = new URLSearchParams(window.location.search).get('db') || '';
+      const scopedUrl = (path) => {
+        const url = new URL(path, window.location.origin);
+        if (dbScope) url.searchParams.set('db', dbScope);
+        return url.toString();
+      };
+      try {
+        const listResponse = await fetch(scopedUrl('/api/graph-canvases'));
+        if (!listResponse.ok) throw new Error(`HTTP ${listResponse.status}`);
+        const listPayload = await listResponse.json();
+        const canvases = Array.isArray(listPayload?.items) ? listPayload.items : [];
+        const matched = canvases.find((item) => String(item?.name || '').trim() === wantedName);
+        if (!matched?.id) {
+          section.hidden = true;
+          return;
+        }
+        const graphResponse = await fetch(scopedUrl(`/api/graph-canvases/${encodeURIComponent(matched.id)}`));
+        if (!graphResponse.ok) throw new Error(`HTTP ${graphResponse.status}`);
+        const payload = await graphResponse.json();
+        const graph = payload?.graph || {};
+        const elements = [
+          ...(Array.isArray(graph.nodes) ? graph.nodes : []),
+          ...(Array.isArray(graph.edges) ? graph.edges : []),
+        ];
+        if (!elements.length) {
+          section.hidden = true;
+          return;
+        }
+        const nameEl = document.getElementById('reportCanvasName');
+        if (nameEl) nameEl.textContent = String(payload?.name || matched.name || wantedName);
+        // 先显示容器，再创建实例，否则容器尺寸为 0 会导致 fit 失效
+        section.hidden = false;
+        // 报告内按容器自适应显示完整关系图（不还原画布缩放/平移，避免只看到局部）
+        reportCanvasCy = window.cytoscape({
+          container: host,
+          elements,
+          style: buildCyStyle(),
+          layout: { name: 'preset', fit: true, padding: 32 },
+          autoungrabify: true,
+          autounselectify: true,
+          boxSelectionEnabled: false,
+          wheelSensitivity: 0.2,
+          minZoom: 0.2,
+          maxZoom: 3,
+        });
+        try {
+          reportCanvasCy.resize();
+          reportCanvasCy.fit(undefined, 32);
+        } catch { }
+      } catch (err) {
+        console.warn('load report canvas graph failed', err);
+        section.hidden = true;
+      }
     }
 
     async function renderReportDetail(reportId) {
       currentReportDetailId = String(reportId || '');
+      destroyReportCanvasGraph();
       reportDetailContent.innerHTML = '<p class="muted">正在加载报告…</p>';
       try {
         const result = await fetchReportDetail(reportId);
@@ -7713,7 +7795,10 @@
       handleReportGenerate();
     });
     document.getElementById('btnReportGenerateBack')?.addEventListener('click', () => setViewMode('report_home'));
-    document.getElementById('btnReportDetailBack')?.addEventListener('click', () => setViewMode('report_home'));
+    document.getElementById('btnReportDetailBack')?.addEventListener('click', () => {
+      destroyReportCanvasGraph();
+      setViewMode('report_home');
+    });
     reportDetailContent?.addEventListener('click', (event) => {
       const source = event.target instanceof Element ? event.target.closest('[data-report-source-id]') : null;
       const id = source?.dataset.reportSourceId;
