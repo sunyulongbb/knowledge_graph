@@ -13031,7 +13031,7 @@ table th {
 .knowledge-report-canvas[hidden] { display: none; }
 .knowledge-report-canvas h2 { margin: 0 0 8px; font-size: 17px; font-weight: 650; }
 .knowledge-report-canvas-hint { margin: 0 0 14px; color: var(--muted); font-size: 12px; }
-.report-canvas-graph { height: 440px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1); overflow: hidden; }
+.report-canvas-graph { height: clamp(520px, 68vh, 860px); border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1); overflow: hidden; }
 
 .knowledge-report-edit { width: min(760px, calc(100% - 32px)); margin: 24px auto; display: grid; gap: 14px; }
 .knowledge-report-edit[hidden] { display: none; }
@@ -13052,7 +13052,7 @@ table th {
   .knowledge-report-list-item { grid-template-columns: 1fr; gap: 8px; }
   .knowledge-report-list-meta { justify-content: flex-start; }
   .knowledge-report-document { width: calc(100% - 28px); padding-top: 30px; }
-  .report-canvas-graph { height: 300px; }
+  .report-canvas-graph { height: clamp(360px, 62vh, 560px); }
   .knowledge-report-item.has-media { grid-template-columns:96px minmax(0,1fr); gap:11px; }
   .knowledge-report-item-media { width:96px; height:72px; }
   .knowledge-report-detail-actions { align-items: flex-start; }

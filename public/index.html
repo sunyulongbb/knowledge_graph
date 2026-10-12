@@ -5950,8 +5950,6 @@
         </header>
         <section class="knowledge-report-summary"><h2>概述</h2><p>${escapeHtml(detail.summary || '')}</p></section>
         <section class="knowledge-report-canvas" id="reportCanvasSection" hidden>
-          <h2>关系图</h2>
-          <p class="knowledge-report-canvas-hint">与报告同名的关联画布「<span id="reportCanvasName"></span>」自动加载。</p>
           <div id="reportCanvasGraph" class="report-canvas-graph" role="img" aria-label="关联画布关系图"></div>
         </section>
         ${sectionHtml || '<p class="knowledge-report-empty">暂无可整理的知识内容。</p>'}
@@ -5969,11 +5967,33 @@
     }
 
     let reportCanvasCy = null;
+    let reportCanvasResizeBound = false;
 
     function destroyReportCanvasGraph() {
       if (!reportCanvasCy) return;
       try { reportCanvasCy.destroy(); } catch { }
       reportCanvasCy = null;
+    }
+
+    // 让关系图横向铺满报告面板（超出文档正文的居中 max-width 列），宽度与 reportDetailPanel 同宽
+    function syncReportCanvasBleed() {
+      const host = document.getElementById('reportCanvasGraph');
+      const section = document.getElementById('reportCanvasSection');
+      const panel = document.getElementById('reportDetailPanel');
+      if (!host || !section || !panel || section.hidden || !reportDetailContent) return;
+      const docWidth = reportDetailContent.clientWidth;
+      const bleed = Math.max(0, Math.round((panel.clientWidth - docWidth) / 2));
+      host.style.marginInline = bleed ? `-${bleed}px` : '';
+      try { reportCanvasCy?.resize(); } catch { }
+    }
+
+    function bindReportCanvasResize() {
+      if (reportCanvasResizeBound) return;
+      reportCanvasResizeBound = true;
+      window.addEventListener('resize', () => {
+        if (!reportCanvasCy) return;
+        syncReportCanvasBleed();
+      });
     }
 
     // 报告概述下方自动加载「与报告同名」的关联页面画布（用户创建的关系图）
@@ -6019,6 +6039,7 @@
         if (nameEl) nameEl.textContent = String(payload?.name || matched.name || wantedName);
         // 先显示容器，再创建实例，否则容器尺寸为 0 会导致 fit 失效
         section.hidden = false;
+        syncReportCanvasBleed();
         // 报告内按容器自适应显示完整关系图（不还原画布缩放/平移，避免只看到局部）
         reportCanvasCy = window.cytoscape({
           container: host,
@@ -6036,6 +6057,7 @@
           reportCanvasCy.resize();
           reportCanvasCy.fit(undefined, 32);
         } catch { }
+        bindReportCanvasResize();
       } catch (err) {
         console.warn('load report canvas graph failed', err);
         section.hidden = true;
