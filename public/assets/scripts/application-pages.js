@@ -101,7 +101,9 @@
     if (saved.focus?.isConnected) saved.focus.focus({ preventScroll: true });
   }
   function closeHomeDetailDrawer() {
-    window.homeKnowledgeMediaViewer?.close();
+    const viewer = window.homeKnowledgeMediaViewer;
+    // 画布内嵌的“知识详情”由关系画布自行管理：hash 变更（切换画布节点）不应关闭它
+    if (!viewer?.isEmbedded?.()) viewer?.close();
     if (homeDetailDrawer?.open) homeDetailDrawer.close();
     restoreHomeDetailPanel();
   }

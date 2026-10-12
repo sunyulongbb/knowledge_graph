@@ -3413,7 +3413,7 @@
           <div id="status" style="display:none">
             <div class="spinner" style="display:none"></div><span></span>
           </div>
-          <div class="graph-canvas-bar"><div id="graphCanvasTabs" class="graph-canvas-tabs" role="tablist" aria-label="关系画布"></div><button id="graphCanvasRefresh" type="button" class="btn sm" title="刷新当前画布" aria-label="刷新当前画布">刷新</button><button id="graphCanvasNew" type="button" class="btn sm">＋ 新建画布</button><button id="graphCanvasDetach" type="button" class="btn sm" hidden title="只移出画布，不删除知识或关系">移出选中</button><button id="graphCanvasRename" type="button" class="btn sm" disabled>重命名</button><button id="graphCanvasDelete" type="button" class="btn sm" disabled>删除画布</button><span id="graphCanvasStatus" class="graph-canvas-status" role="status"></span></div>
+          <div class="graph-canvas-bar"><div id="graphCanvasTabs" class="graph-canvas-tabs" role="tablist" aria-label="关系画布"></div><button id="graphCanvasSave" type="button" class="btn sm" disabled title="保存画布（Ctrl+S）" aria-label="保存画布">保存</button><button id="graphCanvasRefresh" type="button" class="btn sm" title="刷新当前画布" aria-label="刷新当前画布">刷新</button><button id="graphCanvasNew" type="button" class="btn sm">＋ 新建画布</button><button id="graphCanvasDetach" type="button" class="btn sm" hidden title="只移出画布，不删除知识或关系">移出选中</button><button id="graphCanvasRename" type="button" class="btn sm" disabled>重命名</button><button id="graphCanvasDelete" type="button" class="btn sm" disabled>删除画布</button><span id="graphCanvasStatus" class="graph-canvas-status" role="status"></span></div>
           <!-- Top search bar -->
           <div class="vis-topbar">
             <div class="vis-topbar-group" role="group" aria-label="图谱数据">
@@ -7135,6 +7135,25 @@
       renderDetailBreadcrumbs();
     };
 
+    // 记住最近浏览/编辑的知识节点，便于关联页刷新或通过菜单进入时回显关系图与左侧知识编辑
+    const KB_LAST_NODE_STORAGE_PREFIX = "kb-last-knowledge-node";
+    function readLastKnowledgeNodeId() {
+      try {
+        return String(
+          localStorage.getItem(`${KB_LAST_NODE_STORAGE_PREFIX}:${getCurrentGraphDbScope()}`) || "",
+        ).trim();
+      } catch {
+        return "";
+      }
+    }
+    function persistLastKnowledgeNodeId(nodeId) {
+      const normalized = stripEntityIdPrefix(String(nodeId || "").trim());
+      if (!normalized) return;
+      try {
+        localStorage.setItem(`${KB_LAST_NODE_STORAGE_PREFIX}:${getCurrentGraphDbScope()}`, normalized);
+      } catch { }
+    }
+
     function setViewMode(mode, options = {}) {
       const normalized = normalizeViewModeInput(mode) || "table";
       const usesEntityRouteNode = [
@@ -7199,14 +7218,18 @@
         renderDetailBreadcrumbs();
       }
       const hasTargetNode = Boolean(targetNodeIdRaw);
+      const persistedKnowledgeNodeId =
+        normalized === "vis" ? readLastKnowledgeNodeId() : "";
       const resolvedVisNodeId =
         normalized === "vis"
           ? targetNodeIdRaw ||
           (window.kbActiveVisNodeId || "").trim() ||
+          persistedKnowledgeNodeId ||
           (window.kbSelectedRowId || "").trim() ||
           (document.getElementById("fId")?.value || "").trim()
           : "";
       const hasResolvedVisNode = Boolean(resolvedVisNodeId);
+      if (hasResolvedVisNode) persistLastKnowledgeNodeId(resolvedVisNodeId);
       if (normalized === "vis" && hasResolvedVisNode) {
         const routeCenterNodeId = ensureEntityIdPrefix(resolvedVisNodeId);
         window.kbVisRouteNodeId = routeCenterNodeId;
@@ -7299,6 +7322,7 @@
           if (hasResolvedVisNode) {
             window.kbActiveVisNodeId =
               stripEntityIdPrefix(resolvedVisNodeId) || resolvedVisNodeId;
+            persistLastKnowledgeNodeId(window.kbActiveVisNodeId);
             try {
               window.kbSelectedRowId = resolvedVisNodeId;
               window.kbSelectedRowIds = new Set([resolvedVisNodeId]);
@@ -7503,6 +7527,7 @@
         if (hasResolvedVisNode) {
           window.kbActiveVisNodeId =
             stripEntityIdPrefix(resolvedVisNodeId) || resolvedVisNodeId;
+          persistLastKnowledgeNodeId(window.kbActiveVisNodeId);
           try {
             window.kbSelectedRowId = resolvedVisNodeId;
             window.kbSelectedRowIds = new Set([resolvedVisNodeId]);
@@ -7528,6 +7553,9 @@
           );
           if (defaultVisNodeId) {
             loadNodeNeighborhood(defaultVisNodeId, { replace: true });
+          } else {
+            // 关系浏览：没有指定节点时加载整张关系图，避免刷新后空白
+            loadGraph();
           }
         } else {
           try {
@@ -7611,11 +7639,33 @@
       }
 
       if (usesEntityRouteNode) {
-        syncActiveEntityEditor(targetNodeIdRaw, {
+        // 关联页没有显式目标节点时，回退到最近浏览的知识节点，保证左侧知识编辑能回显数据
+        const editorTargetNodeId = resolvedVisNodeId || targetNodeIdRaw;
+        syncActiveEntityEditor(editorTargetNodeId, {
           force: hasTargetNode,
           skipGraphFocus: !isVis,
           refreshCurrent: false,
         });
+        // 切换视图会触发 popstate，db-modal 会重置左侧表单；若编辑器已有内容，
+        // 上面的同步会提前返回，导致点击进入关联页时左侧知识编辑被清空。
+        // 这里在切换稳定后校验一次：仅在关联页且编辑器为空时重新回显。
+        if (isVis && editorTargetNodeId && String(editorTargetNodeId).trim()) {
+          let reconcileLeft = 6;
+          const reconcileEditor = () => {
+            if ((window.kbViewMode || "") !== "vis") return;
+            if (String(document.getElementById("fId")?.value || "").trim()) return;
+            syncActiveEntityEditor(editorTargetNodeId, {
+              force: true,
+              skipGraphFocus: true,
+              refreshCurrent: false,
+            });
+            if (reconcileLeft > 0) {
+              reconcileLeft -= 1;
+              window.setTimeout(reconcileEditor, 90);
+            }
+          };
+          window.setTimeout(reconcileEditor, 0);
+        }
       }
 
       // 新增：所有页面都带选中节点参数
@@ -9763,8 +9813,8 @@
 
     // Load one-hop neighborhood for a specific node from backend and update cytoscape
     async function loadNodeNeighborhood(nodeId, options = {}) {
-      const canvasId = window.kbGraphCanvases?.activeId;
-      const canvasContext = window.kbGraphCanvases?.contextKey;
+      const canvasId = window.kbGraphCanvases?.activeId || null;
+      const canvasContext = window.kbGraphCanvases?.contextKey || null;
       if (canvasId) options = { ...options, replace: false, preserveSnapshotOwner: true };
       if (!nodeId) return;
       const opts = options || {};
@@ -9794,7 +9844,13 @@
         const resp = await fetch(url);
         if (!resp.ok) throw new Error("HTTP " + resp.status);
         const data = await resp.json();
-        if (canvasContext !== window.kbGraphCanvases?.contextKey) return;
+        // kbGraphCanvases 可能晚于本次请求加载（页面刷新时）；只有确实存在上下文时
+        // 才比较，避免 undefined !== contextKey 误判而丢弃数据（刷新后关系图空白）
+        if (canvasContext) {
+          if (canvasContext !== (window.kbGraphCanvases?.contextKey || null)) return;
+        } else if (window.kbGraphCanvases?.activeId) {
+          return;
+        }
         const elements = [];
 
         const nodesRaw = data.nodes || (data.elements && data.elements.nodes) || [];
@@ -11517,7 +11573,7 @@
 
     async function loadGraph(prefetchedData) {
       if (window.kbGraphCanvases?.activeId && !prefetchedData) return;
-      const canvasId = window.kbGraphCanvases?.activeId;
+      const canvasId = window.kbGraphCanvases?.activeId || null;
       showGraphLoading(true, '加载图谱数据…');
       try {
         // 关联视图默认只加载选中节点的一层关系，避免一次性载入全部关系
@@ -11534,7 +11590,7 @@
           }
         }
         const data = prefetchedData || await fetchGraph();
-        if (canvasId !== window.kbGraphCanvases?.activeId) return;
+        if (canvasId !== (window.kbGraphCanvases?.activeId || null)) return;
 
         const nodesRaw = data.nodes || (data.elements && data.elements.nodes) || [];
         const edgesRaw = data.edges || (data.elements && data.elements.edges) || [];
@@ -11758,7 +11814,7 @@
 
             // 选择属性创建关系
             async function selectPropertyForEdge(propId, propName, isCustom = false) {
-              const canvasContext = window.kbGraphCanvases?.contextKey;
+              const canvasContext = window.kbGraphCanvases?.contextKey || null;
               if (!pendingEdgeData) return;
               const { sourceId, targetId, addedEdge } = pendingEdgeData;
               const selectionLabel = propName || propId;
@@ -11792,7 +11848,7 @@
                 if (!resp.ok) throw new Error('创建关系失败: ' + resp.status);
 
                 const result = await resp.json();
-                if (canvasContext !== window.kbGraphCanvases?.contextKey) return;
+                if (canvasContext && canvasContext !== (window.kbGraphCanvases?.contextKey || null)) return;
 
                 const edgeLabel = result.label || selectionLabel;
 
@@ -12293,12 +12349,50 @@
             return url.toString();
           };
 
+          const inCanvasMode = () => !!window.kbGraphCanvases?.activeId;
+          // 选中画布标签时，“删除”只把元素移出画布（保存画布后生效），绝不改动知识库数据
+          const removeFromCanvas = (elements, description) => {
+            let list = [];
+            try {
+              list = (elements || []).filter((ele) => ele && !ele.removed());
+            } catch (err) {
+              list = [];
+            }
+            if (!list.length) return false;
+            if (
+              !confirm(
+                `确定从画布移除${description}吗？仅移出当前画布，不会删除知识库中的知识与关系。`,
+              )
+            ) {
+              return false;
+            }
+            window.kbGraphConnect?.cancel();
+            try {
+              window.kbCy.batch(() => list.forEach((ele) => ele.remove()));
+            } catch (err) {
+              list.forEach((ele) => ele.remove());
+            }
+            if (selectedEdge && (selectedEdge.removed() || !selectedEdge.length)) {
+              selectedEdge = null;
+            }
+            updateDeleteEdgeButtonState();
+            return true;
+          };
+
           const deleteEdgeWithConfirm = async (edge) => {
             if (!edge) return false;
             const edgeId = edge.id();
             const sourceLabel = edge.source().data('label') || edge.source().id();
             const targetLabel = edge.target().data('label') || edge.target().id();
             const edgeLabel = edge.data('label') || '关系';
+
+            // 画布模式：只从画布移除，不删除知识库中的关系
+            if (inCanvasMode()) {
+              return removeFromCanvas(
+                edge,
+                `关系 "${sourceLabel}" —[${edgeLabel}]→ "${targetLabel}"`,
+              );
+            }
 
             const confirmDelete = confirm(`确定删除关系 "${sourceLabel}" —[${edgeLabel}]→ "${targetLabel}" 吗？`);
             if (!confirmDelete) return false;
@@ -12352,10 +12446,28 @@
             }
           });
 
-          // Delete 键删除选中的边
+          // Delete 键删除选中的边；画布模式下则把选中的节点/边移出画布
           document.addEventListener('keydown', async function (e) {
-            if (e.key === 'Delete' && selectedEdge && window.kbViewMode === 'vis') {
+            if (e.key !== 'Delete' || window.kbViewMode !== 'vis') return;
+            const target = e.target;
+            if (
+              target &&
+              (target.isContentEditable ||
+                /^(input|textarea|select)$/i.test(String(target.tagName || '')))
+            ) {
+              return;
+            }
+            if (selectedEdge) {
               await deleteEdgeWithConfirm(selectedEdge);
+              return;
+            }
+            if (!inCanvasMode()) return;
+            const selectedNodes = window.kbCy?.nodes(':selected');
+            if (selectedNodes?.length) {
+              removeFromCanvas(
+                selectedNodes,
+                `选中的 ${selectedNodes.length} 个节点及其画布上的关系`,
+              );
             }
           });
 
@@ -12536,7 +12648,7 @@
               });
             });
 
-            addItem('删除关系', async () => {
+            addItem(inCanvasMode() ? '从画布移除' : '删除关系', async () => {
               if (!edge) return;
               await deleteEdgeWithConfirm(edge);
             }, true);
@@ -12632,6 +12744,16 @@
                 console.error('加载下级关系失败', e);
               }
             });
+
+            if (inCanvasMode()) {
+              addItem('从画布移除（不删除知识）', () => {
+                if (!node) return;
+                removeFromCanvas(
+                  node,
+                  `节点「${node.data('label') || node.id()}」及其画布上的关系`,
+                );
+              });
+            }
 
             addItem('上传节点图像', () => {
               if (!node) return;
@@ -13008,7 +13130,6 @@
             const ele = evt.target;
             const id = ele?.data("id");
             if (!id) return;
-            window.kbGraphDetails?.open(id);
             try {
               if (typeof setTableSelection === "function") {
                 setTableSelection(id, false, { skipDetailRefresh: true });
@@ -13021,10 +13142,13 @@
             enterEditById(id);
             // 记录选中节点id，供详情页切换时使用
             window.kbSelectedNodeId = id;
+            try { persistLastKnowledgeNodeId(id); } catch (e) { }
             // --- 新增：同步菜单路由上的节点id ---
             try {
               syncHashForView('vis', { nodeId: id, includeNode: true });
             } catch (e) { }
+            // 单击即显示详情：必须在路由同步之后打开，路由变更触发的 popstate 会关闭内嵌详情
+            try { window.kbGraphDetails?.open(id); } catch (e) { }
           });
 
           window.kbCy.on('cxttap', 'node', (evt) => {
@@ -17352,7 +17476,7 @@
   <link rel="stylesheet" href="/assets/styles/knowledge-portrait.css?v=20260928-1" />
   <script type="module" src="/assets/scripts/knowledge-roam.js?v=20260929-metro-train"></script>
   <script src="/assets/scripts/app-shared.js"></script>
-  <script src="/assets/scripts/graph-canvases.js?v=20261012-refresh"></script>
+  <script src="/assets/scripts/graph-canvases.js?v=20261012-manual-save3"></script>
   <script>
       window.kbOntologyTreeModuleReady = import("/assets/generated/ontology-tree.js?v=20261005-class-scroll");
   </script>
@@ -17372,10 +17496,10 @@
   <script src="/assets/scripts/knowledge-access.js?v=20261011-member-access"></script>
   <script src="/assets/scripts/applications.js?v=20260927-settings-layout"></script>
   <script src="/assets/scripts/user-management.js?v=20260915-1"></script>
-  <script src="/assets/scripts/home-media-viewer.js?v=20261012-canvas-loop"></script>
+  <script src="/assets/scripts/home-media-viewer.js?v=20261012-detail-keep"></script>
   <script src="/assets/scripts/manual-classify.js?v=20260929-existing-classes"></script>
   <script src="/assets/scripts/knowledge-context-menu.js?v=20260928-3"></script>
-  <script src="/assets/scripts/application-pages.js?v=20261008-card-title"></script>
+  <script src="/assets/scripts/application-pages.js?v=20261012-detail-keep"></script>
   <script src="/assets/scripts/user-profile.js?v=20260924-5"></script>
   <script src="/assets/scripts/sidebar-panel.js?v=20260924-4"></script>
   <script src="/assets/scripts/auth-panel.js?v=20261012-user-id"></script>

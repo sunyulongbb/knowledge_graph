@@ -7,8 +7,10 @@
   const rename = document.getElementById('graphCanvasRename');
   const remove = document.getElementById('graphCanvasDelete');
   const detach = document.getElementById('graphCanvasDetach');
+  const saveButton = document.getElementById('graphCanvasSave');
   let items = [], active = null, scope = '', identity = '', busy = false, applying = false, dirty = false;
   let explore = null, timer = 0, generation = 0, viewGeneration = 0, version = 0, saving = null, bound = null;
+  let cleanSignature = '', idleScheduled = false;
   const currentScope = () => new URLSearchParams(location.search).get('db') || 'default';
   const key = () => `kb-canvas-draft:${identity}:${scope}:${active?.id}`;
   function snapshot() {
@@ -30,7 +32,20 @@
     const response=await fetch(url,{method,headers:{'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
     const data=await response.json(); if(!response.ok) throw Error(data.error || `HTTP ${response.status}`); return data;
   }
+  // 关系浏览（未选择画布）时只保留画布：隐藏左侧本体树与右侧知识推荐/知识详情
+  function syncMode() {
+    const wrap = document.getElementById('cywrap');
+    const list = wrap && wrap.classList;
+    if (!list || typeof list.toggle !== 'function') return;
+    const browse = !active;
+    if (typeof list.contains === 'function' && list.contains('is-canvas-browse') === browse) return;
+    list.toggle('is-canvas-browse', browse);
+    if (typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(() => { try { window.kbCy?.resize(); } catch {} });
+    }
+  }
   function render() {
+    syncMode();
     tabs.replaceChildren();
     for(const item of [{id:null,name:'关系浏览'},...items]) {
       const button=document.createElement('button'); button.type='button';button.setAttribute('role','tab');
@@ -40,17 +55,37 @@
     }
     add.disabled=busy || !window.authUser;
     if(reloadButton) reloadButton.disabled=busy;
+    if(saveButton) syncSaveButton();
     rename.disabled=remove.disabled=busy || !active;
     if(detach){detach.hidden=!active;detach.disabled=busy || !window.kbCy?.elements(':selected').length;}
     add.title=window.authUser?'新建个人画布':'登录后创建个人画布';
   }
   const fail = error => { status.textContent=error.message;status.classList.add('is-error'); };
+  function syncSaveButton(){ if(saveButton) saveButton.disabled=busy || !active || !dirty || applying; }
+  const signature = () => { try { return JSON.stringify(snapshot()); } catch { return ''; } };
+  function markClean(){ cleanSignature = signature(); dirty = false; syncSaveButton(); }
+  // 载入画布、聚焦节点等会触发无实际变化的 pan/zoom 事件：稍后比对一次，确认无变化则恢复“已保存”
+  function scheduleCleanCheck(){
+    if(idleScheduled) return;
+    idleScheduled = true;
+    const check = () => {
+      idleScheduled = false;
+      if(!dirty || !active || applying || saving) return;
+      if(signature() !== cleanSignature) return;
+      try {localStorage.removeItem(key());} catch {}
+      markClean();
+      status.classList.remove('is-error');status.textContent = '已保存';
+    };
+    if(typeof setTimeout === 'function') setTimeout(check, 250);
+  }
   function changed() {
     if(applying || !active) return;
     counters();dirty=true;version++;
+    // 手动保存：编辑只标记为未保存，不再自动提交到服务端
     try {localStorage.setItem(key(),JSON.stringify({revision:active.revision,graph:snapshot()}));}catch{}
     status.classList.remove('is-error');status.textContent='未保存';
-    clearTimeout(timer);timer=setTimeout(()=>save().catch(fail),700);
+    syncSaveButton();
+    scheduleCleanCheck();
   }
   async function save() {
     clearTimeout(timer);
@@ -61,10 +96,10 @@
     saving=api('/'+item.id,'PUT',{name:item.name,graph:state,revision:item.revision}).then(data=>{
       item.revision=data.revision;
       if(token!==generation || active!==item) return;
-      if(version===at) {dirty=false;localStorage.removeItem(draftKey);status.textContent='已保存';}
+      if(version===at) {markClean();localStorage.removeItem(draftKey);status.textContent='已保存';}
       else {try{localStorage.setItem(draftKey,JSON.stringify({revision:item.revision,graph:snapshot()}));}catch{} }
     });
-    try{await saving;}finally{saving=null;}
+    try{await saving;}finally{saving=null;syncSaveButton();}
     if(dirty && token===generation) {clearTimeout(timer);timer=setTimeout(()=>save().catch(fail),700);}
   }
   function bind() {
@@ -88,6 +123,7 @@
       cy.batch(()=>{cy.elements().remove();cy.add([...(graph.nodes || []),...(graph.edges || [])]);});
       cy.resize();cy.viewport({zoom:graph.zoom || 1,pan:graph.pan || {x:0,y:0}});
       counters();
+      cleanSignature = signature();
     } finally {applying=false;}
   }
   async function switchTo(id) {
@@ -95,7 +131,6 @@
     busy=true;render();
     const token=generation;
     try {
-      await save();
       const item=id?items.find(i=>i.id===id):null;
       const data=item?await api('/'+id):null;
       if(token!==generation) return;
@@ -116,7 +151,6 @@
     if(busy || !window.authUser) return;
     busy=true;render();
     try {
-      await save();
       const name='画布 '+(items.length+1);
       const item=await api('','POST',{name});items.push(item);
       busy=false;await switchTo(item.id);
@@ -154,6 +188,13 @@
     finally {busy=false;render();}
   }
   add.addEventListener('click',create);
+  saveButton?.addEventListener('click',()=>{if(active && dirty && !busy) save().catch(fail);});
+  window.addEventListener('keydown',event=>{
+    if(active && (event.ctrlKey || event.metaKey) && String(event.key).toLowerCase()==='s'){
+      event.preventDefault();
+      if(dirty && !busy) save().catch(fail);
+    }
+  });
   reloadButton?.addEventListener('click',reloadCanvas);
   detach?.addEventListener('click',()=>{if(active && !busy){window.kbGraphConnect?.cancel();window.kbCy.elements(':selected').remove();counters();}});
   rename.addEventListener('click',async()=>{

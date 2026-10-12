@@ -9,3 +9,6 @@
 .graph-canvas-empty { position:absolute; left:50%; top:45%; transform:translate(-50%,-50%); display:flex; flex-direction:column; gap:10px; text-align:center; color:var(--muted); pointer-events:none; width:min(320px,80%); line-height:1.7; font-size:13px; }
 .graph-canvas-empty strong { font-size:18px; color:var(--fg); font-weight:600; }
 .graph-canvas-empty[hidden] { display:none; }
+/* 关系浏览（未选择画布）时仅保留画布：隐藏左侧本体面板与右侧知识推荐/知识详情 */
+#cywrap.is-canvas-browse #visOntologyPanel,
+#cywrap.is-canvas-browse #visRecommendPanel { display: none; }

@@ -359,7 +359,10 @@
     dialog.addEventListener('pointercancel', () => { touchStart = null; });
     // Canvas selection updates the node hash while the same embedded viewer stays open.
     window.addEventListener('hashchange', () => { if (!embedded || window.kbViewMode !== 'vis') close(); });
-    window.addEventListener('popstate', close);
+    // 画布节点切换同时触发 popstate：内嵌详情保持打开，仅在路由离开关系画布时关闭
+    window.addEventListener('popstate', () => {
+      if (!embedded || window.kbViewMode !== 'vis' || !/view=vis/.test(String(window.location.hash))) close();
+    });
   }
   function open(id, options = {}) {
     if (dialog?.open) close();
