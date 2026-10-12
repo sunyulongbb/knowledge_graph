@@ -4842,9 +4842,7 @@ body {
   --wiki-reading-font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
     "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI",
     "Microsoft YaHei", system-ui, "Helvetica Neue", Arial, sans-serif;
-  --wiki-measure: 54em;
   color: var(--fg);
-  max-width: var(--wiki-measure);
   font-family: var(--wiki-reading-font);
   font-size: 16.5px !important;
   line-height: 1.95 !important;
