@@ -5064,9 +5064,16 @@ export async function handleCoreKbRoutes(
         const secondLevelIds = new Set<string>();
         const relationAttrs = db
           .query(
-            "SELECT node_id, key, value, property_name_snapshot, datatype FROM attributes WHERE datatype IN ('wikibase-entityid', 'wikibase-item')",
+            `SELECT node_id, key, value, property_name_snapshot, datatype
+             FROM attributes
+             WHERE datatype IN ('wikibase-entityid', 'wikibase-item')
+               AND EXISTS (
+                 SELECT 1
+                 FROM json_each(?) AS target
+                 WHERE instr(attributes.value, target.value) > 0
+               )`,
           )
-          .all() as any[];
+          .all(JSON.stringify(Array.from(levelOneIds))) as any[];
         for (const attr of relationAttrs) {
           const relatedId = String(attr.node_id || '').replace(/^entity\//, '');
           if (!relatedId || relatedId === id) continue;

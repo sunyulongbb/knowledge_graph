@@ -109,6 +109,11 @@ test('second incoming level skips the current node and inaccessible entities', a
   expect(nestedIds).not.toContain('Z');
 });
 
+test('second incoming level only fetches relation attributes that may target first-level entities', () => {
+  expect(nodeRoute).toContain('FROM json_each(?) AS target');
+  expect(nodeRoute).toContain('.all(JSON.stringify(Array.from(levelOneIds)))');
+});
+
 class StubElement {
   children: StubElement[] = [];
   className = '';
