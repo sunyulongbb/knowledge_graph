@@ -82,6 +82,8 @@ test('deselecting invalidates pending entity hydration before clearing the edito
   expect(selectionBlock).toContain('window.kbEnterEditRequestSeq =');
   expect(selectionBlock).toContain('window.kbRouteEnforceSeq =');
   expect(selectionBlock).toContain('window.kbCurrentNodePayload = null');
+  expect(selectionBlock).toContain('window.kbClearLastKnowledgeNodeId?.();');
+  expect(indexSource).toContain('window.kbClearLastKnowledgeNodeId = () => persistLastKnowledgeNodeId("");');
 
   const resetBlock = indexSource.slice(
     indexSource.indexOf('    function resetFormToAdd()'),

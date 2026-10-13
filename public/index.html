@@ -7148,11 +7148,13 @@
     }
     function persistLastKnowledgeNodeId(nodeId) {
       const normalized = stripEntityIdPrefix(String(nodeId || "").trim());
-      if (!normalized) return;
       try {
-        localStorage.setItem(`${KB_LAST_NODE_STORAGE_PREFIX}:${getCurrentGraphDbScope()}`, normalized);
+        const key = `${KB_LAST_NODE_STORAGE_PREFIX}:${getCurrentGraphDbScope()}`;
+        if (normalized) localStorage.setItem(key, normalized);
+        else localStorage.removeItem(key);
       } catch { }
     }
+    window.kbClearLastKnowledgeNodeId = () => persistLastKnowledgeNodeId("");
 
     function setViewMode(mode, options = {}) {
       const normalized = normalizeViewModeInput(mode) || "table";
@@ -7544,7 +7546,7 @@
             "";
         }
         if (window.kbGraphCanvases?.activeId) { window.kbCy?.resize(); }
-        else if (!window.kbCy || window.kbCy.elements().length === 0 || hasResolvedVisNode) {
+        else {
           // 默认只加载选中节点的一层关系
           const defaultVisNodeId = ensureEntityIdPrefix(
             window.kbActiveVisNodeId ||
@@ -7552,21 +7554,15 @@
             (document.getElementById('fId')?.value || '').trim() || ''
           );
           if (defaultVisNodeId) {
-            loadNodeNeighborhood(defaultVisNodeId, { replace: true });
+            if (!window.kbCy || window.kbCy.elements().length === 0 || hasResolvedVisNode) {
+              loadNodeNeighborhood(defaultVisNodeId, { replace: true });
+            } else {
+              try { window.kbCy.resize(); } catch { }
+            }
           } else {
-            // 关系浏览：没有指定节点时加载整张关系图，避免刷新后空白
+            // 关系浏览：没有指定中心节点时保持空白
             loadGraph();
           }
-        } else {
-          try {
-            window.kbCy.resize();
-            const currentVisId =
-              resolvedVisNodeId ||
-              ensureEntityIdPrefix(window.kbActiveVisNodeId || "") ||
-              ensureEntityIdPrefix(window.kbSelectedRowId || "") ||
-              (document.getElementById("fId")?.value || "").trim();
-            if (!currentVisId) window.kbCy.fit();
-          } catch { }
         }
       } else if (isAttr) {
         if (typeof window.loadPropertyList === "function") {
@@ -9731,7 +9727,7 @@
       }
     });
 
-    // Fetch graph data. 加载当前项目的所有节点和关系
+    // Fetch the full graph for views that need it; relationship view loads a selected node neighborhood.
     async function fetchGraph() {
       const url = new URL("/api/kb/graph", window.location.origin);
       // 传递当前页面的 db 参数以确定项目范围
@@ -11589,7 +11585,11 @@
             return;
           }
         }
-        const data = prefetchedData || await fetchGraph();
+        const data = prefetchedData || (
+          window.kbViewMode === 'vis'
+            ? { nodes: [], edges: [] }
+            : await fetchGraph()
+        );
         if (canvasId !== (window.kbGraphCanvases?.activeId || null)) return;
 
         const nodesRaw = data.nodes || (data.elements && data.elements.nodes) || [];

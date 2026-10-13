@@ -562,6 +562,7 @@ function __kbInitTableSelection() {
       window.kbActiveDetailNodeId = "";
       window.kbPinnedKnowledgeDetailRouteId = "";
       window.kbDetailRouteBeforeVis = "";
+      window.kbClearLastKnowledgeNodeId?.();
     }
     if (!id) {
       window.kbSelectionHydrated = false;
