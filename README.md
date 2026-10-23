@@ -1,78 +1,270 @@
 # Knowledge Graph
 
-This project now includes a semantic map / knowledge galaxy page built with Bun, SQLite, native HTML, and `deck.gl`. The map now reads the current application entity data from `nodes`, while `semantic_nodes` acts as the coordinate/index layer.
+**离线优先的知识采集客户端与集中式知识治理、图分析平台。**
 
-## Install
+> 架构规划状态：本文定义目标架构与渐进实施路线，不代表 Lite / Enterprise 双模式、跨端同步、ArangoDB、Elasticsearch 或 MinIO 已在当前代码中全部实现。现阶段项目主要基于 Bun、SQLite 与原生 Web 前端运行。
+
+## 1. 项目定位
+
+Knowledge Graph 采用**一个代码仓库、共享核心能力、两种产品运行模式**的设计。Lite 面向个人或一线工作人员，提供简洁的知识录入、离线管理和可视化浏览；Enterprise 面向组织数据中心，负责多源知识汇聚、知识治理与融合、统一检索、图分析和 API 服务。
+
+- **Knowledge Lite（客户端）**：快速录入、文件与网页资料摘录、轻量结构化、本地搜索、列表/表格/关系网络/时间轴等知识浏览、离线存储、向中心提交知识。
+- **Knowledge Enterprise（数据中心）**：接收多个客户端提交的数据，保留原始来源，进行校验、对齐、融合、质量评估、正式知识发布、跨知识库检索、图分析和统一 API 管理。
+- **Knowledge Hub（交换模块）**：作为 Enterprise 内部模块，处理客户端注册、知识提交、在线增量同步、离线交换包、状态反馈、来源映射及审计；初期不单独部署为微服务。
+
+核心原则：**Lite 独立可用，Enterprise 集中治理；上传不等于融合，中心融合不覆盖客户端原始知识。**
+
+## 2. 总体架构
+
+```mermaid
+flowchart TB
+  subgraph CLIENT["Knowledge Lite · 多个离线客户端"]
+    L1["快速录入 / 本地编辑"]
+    L2["本地知识浏览 / 搜索"]
+    L3["SQLite + 本地文件"]
+    L1 --> L3
+    L3 --> L2
+  end
+  subgraph HUB["Knowledge Hub · 数据交换"]
+    H1["在线增量提交 / 离线包导入"]
+    H2["身份校验 / 断点续传 / 幂等处理"]
+    H1 --> H2
+  end
+  subgraph CENTER["Knowledge Enterprise · 数据中心"]
+    E1["原始知识接收区"]
+    E2["格式校验 / 实体对齐 / 知识融合"]
+    E3["质量评估 / 审核 / 正式发布"]
+    E4["统一检索 / 图分析 / API 服务"]
+    E1 --> E2 --> E3 --> E4
+  end
+  L3 -->|"在线提交或离线同步包"| H1
+  H2 --> E1
+```
+
+### 2.1 产品职责
+
+| 能力 | Lite | Enterprise |
+| --- | --- | --- |
+| 快速录入、文本框选、文件导入 | 核心功能 | 可选 |
+| 本地知识编辑与管理 | 简洁操作 | 完整管理与审核 |
+| 列表、表格、卡片浏览 | 核心功能 | 支持 |
+| 关系网络、时间轴、语义地图 | 轻量浏览 | 深度分析 |
+| 搜索 | 本地搜索 | 跨库、高级检索 |
+| 本体和属性 | 使用预设模板 | 统一管理和维护 |
+| 数据清洗 | 基础格式检查 | 完整 ETL、对齐和融合 |
+| 知识质量评估 | 不作为核心功能 | 核心功能 |
+| 图路径、关联、网络分析 | 不作为核心功能 | 核心功能 |
+| 同步 | 上行提交、查看状态 | 接收、治理、发布 |
+| 统一知识 API | 不作为核心功能 | 核心功能 |
+
+Lite 的操作应尽量避免要求用户理解本体、图节点或图边。推荐使用**名称、类型、描述、标签、属性、关联知识和附件**等简单表单，并支持“粘贴全文 + 鼠标框选提取”。
+
+## 3. 一套代码，两种运行模式
+
+目标采用配置控制功能，而非复制两个项目：
+
+```dotenv
+APP_MODE=lite
+# 或 APP_MODE=enterprise
+```
+
+**注意：`APP_MODE` 为规划中的配置项，尚不能假定当前版本已实现切换。** 第一阶段可让两种模式都基于现有 SQLite 运行，先验证功能边界和同步闭环；后续再扩展 Enterprise 的存储能力。
+
+运行模式决定前端导航、后端路由授权、可用模块和默认存储适配器。**不能只隐藏菜单而继续暴露受限 API。** 同一代码仓库不等于同一运行实例：每个 Lite 客户端和 Enterprise 服务拥有独立进程及数据。
+
+### 3.1 目标逻辑模块
+
+```text
+knowledge_graph/
+├── src/
+│   ├── core/                  # 规划：共享知识模型与服务接口
+│   │   ├── knowledge/         # 知识读写、ID、版本与来源
+│   │   ├── search/            # 统一搜索接口
+│   │   ├── storage/           # 文件存储接口
+│   │   └── sync/              # 知识交换协议
+│   ├── lite/                  # 规划：快速录入、离线浏览、上行提交
+│   ├── enterprise/            # 规划：接收、融合、治理、图分析
+│   └── server/                # 现有 Bun 服务及路由
+├── public/                    # 现有原生 Web 前端
+├── docs/                      # 项目文档
+└── scripts/                   # 开发、数据处理脚本
+```
+
+上述 `core/lite/enterprise` 是**目标逻辑边界**，不要求立即搬迁现有代码。优先以新增接口和小范围适配实现。
+
+### 3.2 与当前代码的衔接
+
+| 当前代码或文档 | 处理策略 |
+| --- | --- |
+| `src/server/index.ts` | 保留 Bun 服务入口，未来注册模式配置和同步路由 |
+| `src/server/db.ts` | 保留 SQLite 能力，逐步解决请求级知识库上下文隔离 |
+| `src/server/routes/core-kb.ts` | 保留现有知识 API，逐步引入统一数据访问接口 |
+| `src/server/pipeline/` | 保留现有录入、清洗、融合流程，作为 Enterprise 治理基础 |
+| `src/server/routes/semantic-map.ts` | 保留现有语义地图浏览接口 |
+| `public/` | 复用原生前端，按运行模式配置页面导航 |
+| [数据录入与知识清洗说明](docs/data-pipeline.md) | 保留现有功能与接口的详细说明 |
+
+现有 `src/server/index.ts` 通过请求 `db` 参数触发 `switchDatabase()`。在支持多客户端和多知识库之前，应检查全局数据库切换是否存在并发请求相互影响的问题，逐步改为请求级上下文，不宜直接在本轮架构规划中重构。
+
+## 4. 数据模型与知识归属
+
+### 4.1 统一交换格式
+
+Lite 与 Enterprise **共享逻辑知识模型，不要求使用同一种数据库**。客户端可继续使用现有 SQLite 表；同步层负责将知识转换成稳定的交换对象。
+
+```json
+{
+  "schemaVersion": 1,
+  "source": {
+    "clientId": "lite-a",
+    "localId": "node-1001"
+  },
+  "version": 3,
+  "deleted": false,
+  "data": {
+    "type": "设施",
+    "labels": { "zh": "诺福克海军基地" },
+    "tags": ["基地"],
+    "descs": {},
+    "claims": {}
+  }
+}
+```
+
+这是**协议示例**，不是现有数据库表结构的替代方案。知识 ID、来源命名空间和版本号必须稳定；来自不同客户端的本地 ID 不能直接当作全局唯一 ID。
+
+### 4.2 原始知识与正式知识分离
+
+- **客户端原始知识**：Lite 可继续本地编辑、离线保存，用户可决定哪些内容提交。
+- **中心接收知识**：保留提交批次、客户端 ID、本地 ID、版本、文件引用及原始内容。
+- **中心正式知识**：经过格式校验、实体对齐、属性映射、融合、审核后形成可查询、可分析的权威知识。
+- **来源映射**：保存“客户端 ID + 本地 ID → 中心接收记录 → 正式知识 ID”的关联，支持多个来源对应一个正式知识。
+
+**中心融合结果不自动覆盖 Lite 的本地原始数据。** 后续如需中心知识下发，应作为独立的订阅/分发功能设计，而不是第一阶段的双向数据库同步。
+
+## 5. 知识同步设计
+
+第一阶段仅实现 **Lite → Enterprise 单向提交**。同步目标是传输知识变更和附件，而不是直接复制 SQLite 数据库文件。
+
+### 5.1 在线增量同步
+
+```mermaid
+sequenceDiagram
+  participant L as Lite
+  participant H as Enterprise Hub
+  participant G as 治理流程
+  L->>L: 本地事务写入知识及变更日志
+  L->>H: 按序提交未确认变更
+  H->>H: 身份校验、版本校验、幂等接收
+  H-->>L: 返回已接收检查点
+  H->>G: 异步校验、对齐、融合
+  G->>G: 发布正式知识及构建索引
+```
+
+建议以**知识变更日志（Outbox）+ 每目标同步检查点**实现断点恢复。新增、修改、删除均应产生事件；删除需保留墓碑信息。接收端按事件 ID 去重，重复提交不应产生重复知识。检查点只在接收端确认后推进。
+
+同步状态至少区分：**本地待提交、传输中、中心已接收、治理中、已发布、失败/需处理**。中心接收成功不代表知识已融合发布。
+
+### 5.2 离线同步
+
+离线环境采用可携带的同步 ZIP 包：
+
+```text
+knowledge-sync.zip
+├── manifest.json          # 来源、知识库、起止序号、校验信息
+├── changes.jsonl          # 变更事件
+├── knowledge.jsonl        # 知识快照
+└── files/                 # 必需的附件内容
+```
+
+支持首次全量快照和后续增量包。离线导出不等于同步成功；目标导入并生成确认结果后才能更新发送端检查点。导入必须校验哈希、包版本、来源、权限、路径安全和幂等性。
+
+### 5.3 文件管理
+
+知识引用稳定的 `fileId` 和相对 `objectKey`，不引用客户端绝对路径。Lite 使用本地目录；Enterprise 后续可使用 MinIO。传输时携带文件大小、类型和 SHA-256，用于校验与去重。知识元数据与文件内容的导入状态应可追踪。
+
+## 6. 存储与基础设施演进
+
+| 能力 | Lite | Enterprise 初期 | Enterprise 扩展 |
+| --- | --- | --- | --- |
+| 主数据 | SQLite | SQLite | ArangoDB 或可替换数据库 |
+| 知识关系 | 现有关系模型 | 现有关系模型 | 图数据库遍历与分析 |
+| 检索 | SQLite / FTS5 评估 | SQLite / FTS5 评估 | Elasticsearch |
+| 附件 | 本地文件目录 | 本地文件目录 | MinIO |
+| 异步任务 | Bun Worker + 持久化任务表 | Bun Worker + 持久化任务表 | 独立 Worker、按需引入队列 |
+| 同步 | 上行提交/离线导出 | Hub 接收/导入 | 多客户端规模化接入 |
+
+**不应一开始就同时引入 ArangoDB、Elasticsearch、MinIO、Redis 和 Kafka。** 首先跑通 Lite 到 Enterprise 的完整业务闭环，再依据数据规模、全文检索质量、图查询复杂度和任务吞吐量逐步升级。SQLite FTS5 的中文检索方案需要单独验证。
+
+Enterprise 的主数据、图边、全文索引和附件之间要明确权威来源与重建机制：**搜索索引和图分析索引可重建，不能形成互不一致的多份主数据。**
+
+## 7. 任务与统一 API
+
+Lite 的长耗时导入、离线导出可使用本地持久化任务；Enterprise 的批量接收、清洗融合、图索引和搜索索引更新应异步执行。初期使用 SQLite 任务表和 Bun Worker 即可，后续再评估 Redis 队列等组件。
+
+规划中的 API 分组：
+
+| 接口组 | 作用 |
+| --- | --- |
+| `/api/kb/*` | 沿用现有知识操作接口 |
+| `/api/kb/pipeline/*` | 沿用现有录入、清洗、确认接口 |
+| `/api/sync/status` | 查看客户端同步状态 |
+| `/api/sync/push` | 客户端触发上行提交 |
+| `/api/sync/export` | 生成离线同步包 |
+| `/api/sync/import` | 中心导入离线同步包 |
+| `/api/sync/apply` | 中心接收经过认证的变更批次 |
+| `/api/tasks/*` | 查询、取消异步任务 |
+
+**同步及任务接口均为规划接口，尚非当前项目已实现 API。** 需要复用现有身份认证、知识库权限和审计机制，避免跨应用/跨知识库数据泄露。
+
+## 8. 逐步实施路线
+
+| 阶段 | 目标 | 验收结果 |
+| --- | --- | --- |
+| 1. 产品模式 | 明确 Lite/Enterprise 功能边界、导航与权限 | 一套代码可按配置展示不同产品入口 |
+| 2. Lite 体验 | 简化录入、完善离线管理和可视化浏览 | 不联网可完成录入、编辑、搜索与浏览 |
+| 3. 统一交换模型 | 规范知识 ID、来源、版本、附件引用 | 现有知识可无损导出/导入标准格式 |
+| 4. 同步闭环 | 增量日志、在线提交、离线包、状态反馈 | 两个 SQLite 实例可完成单向同步与恢复 |
+| 5. 中心治理 | 接收区、来源映射、对齐融合、发布 | 多客户端同类知识可追溯、可融合 |
+| 6. 企业级扩展 | 图数据库、ES、MinIO、异步任务扩容 | 在不改变 Lite 协议前提下按需替换后端 |
+
+实施顺序遵循**先产品与数据流，再模块接口，最后替换基础设施**。当前阶段以架构设计为主，不要求一次性重构代码。
+
+## 9. 关键约束
+
+- **离线优先**：Lite 断网时仍可使用，联网后继续提交未确认数据。
+- **数据隔离**：每个客户端、知识库、应用的来源标识和权限边界明确。
+- **可追溯**：原始知识、提交批次、融合结果、版本与操作日志可关联。
+- **幂等可靠**：重复提交、网络中断、部分失败、删除与重试均有明确处理方式。
+- **安全性**：禁止在 README、代码仓库和日志中保存明文密码、令牌及生产凭据；首次管理员密码应安全生成并及时更换。
+- **兼容性**：保留现有 Bun、SQLite、原生前端与清洗流程，后续按需支持 ARM64、国产化及离线安装。
+- **部署边界**：一个仓库共享核心代码；客户端与中心是独立部署实例，不共享同一 SQLite 文件。
+
+## 10. 当前项目启动与已有能力
+
+### 环境与启动
+
+项目目前使用 Bun 作为服务运行环境：
 
 ```bash
 bun install
-```
-
-The `deck.gl` browser dependency has also been added to `package.json` and installed into `node_modules`.
-
-## Start the Bun Server
-
-```bash
 bun run dev
 ```
 
-The Bun entry point is `src/server/index.ts`; server routes, database access,
-and static-file handling are colocated under `src/server`.
+服务入口：`src/server/index.ts`。默认端口为 `8080`，可使用 `HOST` 和 `PORT` 环境变量覆盖。
 
-Default address:
+- 本机主页：`http://localhost:8080/`
+- 语义地图：`http://localhost:8080/semantic-map.html`
 
-```text
-http://localhost:8080
+例如仅本机访问：
+
+```bash
+HOST=127.0.0.1 PORT=8080 bun run dev
 ```
 
-Main knowledge page:
+### 当前功能与文档
 
-```text
-http://localhost:8080/
-```
-
-Semantic map page:
-
-```text
-http://localhost:8080/semantic-map.html
-```
-
-## SQLite Schema
-
-On server startup, the app automatically ensures the `semantic_nodes` table and indexes exist. Current entity content still comes from `nodes`; `semantic_nodes` stores semantic coordinates and rendering metadata keyed by the same node id.
-
-```sql
-CREATE TABLE IF NOT EXISTS semantic_nodes (
-  id TEXT PRIMARY KEY,
-  label TEXT NOT NULL,
-  type TEXT,
-  tags TEXT,
-  description TEXT,
-  x REAL,
-  y REAL,
-  size REAL DEFAULT 4,
-  color TEXT,
-  hot INTEGER DEFAULT 0,
-  created_at TEXT,
-  updated_at TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_semantic_nodes_xy ON semantic_nodes(x, y);
-CREATE INDEX IF NOT EXISTS idx_semantic_nodes_type ON semantic_nodes(type);
-CREATE INDEX IF NOT EXISTS idx_semantic_nodes_hot ON semantic_nodes(hot);
-```
-
-The application database is stored at:
-
-```text
-../data/app.sqlite
-```
-
-Relative to this repository, that resolves to the sibling `data` directory used by the existing Bun app.
-
-## Semantic Map APIs
-
-Implemented endpoints:
+现有项目包含知识管理、语义地图以及数据录入与知识清洗原型。语义地图读取 `nodes` 的知识内容，`semantic_nodes` 保存语义坐标及渲染索引。已有接口包括：
 
 ```text
 GET /api/semantic-map/init
@@ -81,128 +273,19 @@ GET /api/semantic-map/detail/:id
 GET /api/semantic-map/search?q=keyword
 ```
 
-Behavior summary:
+已有录入流程支持 MySQL、CSV、Excel、JSON 和 Wikidata 读取，保存二维实体表，通过可视化流程完成本体对齐、属性对齐、实体对齐与知识融合，确认后写入知识库。详细说明见 [docs/data-pipeline.md](docs/data-pipeline.md)。
 
-- `/api/semantic-map/init`: load the initial hot nodes with non-null `x/y`.
-- `/api/semantic-map/viewport`: load nodes in the current visible XY range.
-- `/api/semantic-map/detail/:id`: fetch a single node detail record.
-- `/api/semantic-map/search`: optional backend fuzzy search by `label`, `tags`, or `description`.
+离线生成语义坐标的现有脚本为 `scripts/generate-semantic-coordinates.py`，相关依赖和运行细节可直接查看脚本。
 
-All endpoints return JSON and include permissive CORS headers for local development.
-
-## Insert Test Data
-
-If you want standalone sample coordinates for quick demo use, seed sample data with:
+### 验证命令
 
 ```bash
-bun run seed:semantic
+bun test
+bun run typecheck
 ```
 
-The seed script inserts 50 semantic nodes across:
+历史文档记录存在部分既有 TypeScript 类型错误，因此应以实际运行和当前测试结果为准，不应将架构规划视为已经完成的功能交付。
 
-- Person
-- Organization
-- Equipment
-- Location
-- Event
-- Document
-- Technology
+---
 
-Each record includes:
-
-- `label`
-- `type`
-- `tags`
-- `description`
-- `x`
-- `y`
-- `size`
-- `color`
-- `hot`
-
-## Generate Semantic Coordinates Offline
-
-Coordinate generation script:
-
-```text
-scripts/generate-semantic-coordinates.py
-```
-
-Install Python dependencies:
-
-```bash
-pip install sentence-transformers umap-learn pandas
-```
-
-Run the script:
-
-```bash
-python scripts/generate-semantic-coordinates.py
-```
-
-What it does:
-
-1. Syncs current `nodes` into `semantic_nodes`.
-2. Reads `label`, `type`, `tags`, and `description` from `semantic_nodes`.
-3. Generates embeddings with `paraphrase-multilingual-MiniLM-L12-v2`.
-4. Reduces them to 2D with UMAP.
-5. Writes `x` and `y` back into `semantic_nodes`.
-
-UMAP settings:
-
-```text
-n_neighbors=50
-min_dist=0.1
-n_components=2
-metric="cosine"
-```
-
-## Semantic Map Page Features
-
-`/semantic-map.html` currently supports:
-
-- full-screen WebGL scatter rendering via `deck.gl`
-- `OrthographicView` for a true 2D semantic plane
-- semantic content sourced from the current application `nodes`
-- semantic coordinates read from `semantic_nodes`
-- mouse wheel zoom
-- drag pan
-- node hover tooltip
-- click-to-open detail panel
-- local search over loaded nodes
-- search result highlighting and first-result focus
-- viewport-based incremental data loading
-- client-side deduplication with `Map<string, Node>`
-
-## Notes
-
-### 数据录入与知识清洗
-
-新增“数据录入 → 二维实体表 → 数据清洗 → 确认保存知识库”流程原型。支持 MySQL（含演示源）、CSV / Excel / JSON、Wikidata，以及六节点单向流程画布。
-
-完整演示步骤、新接口、SQLite 表结构、验证命令和原型限制见 [数据流程说明](docs/data-pipeline.md)。
-
-- The semantic map does not use Cytoscape.js.
-- Version one intentionally does not render relationship edges.
-- `bunx tsc --noEmit` still reports several pre-existing type errors in older route files outside this feature, but the semantic map files added in this change are in place and wired into the Bun server.
-- 用户名：admin
-- 初始密码：R76tmuTLX1pydQouow1RB6ZB
-- 角色：超级管理员
-- 状态：启用
-
-
-首次运行：已自动创建系统管理员账号
-管理员账号: admin
-管理员密码: k9AH%PhTxCc2CiL_GGmF
-请登录后立即修改密码，并妥善保存该凭据。
-此密码只会在本次创建时显示。
-
-## 局域网访问
-
-默认监听 `0.0.0.0:8080`。运行 `bun run dev` 后，启动日志会列出本机和局域网访问地址。
-手机或其他电脑连接同一路由器后，打开 `http://服务器的局域网IP:8080`，不要使用 `localhost`。
-
-可使用 `HOST=0.0.0.0 PORT=8080 bun run dev` 明确指定监听地址和端口。
-仅本机使用时可设置 `HOST=127.0.0.1`。修改环境变量后需重启服务。
-Docker Compose 映射为主机的 80 端口，访问 `http://服务器的局域网IP`。
-若其他设备无法连接，检查系统防火墙是否允许 Bun 入站，以及路由器是否启用了访客网络或设备隔离。
+**设计结论：** Knowledge Graph 将逐步演进为“Lite 负责采集与离线浏览、Enterprise 负责融合治理与图分析、Hub 负责可靠知识交换”的统一平台。优先保持一套代码和现有技术基础，通过明确产品边界、统一知识交换模型及增量同步机制逐步实现，而非立即进行全面重构。
