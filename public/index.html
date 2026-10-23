@@ -83,9 +83,9 @@
       throw error;
     });
   </script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+  <script src="/js/cytoscape.min.js?v=20261023"></script>
   <script src="https://unpkg.com/cytoscape-edgehandles@4.0.1/cytoscape-edgehandles.js"></script>
-  <script src="/node_modules/cytoscape-dagre/dist/cytoscape-dagre.min.js"></script>
+  <script src="/js/cytoscape-dagre.min.js?v=20261023"></script>
   <script>
     if (typeof cytoscape !== 'undefined') {
       if (typeof cytoscapeEdgehandles !== 'undefined') cytoscape.use(cytoscapeEdgehandles);
@@ -11568,6 +11568,11 @@
     }
 
     async function loadGraph(prefetchedData) {
+      if (document.readyState === "loading") {
+        await new Promise((resolve) => {
+          document.addEventListener("DOMContentLoaded", resolve, { once: true });
+        });
+      }
       if (window.kbGraphCanvases?.activeId && !prefetchedData) return;
       const canvasId = window.kbGraphCanvases?.activeId || null;
       showGraphLoading(true, '加载图谱数据…');
