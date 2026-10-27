@@ -256,6 +256,36 @@ bun run dev
 - 本机主页：`http://localhost:8080/`
 - 语义地图：`http://localhost:8080/semantic-map.html`
 
+### Docker Compose 部署版本
+
+Lite 版只启动应用，SQLite 数据保存在仓库上一级的 `data` 目录（挂载到容器内 `/data`，与服务入口的数据库路径一致）：
+
+```bash
+docker compose up -d
+```
+
+Enterprise 版同时启动 SQLite、ArangoDB 和 Elasticsearch。首次启动前复制环境变量模板并设置强 ArangoDB root 密码：
+
+```bash
+cp .env.example .env
+# 编辑 .env，设置 ARANGO_ROOT_PASSWORD
+docker compose -f docker-compose.enterprise.yml up -d
+```
+
+PowerShell 下可用以下命令复制模板：
+
+```powershell
+Copy-Item .env.example .env
+```
+
+两个版本都可通过 `http://localhost/` 访问应用。Enterprise 版的 ArangoDB Web 界面为 `http://localhost:8529/`（用户名 `root`，密码为 `.env` 中的 `ARANGO_ROOT_PASSWORD`），Elasticsearch 地址为 `http://localhost:9200/`。Enterprise 版容器间可分别通过 `http://arangodb:8529` 和 `http://elasticsearch:9200` 访问数据库。
+
+Enterprise 与 Lite 共用仓库上一级 `data` 目录中的 SQLite 文件（挂载到容器内 `/data`），并额外启动 ArangoDB 和 Elasticsearch。启动时会直接使用每个应用的 `projects.name` 作为对应的 ArangoDB 数据库名，不添加前缀或 ID；ArangoDB 要求项目短名为 1–64 位、以字母开头，且只含字母、数字、下划线或短横线。Enterprise 会在创建应用时校验此规则，已有不符合规则的应用需先改名。每个库会初始化 `entity` 文档集合、`link` 边集合、`graph` 图和 `entity_view` 搜索视图。`entity` 文档保存多语言 `labels`、`descriptions`、`aliases`，不嵌入属性；未带语言标记的名称、描述和别名按 `zh` 写入，已带语言标记的数据按语言码归组。所有 SQLite 属性声明均作为 Wikidata 风格 claim 写入 `link` 边集合：实体关系的 `_to` 指向目标实体，非实体属性的 `_to` 与 `_from` 均指向其所属实体。数组型 `datavalue.value` 会拆成多条边，每条边的 `datavalue.value` 是单值。Elasticsearch 会为每个应用创建 `entity-<应用名>` 索引，并同步该应用的实体文档；为符合 ES 索引命名要求，名称转换为小写且下划线替换为短横线，若转换后索引名冲突则启动报错。节点及属性变更通过 SQLite outbox 同步到 ArangoDB 和 Elasticsearch；SQLite 仍是权威数据源，ArangoDB 中的用户数据库权限为只读，避免绕开 SQLite 权限校验直接写入导致数据不一致。Enterprise Compose 将 `KNOWLEDGE_SEARCH_BACKEND` 设为 `elasticsearch`，并通过 `ARANGO_URL` 自动启用同样的强制规则。知识列表和关键词检索直接从 Elasticsearch 对应应用索引读取，分类、隐藏实体及有效本体筛选也在 ES 中执行；索引通过增量同步维护实体分类。属性值、类型树及媒体专项筛选仍需结合 SQLite，权限检查仍在应用层执行；实体关联关系从 ArangoDB 查询。ES 未配置时返回 503，不会静默退回 SQLite。Lite 版继续从 SQLite 查询。检索接口返回的 `searchBackend` 字段标识本次实际使用的数据源。
+
+SQLite、ArangoDB 和 Elasticsearch 数据分别持久化；执行 `docker compose down` 后仍会保留。仅在需要清除数据时执行对应配置的 `docker compose ... down -v`。ArangoDB 和 Elasticsearch 端口仅绑定到本机回环地址；Elasticsearch 未启用身份验证，仅适用于本地开发。
+
+用户注册时会创建对应的 ArangoDB 内置用户；已有用户在首次成功登录时同步密码和账号状态。ArangoDB 用户是服务级账号，权限按应用成员关系授予只读数据库访问；SQLite 只存密码哈希，因此现有用户无法在启动时批量恢复明文密码并创建 ArangoDB 账号。
+
 例如仅本机访问：
 
 ```bash

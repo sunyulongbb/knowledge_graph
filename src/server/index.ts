@@ -2,6 +2,7 @@ import { createGraphCanvasHandler } from './graph-canvases.ts';
 import { networkInterfaces } from "node:os";
 import { switchDatabase, adminDb, hashPassword, getProjectByIdentifier } from "./db.ts";
 import { ensureInitialAdminAccount } from "./initial-admin.ts";
+import { arangoUserDatabaseGrants, initializeArangoKnowledgeSync, syncArangoNativeUser } from "./arangodb.ts";
 import { createApplicationHandler } from './application-access.ts';
 import { createUserProfileHandler } from './user-profile.ts';
 import { handleCoreKbRoutes } from "./routes/core-kb.ts";
@@ -25,6 +26,7 @@ import { handleJevRoutes } from './routes/jev.ts';
 const port = parseInt(process.env.PORT || "8080");
 const hostname = process.env.HOST?.trim() || "0.0.0.0";
 const initialAdmin = await ensureInitialAdminAccount(adminDb, hashPassword);
+await initializeArangoKnowledgeSync(adminDb);
 if (initialAdmin) {
   console.log("\n============================================================");
   console.log("首次运行：已自动创建系统管理员账号");
@@ -32,6 +34,15 @@ if (initialAdmin) {
   console.log(`管理员密码: ${initialAdmin.password}`);
   console.log("请登录后立即修改密码，并妥善保存该凭据。");
   console.log("此密码只会在本次创建时显示。\n============================================================\n");
+  const adminUser = adminDb.query("SELECT id, display_name FROM users WHERE username=?").get(initialAdmin.username) as any;
+  if (adminUser) {
+    await syncArangoNativeUser(initialAdmin.username, initialAdmin.password, {
+      id: Number(adminUser.id),
+      displayName: String(adminUser.display_name || initialAdmin.username),
+      role: "admin",
+      active: true,
+    }, arangoUserDatabaseGrants(adminDb, Number(adminUser.id), "admin", true));
+  }
 }
 const handleGraphCanvases = createGraphCanvasHandler(adminDb, getKnowledgeUser, getProjectByIdentifier);
 const handleApplications = createApplicationHandler(adminDb, getCurrentUser);

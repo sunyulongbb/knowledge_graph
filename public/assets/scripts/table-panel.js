@@ -718,6 +718,7 @@
           url.search = scopedUrl.search;
         }
       }
+      url.searchParams.set("backend", "elasticsearch");
       url.searchParams.set(
         "limit",
         window.kbTableLayoutMode === "timeline" ? "300" : tblPageSize,
@@ -762,7 +763,10 @@
       url.searchParams.set("hide_entity", "1");
 
       const resp = await fetch(url);
-      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      if (!resp.ok) {
+        const error = await resp.json().catch(() => null);
+        throw new Error(error?.error || "HTTP " + resp.status);
+      }
 
       const data = await resp.json();
       if (requestVersion !== tblLoadVersion) return;

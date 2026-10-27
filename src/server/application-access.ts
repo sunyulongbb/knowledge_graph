@@ -4,6 +4,13 @@ import { hasApplicationPermission } from './application-role-permissions.ts';
 import { cloneApplicationData, removeClonedApplicationFiles } from './application-clone.ts';
 import { importOntologies } from './ontology-import.ts';
 
+export function isValidApplicationName(name: string, reserved: string[] = [], requireArangoCompatibility = false) {
+  return /^[a-zA-Z0-9_-]{1,64}$/.test(name)
+    && !/^\d+$/.test(name)
+    && !reserved.includes(name.toLowerCase())
+    && (!requireArangoCompatibility || /^[a-zA-Z]/.test(name));
+}
+
 export function ensureApplicationSchema(db: Database) {
   const columns = db.query('PRAGMA table_info(projects)').all() as any[];
   if (!columns.some((column) => column.name === 'banner_image')) db.run("ALTER TABLE projects ADD COLUMN banner_image TEXT NOT NULL DEFAULT ''");
@@ -175,7 +182,7 @@ export function createApplicationHandler(db: Database, getUser: (req: Request) =
       const name = String(body.name || '').trim();
       const title = String(body.title || name).trim();
       const description = String(body.description || '').trim();
-      if (!/^[a-zA-Z0-9_-]{1,64}$/.test(name) || /^\d+$/.test(name) || ['app', 'shared'].includes(name.toLowerCase())) return error('应用短名须为 1–64 位字母、数字、下划线或短横线，不能为纯数字、app 或 shared');
+      if (!isValidApplicationName(name, ['app', 'shared'], Boolean(process.env.ARANGO_URL))) return error(process.env.ARANGO_URL ? 'Enterprise 应用短名须以字母开头，且只能包含 1–64 位字母、数字、下划线或短横线' : '应用短名须为 1–64 位字母、数字、下划线或短横线，不能为纯数字、app 或 shared');
       if (!title || title.length > 100 || description.length > 2000) return error('名称最多 100 字，描述最多 2000 字');
       if (projectBy(name)) return error('应用短名已存在', 409);
       db.run("INSERT INTO projects(name,title,description,file,image,theme_color,tags,link,owner_user_id,banner_image) VALUES(?,?,?,'app.sqlite',?,'#ff7a2b','[]',?,?,?)", [name, title, description, String(body.image || ''), String(body.link || ''), user.id, String(body.banner_image || '').trim()]);
@@ -196,7 +203,7 @@ export function createApplicationHandler(db: Database, getUser: (req: Request) =
       if (!hasApplicationPermission(user, 'application:create')) return error('未获授权创建应用', 403);
       const name = String(body.name || '').trim();
       const title = String(body.title || `${project.title || project.name} 副本`).trim();
-      if (!/^[a-zA-Z0-9_-]{1,64}$/.test(name) || /^\d+$/.test(name) || ['app', 'shared', 'default'].includes(name.toLowerCase())) return error('新应用短名须为 1–64 位字母、数字、下划线或短横线，且不能使用保留名称');
+      if (!isValidApplicationName(name, ['app', 'shared', 'default'], Boolean(process.env.ARANGO_URL))) return error(process.env.ARANGO_URL ? 'Enterprise 新应用短名须以字母开头，且只能包含 1–64 位字母、数字、下划线或短横线' : '新应用短名须为 1–64 位字母、数字、下划线或短横线，且不能使用保留名称');
       if (!title || title.length > 100) return error('应用名称不能为空且最多 100 字');
       if (projectBy(name)) return error('应用短名已存在', 409);
       let cloned: any = null;

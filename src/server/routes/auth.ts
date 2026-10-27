@@ -1,5 +1,6 @@
 import { adminDb, hashPassword } from "../db.ts";
 import { getCurrentUser, isAdmin } from "../auth-context.ts";
+import { arangoUserDatabaseGrants, syncArangoNativeUser, syncArangoNativeUserState } from "../arangodb.ts";
 import { mkdirSync, writeFileSync } from "fs";
 import { resolve } from "path";
 
@@ -84,6 +85,20 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
       const created = adminDb.query("SELECT id FROM users WHERE username = ?").get(username) as any;
       const assignedRole = adminDb.query("SELECT id FROM roles WHERE code = ?").get(role === "admin" ? "super_admin" : "user") as any;
       if (created && assignedRole) adminDb.run("INSERT OR IGNORE INTO user_roles (user_id, role_id) VALUES (?, ?)", [created.id, assignedRole.id]);
+      try {
+        await syncArangoNativeUser(username, password, {
+          id: Number(created?.id || 0),
+          displayName: displayName || username,
+          role,
+          active: true,
+        }, arangoUserDatabaseGrants(adminDb, Number(created?.id || 0), role, true));
+      } catch (error) {
+        console.error("ArangoDB user synchronization failed during registration:", error);
+        return Response.json(
+          { success: false, message: "账号已创建，但同步到 ArangoDB 失败；请稍后直接登录重试同步" },
+          { status: 503 },
+        );
+      }
       const user = adminDb
         .query(
           "SELECT id, username, display_name, avatar, panel_state, created_at FROM users WHERE username = ?"
@@ -129,6 +144,21 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
         return Response.json(
           { success: false, message: "用户不存在或密码错误" },
           { status: 401 }
+        );
+      }
+
+      try {
+        await syncArangoNativeUser(username, password, {
+          id: Number(u.id),
+          displayName: String(u.display_name || username),
+          role: u.role === "admin" || u.is_admin ? "admin" : "user",
+          active: true,
+        }, arangoUserDatabaseGrants(adminDb, Number(u.id), u.role === "admin" || u.is_admin ? "admin" : "user", true));
+      } catch (error) {
+        console.error("ArangoDB user synchronization failed during login:", error);
+        return Response.json(
+          { success: false, message: "账号同步到 ArangoDB 失败，请稍后重试" },
+          { status: 503 },
         );
       }
 
@@ -253,7 +283,7 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
     const status = body.status === "disabled" ? "disabled" : body.status === "active" ? "active" : null;
     if (!role && !status) return Response.json({ error: "没有可更新的字段" }, { status: 400 });
     const targetId = Number(userManageMatch[1]);
-    const target = adminDb.query("SELECT id, username FROM users WHERE id = ?").get(targetId) as any;
+    const target = adminDb.query("SELECT id, username, display_name, role, status FROM users WHERE id = ?").get(targetId) as any;
     if (!target) return Response.json({ error: "用户不存在" }, { status: 404 });
     if (target.id === current.id && status === "disabled") return Response.json({ error: "不能停用当前登录账号" }, { status: 400 });
     const updates: string[] = [], params: any[] = [];
@@ -264,6 +294,18 @@ export async function handleAuthRoutes(req: Request, url: URL, method: string) {
     if (role) {
       adminDb.run("DELETE FROM user_roles WHERE user_id = ? AND role_id IN (SELECT id FROM roles WHERE code IN ('super_admin','user'))", [targetId]);
       adminDb.run("INSERT OR IGNORE INTO user_roles (user_id, role_id) SELECT ?, id FROM roles WHERE code = ?", [targetId, role === "admin" ? "super_admin" : "user"]);
+    }
+    const updatedUser = adminDb.query("SELECT id, username, display_name, role, status FROM users WHERE id=?").get(targetId) as any;
+    try {
+      await syncArangoNativeUserState(String(updatedUser.username), {
+        id: Number(updatedUser.id),
+        displayName: String(updatedUser.display_name || updatedUser.username),
+        role: String(updatedUser.role || "user"),
+        active: updatedUser.status !== "disabled",
+      }, arangoUserDatabaseGrants(adminDb, Number(updatedUser.id), String(updatedUser.role || "user"), updatedUser.status !== "disabled"));
+    } catch (error) {
+      console.error("ArangoDB user state synchronization failed:", error);
+      return Response.json({ error: "用户已更新，但同步 ArangoDB 用户状态失败" }, { status: 503 });
     }
     return Response.json({ success: true });
   }

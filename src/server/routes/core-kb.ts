@@ -11,6 +11,11 @@ import { canAccessKnowledge, knowledgeContext } from '../knowledge-access.ts';
 import { appendVideoCoverPairs } from '../video-cover-pairing.ts';
 import { importEntity, EntityImportError, localizeEntityImportMedia, cleanupLocalizedEntityImport } from '../entity-import.ts';
 import {
+  isElasticsearchSearchEnabled,
+  queryArangoIncomingRelations,
+  searchElasticsearchEntities,
+} from "../arangodb.ts";
+import {
   formatNode,
   formatAttribute,
   formatEdge,
@@ -64,6 +69,29 @@ function addMissingWikidataPrefixes(query: string) {
 type EntityAttributeValue = {
   [key: string]: any;
 };
+
+function localizedEntityText(values: any) {
+  if (!values || typeof values !== "object") return "";
+  const entries = Object.values(values) as any[];
+  const preferred = values.zh || values.en || entries[0];
+  return String(preferred?.value || "");
+}
+
+function elasticsearchEntityNode(document: Record<string, any>) {
+  const aliases = Object.values(document.aliases || {})
+    .flatMap((values: any) => Array.isArray(values) ? values : [values])
+    .map((entry: any) => String(entry?.value || "").trim())
+    .filter(Boolean);
+  return formatNode({
+    ...document,
+    id: String(document.sqlite_id || document.id || ""),
+    name: localizedEntityText(document.labels),
+    description: localizedEntityText(document.descriptions),
+    aliases: JSON.stringify(aliases),
+    created_at: document.created_at,
+    updated_at: document.updated_at,
+  });
+}
 
 export async function handleCoreKbRoutes(
   req: Request,
@@ -2027,25 +2055,11 @@ export async function handleCoreKbRoutes(
       (url.searchParams.get("has_media") || "").trim().toLowerCase(),
     );
 
-    const likeParam = `%${q}%`;
-    const params: any[] = [
-      likeParam,
-      likeParam,
-      likeParam,
-      likeParam,
-      likeParam,
-    ];
-    const countParams: any[] = [
-      likeParam,
-      likeParam,
-      likeParam,
-      likeParam,
-      likeParam,
-    ];
+    const params: any[] = [];
+    const countParams: any[] = [];
 
     let joinClause = "";
-    let whereClause =
-      "WHERE (COALESCE(n.name, '') LIKE ? OR COALESCE(n.aliases, '') LIKE ? OR COALESCE(n.description, '') LIKE ? OR COALESCE(n.type, '') LIKE ? OR COALESCE(n.id, '') LIKE ?)";
+    let whereClause = "WHERE 1=1";
     let propertyKeyConditions: string[] = [];
     const propertyKeys = new Set<string>();
 
@@ -2265,18 +2279,125 @@ export async function handleCoreKbRoutes(
       orderClause = " ORDER BY datetime(n.created_at) ASC, n.rowid ASC";
     }
 
-    const nodes = db
-      .query(
-        `SELECT DISTINCT n.* FROM nodes n${joinClause} ${whereClause}${orderClause} LIMIT ? OFFSET ?`,
-      )
-      .all(...params, limit, offset)
-      .map(formatNode);
+    const defaultElasticsearchProject = scopedProject
+      ? null
+      : db
+          .query("SELECT id, name FROM projects WHERE is_default=1 ORDER BY id LIMIT 1")
+          .get() as any;
+    const elasticsearchProject = scopedProject || defaultElasticsearchProject;
+    const elasticsearchProjectName = elasticsearchProject?.name;
+    const elasticsearchSearchRequired =
+      url.searchParams.get("backend") === "elasticsearch" ||
+      process.env.KNOWLEDGE_SEARCH_BACKEND?.trim().toLowerCase() === "elasticsearch" ||
+      Boolean(process.env.ARANGO_URL?.trim());
+    const elasticsearchEnabled = isElasticsearchSearchEnabled();
+    if (elasticsearchSearchRequired && !elasticsearchEnabled) {
+      return Response.json(
+        { error: "Elasticsearch search is required, but ELASTICSEARCH_URL is not configured" },
+        { status: 503 },
+      );
+    }
+    if (elasticsearchSearchRequired && !elasticsearchProjectName) {
+      return Response.json(
+        { error: "Elasticsearch search is required, but no application index could be resolved" },
+        { status: 503 },
+      );
+    }
+    const shouldUseElasticsearch = Boolean(elasticsearchProjectName && elasticsearchEnabled);
+    const needsSqlCandidateIds = Boolean(
+      propertyId || propertyValue || hasImage || hasMedia || typeFilterRaw !== null,
+    );
+    const elasticsearchWhereClause = hasProjectScope
+      ? whereClause
+      : `${whereClause} AND (n.project_id = ? OR n.project_id IS NULL)`;
+    const eligibleIds = shouldUseElasticsearch && needsSqlCandidateIds
+      ? db.query(`SELECT DISTINCT n.id FROM nodes n${joinClause} ${elasticsearchWhereClause}`)
+        .all(...params, ...(hasProjectScope ? [] : [elasticsearchProject.id]))
+        .map((row: any) => String(row.id))
+      : undefined;
+    const projectScopeClause = hasProjectScope
+      ? "project_id = ?"
+      : "(project_id = ? OR project_id IS NULL)";
+    const projectScopeParams = [elasticsearchProject?.id];
+    let elasticsearchClassIds: string[] | undefined;
+    if (shouldUseElasticsearch && (classId || definedClassOnly)) {
+      const availableClassIds = definedClassOnly
+        ? (db.query(`SELECT id FROM classes WHERE ${projectScopeClause}`).all(...projectScopeParams) as any[])
+            .map((row) => String(row.id))
+        : [];
+      elasticsearchClassIds = classId
+        ? (definedClassOnly && !availableClassIds.includes(classId) ? [] : [classId])
+        : availableClassIds;
+    }
+    let elasticsearchIncludeTypes: string[] | undefined;
+    if (shouldUseElasticsearch && definedTypeOnly) {
+      const definedTypes = db.query(
+        `SELECT id FROM ontologies
+         WHERE ${projectScopeClause}
+           AND (status IS NULL OR status = 'active')
+           AND lower(trim(COALESCE(name, ''))) NOT IN ('实体条目', 'wikibase item')
+           AND NOT EXISTS (
+             SELECT 1
+             FROM json_each(CASE WHEN json_valid(alias) THEN alias ELSE '[]' END) defined_type_alias
+             WHERE lower(trim(COALESCE(defined_type_alias.value, ''))) = 'wikibase item'
+           )
+           AND lower(COALESCE(description, '')) NOT LIKE '%wikibase-item 属性值自动创建%'`,
+      ).all(...projectScopeParams) as any[];
+      elasticsearchIncludeTypes = definedTypes.map((row) => String(row.id));
+    }
+    let elasticsearchExcludeTypes: string[] | undefined;
+    if (shouldUseElasticsearch && (hideEntity === "1" || hideEntity.toLowerCase() === "true")) {
+      const hiddenTypes = db.query(
+        `SELECT id FROM ontologies
+         WHERE ${projectScopeClause}
+           AND (
+             lower(trim(COALESCE(name, ''))) IN ('实体条目', 'wikibase item')
+             OR lower(COALESCE(description, '')) LIKE '%wikibase-item 属性值自动创建%'
+           )`,
+      ).all(...projectScopeParams) as any[];
+      const entityTypes = db.query(
+        "SELECT DISTINCT type FROM nodes WHERE type IS NOT NULL AND lower(trim(type))='entity'",
+      ).all() as any[];
+      elasticsearchExcludeTypes = [
+        ...new Set(["entity", ...entityTypes.map((row) => String(row.type)), ...hiddenTypes.map((row) => String(row.id))]),
+      ];
+    }
+    const elasticsearchResults = shouldUseElasticsearch
+      ? await searchElasticsearchEntities(elasticsearchProjectName!, {
+        ids: eligibleIds,
+        query: q,
+        limit,
+        offset,
+        order: orderBy,
+        classIds: elasticsearchClassIds,
+        includeTypes: elasticsearchIncludeTypes,
+        excludeTypes: elasticsearchExcludeTypes,
+      })
+      : null;
 
-    const total = db
-      .query(
-        `SELECT COUNT(DISTINCT n.id) as count FROM nodes n${joinClause} ${whereClause}`,
-      )
-      .get(...countParams) as any;
+    let nodes: any[];
+    let total: any;
+    if (elasticsearchResults) {
+      nodes = elasticsearchResults.documents.map(elasticsearchEntityNode);
+      total = { count: elasticsearchResults.total };
+    } else {
+      const likeParam = `%${q}%`;
+      const searchClause = ` AND (COALESCE(n.name, '') LIKE ? OR COALESCE(n.aliases, '') LIKE ? OR COALESCE(n.description, '') LIKE ? OR COALESCE(n.type, '') LIKE ? OR COALESCE(n.id, '') LIKE ?)`;
+      whereClause += searchClause;
+      params.push(likeParam, likeParam, likeParam, likeParam, likeParam);
+      countParams.push(likeParam, likeParam, likeParam, likeParam, likeParam);
+      nodes = db
+        .query(
+          `SELECT DISTINCT n.* FROM nodes n${joinClause} ${whereClause}${orderClause} LIMIT ? OFFSET ?`,
+        )
+        .all(...params, limit, offset)
+        .map(formatNode);
+      total = db
+        .query(
+          `SELECT COUNT(DISTINCT n.id) as count FROM nodes n${joinClause} ${whereClause}`,
+        )
+        .get(...countParams) as any;
+    }
 
     // Attach image attributes for each returned node
     if (nodes.length > 0) {
@@ -2353,7 +2474,11 @@ export async function handleCoreKbRoutes(
       }
     }
 
-    return Response.json({ nodes, total: total?.count || 0 });
+    return Response.json({
+      nodes,
+      total: total?.count || 0,
+      searchBackend: elasticsearchResults ? "elasticsearch" : "sqlite",
+    });
   }
 
   if (url.pathname === "/api/kb/shorts_random" && method === "GET") {
@@ -5138,6 +5263,49 @@ export async function handleCoreKbRoutes(
           );
           if (secondLevel.length) relation.secondLevel = secondLevel;
         }
+      }
+    }
+
+    const relationProjectName = scopedProject?.name
+      || (db.query("SELECT name FROM projects WHERE is_default=1 ORDER BY id LIMIT 1").get() as any)?.name;
+    if (relationProjectName) {
+      const arangoRelations = await queryArangoIncomingRelations(relationProjectName, String(id));
+      if (arangoRelations) {
+        const requestUser = knowledgeContext.getStore()?.user || getKnowledgeUser(req);
+        const toApiNode = (document: Record<string, any>) => {
+          const entityId = String(document.sqlite_id || document.id || "").replace(/^entity\//, "");
+          if (!entityId || !canAccessKnowledge(db, requestUser, entityId)) return null;
+          return elasticsearchEntityNode({ ...document, sqlite_id: entityId });
+        };
+        const arangoIncomingRelations: any[] = [];
+        for (const relation of arangoRelations.relations) {
+          const source = toApiNode(relation.source);
+          if (!source) continue;
+          arangoIncomingRelations.push({
+            source,
+            propertyId: String(relation.propertyId || ""),
+            propertyName: String(relation.propertyName || relation.propertyId || "关联"),
+          });
+        }
+        const secondLevelByTarget = new Map<string, any[]>();
+        for (const relation of arangoRelations.secondLevel) {
+          const targetId = String(relation.targetId || "").replace(/^entity\//, "");
+          const source = toApiNode(relation.source);
+          if (!targetId || !source || source.id === id) continue;
+          const list = secondLevelByTarget.get(targetId) || [];
+          list.push({
+            source,
+            propertyId: String(relation.propertyId || ""),
+            propertyName: String(relation.propertyName || relation.propertyId || "关联"),
+          });
+          secondLevelByTarget.set(targetId, list);
+        }
+        for (const relation of arangoIncomingRelations) {
+          const sourceId = String(relation.source?.id || "");
+          const secondLevel = secondLevelByTarget.get(sourceId);
+          if (secondLevel?.length) relation.secondLevel = secondLevel;
+        }
+        incomingRelations.splice(0, incomingRelations.length, ...arangoIncomingRelations);
       }
     }
 

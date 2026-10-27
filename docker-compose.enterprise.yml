@@ -1,0 +1,63 @@
+services:
+  app:
+    build: .
+    ports:
+      - "80:8080"
+    volumes:
+      - ../data:/data
+    environment:
+      - PORT=8080
+      - HOST=0.0.0.0
+      - WIKIDATA_SPARQL_ENDPOINT=${WIKIDATA_SPARQL_ENDPOINT:-https://qlever.dev/api/wikidata}
+      - WIKIDATA_REQUEST_TIMEOUT_MS=${WIKIDATA_REQUEST_TIMEOUT_MS:-20000}
+      - ARANGO_URL=http://arangodb:8529
+      - ARANGO_USERNAME=root
+      - ARANGO_PASSWORD=${ARANGO_ROOT_PASSWORD:?Set ARANGO_ROOT_PASSWORD in .env}
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - KNOWLEDGE_SEARCH_BACKEND=elasticsearch
+    depends_on:
+      arangodb:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    restart: always
+
+  arangodb:
+    image: arangodb:3.12
+    environment:
+      ARANGO_ROOT_PASSWORD: ${ARANGO_ROOT_PASSWORD:?Set ARANGO_ROOT_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:8529:8529"
+    volumes:
+      - arangodb_data:/var/lib/arangodb3
+      - arangodb_apps_data:/var/lib/arangodb3-apps
+    healthcheck:
+      test: ["CMD-SHELL", "arangosh --server.endpoint tcp://127.0.0.1:8529 --server.username root --server.password \"$${ARANGO_ROOT_PASSWORD}\" --javascript.execute-string db._version >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.4
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+    ports:
+      - "127.0.0.1:9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS 'http://127.0.0.1:9200/_cluster/health?wait_for_status=yellow&timeout=5s' >/dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    restart: unless-stopped
+
+volumes:
+  arangodb_data:
+  arangodb_apps_data:
+  elasticsearch_data:

@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { test, expect } from 'bun:test';
-import { applicationPermissions, createApplicationHandler, ensureApplicationSchema, ensureDefaultApplication } from '../src/server/application-access.ts';
+import { applicationPermissions, createApplicationHandler, ensureApplicationSchema, ensureDefaultApplication, isValidApplicationName } from '../src/server/application-access.ts';
 import { ensureApplicationRolePermissions } from '../src/server/application-role-permissions.ts';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
@@ -23,6 +23,12 @@ function setup(cloneOptions: { uploadsRoot?: string } = {}) {
   };
   return { db, call, users };
 }
+
+test('Enterprise-compatible application names start with a letter without restricting Lite names', () => {
+  expect(isValidApplicationName('123qwe')).toBe(true);
+  expect(isValidApplicationName('123qwe', [], true)).toBe(false);
+  expect(isValidApplicationName('qwe123', [], true)).toBe(true);
+});
 
 test('first initialization creates one default application with access for every signed-in user', async () => {
   const { db, call } = setup();

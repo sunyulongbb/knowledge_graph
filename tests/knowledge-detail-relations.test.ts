@@ -17,7 +17,44 @@ const incomingRelationsBlock = detailPanelSource.slice(
 type RelationItem = { source: { id: string }; propertyId: string; propertyName: string; secondLevel?: RelationItem[] };
 
 function createNodeRouteRunner() {
-  const js = new Bun.Transpiler({ loader: 'ts' }).transformSync(nodeRoute);
+  const wrappedRoute = `
+    return (async function route(
+      url,
+      method,
+      db,
+      hasProjectScope,
+      scopedProjectId,
+      scopedClause,
+      formatNode,
+      canAccessKnowledge,
+      knowledgeContext,
+      getKnowledgeUser,
+      parseStoredAttributeValues,
+      extractEntityId,
+      scopedProject,
+      queryArangoIncomingRelations,
+      req,
+    ) {
+      ${nodeRoute}
+    })(
+      url,
+      method,
+      db,
+      hasProjectScope,
+      scopedProjectId,
+      scopedClause,
+      formatNode,
+      canAccessKnowledge,
+      knowledgeContext,
+      getKnowledgeUser,
+      parseStoredAttributeValues,
+      extractEntityId,
+      scopedProject,
+      queryArangoIncomingRelations,
+      req,
+    );
+  `;
+  const js = new Bun.Transpiler({ loader: 'ts' }).transformSync(wrappedRoute);
   return new Function(
     'url',
     'method',
@@ -31,6 +68,8 @@ function createNodeRouteRunner() {
     'getKnowledgeUser',
     'parseStoredAttributeValues',
     'extractEntityId',
+    'scopedProject',
+    'queryArangoIncomingRelations',
     'req',
     js,
   ) as (...args: any[]) => Promise<{ json: () => Promise<{ incomingRelations: RelationItem[] }> }>;
@@ -79,6 +118,8 @@ async function fetchNodeRelations() {
       () => null,
       parseStoredAttributeValues,
       extractEntityId,
+      { name: 'mock-project' },
+      async () => null,
       {},
     );
   } finally {
