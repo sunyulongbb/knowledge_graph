@@ -53,6 +53,10 @@ export async function serveStaticRoute(req: Request, pathname: string) {
     return rangedFileResponse(req, file, headers);
   };
 
+  if (pathname === "/product" || pathname === "/product.html") {
+    return new Response(Bun.file("public/product.html"), { headers: { "Content-Type": "text/html; charset=utf-8" } });
+  }
+
   if (pathname === "/sparql" || pathname === "/sparql.html") {
     return new Response(Bun.file("public/sparql.html"), { headers: { "Content-Type": "text/html; charset=utf-8" } });
   }
