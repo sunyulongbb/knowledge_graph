@@ -9834,6 +9834,8 @@
         // normalize id to include entity/ prefix
         const fullId = ensureEntityIdPrefix(nodeId);
         const url = new URL("/api/kb/node/graph", window.location.origin);
+        const graphDb = new URLSearchParams(window.location.search).get('db');
+        if (graphDb) url.searchParams.set('db', graphDb);
         url.searchParams.set("id", fullId);
         if (direction && direction !== "both") {
           url.searchParams.set("direction", direction);

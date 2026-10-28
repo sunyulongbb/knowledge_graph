@@ -71,6 +71,12 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
           classLabel: classes[0]?.name || result.classLabel, color: ontology?.color || classes[0]?.color || null,
           ontology: ontology || null, typeLabel: ontology?.name || result.typeLabel };
       };
+      const graphNode = (node: Doc) => {
+        // Cytoscape clients interpret a top-level `data` field as an element
+        // wrapper. Business JSON has already been flattened by resultNode.
+        const { data, ...fields } = resultNode(node);
+        return fields;
+      };
       await store.ensure(database);
       let body: Doc = {};
       if (['POST', 'PUT', 'PATCH'].includes(method)) {
@@ -163,7 +169,7 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
         const page = await store.list(database, user, { limit: 500, offset: 0, classId: url.searchParams.get('class_id') });
         const handles = page.nodes.map((node: Doc) => node._id);
         const edges = await store.query(database, 'FOR e IN link FILTER e._from IN @handles AND e._to IN @handles AND e._from != e._to RETURN e', { handles });
-        return Response.json({ nodes: page.nodes.map(resultNode), edges: edges.map(e => ({
+        return Response.json({ nodes: page.nodes.map(graphNode), edges: edges.map(e => ({
           id: `${e.sqlite_id}:${e.target_id}`, source: e.source_id, target: e.target_id, type: e.property_id, label: e.property_name || e.property_id,
         })), total: page.total, truncated: page.total > page.nodes.length });
       }
@@ -197,9 +203,33 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
         for (const row of rows) {
           const sourceId = cleanKnowledgeId(row.source.sqlite_id || row.source.id);
           const targetId = cleanKnowledgeId(row.target.sqlite_id || row.target.id);
-          if (sourceId !== id) neighbors.set(sourceId, resultNode(row.source));
-          if (targetId !== id) neighbors.set(targetId, resultNode(row.target));
-          if (targetId === id) incomingRelations.push({ ...resultNode(row.source), property: row.edge.property_id, property_label_zh: row.edge.property_name });
+          const edge = { id: `${row.edge.sqlite_id}:${targetId}`, source: sourceId, target: targetId,
+            type: row.edge.property_id, label: row.edge.property_name || row.edge.property_id, isAttribute: true };
+          if (sourceId !== id) neighbors.set(sourceId, { node: resultNode(row.source), edge });
+          if (targetId !== id) neighbors.set(targetId, { node: resultNode(row.target), edge });
+          if (targetId === id) incomingRelations.push({ source: resultNode(row.source),
+            propertyId: row.edge.property_id, propertyName: row.edge.property_name || row.edge.property_id || '关联' });
+        }
+        if (incomingRelations.length) {
+          const handles = [...new Set(rows.filter(row => cleanKnowledgeId(row.target.sqlite_id || row.target.id) === id).map(row => row.source._id))].filter(Boolean);
+          const secondLevel = handles.length ? await store.query(database, `FOR edge IN link
+            FILTER edge._to IN @handles AND edge._from != edge._to
+            LET source = DOCUMENT(edge._from) LET target = DOCUMENT(edge._to)
+            FILTER source != null AND target != null RETURN { edge, source, target }`, { handles }) : [];
+          const children = new Map<string, Doc[]>();
+          for (const row of secondLevel) {
+            const sourceId = cleanKnowledgeId(row.source.sqlite_id || row.source.id);
+            if (sourceId === id || !canUseArangoKnowledge(row.source, user) || !canUseArangoKnowledge(row.target, user)) continue;
+            const targetId = cleanKnowledgeId(row.target.sqlite_id || row.target.id);
+            const group = children.get(targetId) || [];
+            group.push({ source: resultNode(row.source), propertyId: row.edge.property_id,
+              propertyName: row.edge.property_name || row.edge.property_id || '关联' });
+            children.set(targetId, group);
+          }
+          for (const relation of incomingRelations) {
+            const group = children.get(relation.source.id);
+            if (group?.length) relation.secondLevel = group;
+          }
         }
         return Response.json({ node: resultNode(node), neighbors: [...neighbors.values()], incomingRelations });
       }
@@ -211,10 +241,10 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
       if (['/api/kb/node/relations', '/api/kb/node/graph'].includes(path) && method === 'GET') {
         const center = await store.require(database, id, user);
         const rows = await store.relations(database, id, user, url.searchParams.get('direction') || 'both');
-        const nodes = new Map<string, Doc>([[id, resultNode(center)]]);
+        const nodes = new Map<string, Doc>([[id, graphNode(center)]]);
         const edges = rows.map(({ edge, source, target }) => {
           const sourceId = cleanKnowledgeId(source.sqlite_id || source.id), targetId = cleanKnowledgeId(target.sqlite_id || target.id);
-          nodes.set(sourceId, resultNode(source)); nodes.set(targetId, resultNode(target));
+          nodes.set(sourceId, graphNode(source)); nodes.set(targetId, graphNode(target));
           return { id: `${edge.sqlite_id}:${targetId}`, source: sourceId, target: targetId, type: edge.property_id, label: edge.property_name || edge.property_id, isAttribute: true };
         });
         return Response.json(path.endsWith('/graph') ? { nodes: [...nodes.values()], edges } : { items: edges });
