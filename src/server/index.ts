@@ -1,4 +1,6 @@
 import { EnterpriseKnowledgeSearch } from './enterprise-search.ts';
+import { createSqliteKnowledgeSync } from './sqlite-knowledge-sync.ts';
+import { EnterpriseSqliteBackup } from './enterprise-sqlite-backup.ts';
 import { createGraphCanvasHandler } from './graph-canvases.ts';
 import { enterpriseKnowledgeEnabled } from './knowledge-mode.ts';
 import { EnterpriseKnowledgeStore, ArangoElasticsearchSync } from './enterprise-knowledge.ts';
@@ -59,6 +61,8 @@ const handleUserProfile = createUserProfileHandler(adminDb, getCurrentUser);
 
 console.log(`[Knowledge storage] ${enterpriseKnowledgeEnabled() ? 'arangodb (Enterprise)' : 'sqlite (Lite)'}`);
 const enterpriseStore = enterpriseKnowledgeEnabled() ? EnterpriseKnowledgeStore.configured() : null;
+const enterpriseBackup = enterpriseStore ? new EnterpriseSqliteBackup(adminDb, enterpriseStore) : undefined;
+enterpriseBackup?.start(async () => (adminDb.query('SELECT name FROM projects ORDER BY id').all() as { name: string }[]).map(project => project.name));
 const handleApplications = createApplicationHandler(adminDb, getCurrentUser, {
   provisionKnowledge: enterpriseStore ? name => ensureApplicationDatabase(enterpriseStore.client, name) : undefined,
 });
@@ -67,6 +71,7 @@ const enterpriseSync = enterpriseStore && process.env.ELASTICSEARCH_URL?.trim()
   : undefined;
 const handleEnterpriseKnowledge = enterpriseStore ? createEnterpriseKnowledgeHandler({
   store: enterpriseStore, sync: enterpriseSync,
+  backup: enterpriseBackup,
   search: enterpriseSync ? new EnterpriseKnowledgeSearch(enterpriseStore, enterpriseSync.elasticsearch) : undefined,
   getUser: getKnowledgeUser, getProject: getProjectByIdentifier,
   canCreate: (user, project) => user.role === 'admin' || applicationPermissions(adminDb, user, project).member,
@@ -78,6 +83,10 @@ const handleEnterpriseKnowledge = enterpriseStore ? createEnterpriseKnowledgeHan
     properties: adminDb.query('SELECT id,name,datatype,status FROM properties WHERE project_id=?').all(project.id),
   }),
 }) : null;
+const handleSqliteKnowledgeSync = createSqliteKnowledgeSync({
+  db: adminDb, getUser: getCurrentUser, getProject: getProjectByIdentifier,
+  store: enterpriseStore, sync: enterpriseSync,
+});
 enterpriseSync?.start(async () => {
   const { body } = await enterpriseStore!.client.system('/_api/database');
   const existing = new Set<string>(body.result);
@@ -118,6 +127,8 @@ const server = Bun.serve({
       const requestUrl = url;
       const response = await knowledgeContext.run({ user: getKnowledgeUser(req) }, async () => {
       const url = requestUrl;
+      const sqliteSyncResponse = await handleSqliteKnowledgeSync(req, url);
+      if (sqliteSyncResponse) return sqliteSyncResponse;
       const enterpriseResponse = await handleEnterpriseKnowledge?.(req, url, method);
       if (enterpriseResponse) {
         enterpriseResponse.headers.set('X-Knowledge-Storage', 'arangodb');

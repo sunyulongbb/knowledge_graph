@@ -1,5 +1,11 @@
 # 企业版知识主存储
 
+## SQLite 备份
+
+Enterprise 以 ArangoDB 为知识主存储、ES 为检索索引，并将完整 entity/link 文档备份到 `app.sqlite` 的独立表 `enterprise_knowledge_backups`。每次知识写入后触发备份，后台默认每 60 秒重试和对账（`ENTERPRISE_SQLITE_BACKUP_INTERVAL_MS`）；ES 故障不影响备份。源读取成功后才替换快照，读取失败保留上一次成功版本。
+
+此表保存每个应用最新成功快照，包括权限、关系及完整 statement，不包含附件文件本身。`GET /api/kb/knowledge-sync/status` 的 `sqliteBackup` 返回最近成功备份时间与实体/边数量。页面 SQLite 导入仍读取旧 nodes/attributes 表，尚未提供从新备份表恢复的页面操作。快照目前整图读取到内存；独立灾备和历史版本保留需要另行复制数据库及附件。
+
 企业版首页和知识列表的关键词、筛选、分页及内容返回统一使用 Elasticsearch。知识新增、修改、删除先提交 ArangoDB，再由同步器同步到 ES。知识详情和图关系仍由 ArangoDB 提供。Lite 版保留原 SQLite 知识路径。用户、会话、应用、本体、分类和属性定义仍由现有 SQLite 元数据库管理；知识接口不再通过 SQLite 的 nodes / attributes / entity_classes 查询数据。
 
 ## 配置与部署

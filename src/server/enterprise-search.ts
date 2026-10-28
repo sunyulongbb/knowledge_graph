@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
+import { knowledgeMedia } from '../shared/knowledge-media.ts';
 import { ElasticsearchClient, elasticsearchEntityIndexName } from './arangodb.ts';
 import type { EnterpriseKnowledgeStore } from './enterprise-knowledge.ts';
 import type { KnowledgeUser } from './knowledge-access.ts';
 
 type Doc = Record<string, any>;
-export const ENTITY_SEARCH_SCHEMA = 1;
+export const ENTITY_SEARCH_SCHEMA = 2;
 export async function ensureEntitySearchMapping(client: ElasticsearchClient, index: string) {
   await client.send(`/${encodeURIComponent(index)}/_mapping`, { method: 'PUT', body: JSON.stringify({ properties: {
     has_images: { type: 'boolean' }, has_media: { type: 'boolean' },
@@ -13,19 +14,13 @@ export async function ensureEntitySearchMapping(client: ElasticsearchClient, ind
     } },
   } }) });
 }
-const mediaList = (value: unknown): unknown[] => {
-  if (Array.isArray(value)) return value;
-  if (typeof value !== 'string' || !value.trim()) return [];
-  try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed : [parsed]; }
-  catch { return [value]; }
-};
 /** Search-only projection; definitions remain in SQLite and values remain in link. */
 export function entitySearchProjection(document: Doc) {
   const { _id, _rev, _key, _search_attributes = [], ...fields } = document;
   const attributes: Doc[] = _search_attributes;
   const fingerprint = createHash('sha256').update(JSON.stringify([_rev, attributes])).digest('hex');
-  const images = mediaList(fields.images).filter(Boolean), videos = mediaList(fields.videos).filter(Boolean);
-  return { ...fields, _arango_rev: _rev, _search_revision: fingerprint, _search_schema: ENTITY_SEARCH_SCHEMA,
+  const { images, videos, covers } = knowledgeMedia(fields, attributes);
+  return { ...fields, images, videos, covers, _arango_rev: _rev, _search_revision: fingerprint, _search_schema: ENTITY_SEARCH_SCHEMA,
     has_images: images.length > 0, has_media: images.length > 0 || videos.length > 0,
     search_attributes: attributes.map(attr => ({ property_id: attr.property_id, value_text: attr.value_text })),
   };

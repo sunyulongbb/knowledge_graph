@@ -16,6 +16,10 @@ Knowledge Graph 采用**一个代码仓库、共享核心能力、两种产品�
 
 ## 2. 总体架构
 
+Enterprise 的知识主存储使用 ArangoDB，Elasticsearch 提供可重建的检索索引，SQLite 同时保存系统元数据和知识备份。当前已实现写入后备份和定期备份：完整的 entity/link 文档按应用保存到 `app.sqlite` 的 `enterprise_knowledge_backups` 表，读取失败时保留上一次成功快照。默认每 60 秒备份一次，可通过 `ENTERPRISE_SQLITE_BACKUP_INTERVAL_MS` 调整；此备份不依赖 ES。
+
+当前备份仅保留每个应用的最新成功快照，不包含图片、视频等附件文件本身。独立灾备需要同时复制 SQLite 数据和上传目录到其他存储位置。备份表与旧版 SQLite 的 nodes/attributes 表分开，现有「知识同步」入口仍导入旧版知识表，尚不支持从新备份表一键恢复。当前使用整图内存快照，超大知识库需要后续改为分批快照。
+
 ```mermaid
 flowchart TB
   subgraph CLIENT["Knowledge Lite · 多个离线客户端"]

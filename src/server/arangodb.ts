@@ -162,6 +162,10 @@ export function isElasticsearchSearchEnabled() {
   return Boolean(elasticsearchConfigFromEnvironment());
 }
 
+export function isArangoSearchEnabled() {
+  return Boolean(configFromEnvironment());
+}
+
 export function arangoDatabaseName(projectName: string) {
   const name = String(projectName || "").trim();
   if (!/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(name)) {
@@ -245,38 +249,251 @@ export async function queryArangoIncomingRelations(
   const client = clientOverride || new ArangoClient(config!);
   const database = arangoDatabaseName(projectName);
   const vertex = `entity/${documentKey(nodeId)}`;
-  const incoming = await client.database(database, "/_api/cursor", {
-    method: "POST",
-    body: JSON.stringify({
-      query: `FOR edge IN link
-        FILTER edge._to == @vertex AND edge._from != @vertex
-        LET source = DOCUMENT(edge._from)
-        FILTER source != null
-        RETURN { source, propertyId: edge.property_id, propertyName: edge.property_name }`,
-      bindVars: { vertex },
-    }),
-  });
-  const relations = incoming.body?.result || [];
-  if (!relations.length) return [];
+  const incoming = await queryArangoCursor(client, database, `FOR source, edge IN 1..1 INBOUND @vertex GRAPH 'graph'
+    FILTER edge._from != edge._to
+    RETURN { source, edge }`, { vertex });
+  const relations = incoming.map(({ source, edge }: any) => ({
+    source,
+    propertyId: edge.property_id,
+    propertyName: edge.property_name,
+  }));
+  if (!relations.length) return { relations: [], secondLevel: [] };
   const sourceVertices = [...new Set(relations.map((relation: any) => relation.source?._id).filter(Boolean))];
-  const secondLevel = await client.database(database, "/_api/cursor", {
-    method: "POST",
-    body: JSON.stringify({
-      query: `FOR edge IN link
-        FILTER edge._to IN @targets
-          AND edge._from != edge._to
-          AND edge._from != @vertex
-        LET target = DOCUMENT(edge._to)
-        LET source = DOCUMENT(edge._from)
-        FILTER target != null AND source != null
-        RETURN { targetId: target.sqlite_id, source, propertyId: edge.property_id, propertyName: edge.property_name }`,
-      bindVars: { targets: sourceVertices, vertex },
-    }),
-  });
+  const secondLevel = await queryArangoCursor(
+    client,
+    database,
+    `FOR target IN @targets
+      FOR source, edge IN 1..1 INBOUND target GRAPH 'graph'
+      FILTER edge._from != edge._to AND edge._from != @vertex
+      RETURN { targetId: target.sqlite_id, source, edge }`,
+    { targets: sourceVertices, vertex },
+  );
   return {
     relations,
-    secondLevel: secondLevel.body?.result || [],
+    secondLevel: secondLevel.map(({ targetId, source, edge }: any) => ({
+      targetId,
+      source,
+      propertyId: edge.property_id,
+      propertyName: edge.property_name,
+    })),
   };
+}
+
+async function queryArangoCursor(
+  client: ArangoClient,
+  database: string,
+  query: string,
+  bindVars: Record<string, unknown>,
+) {
+  let { body } = await client.database(database, "/_api/cursor", {
+    method: "POST",
+    body: JSON.stringify({ query, bindVars }),
+  });
+  const results = [...(body?.result || [])];
+  while (body?.hasMore && body?.id) {
+    ({ body } = await client.database(database, `/_api/cursor/${encodeURIComponent(body.id)}`, {
+      method: "PUT",
+    }));
+    results.push(...(body?.result || []));
+  }
+  return results;
+}
+
+export async function searchArangoEntities(
+  projectName: string,
+  options: {
+    projectId?: number | null;
+    query: string;
+    limit: number;
+    offset: number;
+    ids?: string[];
+    classIds?: string[];
+    includeTypes?: string[];
+    excludeTypes?: string[];
+  },
+  clientOverride?: ArangoClient,
+) {
+  const config = configFromEnvironment();
+  if (!clientOverride && !config) return null;
+  if (options.ids?.length === 0 || options.classIds?.length === 0 || options.includeTypes?.length === 0) {
+    return { total: 0, documents: [] as Record<string, any>[] };
+  }
+  const client = clientOverride || new ArangoClient(config!);
+  const database = arangoDatabaseName(projectName);
+  const searchClause = options.query.trim()
+    ? `SEARCH entity.sqlite_id == @exactQuery
+        OR entity.type == @exactQuery
+        OR LIKE(TO_JSON(entity.labels), @pattern, true)
+        OR LIKE(TO_JSON(entity.descriptions), @pattern, true)
+        OR LIKE(TO_JSON(entity.aliases), @pattern, true)`
+    : "SEARCH 1 == 1";
+  const filterClause = `FILTER (@projectId == null OR entity.project_id == @projectId OR entity.project_id == null)
+    AND (@ids == null OR entity.sqlite_id IN @ids)
+    AND (@classIds == null OR LENGTH(INTERSECTION(entity.class_ids || [], @classIds)) > 0)
+    AND (@includeTypes == null OR entity.type IN @includeTypes)
+    AND (@excludeTypes == null OR entity.type NOT IN @excludeTypes)`;
+  const bindVars = {
+    exactQuery: options.query.trim(),
+    pattern: `%${options.query.trim()}%`,
+    projectId: options.projectId ?? null,
+    ids: options.ids ?? null,
+    classIds: options.classIds ?? null,
+    includeTypes: options.includeTypes ?? null,
+    excludeTypes: options.excludeTypes ?? null,
+  };
+  const count = await queryArangoCursor(
+    client,
+    database,
+    `FOR entity IN entity_view ${searchClause} ${filterClause}
+      COLLECT WITH COUNT INTO total
+      RETURN total`,
+    bindVars,
+  );
+  const documents = await queryArangoCursor(
+    client,
+    database,
+    `FOR entity IN entity_view ${searchClause} ${filterClause}
+      SORT entity.updated_at_sort DESC, entity.sqlite_id ASC
+      LIMIT @offset, @limit
+      RETURN entity`,
+    { ...bindVars, offset: Math.max(0, options.offset), limit: Math.max(1, options.limit) },
+  );
+  return { total: Number(count[0] || 0), documents };
+}
+
+export async function queryArangoEntity(
+  projectName: string,
+  nodeId: string,
+  clientOverride?: ArangoClient,
+) {
+  const config = configFromEnvironment();
+  if (!clientOverride && !config) return null;
+  const client = clientOverride || new ArangoClient(config!);
+  const documents = await queryArangoCursor(
+    client,
+    arangoDatabaseName(projectName),
+    "FOR entity IN entity_view FILTER entity.sqlite_id == @id LIMIT 1 RETURN entity",
+    { id: String(nodeId).replace(/^entity\//, "") },
+  );
+  return documents[0] || null;
+}
+
+export async function queryArangoGraph(
+  projectName: string,
+  options: { classId?: string; projectId?: number | null } = {},
+  clientOverride?: ArangoClient,
+) {
+  const config = configFromEnvironment();
+  if (!clientOverride && !config) return null;
+  const client = clientOverride || new ArangoClient(config!);
+  const database = arangoDatabaseName(projectName);
+  const bindVars = {
+    classId: options.classId || null,
+    projectId: options.projectId ?? null,
+  };
+  const filters = `FILTER (@projectId == null OR entity.project_id == @projectId OR entity.project_id == null)
+    AND (@classId == null OR @classId IN (entity.class_ids || []))`;
+  const nodes = await queryArangoCursor(
+    client,
+    database,
+    `FOR entity IN entity_view ${filters} RETURN entity`,
+    bindVars,
+  );
+  const edges = await queryArangoCursor(
+    client,
+    database,
+    `FOR start IN entity_view
+      ${filters.replaceAll("entity.", "start.")}
+      FOR vertex, edge IN 1..1 ANY start GRAPH 'graph'
+      FILTER edge._from != edge._to
+      FILTER (@classId == null
+        OR @classId IN (DOCUMENT(edge._from).class_ids || [])
+        AND @classId IN (DOCUMENT(edge._to).class_ids || []))
+      COLLECT edgeId = edge._id INTO matches = edge
+      RETURN FIRST(matches)`,
+    { classId: options.classId || null, projectId: options.projectId ?? null },
+  );
+  return { nodes, edges };
+}
+
+export async function queryArangoNodeGraph(
+  projectName: string,
+  nodeId: string,
+  direction: "INBOUND" | "OUTBOUND" | "ANY" = "ANY",
+  clientOverride?: ArangoClient,
+) {
+  const config = configFromEnvironment();
+  if (!clientOverride && !config) return null;
+  const client = clientOverride || new ArangoClient(config!);
+  const database = arangoDatabaseName(projectName);
+  const center = await queryArangoEntity(projectName, nodeId, client);
+  if (!center) return { center: null, neighbors: [] };
+  const vertex = `entity/${documentKey(nodeId)}`;
+  const neighbors = await queryArangoCursor(
+    client,
+    database,
+    `FOR vertex, edge IN 1..1 ${direction} @vertex GRAPH 'graph'
+      RETURN { vertex, edge }`,
+    { vertex },
+  );
+  return { center, neighbors };
+}
+
+export async function queryArangoNodeRelations(
+  projectName: string,
+  nodeId: string,
+  clientOverride?: ArangoClient,
+) {
+  const config = configFromEnvironment();
+  if (!clientOverride && !config) return null;
+  const client = clientOverride || new ArangoClient(config!);
+  const database = arangoDatabaseName(projectName);
+  const vertex = `entity/${documentKey(nodeId)}`;
+  return queryArangoCursor(
+    client,
+    database,
+    `FOR vertex, edge IN 1..1 ANY @vertex GRAPH 'graph' RETURN edge`,
+    { vertex },
+  );
+}
+
+export async function queryArangoNodeAttributes(
+  projectName: string,
+  nodeId: string,
+  clientOverride?: ArangoClient,
+) {
+  const config = configFromEnvironment();
+  if (!clientOverride && !config) return null;
+  const client = clientOverride || new ArangoClient(config!);
+  const database = arangoDatabaseName(projectName);
+  const vertex = `entity/${documentKey(nodeId)}`;
+  return queryArangoCursor(
+    client,
+    database,
+    `FOR vertex, edge IN 1..1 OUTBOUND @vertex GRAPH 'graph' RETURN edge`,
+    { vertex },
+  );
+}
+
+export async function queryArangoEdge(
+  projectName: string,
+  attributeId: string,
+  targetId: string,
+  clientOverride?: ArangoClient,
+) {
+  const config = configFromEnvironment();
+  if (!clientOverride && !config) return null;
+  const client = clientOverride || new ArangoClient(config!);
+  const database = arangoDatabaseName(projectName);
+  const result = await queryArangoCursor(
+    client,
+    database,
+    `FOR edge IN link
+      FILTER edge.sqlite_id == @attributeId AND edge.target_id == @targetId
+      LIMIT 1 RETURN edge`,
+    { attributeId, targetId: String(targetId).replace(/^entity\//, "") },
+  );
+  return result[0] || null;
 }
 
 export function documentKey(id: unknown) {

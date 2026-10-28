@@ -155,6 +155,7 @@
             <img id="appBannerPreview" alt="Banner 背景预览" hidden style="width:100%;height:120px;object-fit:cover;border-radius:8px" />
           </div>
           <div class="form-actions">
+            <button type="button" class="btn" id="openKnowledgeSync">知识同步</button>
             <button type="submit" class="btn primary">保存</button>
             <button type="button" class="btn" id="closeAppSettingsModal">取消</button>
           </div>
@@ -162,6 +163,7 @@
       </div>
     `;
     document.body.appendChild(modal);
+    modal.querySelector('#openKnowledgeSync').onclick = () => openKnowledgeSync();
     // Logo 是应用最直观的标识，置于设置表单顶部方便先预览和替换。
     const settingsForm = modal.querySelector('#appSettingsForm');
     const logoGroup = modal.querySelector('#appLogo')?.closest('.form-group');
@@ -227,6 +229,55 @@
       };
     }
     return modal;
+  }
+
+  async function openKnowledgeSync() {
+    const database = getCurrentDbSlug();
+    if (!database) return;
+    let panel = document.getElementById('knowledgeSyncModal');
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = 'knowledgeSyncModal';
+      panel.className = 'modal-overlay';
+      panel.style.zIndex = '10001';
+      panel.innerHTML = `<div class="modal-content" style="padding:24px;max-width:560px">
+        <h3>知识同步</h3>
+        <p>将当前应用的 SQLite 实体、分类、维护权限、属性和关系导入 ArangoDB，再同步到 Elasticsearch。</p>
+        <p>相同 ID 的实体及其出向关系将以 SQLite 内容覆盖。仅存在于 ArangoDB 的其他实体会保留。失败后可重新执行；已完成的批次会保留。</p>
+        <p data-sync-status role="status" aria-live="polite"></p>
+        <div class="form-actions"><button type="button" class="btn primary" data-sync-start>开始同步</button><button type="button" class="btn" data-sync-close>关闭</button></div>
+      </div>`;
+      document.body.appendChild(panel);
+    }
+    panel.style.display = 'flex';
+    const status = panel.querySelector('[data-sync-status]');
+    const start = panel.querySelector('[data-sync-start]');
+    let timer;
+    panel.querySelector('[data-sync-close]').onclick = () => { clearTimeout(timer); panel.style.display = 'none'; };
+    const endpoint = '/api/kb/knowledge-sync/sqlite/';
+    const request = async (action, method = 'GET') => {
+      const response = await fetch(`${endpoint}${action}?db=${encodeURIComponent(database)}`, { method });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '同步请求失败');
+      return data;
+    };
+    const refresh = async () => {
+      clearTimeout(timer);
+      try {
+        const data = await request('status');
+        start.disabled = data.state === 'running' || !data.configured;
+        const phases = { sqlite: '读取 SQLite', arangodb: '写入 ArangoDB', elasticsearch: '同步 Elasticsearch' };
+        status.textContent = !data.configured ? '尚未配置 ArangoDB / Elasticsearch 连接。' : data.state === 'idle' ? '需要系统管理员权限。尚未开始同步。' :
+          `${data.state === 'completed' ? '同步完成' : data.state === 'failed' ? '同步失败' : phases[data.phase] || '同步中'}：实体 ${data.entities}/${data.total}，属性及关系边 ${data.links}。${data.error || ''}`;
+        if (data.state === 'running' && panel.style.display !== 'none') timer = setTimeout(refresh, 1500);
+      } catch (error) { status.textContent = error.message; start.disabled = true; }
+    };
+    start.onclick = async () => {
+      start.disabled = true;
+      try { await request('start', 'POST'); await refresh(); }
+      catch (error) { status.textContent = error.message; start.disabled = false; }
+    };
+    await refresh();
   }
 
   async function submitSettings() {

@@ -11,8 +11,16 @@ import { canAccessKnowledge, knowledgeContext } from '../knowledge-access.ts';
 import { appendVideoCoverPairs } from '../video-cover-pairing.ts';
 import { importEntity, EntityImportError, localizeEntityImportMedia, cleanupLocalizedEntityImport } from '../entity-import.ts';
 import {
+  isArangoSearchEnabled,
   isElasticsearchSearchEnabled,
+  searchArangoEntities,
   queryArangoIncomingRelations,
+  queryArangoEntity,
+  queryArangoGraph,
+  queryArangoNodeGraph,
+  queryArangoNodeRelations,
+  queryArangoNodeAttributes,
+  queryArangoEdge,
   searchElasticsearchEntities,
 } from "../arangodb.ts";
 import {
@@ -93,6 +101,33 @@ function elasticsearchEntityNode(document: Record<string, any>) {
   });
 }
 
+function arangoEntityNode(document: Record<string, any>) {
+  const entityId = String(document.sqlite_id || document.id || "").replace(/^entity\//, "");
+  return entityId ? elasticsearchEntityNode({ ...document, sqlite_id: entityId }) : null;
+}
+
+function arangoEntityEdge(edge: Record<string, any>) {
+  const source = String(edge.source_id || "").replace(/^entity\//, "");
+  const target = String(edge.target_id || "").replace(/^entity\//, "");
+  const propertyId = String(edge.property_id || "");
+  const propertyName = String(edge.property_name || propertyId || "关联");
+  return {
+    id: `${edge.sqlite_id || edge._key || edge._id}:${target}`,
+    source,
+    target,
+    type: propertyId,
+    property: propertyId,
+    property_label_zh: propertyName,
+    label: propertyName,
+    value: edge.mainsnak?.datavalue?.value,
+    mainsnak: edge.mainsnak,
+    rank: edge.rank,
+    qualifiers: edge.qualifiers || {},
+    references: edge.references || [],
+    data: JSON.stringify({ isAttribute: true }),
+  };
+}
+
 export async function handleCoreKbRoutes(
   req: Request,
   url: URL,
@@ -103,6 +138,14 @@ export async function handleCoreKbRoutes(
     dbParam && dbParam !== "app" ? getProjectByIdentifier(dbParam) : null;
   const scopedProjectId = Number(scopedProject?.id || 0) || null;
   const hasProjectScope = scopedProjectId !== null;
+  const currentArangoProject = () => {
+    const project = scopedProject || (db.query(
+      "SELECT id, name FROM projects WHERE is_default=1 ORDER BY id LIMIT 1",
+    ).get() as any);
+    return project?.name
+      ? { id: Number(project.id), name: String(project.name) }
+      : null;
+  };
   const scopedClause = (alias = "") => {
     const prefix = alias ? `${alias}.` : "";
     return `${prefix}project_id = ?`;
@@ -1856,6 +1899,35 @@ export async function handleCoreKbRoutes(
 
   if (url.pathname === "/api/kb/graph" && method === "GET") {
     const classId = (url.searchParams.get("class_id") || "").trim();
+    const project = isArangoSearchEnabled() ? currentArangoProject() : null;
+    if (project) {
+      const graph = await queryArangoGraph(project.name, {
+        classId,
+        projectId: project.id,
+      });
+      if (graph) {
+        const requestUser = knowledgeContext.getStore()?.user || getKnowledgeUser(req);
+        const nodes = graph.nodes
+          .filter((document: any) => canAccessKnowledge(
+            db,
+            requestUser,
+            String(document.sqlite_id || document.id || "").replace(/^entity\//, ""),
+          ))
+          .map(arangoEntityNode)
+          .filter(Boolean) as any[];
+        const visibleIds = new Set(nodes.map((node) => String(node.id)));
+        const edges = graph.edges
+          .map(arangoEntityEdge)
+          .filter((edge: any) => visibleIds.has(edge.source) && visibleIds.has(edge.target));
+        return Response.json({
+          nodes,
+          edges,
+          counts: { nodes: nodes.length, edges: edges.length },
+          source: "arangodb_graph",
+        });
+      }
+    }
+
     const conditions = hasProjectScope ? [scopedClause()] : [];
     const nodesParams = hasProjectScope ? [scopedProjectId] : [];
     if (classId) {
@@ -1926,6 +1998,39 @@ export async function handleCoreKbRoutes(
     const direction = String(url.searchParams.get("direction") || "both")
       .trim()
       .toLowerCase();
+    const project = isArangoSearchEnabled() ? currentArangoProject() : null;
+    if (project) {
+      const normalizedId = id.replace(/^entity\//, "");
+      const traversalDirection = direction === "incoming"
+        ? "INBOUND"
+        : direction === "outgoing"
+          ? "OUTBOUND"
+          : "ANY";
+      const graph = await queryArangoNodeGraph(project.name, normalizedId, traversalDirection);
+      if (graph) {
+        const requestUser = knowledgeContext.getStore()?.user || getKnowledgeUser(req);
+        const center = graph.center ? arangoEntityNode(graph.center) : null;
+        if (!center || !canAccessKnowledge(db, requestUser, normalizedId)) {
+          return Response.json({ nodes: [], edges: [], source: "arangodb_graph" });
+        }
+        const nodesById = new Map<string, any>([[String(center.id), center]]);
+        const edges: any[] = [];
+        for (const result of graph.neighbors) {
+          const node = arangoEntityNode(result.vertex);
+          if (!node || !canAccessKnowledge(db, requestUser, String(node.id))) continue;
+          nodesById.set(String(node.id), node);
+          edges.push(arangoEntityEdge(result.edge));
+        }
+        const visibleIds = new Set(nodesById.keys());
+        const visibleEdges = edges.filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target));
+        return Response.json({
+          nodes: [...nodesById.values()],
+          edges: visibleEdges,
+          source: "arangodb_graph",
+        });
+      }
+    }
+
     const includeOutgoing = direction !== "incoming";
     const includeIncoming = direction !== "outgoing";
 
@@ -2054,6 +2159,47 @@ export async function handleCoreKbRoutes(
     const hasMedia = ["1", "true"].includes(
       (url.searchParams.get("has_media") || "").trim().toLowerCase(),
     );
+
+    if ((url.searchParams.get("source") || "").trim().toLowerCase() === "arangodb") {
+      const project = isArangoSearchEnabled() ? currentArangoProject() : null;
+      if (!isArangoSearchEnabled() || !project) {
+        return Response.json(
+          { error: "ArangoDB entity search is unavailable for the current application" },
+          { status: 503 },
+        );
+      }
+      let classIds: string[] | undefined;
+      if (classId || definedClassOnly) {
+        const availableClassIds = definedClassOnly
+          ? (db.query(
+              "SELECT id FROM classes WHERE project_id = ? OR project_id IS NULL",
+            ).all(project.id) as any[]).map((row) => String(row.id))
+          : [];
+        classIds = classId
+          ? (definedClassOnly && !availableClassIds.includes(classId) ? [] : [classId])
+          : availableClassIds;
+      }
+      const result = await searchArangoEntities(project.name, {
+        projectId: project.id,
+        query: q,
+        limit,
+        offset,
+        classIds,
+        includeTypes: typeFilterRaw ? [typeFilterRaw.trim()] : undefined,
+      });
+      if (!result) {
+        return Response.json({ error: "ArangoDB entity search is not configured" }, { status: 503 });
+      }
+      const requestUser = knowledgeContext.getStore()?.user || getKnowledgeUser(req);
+      const nodes = result.documents
+        .map(arangoEntityNode)
+        .filter((node: any) => node && canAccessKnowledge(db, requestUser, String(node.id)));
+      return Response.json({
+        nodes,
+        total: result.total,
+        searchBackend: "arangodb_view",
+      });
+    }
 
     const params: any[] = [];
     const countParams: any[] = [];
@@ -5079,6 +5225,66 @@ export async function handleCoreKbRoutes(
     let id = url.searchParams.get("id");
     if (!id) return new Response("Missing id", { status: 400 });
 
+    const project = isArangoSearchEnabled() ? currentArangoProject() : null;
+    if (project && isArangoSearchEnabled()) {
+      const nodeId = id.replace(/^entity\//, "");
+      const document = await queryArangoEntity(project.name, nodeId);
+      if (document) {
+        const requestUser = knowledgeContext.getStore()?.user || getKnowledgeUser(req);
+        if (!canAccessKnowledge(db, requestUser, nodeId)) {
+          return new Response("Not found", { status: 404 });
+        }
+        const node = arangoEntityNode(document);
+        const outgoing = await queryArangoNodeGraph(project.name, nodeId, "OUTBOUND");
+        const neighbors: any[] = [];
+        for (const result of outgoing?.neighbors || []) {
+          const target = arangoEntityNode(result.vertex);
+          if (!target || !canAccessKnowledge(db, requestUser, String(target.id))) continue;
+          neighbors.push({ node: target, edge: arangoEntityEdge(result.edge) });
+        }
+        const arangoRelations = await queryArangoIncomingRelations(project.name, nodeId);
+        const incomingRelations: any[] = [];
+        if (arangoRelations && !Array.isArray(arangoRelations)) {
+          const relationSources = new Map<string, any>();
+          for (const relation of arangoRelations.relations) {
+            const source = arangoEntityNode(relation.source);
+            if (!source || !canAccessKnowledge(db, requestUser, String(source.id))) continue;
+            const relationItem = {
+              source,
+              propertyId: String(relation.propertyId || ""),
+              propertyName: String(relation.propertyName || relation.propertyId || "关联"),
+            };
+            incomingRelations.push(relationItem);
+            relationSources.set(String(source.id), relationItem);
+          }
+          const secondLevelByTarget = new Map<string, any[]>();
+          for (const relation of arangoRelations.secondLevel) {
+            const targetId = String(relation.targetId || "").replace(/^entity\//, "");
+            const source = arangoEntityNode(relation.source);
+            if (!targetId || !source || source.id === nodeId || !canAccessKnowledge(db, requestUser, String(source.id))) continue;
+            const children = secondLevelByTarget.get(targetId) || [];
+            children.push({
+              source,
+              propertyId: String(relation.propertyId || ""),
+              propertyName: String(relation.propertyName || relation.propertyId || "关联"),
+            });
+            secondLevelByTarget.set(targetId, children);
+          }
+          for (const [sourceId, relation] of relationSources) {
+            const secondLevel = secondLevelByTarget.get(sourceId);
+            if (secondLevel?.length) relation.secondLevel = secondLevel;
+          }
+        }
+        return Response.json({
+          node,
+          neighbors,
+          incomingRelations,
+          source: "arangodb_graph",
+        });
+      }
+      return new Response("Not found", { status: 404 });
+    }
+
     let node = hasProjectScope
       ? db
           .query(`SELECT * FROM nodes WHERE id = ? AND ${scopedClause()}`)
@@ -5325,6 +5531,39 @@ export async function handleCoreKbRoutes(
         "1" ||
       String(url.searchParams.get("status") || "").toLowerCase() === "all";
 
+    const project = isArangoSearchEnabled() ? currentArangoProject() : null;
+    if (project && isArangoSearchEnabled()) {
+      const nodeId = id.replace(/^entity\//, "");
+      const document = await queryArangoEntity(project.name, nodeId);
+      if (!document) return new Response("Not found", { status: 404 });
+      const arangoEdges = await queryArangoNodeAttributes(project.name, nodeId);
+      if (arangoEdges) {
+        const requestUser = knowledgeContext.getStore()?.user || getKnowledgeUser(req);
+        if (!canAccessKnowledge(db, requestUser, nodeId)) return new Response("Not found", { status: 404 });
+        const deprecatedPropertyIds = includeDeprecated
+          ? new Set<string>()
+          : new Set(
+              (db.query(
+                `SELECT id FROM properties
+                 WHERE status IS NOT NULL AND status <> 'active'
+                   AND (project_id = ? OR project_id IS NULL)`,
+              ).all(project.id) as any[]).map((row) => String(row.id)),
+            );
+        const attributes = new Map<string, any>();
+        for (const edge of arangoEdges) {
+          const attribute = edge.attribute;
+          if (!attribute?.id || deprecatedPropertyIds.has(String(attribute.key || ""))) continue;
+          attributes.set(String(attribute.id), formatAttribute(attribute));
+        }
+        return Response.json(
+          relationAttributeResponse(
+            [...attributes.values()],
+            document.relation_order,
+          ),
+        );
+      }
+    }
+
     if (id.startsWith("entity/")) {
       const stripped = id.replace("entity/", "");
       const nodeExists = hasProjectScope
@@ -5496,6 +5735,25 @@ export async function handleCoreKbRoutes(
     let id = url.searchParams.get("id");
     if (!id) return new Response("Missing id", { status: 400 });
 
+    const project = isArangoSearchEnabled() ? currentArangoProject() : null;
+    if (project && isArangoSearchEnabled()) {
+      const nodeId = id.replace(/^entity\//, "");
+      const arangoEdges = await queryArangoNodeRelations(project.name, nodeId);
+      if (arangoEdges) {
+        const requestUser = knowledgeContext.getStore()?.user || getKnowledgeUser(req);
+        if (!canAccessKnowledge(db, requestUser, nodeId)) return new Response("Not found", { status: 404 });
+        const items = arangoEdges
+          .filter((edge: any) => {
+            const sourceId = String(edge.source_id || "").replace(/^entity\//, "");
+            const targetId = String(edge.target_id || "").replace(/^entity\//, "");
+            return canAccessKnowledge(db, requestUser, sourceId)
+              && canAccessKnowledge(db, requestUser, targetId);
+          })
+          .map(arangoEntityEdge);
+        return Response.json({ items, source: "arangodb_graph" });
+      }
+    }
+
     if (id.startsWith("entity/")) {
       const stripped = id.replace("entity/", "");
       const nodeExists = hasProjectScope
@@ -5568,6 +5826,22 @@ export async function handleCoreKbRoutes(
 
     const attrId = parts[0] as string;
     const targetId = parts.slice(1).join(":");
+    const project = isArangoSearchEnabled() ? currentArangoProject() : null;
+    if (project && isArangoSearchEnabled()) {
+      const edge = await queryArangoEdge(project.name, attrId, targetId);
+      if (edge) {
+        const requestUser = knowledgeContext.getStore()?.user || getKnowledgeUser(req);
+        const sourceId = String(edge.source_id || "").replace(/^entity\//, "");
+        const normalizedTargetId = String(edge.target_id || "").replace(/^entity\//, "");
+        if (!canAccessKnowledge(db, requestUser, sourceId)
+          || !canAccessKnowledge(db, requestUser, normalizedTargetId)) {
+          return new Response("Not found", { status: 404 });
+        }
+        return Response.json(arangoEntityEdge(edge));
+      }
+      return new Response("Not found", { status: 404 });
+    }
+
     const attr = db
       .query("SELECT * FROM attributes WHERE id = ?")
       .get(attrId) as any;

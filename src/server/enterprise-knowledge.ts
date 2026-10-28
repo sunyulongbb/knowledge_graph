@@ -1,4 +1,5 @@
 import { appendVideoCoverPairs } from './video-cover-pairing.ts';
+import { knowledgeMedia } from '../shared/knowledge-media.ts';
 import { randomUUID } from 'node:crypto';
 import {
   ArangoClient, arangoDatabaseName, configFromEnvironment,
@@ -39,7 +40,7 @@ export function arangoNodeResponse(node: Doc, user: KnowledgeUser | null): Doc {
   const aliases = Object.values(node.aliases || {}).flatMap((v: any) => Array.isArray(v) ? v : [v]).map((v: any) => v?.value).filter(Boolean);
   const categories = node.class_ids || [];
   const { _relationGraphSnapshot, ...data } = json(node.data, {});
-  const images = json(node.images, []), covers = json(node.covers, []), videos = json(node.videos, []);
+  const { images, covers, videos } = knowledgeMedia(node, node._search_attributes || []);
   const name = localizedText(node.labels) || node.name || '';
   const description = localizedText(node.descriptions) || node.description || '';
   return {

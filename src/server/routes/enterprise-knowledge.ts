@@ -1,4 +1,5 @@
 import type { EnterpriseKnowledgeSearch } from '../enterprise-search.ts';
+import type { EnterpriseSqliteBackup } from '../enterprise-sqlite-backup.ts';
 import { prepareEntityImageValues } from '../entity-media-images.ts';
 import { marked } from 'marked';
 import { enterpriseKnowledgeEnabled } from '../knowledge-mode.ts';
@@ -13,6 +14,7 @@ type Doc = Record<string, any>;
 type Dependencies = {
   store: EnterpriseKnowledgeStore;
   sync?: ArangoElasticsearchSync;
+  backup?: EnterpriseSqliteBackup;
   search?: EnterpriseKnowledgeSearch;
   getUser: (req: Request) => KnowledgeUser | null;
   getProject: (identifier: string) => Doc | null;
@@ -37,9 +39,19 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
       if (enterpriseMediaPath(url.pathname)) {
         const projects = url.searchParams.has('db') ? [deps.getProject(url.searchParams.get('db')!)].filter(Boolean) : deps.listProjects?.() || [deps.getProject('default')].filter(Boolean);
         const user = deps.getUser(req);
+        let backendError: unknown;
         for (const project of projects) {
-          if (await deps.store.mediaReadable(project!.name, url.pathname, user)) return await deps.serveMedia?.(req, url.pathname) || new Response('Not Found', { status: 404 });
+          let readable = false;
+          try { readable = await deps.store.mediaReadable(project!.name, url.pathname, user); }
+          catch (error: any) {
+            // SQLite may still list applications not migrated to ArangoDB.
+            // A missing database must not block media belonging to another app.
+            if (error?.status !== 404 || error?.body?.errorNum !== 1228) backendError = error;
+            continue;
+          }
+          if (readable) return await deps.serveMedia?.(req, url.pathname) || new Response('Not Found', { status: 404 });
         }
+        if (backendError) throw backendError;
         return new Response('Not Found', { status: 404 });
       }
       if (url.pathname === '/api/kb/classes' && method === 'POST') return null;
@@ -72,6 +84,10 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
         return user;
       };
       const synchronizeWrite = async () => {
+        if (deps.backup) {
+          try { await deps.backup.afterWrite(database); }
+          catch (error) { console.error('Knowledge saved to ArangoDB; SQLite backup will retry:', error); }
+        }
         if (!deps.sync) return 'disabled';
         try { await deps.sync.afterWrite(database); return 'synced'; }
         catch (error) { console.error('Knowledge saved to ArangoDB; Elasticsearch synchronization will retry:', error); return 'pending'; }
@@ -174,6 +190,7 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
       if (path === '/api/kb/node' && method === 'GET') {
         if (!id) throw new KnowledgeStoreError('缺少知识 ID');
         const node = await store.require(database, id, user);
+        node._search_attributes = await store.attributes(database, id);
         const rows = await store.relations(database, id, user);
         const neighbors = new Map<string, Doc>();
         const incomingRelations: Doc[] = [];
@@ -248,7 +265,7 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
       }
       if (path === '/api/kb/knowledge-sync/status' && method === 'GET') {
         if (user?.role !== 'admin') throw new KnowledgeStoreError('需要管理员权限', 403);
-        return Response.json({ backend: 'arangodb', elasticsearchConfigured: Boolean(deps.sync), ...(deps.sync?.status(database) || { source: 'entity', mode: 'disabled' }) });
+        return Response.json({ backend: 'arangodb', sqliteBackup: deps.backup?.status(database) || null, elasticsearchConfigured: Boolean(deps.sync), ...(deps.sync?.status(database) || { source: 'entity', mode: 'disabled' }) });
       }
       if (path === '/api/kb/knowledge-sync/reindex' && method === 'POST') {
         if (loggedIn().role !== 'admin') throw new KnowledgeStoreError('需要管理员权限', 403);
@@ -267,6 +284,13 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
       // Never fall through to a legacy SQLite knowledge endpoint in Enterprise.
       return Response.json({ error: '此知识接口尚未迁移到 ArangoDB', code: 'ENTERPRISE_ROUTE_UNAVAILABLE', path }, { status: 501 });
     } catch (error: any) {
+      if (error?.status === 404 && error?.body?.errorNum === 1228) {
+        return Response.json({
+          error: '当前应用尚未初始化 ArangoDB 知识库，请由系统管理员在「应用设置 → 知识同步」导入 SQLite 知识数据',
+          code: 'KNOWLEDGE_DATABASE_NOT_INITIALIZED',
+          database: deps.getProject(url.searchParams.get('db') || 'default')?.name,
+        }, { status: 409 });
+      }
       if (error instanceof KnowledgeStoreError || error instanceof TypeError || error instanceof RangeError) {
         return Response.json({ error: error.message }, { status: error instanceof KnowledgeStoreError ? error.status : 400 });
       }
