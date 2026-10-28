@@ -2,7 +2,7 @@ import { EnterpriseKnowledgeSearch } from '../src/server/enterprise-search.ts';
 import { createEnterpriseKnowledgeHandler } from '../src/server/routes/enterprise-knowledge.ts';
 /** Uses an isolated, disposable database/index. Never reads or changes production knowledge. */
 import { strict as assert } from 'node:assert';
-import { ArangoClient, ElasticsearchClient, documentKey, elasticsearchEntityIndexName } from '../src/server/arangodb.ts';
+import { ArangoClient, ElasticsearchClient, documentKey, elasticsearchEntityIndexName, ensureApplicationDatabase } from '../src/server/arangodb.ts';
 import { EnterpriseKnowledgeStore, ArangoElasticsearchSync } from '../src/server/enterprise-knowledge.ts';
 
 const name = `codex_verify_${Date.now()}`;
@@ -19,9 +19,8 @@ let created = false;
 try {
   await arango.system('/_api/database', { method: 'POST', body: JSON.stringify({ name }) });
   created = true;
-  for (const [collection, type] of [['entity', 2], ['link', 3]] as const) {
-    await arango.database(name, '/_api/collection', { method: 'POST', body: JSON.stringify({ name: collection, type }) });
-  }
+  await ensureApplicationDatabase(arango, name);
+  await ensureApplicationDatabase(arango, name);
   await store.create(name, 7, { id: 'source', name: '知识测试', description: '首个版本', visibility: 'private', categoryIds: ['class/a'] }, owner);
   await store.create(name, 7, { id: 'target', name: '关系目标', images: ['/static/uploads/node-images/test.png'] }, owner);
   await store.update(name, 'target', { name: '123', description: 'true' }, owner);

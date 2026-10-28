@@ -57,7 +57,7 @@ export function applicationPermissions(db: Database, user: KnowledgeUser | null,
   };
 }
 
-export function createApplicationHandler(db: Database, getUser: (req: Request) => KnowledgeUser | null, cloneOptions: { uploadsRoot?: string } = {}) {
+export function createApplicationHandler(db: Database, getUser: (req: Request) => KnowledgeUser | null, cloneOptions: { uploadsRoot?: string; provisionKnowledge?: (name: string) => Promise<unknown> } = {}) {
   const error = (message: string, status = 400) => Response.json({ error: message, message, success: false }, { status });
   const projectBy = (key: unknown, byId = false) => byId
     ? db.query('SELECT * FROM projects WHERE id=?').get(Number(key) || -1) as any
@@ -174,6 +174,10 @@ export function createApplicationHandler(db: Database, getUser: (req: Request) =
     // Existing switchers use this GET. It now only resolves an existing app.
     if (path === '/api/kb/create_project' && method === 'GET') {
       const project = projectBy(url.searchParams.get('name'));
+      if (project && cloneOptions.provisionKnowledge) {
+        try { await cloneOptions.provisionKnowledge(project.name); }
+        catch (cause) { return error(`初始化知识数据库失败：${cause instanceof Error ? cause.message : String(cause)}`, 503); }
+      }
       return project ? Response.json({ success: true, project: record(project, user) }) : error('应用不存在，请登录后创建', 404);
     }
     if ((path === '/api/applications' || path === '/api/kb/create_project') && method === 'POST') {
@@ -185,6 +189,11 @@ export function createApplicationHandler(db: Database, getUser: (req: Request) =
       if (!isValidApplicationName(name, ['app', 'shared'], Boolean(process.env.ARANGO_URL))) return error(process.env.ARANGO_URL ? 'Enterprise 应用短名须以字母开头，且只能包含 1–64 位字母、数字、下划线或短横线' : '应用短名须为 1–64 位字母、数字、下划线或短横线，不能为纯数字、app 或 shared');
       if (!title || title.length > 100 || description.length > 2000) return error('名称最多 100 字，描述最多 2000 字');
       if (projectBy(name)) return error('应用短名已存在', 409);
+      try { await cloneOptions.provisionKnowledge?.(name); }
+      catch (cause) {
+        console.error(`Provisioning application ${name} failed`, cause);
+        return error(`创建知识数据库失败：${cause instanceof Error ? cause.message : String(cause)}`, 503);
+      }
       db.run("INSERT INTO projects(name,title,description,file,image,theme_color,tags,link,owner_user_id,banner_image) VALUES(?,?,?,'app.sqlite',?,'#ff7a2b','[]',?,?,?)", [name, title, description, String(body.image || ''), String(body.link || ''), user.id, String(body.banner_image || '').trim()]);
       return Response.json({ success: true, project: record(projectBy(name), user) }, { status: 201 });
     }
@@ -209,6 +218,7 @@ export function createApplicationHandler(db: Database, getUser: (req: Request) =
       let cloned: any = null;
       let clonedProjectId = 0;
       try {
+        await cloneOptions.provisionKnowledge?.(name);
         cloned = db.transaction(() => {
           db.run("INSERT INTO projects(name,title,description,file,image,theme_color,tags,link,owner_user_id,banner_image) VALUES(?,?,?,'app.sqlite',?,?,?,?,?,?)", [name, title, String(project.description || ''), String(project.image || ''), String(project.theme_color || '#ff7a2b'), String(project.tags || '[]'), String(project.link || ''), user.id, String(project.banner_image || '')]);
           const target = projectBy(name);

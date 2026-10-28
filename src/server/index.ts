@@ -2,7 +2,7 @@ import { EnterpriseKnowledgeSearch } from './enterprise-search.ts';
 import { createGraphCanvasHandler } from './graph-canvases.ts';
 import { enterpriseKnowledgeEnabled } from './knowledge-mode.ts';
 import { EnterpriseKnowledgeStore, ArangoElasticsearchSync } from './enterprise-knowledge.ts';
-import { ElasticsearchClient } from './arangodb.ts';
+import { ElasticsearchClient, ensureApplicationDatabase } from './arangodb.ts';
 import { createEnterpriseKnowledgeHandler } from './routes/enterprise-knowledge.ts';
 import { applicationPermissions } from './application-access.ts';
 import { networkInterfaces } from "node:os";
@@ -55,11 +55,13 @@ if (initialAdmin) {
   }
 }
 const handleGraphCanvases = createGraphCanvasHandler(adminDb, getKnowledgeUser, getProjectByIdentifier);
-const handleApplications = createApplicationHandler(adminDb, getCurrentUser);
 const handleUserProfile = createUserProfileHandler(adminDb, getCurrentUser);
 
 console.log(`[Knowledge storage] ${enterpriseKnowledgeEnabled() ? 'arangodb (Enterprise)' : 'sqlite (Lite)'}`);
 const enterpriseStore = enterpriseKnowledgeEnabled() ? EnterpriseKnowledgeStore.configured() : null;
+const handleApplications = createApplicationHandler(adminDb, getCurrentUser, {
+  provisionKnowledge: enterpriseStore ? name => ensureApplicationDatabase(enterpriseStore.client, name) : undefined,
+});
 const enterpriseSync = enterpriseStore && process.env.ELASTICSEARCH_URL?.trim()
   ? new ArangoElasticsearchSync(enterpriseStore, new ElasticsearchClient({ url: process.env.ELASTICSEARCH_URL.trim().replace(/\/+$/, '') }))
   : undefined;
@@ -76,7 +78,12 @@ const handleEnterpriseKnowledge = enterpriseStore ? createEnterpriseKnowledgeHan
     properties: adminDb.query('SELECT id,name,datatype,status FROM properties WHERE project_id=?').all(project.id),
   }),
 }) : null;
-enterpriseSync?.start(async () => (adminDb.query('SELECT name FROM projects ORDER BY id').all() as { name: string }[]).map(project => project.name));
+enterpriseSync?.start(async () => {
+  const { body } = await enterpriseStore!.client.system('/_api/database');
+  const existing = new Set<string>(body.result);
+  return (adminDb.query('SELECT name FROM projects ORDER BY id').all() as { name: string }[])
+    .map(project => project.name).filter(name => existing.has(name));
+});
 
 const server = Bun.serve({
   port: port,

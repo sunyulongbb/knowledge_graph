@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-function setup(cloneOptions: { uploadsRoot?: string } = {}) {
+function setup(cloneOptions: { uploadsRoot?: string; provisionKnowledge?: (name: string) => Promise<unknown> } = {}) {
   const db = new Database(':memory:');
   db.run('PRAGMA foreign_keys=ON');
   db.run("CREATE TABLE users(id INTEGER PRIMARY KEY,username TEXT,display_name TEXT,status TEXT DEFAULT 'active')");
@@ -23,6 +23,38 @@ function setup(cloneOptions: { uploadsRoot?: string } = {}) {
   };
   return { db, call, users };
 }
+
+test('creating an application provisions knowledge storage before reporting success', async () => {
+  const provisioned: string[] = [];
+  const { db, call } = setup({ provisionKnowledge: async name => { provisioned.push(name); } });
+  try {
+    const response = await call('/api/applications', 1, { name: 'new_app', title: 'New App' });
+    expect(response!.status).toBe(201);
+    expect(provisioned).toEqual(['new_app']);
+    expect(db.query('SELECT name FROM projects WHERE name=?').get('new_app')).toEqual({ name: 'new_app' });
+  } finally { db.close(); }
+});
+
+test('database provisioning failures do not create an unusable application record', async () => {
+  const { db, call } = setup({ provisionKnowledge: async () => { throw new Error('database unavailable'); } });
+  try {
+    const response = await call('/api/applications', 1, { name: 'failed_app' });
+    expect(response!.status).toBe(503);
+    expect(db.query('SELECT name FROM projects WHERE name=?').get('failed_app')).toBeNull();
+  } finally { db.close(); }
+});
+
+test('legacy create and switch both initialize the application knowledge database', async () => {
+  const provisioned: string[] = [];
+  const { db, call } = setup({ provisionKnowledge: async name => { provisioned.push(name); } });
+  try {
+    expect((await call('/api/kb/create_project', 1, { name: 'project_new' }))!.status).toBe(201);
+    expect((await call('/api/kb/create_project?name=project_new', 1))!.status).toBe(200);
+    expect(provisioned).toEqual(['project_new', 'project_new']);
+    expect((await call('/api/kb/create_project?name=unknown', 1))!.status).toBe(404);
+    expect(provisioned).toHaveLength(2);
+  } finally { db.close(); }
+});
 
 test('Enterprise-compatible application names start with a letter without restricting Lite names', () => {
   expect(isValidApplicationName('123qwe')).toBe(true);

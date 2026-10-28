@@ -100,7 +100,7 @@ export class ArangoClient {
     }
     if (!response.ok) {
       const detail = body?.errorMessage || body?.message || response.statusText;
-      throw Object.assign(new Error(`ArangoDB HTTP ${response.status}: ${detail || "request failed"}`), {
+      throw Object.assign(new Error(`ArangoDB HTTP ${response.status}: ${detail || "request failed"} (${init.method || 'GET'} ${new URL(url).pathname})`), {
         status: response.status,
         body,
       });
@@ -745,7 +745,7 @@ async function ensureView(client: ArangoClient, dbName: string) {
   });
 }
 
-async function ensureApplicationDatabase(client: ArangoClient, projectName: string) {
+export async function ensureApplicationDatabase(client: ArangoClient, projectName: string) {
   const dbName = await createDatabase(client, projectName);
   await ensureCollection(client, dbName, "entity", 2);
   await ensureCollection(client, dbName, "link", 3);
