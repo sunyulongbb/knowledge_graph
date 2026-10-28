@@ -97,3 +97,20 @@ test('entity image deletion is staged and persisted by the normal save action', 
   expect(indexSource).toContain("'已删除图片预览，点击保存后同步到知识。'");
   expect(indexSource).toContain('? { images: pendingHeaderImages }');
 });
+
+test('application scope is ready before startup hydration and follows application switches', () => {
+  const scope = readFileSync(new URL('../public/assets/scripts/application-scope.js', import.meta.url), 'utf8');
+  const window: any = { location: { href: 'http://localhost:8080/?db=project_a#view=detail&node=1341', origin: 'http://localhost:8080' } };
+  new Function('window', 'URL', scope)(window, URL);
+  expect(window.appendCurrentDbParam('/api/kb/node?id=entity%2F1341').searchParams.get('db')).toBe('project_a');
+  expect(window.appendCurrentDbParam('/api/kb/node?id=entity%2F1341').searchParams.get('id')).toBe('entity/1341');
+  window.location.href = 'http://localhost:8080/?db=project_b';
+  expect(window.appendCurrentDbParam('/api/kb/node').searchParams.get('db')).toBe('project_b');
+  expect(indexSource.indexOf('application-scope.js')).toBeLessThan(indexSource.indexOf('function restoreKnowledgeRouteState'));
+  expect(indexSource.indexOf('application-scope.js')).toBeLessThan(indexSource.indexOf('detail-panel.js'));
+});
+test('opening the editor directly from a detail URL keeps its application scope', () => {
+  const start = indexSource.indexOf('    async function enterEditById(');
+  const block = indexSource.slice(start, indexSource.indexOf('    async function ', start + 35));
+  expect(block).toContain('window.appendCurrentDbParam(url)');
+});

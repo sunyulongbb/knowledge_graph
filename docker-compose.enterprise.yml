@@ -5,6 +5,7 @@ services:
       - "80:8080"
     volumes:
       - ../data:/data
+      - ./uploads:/app/uploads
     environment:
       - PORT=8080
       - HOST=0.0.0.0
@@ -15,6 +16,9 @@ services:
       - ARANGO_PASSWORD=${ARANGO_ROOT_PASSWORD:?Set ARANGO_ROOT_PASSWORD in .env}
       - ELASTICSEARCH_URL=http://elasticsearch:9200
       - KNOWLEDGE_SEARCH_BACKEND=elasticsearch
+      - KNOWLEDGE_LEGACY_SQLITE_SYNC=false
+      - KNOWLEDGE_STORAGE_BACKEND=arangodb
+      - ENTITY_ES_SYNC_INTERVAL_MS=${ENTITY_ES_SYNC_INTERVAL_MS:-30000}
     depends_on:
       arangodb:
         condition: service_healthy

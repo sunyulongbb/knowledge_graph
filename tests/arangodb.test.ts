@@ -113,6 +113,7 @@ test("Enterprise startup creates per-project graph structures and migrates node/
     expect(entities).toHaveLength(3);
     const sourceEntity = entities.find((entity) => entity.sqlite_id === "source");
     expect(sourceEntity).not.toHaveProperty("attributes");
+    expect(sourceEntity.class_ids).toEqual(["class-a"]);
     expect(sourceEntity.labels).toEqual({ zh: { language: "zh", value: "源实体" } });
     expect(sourceEntity.descriptions).toEqual({ zh: { language: "zh", value: "源描述" } });
     expect(sourceEntity.aliases).toEqual({

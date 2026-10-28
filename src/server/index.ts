@@ -1,4 +1,10 @@
+import { EnterpriseKnowledgeSearch } from './enterprise-search.ts';
 import { createGraphCanvasHandler } from './graph-canvases.ts';
+import { enterpriseKnowledgeEnabled } from './knowledge-mode.ts';
+import { EnterpriseKnowledgeStore, ArangoElasticsearchSync } from './enterprise-knowledge.ts';
+import { ElasticsearchClient } from './arangodb.ts';
+import { createEnterpriseKnowledgeHandler } from './routes/enterprise-knowledge.ts';
+import { applicationPermissions } from './application-access.ts';
 import { networkInterfaces } from "node:os";
 import { switchDatabase, adminDb, hashPassword, getProjectByIdentifier } from "./db.ts";
 import { ensureInitialAdminAccount } from "./initial-admin.ts";
@@ -26,7 +32,11 @@ import { handleJevRoutes } from './routes/jev.ts';
 const port = parseInt(process.env.PORT || "8080");
 const hostname = process.env.HOST?.trim() || "0.0.0.0";
 const initialAdmin = await ensureInitialAdminAccount(adminDb, hashPassword);
-await initializeArangoKnowledgeSync(adminDb);
+// Legacy SQLite -> graph mirroring must be explicitly enabled. In Enterprise,
+// ArangoDB contains authoritative knowledge and must never be rebuilt at startup.
+if (process.env.KNOWLEDGE_LEGACY_SQLITE_SYNC === "true" && !enterpriseKnowledgeEnabled()) {
+  await initializeArangoKnowledgeSync(adminDb);
+}
 if (initialAdmin) {
   console.log("\n============================================================");
   console.log("首次运行：已自动创建系统管理员账号");
@@ -47,6 +57,26 @@ if (initialAdmin) {
 const handleGraphCanvases = createGraphCanvasHandler(adminDb, getKnowledgeUser, getProjectByIdentifier);
 const handleApplications = createApplicationHandler(adminDb, getCurrentUser);
 const handleUserProfile = createUserProfileHandler(adminDb, getCurrentUser);
+
+console.log(`[Knowledge storage] ${enterpriseKnowledgeEnabled() ? 'arangodb (Enterprise)' : 'sqlite (Lite)'}`);
+const enterpriseStore = enterpriseKnowledgeEnabled() ? EnterpriseKnowledgeStore.configured() : null;
+const enterpriseSync = enterpriseStore && process.env.ELASTICSEARCH_URL?.trim()
+  ? new ArangoElasticsearchSync(enterpriseStore, new ElasticsearchClient({ url: process.env.ELASTICSEARCH_URL.trim().replace(/\/+$/, '') }))
+  : undefined;
+const handleEnterpriseKnowledge = enterpriseStore ? createEnterpriseKnowledgeHandler({
+  store: enterpriseStore, sync: enterpriseSync,
+  search: enterpriseSync ? new EnterpriseKnowledgeSearch(enterpriseStore, enterpriseSync.elasticsearch) : undefined,
+  getUser: getKnowledgeUser, getProject: getProjectByIdentifier,
+  canCreate: (user, project) => user.role === 'admin' || applicationPermissions(adminDb, user, project).member,
+  listProjects: () => adminDb.query('SELECT id,name FROM projects ORDER BY id').all(),
+  serveMedia: serveStaticRoute,
+  getSchema: project => ({
+    classes: adminDb.query('SELECT * FROM classes WHERE project_id=? ORDER BY COALESCE(sort_order,rowid),name').all(project.id),
+    ontologies: adminDb.query('SELECT id,name,alias,color FROM ontologies WHERE project_id=?').all(project.id),
+    properties: adminDb.query('SELECT id,name,datatype,status FROM properties WHERE project_id=?').all(project.id),
+  }),
+}) : null;
+enterpriseSync?.start(async () => (adminDb.query('SELECT name FROM projects ORDER BY id').all() as { name: string }[]).map(project => project.name));
 
 const server = Bun.serve({
   port: port,
@@ -70,7 +100,7 @@ const server = Bun.serve({
     try {
       const dbParam = url.searchParams.get("db");
       const skipSwitch = ["/api/kb/list_projects", "/api/kb/create_project"];
-      if (dbParam && !skipSwitch.includes(url.pathname)) {
+      if (!enterpriseKnowledgeEnabled() && dbParam && !skipSwitch.includes(url.pathname)) {
         try {
           switchDatabase(`${dbParam}.sqlite`);
         } catch (e) {
@@ -81,6 +111,11 @@ const server = Bun.serve({
       const requestUrl = url;
       const response = await knowledgeContext.run({ user: getKnowledgeUser(req) }, async () => {
       const url = requestUrl;
+      const enterpriseResponse = await handleEnterpriseKnowledge?.(req, url, method);
+      if (enterpriseResponse) {
+        enterpriseResponse.headers.set('X-Knowledge-Storage', 'arangodb');
+        return enterpriseResponse;
+      }
       const canvasResponse = await handleGraphCanvases(req, url);
       if (canvasResponse) return canvasResponse;
       const profileResponse = await handleUserProfile(req, url, method);

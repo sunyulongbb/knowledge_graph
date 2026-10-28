@@ -5,6 +5,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>知识库</title>
+  <script src="/assets/scripts/application-scope.js?v=20261028-route-scope"></script>
 
   <script>
     // Restore the theme before styles and page content can paint.
@@ -15655,6 +15656,7 @@
       uploadedPdfUrl = (node?.pdf || "").toString().trim();
       const nodeImages = sameImageDraft ? [...(window.kbPendingEntityImages || [])] : resolveNodeImages(node);
       const nodeImagePreviewUrl = nodeImages[0] || "";
+      const nodeVideoCoverPreviewUrl = (resolveNodeImages({ images: node?.covers, image: node?.cover }) || [])[0] || "";
       window.kbPendingEntityImageDataUrl = nodeImagePreviewUrl;
       window.kbPendingEntityImages = nodeImages;
       if (!sameImageDraft) {
@@ -15710,7 +15712,7 @@
         updateEntityDisplayLink(linkUrl);
         const eImageWrap = document.getElementById('entityDisplayImageWrap');
         const eImage = document.getElementById('entityDisplayImage');
-        const imageUrl = nodeImagePreviewUrl;
+        const imageUrl = nodeImagePreviewUrl || nodeVideoCoverPreviewUrl;
         if (eImage && eImageWrap) {
           updateEntityHeaderImage(imageUrl || '');
         }
@@ -17073,6 +17075,10 @@
           }
         }
         const url = new URL("/api/kb/node", window.location.origin);
+        if (typeof window.appendCurrentDbParam === "function") {
+          const scopedUrl = window.appendCurrentDbParam(url);
+          if (scopedUrl instanceof URL) url.search = scopedUrl.search;
+        }
         url.searchParams.set("id", fullId);
         const resp = await fetch(url);
         if (!resp.ok) throw new Error("HTTP " + resp.status);
@@ -17489,7 +17495,7 @@
   <script src="/assets/scripts/property-panel.js?v=20260915-1"></script>
   <script src="/assets/scripts/table-panel.js?v=20261008-pagination"></script>
   <script src="/assets/scripts/table-selection.js?v=20261010-crumb-label"></script>
-  <script src="/assets/scripts/entity-manage-table.js?v=20260928-1"></script>
+  <script src="/assets/scripts/entity-manage-table.js?v=20261028-cover-url"></script>
   <script src="/assets/scripts/attr-panel.js?v=20260925-tail-suggestions"></script>
   <script src="/assets/scripts/entity-import.js?v=20260921-6"></script>
   <!-- relation-panel.js 已移除，使用 edgehandles 拖拽创建关系 -->
@@ -17683,7 +17689,7 @@
   <link rel="stylesheet" href="/assets/styles/pipeline.css?v=20261010-merge">
   <script src="/node_modules/drawflow/dist/drawflow.min.js"></script>
   <script type="module" src="/assets/scripts/pipeline-ui.js?v=20261010-merge3"></script>
-  <script src="/assets/scripts/ui-shell.js?v=20260928-tree-management"></script>
+  <script src="/assets/scripts/ui-shell.js?v=20261028-route-scope"></script>
 </body>
 
 </html>

@@ -40,7 +40,7 @@ export type ArangoUserDatabaseGrant = {
 
 const IMPORT_BATCH_SIZE = 250;
 
-function configFromEnvironment(): ArangoConfig | null {
+export function configFromEnvironment(): ArangoConfig | null {
   const url = process.env.ARANGO_URL?.trim();
   const username = process.env.ARANGO_USERNAME?.trim();
   const password = process.env.ARANGO_PASSWORD;
@@ -279,7 +279,7 @@ export async function queryArangoIncomingRelations(
   };
 }
 
-function documentKey(id: unknown) {
+export function documentKey(id: unknown) {
   return createHash("sha256").update(String(id)).digest("hex");
 }
 
@@ -390,7 +390,7 @@ function referencedEntityIds(value: unknown): string[] {
   return normalized ? [normalized, ...nested] : nested;
 }
 
-function entityDocument(node: Record<string, any>, syncVersion?: string, classIds: string[] = []) {
+export function entityDocument(node: Record<string, any>, syncVersion?: string, classIds: string[] = []) {
   const { name, description, aliases, ...fields } = node;
   return {
     ...fields,
@@ -416,7 +416,7 @@ function elasticsearchNotFound(error: unknown) {
   return Boolean(error && typeof error === "object" && "status" in error && error.status === 404);
 }
 
-async function ensureElasticsearchEntityIndex(client: ElasticsearchClient, projectName: string) {
+export async function ensureElasticsearchEntityIndex(client: ElasticsearchClient, projectName: string, preserveExisting = false) {
   const index = elasticsearchEntityIndexName(projectName);
   let recreate = false;
   try {
@@ -425,6 +425,7 @@ async function ensureElasticsearchEntityIndex(client: ElasticsearchClient, proje
     if (!elasticsearchNotFound(error)) throw error;
     recreate = true;
   }
+  if (!recreate && preserveExisting) return index;
   if (!recreate) {
     const { body } = await client.send(`/${encodeURIComponent(index)}/_mapping`);
     const mapping = body?.[index]?.mappings;
@@ -621,7 +622,7 @@ function claimStatement(attribute: AttributeRow) {
   };
 }
 
-function edgeDocuments(node: Record<string, any>, attributes: AttributeRow[], syncVersion?: string) {
+export function edgeDocuments(node: Record<string, any>, attributes: AttributeRow[], syncVersion?: string) {
   const edges: Record<string, unknown>[] = [];
   const sourceKey = documentKey(node.id);
   for (const attribute of attributes) {
@@ -657,6 +658,7 @@ function edgeDocuments(node: Record<string, any>, attributes: AttributeRow[], sy
           property_id: String(claim.mainsnak?.property || attribute.key || ""),
           property_name: attribute.property_name_snapshot || "",
           ...valueClaim,
+          attribute: { ...attribute },
           ...(syncVersion ? { sync_version: syncVersion } : {}),
         });
       }
@@ -797,6 +799,7 @@ async function synchronizeProjectSnapshot(client: ArangoClient, db: Database, pr
     "SELECT * FROM nodes WHERE project_id = ? OR (project_id IS NULL AND ? = (SELECT id FROM projects WHERE is_default=1 LIMIT 1)) ORDER BY id",
   ).all(projectId, projectId) as Record<string, any>[];
   const attributes = attributesForNodes(db, nodes.map((node) => String(node.id)));
+  const classIds = entityClassIds(db, nodes.map((node) => String(node.id)));
 
   for (let offset = 0; offset < nodes.length; offset += IMPORT_BATCH_SIZE) {
     const chunk = nodes.slice(offset, offset + IMPORT_BATCH_SIZE);
@@ -804,7 +807,7 @@ async function synchronizeProjectSnapshot(client: ArangoClient, db: Database, pr
       client,
       dbName,
       "entity",
-      chunk.map((node) => entityDocument(node, syncVersion)),
+      chunk.map((node) => entityDocument(node, syncVersion, classIds.get(String(node.id)) || [])),
     );
     await importDocuments(
       client,
@@ -860,7 +863,8 @@ async function synchronizeNode(
   const rows = db.query(
     "SELECT id,node_id,key,value,datatype,property_name_snapshot,statement_json,created_at FROM attributes WHERE node_id=? ORDER BY id",
   ).all(nodeId) as AttributeRow[];
-  await importDocuments(client, dbName, "entity", [entityDocument(node)]);
+  const classIds = entityClassIds(db, [nodeId]);
+  await importDocuments(client, dbName, "entity", [entityDocument(node, undefined, classIds.get(nodeId) || [])]);
   await executeAql(client, dbName, "FOR edge IN link FILTER edge._from == @vertex REMOVE edge IN link", {
     vertex: vertexId,
   });

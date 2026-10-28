@@ -8,22 +8,20 @@
       .replace(/^entity\//, "")
       .trim();
   const imageOf = (node) => {
-    const raw =
-      node?.image || node?.cover || node?.images || node?.covers || "";
-    let values = raw;
-    if (typeof raw === "string") {
+    const valuesOf = (value) => {
+      if (Array.isArray(value)) return value.flatMap(valuesOf);
+      if (value && typeof value === 'object') return valuesOf(value.url || value.src || '');
+      if (typeof value !== 'string' || !value.trim()) return [];
+      const source = value.trim();
+      // A data URL contains both a semicolon and a comma; it is one image address.
+      if (/^data:image\//i.test(source)) return [source];
       try {
-        values = JSON.parse(raw);
-      } catch {
-        values = raw.split(/[\n,，;；]+/);
-      }
-    }
-    const first = Array.isArray(values)
-      ? values.flat(Infinity).find(Boolean)
-      : values;
-    return typeof first === "object"
-      ? String(first?.url || first?.src || "")
-      : String(first || "").trim();
+        const parsed = JSON.parse(source);
+        if (parsed !== source) return valuesOf(parsed);
+      } catch {}
+      return source.split(/[\n,，;；]+/).map(item => item.trim()).filter(Boolean);
+    };
+    return [node?.image, node?.cover, node?.images, node?.covers].flatMap(valuesOf)[0] || '';
   };
   const imageCell = (node) => {
     const url = imageOf(node);

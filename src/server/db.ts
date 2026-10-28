@@ -1,3 +1,4 @@
+import { enterpriseKnowledgeEnabled } from './knowledge-mode.ts';
 import { Database } from "bun:sqlite";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync } from "fs";
 import { join, resolve } from "path";
@@ -334,7 +335,7 @@ function ensureSharedTables() {
   appDb.run(`CREATE TABLE IF NOT EXISTS login_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, username TEXT, login_at DATETIME DEFAULT CURRENT_TIMESTAMP, ip TEXT, user_agent TEXT, success INTEGER NOT NULL, failure_reason TEXT)`);
   appDb.run(`CREATE TABLE IF NOT EXISTS operation_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, username TEXT, module TEXT NOT NULL, action TEXT NOT NULL, target TEXT, path TEXT, success INTEGER NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
   appDb.run(`CREATE TABLE IF NOT EXISTS knowledge_favorites (user_id INTEGER NOT NULL, knowledge_id TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, knowledge_id))`);
-  runSafe("ALTER TABLE nodes ADD COLUMN created_by INTEGER");
+  if (!enterpriseKnowledgeEnabled()) runSafe("ALTER TABLE nodes ADD COLUMN created_by INTEGER");
   runSafe("ALTER TABLE properties ADD COLUMN tail_ontology_id TEXT");
   const defaultPermissions = ["user:view","user:create","user:update","user:delete","role:view","role:create","role:update","role:delete","permission:view","permission:update","knowledge:view","knowledge:create","knowledge:update","knowledge:delete","knowledge:audit","knowledge:like","knowledge:comment","knowledge:share","knowledge:favorite","system:config","system:log"];
   defaultPermissions.forEach((code) => appDb.run("INSERT OR IGNORE INTO permissions (code, name, module) VALUES (?, ?, ?)", [code, code, code.split(":")[0] || ""]));
@@ -368,6 +369,7 @@ function ensureSharedTables() {
   `);
   runSafe("CREATE INDEX IF NOT EXISTS idx_knowledge_reports_project_updated ON knowledge_reports(project_id, updated_at DESC)");
 
+  if (!enterpriseKnowledgeEnabled()) {
   appDb.run(`
     CREATE TABLE IF NOT EXISTS nodes (
       id TEXT PRIMARY KEY,
@@ -637,6 +639,8 @@ function ensureSharedTables() {
       `,
       ["entity_id", "class_id", "created_at"],
     );
+  }
+
   }
 
   appDb.run(`
@@ -1740,6 +1744,11 @@ export function ensureTables() {
 }
 
 export function initializeKnowledgeBaseDatabase() {
+  if (enterpriseKnowledgeEnabled()) {
+    // Enterprise must not repair, import or read offline knowledge during startup.
+    ensureSharedTables();
+    return;
+  }
   migrateLegacyDataFilesToRoot();
   ensureSharedTables();
   migrateLegacyDatabases();
@@ -1758,6 +1767,6 @@ export function switchDatabase(_filename: string) {
 export { APP_DB_FILENAME, getProjectByIdentifier };
 
 initializeKnowledgeBaseDatabase();
-ensureKnowledgeAccessSchema(appDb);
+if (!enterpriseKnowledgeEnabled()) ensureKnowledgeAccessSchema(appDb);
 ensureApplicationSchema(appDb);
 ensureDefaultApplication(appDb);
