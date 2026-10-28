@@ -1472,6 +1472,7 @@
     // user selected is an explicit entity assignment; ancestors are inferred.
     await setEntityClass(entityId, baseClassId);
   }
+  window.autoAssignSelectedClassToNode = autoAssignSelectedClassToNode;
 
   async function clearEntityClass(entityId, classId) {
     const url = appendCurrentDbToUrl(

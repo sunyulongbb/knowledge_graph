@@ -4,6 +4,24 @@ import { readFileSync } from 'node:fs';
 const source = readFileSync(new URL('../public/assets/scripts/schema-panel.js', import.meta.url), 'utf8');
 const start = source.indexOf('  async function assignSelectedEntityClass(');
 const end = source.indexOf('  async function autoAssignSelectedClassToNode(', start);
+
+test('new knowledge can call automatic classification across script scopes', async () => {
+  const window: any = { kbSelectedClassId: 'child' };
+  const writes: any[] = [];
+  const helperEnd = source.indexOf('  async function clearEntityClass(', end);
+  new Function('window', 'setEntityClass', source.slice(end, helperEnd))(
+    window, async (entityId: string, classId: string) => { writes.push({ entityId, classId }); },
+  );
+  const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  const call = html.match(/await window\.autoAssignSelectedClassToNode\(createdId\);/)?.[0];
+  expect(call).toBeDefined();
+  const invoke = new Function('window', 'createdId', `return (async () => { ${call} })();`);
+  await invoke(window, 'entity/123');
+  expect(writes).toEqual([{ entityId: 'entity/123', classId: 'child' }]);
+  window.kbSelectedClassId = '';
+  await invoke(window, 'entity/124');
+  expect(writes).toHaveLength(1);
+});
 function setup(classes: object[], assigned: object[] = [], parentMap?: Map<string, string>) {
   const saved: string[] = [];
   const assign = new Function('window', 'setEntityClass', `${source.slice(start, end)}; return assignSelectedEntityClass;`)(

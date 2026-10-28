@@ -37,6 +37,19 @@ test('formatting and patching Arango documents do not query SQLite knowledge tab
   expect(result.can_edit).toBe(true);
   expect(updated.owner_user_id).toBe(owner.id);
 });
+test('JSON scalar text from the composer survives Arango creation and editing', () => {
+  const store = new EnterpriseKnowledgeStore(new ArangoClient({ url: 'http://arango', username: 'u', password: 'p' }));
+  for (const name of ['123', '0', 'true', 'false', 'null', '1.25']) {
+    const first = store.patch(null, { id: 'text', name, description: name, aliases: name }, 7, owner);
+    expect(first.labels.zh.value).toBe(name);
+    expect(first.descriptions.zh.value).toBe(name);
+    expect(first.aliases.zh[0].value).toBe(name);
+    const updated = store.patch(first, { description: '456' }, 7, owner);
+    expect(arangoNodeResponse(updated, owner).name).toBe(name);
+    expect(arangoNodeResponse(updated, owner).description).toBe('456');
+  }
+});
+
 test('AQL cursor pagination consumes every page and cleans the cursor', async () => {
   const calls: string[] = [];
   const store = new EnterpriseKnowledgeStore(new ArangoClient({ url: 'http://arango', username: 'u', password: 'p' }, async (input, init) => {

@@ -9,7 +9,7 @@
   const hasKnowledgeAdminAccess = () => window.authUser?.role === 'admin' || hasDefaultApplicationAccess() || (window.kbApplicationProjects || []).some((project) => project.slug === window.kbApplicationScope && project.member);
   let editorNode = null;
   let generation = 0;
-  const canCreate = () => hasKnowledgeAccess() && (!window.kbApplicationScope || (window.kbApplicationProjects || []).some((project) => project.slug === window.kbApplicationScope && project.member));
+  const canCreate = () => hasDefaultApplicationAccess() || (hasKnowledgeAccess() && (!window.kbApplicationScope || (window.kbApplicationProjects || []).some((project) => project.slug === window.kbApplicationScope && project.member)));
   const canEditCurrent = () => hasDefaultApplicationAccess() || (hasKnowledgeAccess() && (byId('fId')?.value ? !!editorNode?.can_edit : canCreate()));
   window.canEditCurrentKnowledge = canEditCurrent;
   const nodeForId = (id) => (window.kbTableNodes || []).find((node) => normalizeId(node.id || node._id) === normalizeId(id));

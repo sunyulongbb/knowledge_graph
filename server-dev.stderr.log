@@ -1,2 +1,0 @@
-$ bun run src/server/index.ts
-error: script "dev" exited with code 1

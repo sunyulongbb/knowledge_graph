@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 
 test('UI grants every user full access in the default application and rejects unauthorized selections elsewhere', () => {
   const source = readFileSync(new URL('../public/assets/scripts/knowledge-access.js', import.meta.url), 'utf8');
-  const policy = source.slice(source.indexOf('  const hasDefaultApplicationAccess'), source.indexOf('  const editControls')).replace('  let editorNode = null;\n', '');
+  const policy = source.slice(source.indexOf('  const hasDefaultApplicationAccess'), source.indexOf('  const editControls')).replace(/  let editorNode = null;\r?\n/, '');
   const window: any = { authUser: null, location: { search: '?db=other' }, kbTableNodes: [
     { id: 'own', can_edit: true, can_manage: true },
     { id: 'maintained', can_edit: true, can_manage: false },
@@ -16,6 +16,8 @@ test('UI grants every user full access in the default application and rejects un
   expect(window.canOperateKnowledgeSelection(['own'], 'manage')).toBe(false);
   window.location.search = '?db=default';
   window.kbApplicationScope = 'default';
+  // Creation must work before the application list has loaded, including guests.
+  expect(window.canEditCurrentKnowledge()).toBe(true);
   window.kbApplicationProjects = [{ slug: 'default', member: true }];
   expect(window.canEditCurrentKnowledge()).toBe(true);
   expect(window.canOperateKnowledgeSelection(['own'], 'manage')).toBe(true);

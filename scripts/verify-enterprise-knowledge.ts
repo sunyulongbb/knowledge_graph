@@ -24,6 +24,12 @@ try {
   }
   await store.create(name, 7, { id: 'source', name: '知识测试', description: '首个版本', visibility: 'private', categoryIds: ['class/a'] }, owner);
   await store.create(name, 7, { id: 'target', name: '关系目标', images: ['/static/uploads/node-images/test.png'] }, owner);
+  await store.update(name, 'target', { name: '123', description: 'true' }, owner);
+  assert.equal((await store.get(name, 'target'))?.labels.zh.value, '123');
+  assert.equal((await store.get(name, 'target'))?.descriptions.zh.value, 'true');
+  await sync.afterWrite(name);
+  assert.equal((await new EnterpriseKnowledgeSearch(store, es).search(name, owner, { q: '123', limit: 20, offset: 0 })).total, 1);
+  await store.update(name, 'target', { name: '关系目标', description: '' }, owner);
   assert.equal(await store.mediaReadable(name, '/static/uploads/node-images/test.png', null), true);
   const summary = await store.summary(name, owner);
   assert.equal(summary.entities, 2);

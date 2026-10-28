@@ -13397,6 +13397,10 @@
 
     // 自动加载图谱（移除了手动加载按钮）
     function clearKnowledgeNodeContextForCreate() {
+      // Prevent an earlier detail request from replacing the new draft.
+      window.kbEnterEditRequestSeq = (window.kbEnterEditRequestSeq || 0) + 1;
+      window.kbRouteEnforceSeq = (window.kbRouteEnforceSeq || 0) + 1;
+      window.kbClearLastKnowledgeNodeId?.();
       // 新建知识不应继承详情、关系图或列表中任何已选知识的路由上下文。
       window.kbPinnedKnowledgeDetailRouteId = "";
       window.kbDetailRouteBeforeVis = "";
@@ -13438,8 +13442,13 @@
       btnTableAdd.addEventListener("click", () => {
         clearKnowledgeNodeContextForCreate();
         resetFormToAdd();
-        // Focus on name input
-        if (fName) fName.focus();
+        setViewMode("table", { replaceRoute: true });
+        const split = document.querySelector('.kb-split');
+        if (split?.classList.contains('hide-left')) {
+          document.getElementById('btnToggleLeftPanel')?.click();
+        }
+        document.documentElement.removeAttribute('data-kb-editor-left');
+        document.getElementById('entityDisplayName')?.focus();
       });
     }
     tblSearch.addEventListener("input", () => {
@@ -15888,7 +15897,7 @@
             : "";
           if (createdId) {
             try {
-              await autoAssignSelectedClassToNode(createdId);
+              await window.autoAssignSelectedClassToNode(createdId);
             } catch (err) {
               console.error("自动关联分类失败", err);
             }

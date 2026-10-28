@@ -7,6 +7,25 @@ const tableSelectionSource = readFileSync(new URL('../public/assets/scripts/tabl
 const indexSource = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
 const manageTableSource = readFileSync(new URL('../public/assets/scripts/entity-manage-table.js', import.meta.url), 'utf8');
 
+test('adding knowledge opens a collapsed editor and focuses the visible composer', () => {
+  const start = indexSource.indexOf('      btnTableAdd.addEventListener("click", () => {');
+  const handler = indexSource.slice(start, indexSource.indexOf('\n      });', start));
+  const body = handler.slice(handler.indexOf('{') + 1);
+  const calls: string[] = [];
+  const document = {
+    querySelector: () => ({ classList: { contains: () => true } }),
+    getElementById: (id: string) => ({
+      click: () => calls.push(`open:${id}`),
+      focus: () => calls.push(`focus:${id}`),
+    }),
+    documentElement: { removeAttribute: (name: string) => calls.push(`remove:${name}`) },
+  };
+  new Function('document', 'clearKnowledgeNodeContextForCreate', 'resetFormToAdd', 'setViewMode', body)(
+    document, () => calls.push('clear'), () => calls.push('reset'), (mode: string) => calls.push(mode),
+  );
+  expect(calls).toEqual(['clear', 'reset', 'table', 'open:btnToggleLeftPanel', 'remove:data-kb-editor-left', 'focus:entityDisplayName']);
+});
+
 function hydrate(window: any) {
   const loads: any[] = [];
   const panel = { style: { display: 'none' } };

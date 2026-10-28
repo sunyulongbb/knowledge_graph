@@ -292,6 +292,15 @@ function parseJson(value: unknown): any {
   }
 }
 
+// User-entered localized text can itself look like a JSON scalar (123, true,
+// null). Only decode structured JSON here; scalar text must remain literal.
+function parseLocalizedInput(value: unknown): any {
+  const parsed = parseJson(value);
+  return typeof value === 'string' && (parsed === null || typeof parsed !== 'object')
+    ? value
+    : parsed;
+}
+
 type LocalizedValue = { language: string; value: string };
 type LocalizedValueMap = Record<string, LocalizedValue>;
 type LocalizedAliasMap = Record<string, LocalizedValue[]>;
@@ -310,7 +319,7 @@ function localizedEntry(value: unknown, language: string): LocalizedValue | null
 }
 
 function localizedValueMap(raw: unknown, defaultLanguage = "zh"): LocalizedValueMap {
-  const parsed = parseJson(raw);
+  const parsed = parseLocalizedInput(raw);
   const result: LocalizedValueMap = {};
   const add = (value: unknown, language: string) => {
     const entry = localizedEntry(value, language);
@@ -337,7 +346,7 @@ function localizedValueMap(raw: unknown, defaultLanguage = "zh"): LocalizedValue
 }
 
 function localizedAliasMap(raw: unknown, defaultLanguage = "zh"): LocalizedAliasMap {
-  const parsed = parseJson(raw);
+  const parsed = parseLocalizedInput(raw);
   const result: LocalizedAliasMap = {};
   const seen = new Set<string>();
   const add = (value: unknown, language: string) => {

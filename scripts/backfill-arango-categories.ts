@@ -3,6 +3,7 @@ import { Database } from 'bun:sqlite';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { EnterpriseKnowledgeStore } from '../src/server/enterprise-knowledge.ts';
+import { arangoDatabaseName } from '../src/server/arangodb.ts';
 const source = process.argv.find(arg => arg.startsWith('--source='))?.slice('--source='.length);
 if (!source) throw new Error('Usage: bun run scripts/backfill-arango-categories.ts --source=<verified.sqlite> [--apply]');
 const apply = process.argv.includes('--apply');
@@ -16,6 +17,8 @@ if (apply) mkdirSync(resolve('data/recovery'), { recursive: true });
 let eligible = 0, updated = 0, associations = 0, missing = 0, preserved = 0;
 try {
   for (const project of projects) {
+    try { arangoDatabaseName(project.name); }
+    catch { console.warn(`Skipping project with invalid ArangoDB database name: ${project.name}`); continue; }
     const rows = db.query(`SELECT DISTINCT n.id,ec.class_id FROM nodes n
       JOIN entity_classes ec ON REPLACE(ec.entity_id,'entity/','')=n.id
       JOIN classes c ON c.id=ec.class_id
