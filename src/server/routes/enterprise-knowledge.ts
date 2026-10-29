@@ -41,8 +41,8 @@ const schemaReadPaths = new Set(['/api/kb/ontologies', '/api/kb/ontology/tree', 
 const propertyWritePaths = new Set(['/api/kb/property_create', '/api/kb/property_update', '/api/kb/property_delete', '/api/kb/ontology/property']);
 export const enterpriseMediaPath = (path: string) => /^\/static\/uploads\/(?:.*\/)?(node-images|node-videos|node-pdfs)\//i.test(path.replace(/\/{2,}/g, '/'));
 export function enterpriseKnowledgePath(path: string) {
-  return enterpriseMediaPath(path) || /^\/api\/kb\/(?:node(?:s)?(?:\/|$)|node-types$|entity(?:_|\/)|geography(?:\/|$)|discover(?:\/|$)|attributes(?:\/|$)|relations(?:\/|$)|reports(?:\/|$)|graph$|edge$|stats$|classes$|gallery_|knowledge-|entry(?:\/|$)|shorts_|fetch$|clean\/)/.test(path)
-    || path.startsWith('/api/wiki/') || path.startsWith('/api/knowledge/') || path.startsWith('/api/sparql/import');
+  return enterpriseMediaPath(path) || /^\/api\/kb\/(?:node(?:s)?(?:\/|$)|node-types$|entity(?:_|\/)|attributes(?:\/|$)|relations(?:\/|$)|graph$|edge$|stats$|classes$|gallery_|knowledge-|entry(?:\/|$)|shorts_|fetch$|clean\/)/.test(path)
+    || path.startsWith('/api/wiki/') || path.startsWith('/api/knowledge/') || path.startsWith('/api/comments/') || path.startsWith('/api/sparql/import');
 }
 export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
   const arangoSearch = new ArangoKnowledgeSearch(deps.store);
@@ -78,8 +78,10 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
       const path = url.pathname;
       const store = deps.store;
       if (path === '/api/kb/reports' || path.startsWith('/api/kb/reports/')) {
-        return await handleEnterpriseReports(req, url, method, { store, project, user,
-          canCreate: Boolean(user && deps.canCreate(user, project)), legacySchema: () => deps.getSchema?.(project) });
+        return await handleEnterpriseReports(req, url, method, {
+          store, project, user,
+          canCreate: Boolean(user && deps.canCreate(user, project)), legacySchema: () => deps.getSchema?.(project)
+        });
       }
       const loggedIn = () => {
         if (!user || user.id <= 0) throw new KnowledgeStoreError('请先登录', 401);
@@ -133,8 +135,10 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
         try { result = await importEnterpriseEntities(store, database, Number(project.id), localized.input, current, () => deps.getSchema?.(project)); }
         catch (error) { cleanupLocalizedEntityImport(localized.files); throw error; }
         const sync = await synchronizeWrite();
-        return Response.json({ ok: true, ...result, filesLocalized: localized.files.length, sync,
-          ...(sync === 'pending' ? { warning: '实体已保存到 ArangoDB，Elasticsearch 同步暂未完成，后台将自动重试' } : {}) }, { status: sync === 'pending' ? 202 : 200 });
+        return Response.json({
+          ok: true, ...result, filesLocalized: localized.files.length, sync,
+          ...(sync === 'pending' ? { warning: '实体已保存到 ArangoDB，Elasticsearch 同步暂未完成，后台将自动重试' } : {})
+        }, { status: sync === 'pending' ? 202 : 200 });
       }
       const importedSchema = await store.importSchema?.(database);
       const schema = importedSchema || deps.getSchema?.(project);
@@ -151,8 +155,10 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
           const links = schema?.ontology_properties || [];
           const rows = filter(schema?.properties || []).map(row => {
             const ids = [...new Set(links.filter(link => link.property_id === row.id).map(link => link.ontology_id))];
-            return { ...row, label: row.name, alias: parse(row.alias), types: parse(row.types), ontology_ids: ids,
-              ontology_names: ids.map(id => schema?.ontologies.find(item => item.id === id)?.name || id), linked_to_ontology: ids.includes(ontology) };
+            return {
+              ...row, label: row.name, alias: parse(row.alias), types: parse(row.types), ontology_ids: ids,
+              ontology_names: ids.map(id => schema?.ontologies.find(item => item.id === id)?.name || id), linked_to_ontology: ids.includes(ontology)
+            };
           }).filter(row => (!ontology || url.searchParams.get('association_mode') !== 'linked' || row.linked_to_ontology)
             && (!typeName || parse(row.types).some((type: unknown) => String(type).trim().toLowerCase() === typeName)));
           const offset = integer(url.searchParams.get('offset'), 0, 1_000_000), limit = integer(url.searchParams.get('limit'), 20, 500);
@@ -170,10 +176,12 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
             }
           }
           const links = (schema?.ontology_properties || []).filter(row => ontologyIds.has(row.ontology_id));
-          return Response.json({ items: (schema?.properties || []).filter(row => links.some(link => link.property_id === row.id)).map(row => {
-            const isLocal = links.some(link => link.property_id === row.id && link.ontology_id === ontologyId);
-            return { ...row, label: row.name, is_local: isLocal, inherited: !isLocal, types: parse(row.types) };
-          }) });
+          return Response.json({
+            items: (schema?.properties || []).filter(row => links.some(link => link.property_id === row.id)).map(row => {
+              const isLocal = links.some(link => link.property_id === row.id && link.ontology_id === ontologyId);
+              return { ...row, label: row.name, is_local: isLocal, inherited: !isLocal, types: parse(row.types) };
+            })
+          });
         }
         const rows: Doc[] = filter(schema?.ontologies || []).map(row => ({ ...row, alias: parse(row.alias) }));
         if (path === '/api/kb/ontologies') return Response.json(rows);
@@ -187,9 +195,11 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
         if (!schema) return result;
         const classes = schema.classes.filter(cls => result.categoryIds.includes(cls.id));
         const ontology = schema.ontologies.find(type => type.id === node.type || type.name === node.type);
-        return { ...result, classes, categoryLabels: classes.map(cls => cls.name),
+        return {
+          ...result, classes, categoryLabels: classes.map(cls => cls.name),
           classLabel: classes[0]?.name || result.classLabel, color: ontology?.color || classes[0]?.color || null,
-          ontology: ontology || null, typeLabel: ontology?.name || result.typeLabel };
+          ontology: ontology || null, typeLabel: ontology?.name || result.typeLabel
+        };
       };
       const graphNode = (node: Doc) => {
         // Cytoscape clients interpret a top-level `data` field as an element
@@ -200,7 +210,7 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
       await store.ensure(database);
       let body: Doc = {};
       if (['POST', 'PUT', 'PATCH'].includes(method)) {
-        try { body = await req.json(); }
+        try { body = req.body === null && /^\/api\/knowledge\/[^/]+\/(like|share)$/.test(path) ? {} : await req.json(); }
         catch { throw new KnowledgeStoreError('无效的 JSON 请求'); }
         if (!body || typeof body !== 'object' || Array.isArray(body)) throw new KnowledgeStoreError('请求必须是 JSON 对象');
       }
@@ -222,264 +232,319 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
         }
         if (!body.ids.length) return Response.json({ items: [] });
         const rows = await store.relationshipCards(database, body.ids, user);
-        return Response.json({ items: rows.map(row => ({ node: resultNode(row.node), truncated: row.truncated,
-          relations: row.relations.map((relation: Doc) => ({ node: resultNode(relation.node),
-            propertyId: relation.edge.property_id, propertyName: relation.edge.property_name || relation.edge.property_id || '关联',
-            direction: relation.edge._from === row.node._id ? 'outgoing' : 'incoming' })) })) });
+        return Response.json({
+          items: rows.map(row => ({
+            node: resultNode(row.node), truncated: row.truncated,
+            relations: row.relations.map((relation: Doc) => ({
+              node: resultNode(relation.node),
+              propertyId: relation.edge.property_id, propertyName: relation.edge.property_name || relation.edge.property_id || '关联',
+              direction: relation.edge._from === row.node._id ? 'outgoing' : 'incoming'
+            }))
+          }))
+        });
       }
       if (['/api/kb/entity_search', '/api/kb/discover/search'].includes(path) && method === 'GET') {
         const discovery = path === '/api/kb/discover/search';
         const backend = discovery ? 'elasticsearch' : 'arangosearch';
         if (discovery && !deps.search) throw new KnowledgeStoreError('未配置 Elasticsearch 首页与检索服务', 503);
-        const classId = url.searchParams.get('class_id');
-        let classIds: string[] | null = classId ? [classId] : null;
-        if (classId && schema) {
-          const descendants = new Set([classId]);
-          let added = true;
-          while (added) {
-            added = false;
-            for (const cls of schema.classes) if (descendants.has(cls.parent_id) && !descendants.has(cls.id)) { descendants.add(cls.id); added = true; }
+        const interaction = path.match(/^\/api\/knowledge\/([^/]+)(?:\/(interaction|comments|like|share))?$/);
+        const commentDelete = path.match(/^\/api\/comments\/([^/]+)$/);
+        if (interaction || (commentDelete && method === 'DELETE')) {
+          let nodeId = interaction ? cleanKnowledgeId(decodeURIComponent(interaction[1])) : '';
+          const action = interaction?.[2] || (commentDelete ? 'comments' : 'interaction');
+          if (!((method === 'GET' && ['interaction', 'comments'].includes(action))
+            || (method === 'POST' && ['comments', 'like', 'share'].includes(action))
+            || (method === 'DELETE' && (action === 'like' || commentDelete)))) {
+            return Response.json({ error: '不支持的请求方法' }, { status: 405 });
           }
-          classIds = [...descendants];
+          if (method !== 'GET') loggedIn();
+          if (commentDelete) {
+            const rows = await store.query(database, `FOR doc IN entity
+            FILTER @commentId IN NOT_NULL(doc.interactions.comments, [])[*].id
+            LIMIT 1 RETURN { id: doc.sqlite_id || doc.id }`, { commentId: decodeURIComponent(commentDelete[1]) });
+            if (!rows.length) throw new KnowledgeStoreError('评论不存在', 404);
+            nodeId = rows[0].id;
+          }
+          const result = await store.interact(database, nodeId, user, action, method,
+            { ...body, commentId: commentDelete ? decodeURIComponent(commentDelete[1]) : undefined });
+          const shareUrl = new URL('/kb/detail', url.origin);
+          shareUrl.searchParams.set('id', nodeId);
+          shareUrl.searchParams.set('db', database);
+          return Response.json({
+            ...result, ...(method !== 'GET' ? { success: true, sync: await synchronizeWrite() } : {}),
+            ...(action === 'share' ? { shareUrl: shareUrl.toString() } : {})
+          }, { status: action === 'comments' && method === 'POST' ? 201 : 200 });
         }
-        let page;
-        const selectedType = url.searchParams.get('type');
-        const discoveryTypes = discovery && selectedType ? new Set([selectedType]) : null;
-        if (discoveryTypes && schema) {
-          let added = true;
-          while (added) {
-            added = false;
-            for (const type of schema.ontologies) if (discoveryTypes.has(type.parent_id) && !discoveryTypes.has(type.id)) { discoveryTypes.add(type.id); added = true; }
+        if (path === '/api/kb/entity_search' && method === 'GET') {
+          if (!deps.search) throw new KnowledgeStoreError('未配置 Elasticsearch 知识检索', 503);
+          const classId = url.searchParams.get('class_id');
+          let classIds: string[] | null = classId ? [classId] : null;
+          if (classId && schema) {
+            const descendants = new Set([classId]);
+            let added = true;
+            while (added) {
+              added = false;
+              for (const cls of schema.classes) if (descendants.has(cls.parent_id) && !descendants.has(cls.id)) { descendants.add(cls.id); added = true; }
+            }
+            classIds = [...descendants];
+          }
+          let page;
+          const selectedType = url.searchParams.get('type');
+          const discoveryTypes = discovery && selectedType ? new Set([selectedType]) : null;
+          if (discoveryTypes && schema) {
+            let added = true;
+            while (added) {
+              added = false;
+              for (const type of schema.ontologies) if (discoveryTypes.has(type.parent_id) && !discoveryTypes.has(type.id)) { discoveryTypes.add(type.id); added = true; }
+            }
+          }
+          const propertyInput = url.searchParams.get('property_id');
+          const propertyId = discovery && propertyInput ? schema?.properties.find(property => property.id === propertyInput || String(property.name || '').trim().toLowerCase() === propertyInput.trim().toLowerCase())?.id || propertyInput : propertyInput;
+          if (discovery) {
+            const from = url.searchParams.get('updated_from'), to = url.searchParams.get('updated_to');
+            if ([from, to].some(date => date && (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date))) throw new KnowledgeStoreError('更新时间格式无效');
+            if (from && to && from > to) throw new KnowledgeStoreError('开始日期不能晚于结束日期');
+          }
+          try {
+            page = await (discovery ? deps.search! : arangoSearch).search(database, user, {
+              q: url.searchParams.get('q'), limit: integer(url.searchParams.get('limit'), 20, 500),
+              offset: integer(url.searchParams.get('offset'), 0, 1_000_000),
+              classIds, type: discoveryTypes ? null : selectedType, ...(discoveryTypes ? { includeTypes: [...discoveryTypes] } : {}), order: url.searchParams.get('order'),
+              emptyType: url.searchParams.has('type') && url.searchParams.get('type') === '',
+              hasImage: ['1', 'true'].includes(url.searchParams.get('has_image') || ''),
+              hasMedia: ['1', 'true'].includes(url.searchParams.get('has_media') || ''),
+              propertyId, propertyValue: url.searchParams.get('property_value'),
+              ...(discovery ? {
+                matchMode: url.searchParams.get('match_mode'), searchScope: url.searchParams.get('search_scope'),
+                excludeQuery: url.searchParams.get('exclude_q'), updatedFrom: url.searchParams.get('updated_from'), updatedTo: url.searchParams.get('updated_to')
+              } : {}),
+              definedClasses: ['1', 'true'].includes(url.searchParams.get('defined_class_only') || '') && schema ? schema.classes.map(cls => cls.id) : null,
+              definedTypes: ['1', 'true'].includes(url.searchParams.get('defined_type_only') || '') && schema ? schema.ontologies.map(type => type.id) : null,
+              excludeTypes: ['1', 'true'].includes(url.searchParams.get('hide_entity') || '')
+                ? hiddenKnowledgeTypes(schema?.ontologies) : [],
+            });
+          } catch (error) {
+            console.error(`${backend} search failed:`, error);
+            throw new KnowledgeStoreError(discovery ? 'Elasticsearch 首页与检索服务暂时不可用，请检查同步器状态' : 'ArangoSearch 知识检索暂时不可用，请检查搜索视图', 503);
+          }
+          return Response.json({ nodes: page.nodes.map(resultNode), total: page.total, searchBackend: backend }, { headers: { 'X-Knowledge-Search': backend } });
+        }
+        if (path === '/api/kb/classes' && method === 'GET') {
+          const summary = await store.summary(database, user);
+          const counts = new Map(summary.categories.map((row: Doc) => [row.id, row.count]));
+          const q = (url.searchParams.get('q') || '').toLowerCase();
+          const parse = (value: any) => { try { return typeof value === 'string' ? JSON.parse(value) : value || []; } catch { return []; } };
+          return Response.json((schema?.classes || []).filter(cls => String(cls.name || '').toLowerCase().includes(q)).map(cls => ({
+            ...cls, label: cls.name, parent: cls.parent_id, instance_count: counts.get(cls.id) || 0,
+            tags: parse(cls.tags), analyses: parse(cls.analyses),
+          })));
+        }
+        if (path === '/api/kb/entity/class') {
+          if (method === 'GET') {
+            const node = await store.require(database, id, user);
+            return Response.json({ items: schema?.classes.filter(cls => (node.class_ids || []).includes(cls.id)).map(cls => ({ ...cls, label: cls.name })) || [] });
+          }
+          if (method === 'POST' || method === 'DELETE') {
+            const classId = String(body.class_id || url.searchParams.get('class_id') || '').trim();
+            if (method === 'POST' && !classId) throw new KnowledgeStoreError('缺少分类');
+            if (classId && schema && !schema.classes.some(cls => cls.id === classId)) throw new KnowledgeStoreError('分类不属于当前应用');
+            await store.classify(database, id, classId, method === 'DELETE', loggedIn());
+            return Response.json({ ok: true, sync: await synchronizeWrite() });
           }
         }
-        const propertyInput = url.searchParams.get('property_id');
-        const propertyId = discovery && propertyInput ? schema?.properties.find(property => property.id === propertyInput || String(property.name || '').trim().toLowerCase() === propertyInput.trim().toLowerCase())?.id || propertyInput : propertyInput;
-        if (discovery) {
-          const from = url.searchParams.get('updated_from'), to = url.searchParams.get('updated_to');
-          if ([from, to].some(date => date && (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date))) throw new KnowledgeStoreError('更新时间格式无效');
-          if (from && to && from > to) throw new KnowledgeStoreError('开始日期不能晚于结束日期');
+        if (path === '/api/kb/node-types' && method === 'GET') {
+          return Response.json((await store.summary(database, user)).types);
         }
-        try { page = await (discovery ? deps.search! : arangoSearch).search(database, user, {
-          q: url.searchParams.get('q'), limit: integer(url.searchParams.get('limit'), 20, 500),
-          offset: integer(url.searchParams.get('offset'), 0, 1_000_000),
-          classIds, type: discoveryTypes ? null : selectedType, ...(discoveryTypes ? { includeTypes: [...discoveryTypes] } : {}), order: url.searchParams.get('order'),
-          emptyType: url.searchParams.has('type') && url.searchParams.get('type') === '',
-          hasImage: ['1', 'true'].includes(url.searchParams.get('has_image') || ''),
-          hasMedia: ['1', 'true'].includes(url.searchParams.get('has_media') || ''),
-          propertyId, propertyValue: url.searchParams.get('property_value'),
-          ...(discovery ? { matchMode: url.searchParams.get('match_mode'), searchScope: url.searchParams.get('search_scope'),
-            excludeQuery: url.searchParams.get('exclude_q'), updatedFrom: url.searchParams.get('updated_from'), updatedTo: url.searchParams.get('updated_to') } : {}),
-          definedClasses: ['1', 'true'].includes(url.searchParams.get('defined_class_only') || '') && schema ? schema.classes.map(cls => cls.id) : null,
-          definedTypes: ['1', 'true'].includes(url.searchParams.get('defined_type_only') || '') && schema ? schema.ontologies.map(type => type.id) : null,
-          excludeTypes: ['1', 'true'].includes(url.searchParams.get('hide_entity') || '')
-            ? hiddenKnowledgeTypes(schema?.ontologies) : [],
-        }); } catch (error) {
-          console.error(`${backend} search failed:`, error);
-          throw new KnowledgeStoreError(discovery ? 'Elasticsearch 首页与检索服务暂时不可用，请检查同步器状态' : 'ArangoSearch 知识检索暂时不可用，请检查搜索视图', 503);
+        if (path === '/api/kb/stats' && method === 'GET') {
+          const summary = await store.summary(database, user);
+          return Response.json({
+            counts: {
+              entity: summary.entities, link: summary.attributes,
+              instance: schema?.classes.length || 0, property: schema?.properties.length || 0
+            }
+          });
         }
-        return Response.json({ nodes: page.nodes.map(resultNode), total: page.total, searchBackend: backend }, { headers: { 'X-Knowledge-Search': backend } });
-      }
-      if (path === '/api/kb/classes' && method === 'GET') {
-        const summary = await store.summary(database, user);
-        const counts = new Map(summary.categories.map((row: Doc) => [row.id, row.count]));
-        const q = (url.searchParams.get('q') || '').toLowerCase();
-        const parse = (value: any) => { try { return typeof value === 'string' ? JSON.parse(value) : value || []; } catch { return []; } };
-        return Response.json((schema?.classes || []).filter(cls => String(cls.name || '').toLowerCase().includes(q)).map(cls => ({
-          ...cls, label: cls.name, parent: cls.parent_id, instance_count: counts.get(cls.id) || 0,
-          tags: parse(cls.tags), analyses: parse(cls.analyses),
-        })));
-      }
-      if (path === '/api/kb/entity/class') {
-        if (method === 'GET') {
+        if (path === '/api/kb/node/random' && method === 'GET') {
+          const page = await store.list(database, user, { limit: 1, offset: 0, order: 'random' });
+          return Response.json({ node: page.nodes[0] ? resultNode(page.nodes[0]) : null });
+        }
+        if (path === '/api/kb/graph' && method === 'GET') {
+          const page = await store.list(database, user, { limit: 500, offset: 0, classId: url.searchParams.get('class_id') });
+          const handles = page.nodes.map((node: Doc) => node._id);
+          const edges = await store.query(database, 'FOR e IN link FILTER e._from IN @handles AND e._to IN @handles AND e._from != e._to RETURN e', { handles });
+          return Response.json({
+            nodes: page.nodes.map(graphNode), edges: edges.map(e => ({
+              id: `${e.sqlite_id}:${e.target_id}`, source: e.source_id, target: e.target_id, type: e.property_id, label: e.property_name || e.property_id,
+            })), total: page.total, truncated: page.total > page.nodes.length
+          });
+        }
+        if (path === '/api/kb/nodes' && method === 'POST') {
+          const current = loggedIn();
+          if (!deps.canCreate(current, project)) throw new KnowledgeStoreError('需要应用成员权限才能创建知识', 403);
+          const prepared = await prepareEntityImageValues(body, Number(project.id));
+          const node = await store.create(database, Number(project.id), prepared, current);
+          return Response.json({ ok: true, node: resultNode(node), sync: await synchronizeWrite() });
+        }
+        if (path === '/api/kb/nodes/update' && method === 'POST') {
+          if (!id) throw new KnowledgeStoreError('缺少知识 ID');
+          const current = loggedIn();
+          await store.require(database, id, current, 'edit');
+          const prepared = await prepareEntityImageValues(body, Number(project.id));
+          const node = await store.update(database, id, prepared, current);
+          return Response.json({ ok: true, node: resultNode(node), sync: await synchronizeWrite() });
+        }
+        if (path === '/api/kb/nodes' && method === 'DELETE') {
+          if (!id) throw new KnowledgeStoreError('缺少知识 ID');
+          await store.remove(database, id, loggedIn());
+          return Response.json({ ok: true, success: true, sync: await synchronizeWrite() });
+        }
+        if (['/api/kb/node', '/api/kb/node/relation-insights'].includes(path) && method === 'GET') {
+          if (!id) throw new KnowledgeStoreError('缺少知识 ID');
           const node = await store.require(database, id, user);
-          return Response.json({ items: schema?.classes.filter(cls => (node.class_ids || []).includes(cls.id)).map(cls => ({ ...cls, label: cls.name })) || [] });
-        }
-        if (method === 'POST' || method === 'DELETE') {
-          const classId = String(body.class_id || url.searchParams.get('class_id') || '').trim();
-          if (method === 'POST' && !classId) throw new KnowledgeStoreError('缺少分类');
-          if (classId && schema && !schema.classes.some(cls => cls.id === classId)) throw new KnowledgeStoreError('分类不属于当前应用');
-          await store.classify(database, id, classId, method === 'DELETE', loggedIn());
-          return Response.json({ ok: true, sync: await synchronizeWrite() });
-        }
-      }
-      if (path === '/api/kb/node-types' && method === 'GET') {
-        return Response.json((await store.summary(database, user)).types);
-      }
-      if (path === '/api/kb/stats' && method === 'GET') {
-        const summary = await store.summary(database, user);
-        return Response.json({ counts: { entity: summary.entities, link: summary.attributes,
-          instance: schema?.classes.length || 0, property: schema?.properties.length || 0 } });
-      }
-      if (path === '/api/kb/node/random' && method === 'GET') {
-        const page = await store.list(database, user, { limit: 1, offset: 0, order: 'random' });
-        return Response.json({ node: page.nodes[0] ? resultNode(page.nodes[0]) : null });
-      }
-      if (path === '/api/kb/graph' && method === 'GET') {
-        const page = await store.list(database, user, { limit: 500, offset: 0, classId: url.searchParams.get('class_id') });
-        const handles = page.nodes.map((node: Doc) => node._id);
-        const edges = await store.query(database, 'FOR e IN link FILTER e._from IN @handles AND e._to IN @handles AND e._from != e._to RETURN e', { handles });
-        return Response.json({ nodes: page.nodes.map(graphNode), edges: edges.map(e => ({
-          id: `${e.sqlite_id}:${e.target_id}`, source: e.source_id, target: e.target_id, type: e.property_id, label: e.property_name || e.property_id,
-        })), total: page.total, truncated: page.total > page.nodes.length });
-      }
-      if (path === '/api/kb/nodes' && method === 'POST') {
-        const current = loggedIn();
-        if (!deps.canCreate(current, project)) throw new KnowledgeStoreError('需要应用成员权限才能创建知识', 403);
-        const prepared = await prepareEntityImageValues(body, Number(project.id));
-        const node = await store.create(database, Number(project.id), prepared, current);
-        return Response.json({ ok: true, node: resultNode(node), sync: await synchronizeWrite() });
-      }
-      if (path === '/api/kb/nodes/update' && method === 'POST') {
-        if (!id) throw new KnowledgeStoreError('缺少知识 ID');
-        const current = loggedIn();
-        await store.require(database, id, current, 'edit');
-        const prepared = await prepareEntityImageValues(body, Number(project.id));
-        const node = await store.update(database, id, prepared, current);
-        return Response.json({ ok: true, node: resultNode(node), sync: await synchronizeWrite() });
-      }
-      if (path === '/api/kb/nodes' && method === 'DELETE') {
-        if (!id) throw new KnowledgeStoreError('缺少知识 ID');
-        await store.remove(database, id, loggedIn());
-        return Response.json({ ok: true, success: true, sync: await synchronizeWrite() });
-      }
-      if (['/api/kb/node', '/api/kb/node/relation-insights'].includes(path) && method === 'GET') {
-        if (!id) throw new KnowledgeStoreError('缺少知识 ID');
-        const node = await store.require(database, id, user);
-        const [attributes, graph] = await Promise.all([
-          path === '/api/kb/node' ? store.attributes(database, id) : Promise.resolve([]),
-          store.relationPaths?.(database, id, user, integer(url.searchParams.get('relation_limit'), 500, 1000)),
-        ]);
-        node._search_attributes = attributes;
-        if (graph) return Response.json({ node: resultNode(node), ...buildRelationInsights(node, graph.paths, resultNode, graph.truncated) });
-        const rows = await store.relations(database, id, user);
-        const neighbors = new Map<string, Doc>();
-        const incomingRelations: Doc[] = [];
-        for (const row of rows) {
-          const sourceId = cleanKnowledgeId(row.source.sqlite_id || row.source.id);
-          const targetId = cleanKnowledgeId(row.target.sqlite_id || row.target.id);
-          const edge = { id: `${row.edge.sqlite_id}:${targetId}`, source: sourceId, target: targetId,
-            type: row.edge.property_id, label: row.edge.property_name || row.edge.property_id, isAttribute: true };
-          if (sourceId !== id) neighbors.set(sourceId, { node: resultNode(row.source), edge });
-          if (targetId !== id) neighbors.set(targetId, { node: resultNode(row.target), edge });
-          if (targetId === id) incomingRelations.push({ source: resultNode(row.source),
-            propertyId: row.edge.property_id, propertyName: row.edge.property_name || row.edge.property_id || '关联' });
-        }
-        if (incomingRelations.length) {
-          const handles = [...new Set(rows.filter(row => cleanKnowledgeId(row.target.sqlite_id || row.target.id) === id).map(row => row.source._id))].filter(Boolean);
-          const secondLevel = handles.length ? await store.query(database, `FOR edge IN link
+          const [attributes, graph] = await Promise.all([
+            path === '/api/kb/node' ? store.attributes(database, id) : Promise.resolve([]),
+            store.relationPaths?.(database, id, user, integer(url.searchParams.get('relation_limit'), 500, 1000)),
+          ]);
+          node._search_attributes = attributes;
+          if (graph) return Response.json({ node: resultNode(node), ...buildRelationInsights(node, graph.paths, resultNode, graph.truncated) });
+          const rows = await store.relations(database, id, user);
+          const neighbors = new Map<string, Doc>();
+          const incomingRelations: Doc[] = [];
+          for (const row of rows) {
+            const sourceId = cleanKnowledgeId(row.source.sqlite_id || row.source.id);
+            const targetId = cleanKnowledgeId(row.target.sqlite_id || row.target.id);
+            const edge = {
+              id: `${row.edge.sqlite_id}:${targetId}`, source: sourceId, target: targetId,
+              type: row.edge.property_id, label: row.edge.property_name || row.edge.property_id, isAttribute: true
+            };
+            if (sourceId !== id) neighbors.set(sourceId, { node: resultNode(row.source), edge });
+            if (targetId !== id) neighbors.set(targetId, { node: resultNode(row.target), edge });
+            if (targetId === id) incomingRelations.push({
+              source: resultNode(row.source),
+              propertyId: row.edge.property_id, propertyName: row.edge.property_name || row.edge.property_id || '关联'
+            });
+          }
+          if (incomingRelations.length) {
+            const handles = [...new Set(rows.filter(row => cleanKnowledgeId(row.target.sqlite_id || row.target.id) === id).map(row => row.source._id))].filter(Boolean);
+            const secondLevel = handles.length ? await store.query(database, `FOR edge IN link
             FILTER edge._to IN @handles AND edge._from != edge._to
             LET source = DOCUMENT(edge._from) LET target = DOCUMENT(edge._to)
             FILTER source != null AND target != null RETURN { edge, source, target }`, { handles }) : [];
-          const children = new Map<string, Doc[]>();
-          for (const row of secondLevel) {
-            const sourceId = cleanKnowledgeId(row.source.sqlite_id || row.source.id);
-            if (sourceId === id || !canUseArangoKnowledge(row.source, user) || !canUseArangoKnowledge(row.target, user)) continue;
-            const targetId = cleanKnowledgeId(row.target.sqlite_id || row.target.id);
-            const group = children.get(targetId) || [];
-            group.push({ source: resultNode(row.source), propertyId: row.edge.property_id,
-              propertyName: row.edge.property_name || row.edge.property_id || '关联' });
-            children.set(targetId, group);
+            const children = new Map<string, Doc[]>();
+            for (const row of secondLevel) {
+              const sourceId = cleanKnowledgeId(row.source.sqlite_id || row.source.id);
+              if (sourceId === id || !canUseArangoKnowledge(row.source, user) || !canUseArangoKnowledge(row.target, user)) continue;
+              const targetId = cleanKnowledgeId(row.target.sqlite_id || row.target.id);
+              const group = children.get(targetId) || [];
+              group.push({
+                source: resultNode(row.source), propertyId: row.edge.property_id,
+                propertyName: row.edge.property_name || row.edge.property_id || '关联'
+              });
+              children.set(targetId, group);
+            }
+            for (const relation of incomingRelations) {
+              const group = children.get(relation.source.id);
+              if (group?.length) relation.secondLevel = group;
+            }
           }
-          for (const relation of incomingRelations) {
-            const group = children.get(relation.source.id);
-            if (group?.length) relation.secondLevel = group;
-          }
+          return Response.json({ node: resultNode(node), neighbors: [...neighbors.values()], incomingRelations });
         }
-        return Response.json({ node: resultNode(node), neighbors: [...neighbors.values()], incomingRelations });
+        if (path === '/api/kb/node/attributes' && method === 'GET') {
+          const node = await store.require(database, id, user);
+          const attrs = (await store.attributes(database, id)).map(arangoAttributeResponse);
+          return Response.json(relationAttributeResponse(attrs, node.relation_order));
+        }
+        if (['/api/kb/node/relations', '/api/kb/node/graph'].includes(path) && method === 'GET') {
+          const center = await store.require(database, id, user);
+          const rows = await store.relations(database, id, user, url.searchParams.get('direction') || 'both');
+          const nodes = new Map<string, Doc>([[id, graphNode(center)]]);
+          const edges = rows.map(({ edge, source, target }) => {
+            const sourceId = cleanKnowledgeId(source.sqlite_id || source.id), targetId = cleanKnowledgeId(target.sqlite_id || target.id);
+            nodes.set(sourceId, graphNode(source)); nodes.set(targetId, graphNode(target));
+            return { id: `${edge.sqlite_id}:${targetId}`, source: sourceId, target: targetId, type: edge.property_id, label: edge.property_name || edge.property_id, isAttribute: true };
+          });
+          return Response.json(path.endsWith('/graph') ? { nodes: [...nodes.values()], edges } : { items: edges });
+        }
+        if (path === '/api/kb/attributes/save' && method === 'POST') {
+          const definition = schema?.properties.find(prop => prop.id === (body.property || body.prop));
+          if (definition?.status === 'deprecated') throw new KnowledgeStoreError('不能编辑已废弃的属性');
+          const attr = await store.saveAttribute(database, {
+            ...body,
+            datatype: body.datatype || definition?.datatype,
+            property_name_snapshot: definition?.name || body.property_name_snapshot,
+          }, loggedIn());
+          return Response.json({ ...arangoAttributeResponse(attr), sync: await synchronizeWrite() });
+        }
+        if (path.startsWith('/api/kb/attributes/') && method === 'DELETE') {
+          await store.removeAttribute(database, decodeURIComponent(path.slice('/api/kb/attributes/'.length)), loggedIn());
+          return Response.json({ success: true, sync: await synchronizeWrite() });
+        }
+        if (path === '/api/kb/relations/create' && method === 'POST') {
+          const current = loggedIn();
+          const source = cleanKnowledgeId(body.source), target = cleanKnowledgeId(body.target);
+          if (!source || !target) throw new KnowledgeStoreError('缺少关系起点或终点');
+          await store.require(database, target, user);
+          const attr = await store.saveAttribute(database, {
+            node_id: source, property: body.type || 'related', datatype: 'wikibase-item',
+            property_name_snapshot: body.label || body.type || 'related', value: { id: target },
+          }, current);
+          return Response.json({ id: `${attr.id}:${target}`, source, target, type: attr.key, label: attr.property_name_snapshot, isAttribute: true, sync: await synchronizeWrite() });
+        }
+        if (path.startsWith('/api/kb/relations/') && method === 'DELETE') {
+          await store.removeRelation(database, decodeURIComponent(path.slice('/api/kb/relations/'.length)), loggedIn());
+          return Response.json({ success: true, sync: await synchronizeWrite() });
+        }
+        if (path === '/api/kb/node/relation-order' && method === 'POST') {
+          const order = await store.reorder(database, id, body, loggedIn());
+          return Response.json({ success: true, relation_order: order, sync: await synchronizeWrite() });
+        }
+        if (path === '/api/kb/knowledge-access' && method === 'GET') {
+          const node = await store.require(database, id, user);
+          return Response.json({
+            id, visibility: node.visibility || 'public', owner: node.owner_user_id ? { id: node.owner_user_id, username: node.creator_username } : null,
+            creatorUsername: node.creator_username, maintainers: (node.maintainer_ids || []).map((id: number) => ({ id })),
+            requests: canUseArangoKnowledge(node, user, 'manage') ? Object.values(node.maintenance_requests || {}).filter((request: any) => request.status === 'pending') : [],
+            ownRequest: user ? node.maintenance_requests?.[String(user.id)] || null : null,
+            canManage: canUseArangoKnowledge(node, user, 'manage'), canEdit: canUseArangoKnowledge(node, user, 'edit'), canRequest: Boolean(user?.id && !canUseArangoKnowledge(node, user, 'edit'))
+          });
+        }
+        if (['/api/kb/knowledge-maintenance/request', '/api/kb/knowledge-maintenance/review', '/api/kb/knowledge-maintenance/remove'].includes(path) && method === 'POST') {
+          await store.maintenance(database, id, path.split('/').pop()!, body, loggedIn());
+          return Response.json({ ok: true, sync: await synchronizeWrite() });
+        }
+        if (path === '/api/kb/knowledge-sync/status' && method === 'GET') {
+          if (user?.role !== 'admin') throw new KnowledgeStoreError('需要管理员权限', 403);
+          return Response.json({ backend: 'arangodb', sqliteBackup: deps.backup?.status(database) || null, elasticsearchConfigured: Boolean(deps.sync), ...(deps.sync?.status(database) || { source: 'entity', mode: 'disabled' }) });
+        }
+        if (path === '/api/kb/knowledge-sync/reindex' && method === 'POST') {
+          if (loggedIn().role !== 'admin') throw new KnowledgeStoreError('需要管理员权限', 403);
+          if (!deps.sync) throw new KnowledgeStoreError('未配置 Elasticsearch', 503);
+          return Response.json({ ok: true, synced: await deps.sync.flush(database) });
+        }
+        if (path === '/api/wiki/page' && method === 'GET') {
+          const node = await store.require(database, id, user);
+          const md = String(node.wiki_md || '');
+          return Response.json({ page: { md, html: md ? await marked.parse(md) : '' } });
+        }
+        if (path === '/api/wiki/page/save' && method === 'POST') {
+          await store.update(database, id, { wiki_md: body.md ?? body.content ?? '' }, loggedIn());
+          return Response.json({ ok: true, sync: await synchronizeWrite() });
+        }
+        // Never fall through to a legacy SQLite knowledge endpoint in Enterprise.
+        return Response.json({ error: '此知识接口尚未迁移到 ArangoDB', code: 'ENTERPRISE_ROUTE_UNAVAILABLE', path }, { status: 501 });
+      } catch (error: any) {
+        if (error?.status === 404 && error?.body?.errorNum === 1228) {
+          return Response.json({
+            error: '当前应用尚未初始化 ArangoDB 知识库，请由系统管理员在「应用设置 → 知识同步」导入 SQLite 知识数据',
+            code: 'KNOWLEDGE_DATABASE_NOT_INITIALIZED',
+            database: deps.getProject(url.searchParams.get('db') || 'default')?.name,
+          }, { status: 409 });
+        }
+        if (error instanceof KnowledgeStoreError || error instanceof EntityImportError || error instanceof OntologyImportError || error instanceof TypeError || error instanceof RangeError) {
+          return Response.json({ error: error.message }, { status: error instanceof KnowledgeStoreError ? error.status : 400 });
+        }
+        console.error('Enterprise knowledge request failed:', error);
+        return Response.json({ error: 'ArangoDB 知识服务暂时不可用', code: 'KNOWLEDGE_BACKEND_UNAVAILABLE' }, { status: 503 });
       }
-      if (path === '/api/kb/node/attributes' && method === 'GET') {
-        const node = await store.require(database, id, user);
-        const attrs = (await store.attributes(database, id)).map(arangoAttributeResponse);
-        return Response.json(relationAttributeResponse(attrs, node.relation_order));
-      }
-      if (['/api/kb/node/relations', '/api/kb/node/graph'].includes(path) && method === 'GET') {
-        const center = await store.require(database, id, user);
-        const rows = await store.relations(database, id, user, url.searchParams.get('direction') || 'both');
-        const nodes = new Map<string, Doc>([[id, graphNode(center)]]);
-        const edges = rows.map(({ edge, source, target }) => {
-          const sourceId = cleanKnowledgeId(source.sqlite_id || source.id), targetId = cleanKnowledgeId(target.sqlite_id || target.id);
-          nodes.set(sourceId, graphNode(source)); nodes.set(targetId, graphNode(target));
-          return { id: `${edge.sqlite_id}:${targetId}`, source: sourceId, target: targetId, type: edge.property_id, label: edge.property_name || edge.property_id, isAttribute: true };
-        });
-        return Response.json(path.endsWith('/graph') ? { nodes: [...nodes.values()], edges } : { items: edges });
-      }
-      if (path === '/api/kb/attributes/save' && method === 'POST') {
-        const definition = schema?.properties.find(prop => prop.id === (body.property || body.prop));
-        if (definition?.status === 'deprecated') throw new KnowledgeStoreError('不能编辑已废弃的属性');
-        const attr = await store.saveAttribute(database, { ...body,
-          datatype: body.datatype || definition?.datatype,
-          property_name_snapshot: definition?.name || body.property_name_snapshot,
-        }, loggedIn());
-        return Response.json({ ...arangoAttributeResponse(attr), sync: await synchronizeWrite() });
-      }
-      if (path.startsWith('/api/kb/attributes/') && method === 'DELETE') {
-        await store.removeAttribute(database, decodeURIComponent(path.slice('/api/kb/attributes/'.length)), loggedIn());
-        return Response.json({ success: true, sync: await synchronizeWrite() });
-      }
-      if (path === '/api/kb/relations/create' && method === 'POST') {
-        const current = loggedIn();
-        const source = cleanKnowledgeId(body.source), target = cleanKnowledgeId(body.target);
-        if (!source || !target) throw new KnowledgeStoreError('缺少关系起点或终点');
-        await store.require(database, target, user);
-        const attr = await store.saveAttribute(database, {
-          node_id: source, property: body.type || 'related', datatype: 'wikibase-item',
-          property_name_snapshot: body.label || body.type || 'related', value: { id: target },
-        }, current);
-        return Response.json({ id: `${attr.id}:${target}`, source, target, type: attr.key, label: attr.property_name_snapshot, isAttribute: true, sync: await synchronizeWrite() });
-      }
-      if (path.startsWith('/api/kb/relations/') && method === 'DELETE') {
-        await store.removeRelation(database, decodeURIComponent(path.slice('/api/kb/relations/'.length)), loggedIn());
-        return Response.json({ success: true, sync: await synchronizeWrite() });
-      }
-      if (path === '/api/kb/node/relation-order' && method === 'POST') {
-        const order = await store.reorder(database, id, body, loggedIn());
-        return Response.json({ success: true, relation_order: order, sync: await synchronizeWrite() });
-      }
-      if (path === '/api/kb/knowledge-access' && method === 'GET') {
-        const node = await store.require(database, id, user);
-        return Response.json({ id, visibility: node.visibility || 'public', owner: node.owner_user_id ? { id: node.owner_user_id, username: node.creator_username } : null,
-          creatorUsername: node.creator_username, maintainers: (node.maintainer_ids || []).map((id: number) => ({ id })),
-          requests: canUseArangoKnowledge(node, user, 'manage') ? Object.values(node.maintenance_requests || {}).filter((request: any) => request.status === 'pending') : [],
-          ownRequest: user ? node.maintenance_requests?.[String(user.id)] || null : null,
-          canManage: canUseArangoKnowledge(node, user, 'manage'), canEdit: canUseArangoKnowledge(node, user, 'edit'), canRequest: Boolean(user?.id && !canUseArangoKnowledge(node, user, 'edit')) });
-      }
-      if (['/api/kb/knowledge-maintenance/request', '/api/kb/knowledge-maintenance/review', '/api/kb/knowledge-maintenance/remove'].includes(path) && method === 'POST') {
-        await store.maintenance(database, id, path.split('/').pop()!, body, loggedIn());
-        return Response.json({ ok: true, sync: await synchronizeWrite() });
-      }
-      if (path === '/api/kb/knowledge-sync/status' && method === 'GET') {
-        if (user?.role !== 'admin') throw new KnowledgeStoreError('需要管理员权限', 403);
-        return Response.json({ backend: 'arangodb', sqliteBackup: deps.backup?.status(database) || null, elasticsearchConfigured: Boolean(deps.sync), ...(deps.sync?.status(database) || { source: 'entity', mode: 'disabled' }) });
-      }
-      if (path === '/api/kb/knowledge-sync/reindex' && method === 'POST') {
-        if (loggedIn().role !== 'admin') throw new KnowledgeStoreError('需要管理员权限', 403);
-        if (!deps.sync) throw new KnowledgeStoreError('未配置 Elasticsearch', 503);
-        return Response.json({ ok: true, synced: await deps.sync.flush(database) });
-      }
-      if (path === '/api/wiki/page' && method === 'GET') {
-        const node = await store.require(database, id, user);
-        const md = String(node.wiki_md || '');
-        return Response.json({ page: { md, html: md ? await marked.parse(md) : '' } });
-      }
-      if (path === '/api/wiki/page/save' && method === 'POST') {
-        await store.update(database, id, { wiki_md: body.md ?? body.content ?? '' }, loggedIn());
-        return Response.json({ ok: true, sync: await synchronizeWrite() });
-      }
-      // Never fall through to a legacy SQLite knowledge endpoint in Enterprise.
-      return Response.json({ error: '此知识接口尚未迁移到 ArangoDB', code: 'ENTERPRISE_ROUTE_UNAVAILABLE', path }, { status: 501 });
-    } catch (error: any) {
-      if (error?.status === 404 && error?.body?.errorNum === 1228) {
-        return Response.json({
-          error: '当前应用尚未初始化 ArangoDB 知识库，请由系统管理员在「应用设置 → 知识同步」导入 SQLite 知识数据',
-          code: 'KNOWLEDGE_DATABASE_NOT_INITIALIZED',
-          database: deps.getProject(url.searchParams.get('db') || 'default')?.name,
-        }, { status: 409 });
-      }
-      if (error instanceof KnowledgeStoreError || error instanceof EntityImportError || error instanceof OntologyImportError || error instanceof TypeError || error instanceof RangeError) {
-        return Response.json({ error: error.message }, { status: error instanceof KnowledgeStoreError ? error.status : 400 });
-      }
-      console.error('Enterprise knowledge request failed:', error);
-      return Response.json({ error: 'ArangoDB 知识服务暂时不可用', code: 'KNOWLEDGE_BACKEND_UNAVAILABLE' }, { status: 503 });
-    }
-  };
-}
+    };
+  }

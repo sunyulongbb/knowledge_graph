@@ -216,3 +216,52 @@ test('link documents preserve complete attribute values, qualifiers and sources 
   expect(calls).toHaveLength(1);
   expect(calls[0]).not.toContain('knowledge_attributes');
 });
+
+
+test('Enterprise interactions persist in entity with read ACL, idempotent likes and comment ownership', async () => {
+  const previous = process.env.KNOWLEDGE_STORAGE_BACKEND;
+  process.env.KNOWLEDGE_STORAGE_BACKEND = 'arangodb';
+  try {
+    let node = entityDocument({ id: 'Q1', name: 'test', owner_user_id: 42, visibility: 'public' });
+    const store = new EnterpriseKnowledgeStore(new ArangoClient({ url: 'http://arango', username: 'u', password: 'p' }, async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      if (path.endsWith('/transaction/begin')) return reply({ result: { id: 'trx' } });
+      if (path.includes('/document/entity/')) {
+        if (init?.method === 'PATCH') node = { ...node, ...JSON.parse(String(init.body)) };
+        return reply(node);
+      }
+      if (path.endsWith('/cursor')) return reply({ result: [{ id: 'Q1' }] });
+      return reply({});
+    }));
+    let user: any = null;
+    const handler = createEnterpriseKnowledgeHandler({ store, getProject: () => ({ id: 7, name: 'app' }), getUser: () => user, canCreate: () => true });
+    const call = async (path: string, method = 'GET', body?: any) => {
+      const url = new URL(`http://localhost${path}?db=app`);
+      return (await handler(new Request(url, { method, ...(body ? { body: JSON.stringify(body) } : {}) }), url, method))!;
+    };
+    const commentsPath = '/api/knowledge/entity%2FQ1/comments';
+    expect((await (await call(commentsPath)).json()).comments).toEqual([]);
+    expect((await call('/api/knowledge/Q1/like', 'POST')).status).toBe(401);
+    user = owner;
+    await call('/api/knowledge/Q1/like', 'POST');
+    expect((await (await call('/api/knowledge/Q1/like', 'POST')).json()).likeCount).toBe(1);
+    expect((await call(commentsPath, 'POST', { content: ' ' })).status).toBe(400);
+    const added = await call(commentsPath, 'POST', { content: 'hello' });
+    expect(added.status).toBe(201);
+    const comment = await added.json();
+    expect(comment.commentCount).toBe(1);
+    expect(arangoNodeResponse(node, owner).interactions).toBeUndefined();
+    user = stranger;
+    expect((await call(`/api/comments/${comment.id}`, 'DELETE')).status).toBe(403);
+    user = owner;
+    expect((await (await call(`/api/comments/${comment.id}`, 'DELETE')).json()).commentCount).toBe(0);
+    const shared = await (await call('/api/knowledge/Q1/share', 'POST')).json();
+    expect(new URL(shared.shareUrl).searchParams.get('db')).toBe('app');
+    expect(shared.shareCount).toBe(1);
+    node.visibility = 'private'; user = null;
+    expect((await call(commentsPath)).status).toBe(404);
+  } finally {
+    if (previous === undefined) delete process.env.KNOWLEDGE_STORAGE_BACKEND;
+    else process.env.KNOWLEDGE_STORAGE_BACKEND = previous;
+  }
+});

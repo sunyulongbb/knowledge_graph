@@ -36,7 +36,7 @@ export function canUseArangoKnowledge(node: Doc | null, user: KnowledgeUser | nu
   return mode !== 'manage' && (node.maintainer_ids || []).includes(user.id);
 }
 export function arangoNodeResponse(node: Doc, user: KnowledgeUser | null): Doc {
-  const { _key, _id, _rev, data: storedData, sync_version, maintenance_requests, _arango_rev, _search_revision, _search_schema, search_attributes, has_images, has_media, _current_permissions, ...fields } = node;
+  const { _key, _id, _rev, data: storedData, interactions, sync_version, maintenance_requests, _arango_rev, _search_revision, _search_schema, search_attributes, has_images, has_media, _current_permissions, ...fields } = node;
   const id = cleanKnowledgeId(node.sqlite_id || node.id);
   const aliases = Object.values(node.aliases || {}).flatMap((v: any) => Array.isArray(v) ? v : [v]).map((v: any) => v?.value).filter(Boolean);
   const categories = node.class_ids || [];
@@ -178,6 +178,40 @@ export class EnterpriseKnowledgeStore {
     });
     return rows.map(node => ({ key: String(node._key), id: String(node.id),
       can_edit: canUseArangoKnowledge(node, user, 'edit'), can_manage: canUseArangoKnowledge(node, user, 'manage') }));
+  }
+  async interact(database: string, id: string, user: KnowledgeUser | null, action = 'interaction', method = 'GET', input: Doc = {}) {
+    const perform = async (trx?: string) => {
+      const node = await this.require(database, id, user, 'read', trx);
+      const state = node.interactions || {};
+      let likes: number[] = [...(state.likes || [])];
+      let comments: Doc[] = [...(state.comments || [])];
+      let shareCount = Number(state.shareCount || 0);
+      let addedId: string | undefined;
+      if (method !== 'GET') {
+        if (!user || user.id <= 0) throw new KnowledgeStoreError('请先登录', 401);
+        if (action === 'like') likes = method === 'DELETE' ? likes.filter(uid => uid !== user.id) : [...new Set([...likes, user.id])];
+        else if (action === 'share') shareCount++;
+        else if (action === 'comments' && method === 'POST') {
+          const content = String(input.content || '').trim();
+          if (!content || content.length > 2000) throw new KnowledgeStoreError('评论内容不能为空且不能超过 2000 字');
+          addedId = randomUUID();
+          comments.unshift({ id: addedId, userId: user.id, username: user.displayName || user.username, avatar: '', content, createdAt: new Date().toISOString() });
+        } else if (action === 'comments' && method === 'DELETE') {
+          const comment = comments.find(row => row.id === input.commentId);
+          if (!comment) throw new KnowledgeStoreError('评论不存在', 404);
+          if (comment.userId !== user.id && user.role !== 'admin' && !user.fullAccess) throw new KnowledgeStoreError('无权删除此评论', 403);
+          comments = comments.filter(row => row.id !== input.commentId);
+        }
+        await this.client.database(database, `/_api/document/entity/${node._key}`, {
+          method: 'PATCH', headers: { 'x-arango-trx-id': trx! },
+          body: JSON.stringify({ interactions: { likes, comments, shareCount } }),
+        });
+      }
+      return { ...(addedId ? { id: addedId } : {}), likeCount: likes.length, commentCount: comments.length, shareCount,
+        liked: Boolean(user && likes.includes(user.id)), comments: comments.map(row => ({ ...row,
+          canDelete: Boolean(user && (row.userId === user.id || user.role === 'admin' || user.fullAccess)) })) };
+    };
+    return method === 'GET' ? perform() : this.transaction(database, perform);
   }
   async list(database: string, user: KnowledgeUser | null, options: Doc) {
     const binds: Doc = {
