@@ -36,11 +36,14 @@ export function canUseArangoKnowledge(node: Doc | null, user: KnowledgeUser | nu
   return mode !== 'manage' && (node.maintainer_ids || []).includes(user.id);
 }
 export function arangoNodeResponse(node: Doc, user: KnowledgeUser | null): Doc {
-  const { _key, _id, _rev, sync_version, maintenance_requests, _arango_rev, _search_revision, _search_schema, search_attributes, has_images, has_media, _current_permissions, ...fields } = node;
+  const { _key, _id, _rev, data: storedData, sync_version, maintenance_requests, _arango_rev, _search_revision, _search_schema, search_attributes, has_images, has_media, _current_permissions, ...fields } = node;
   const id = cleanKnowledgeId(node.sqlite_id || node.id);
   const aliases = Object.values(node.aliases || {}).flatMap((v: any) => Array.isArray(v) ? v : [v]).map((v: any) => v?.value).filter(Boolean);
   const categories = node.class_ids || [];
-  const { _relationGraphSnapshot, ...data } = json(node.data, {});
+  // Storage data is flattened in the API; `data` is reserved for graph wrappers.
+  const parsedData = json(storedData, {});
+  const { _relationGraphSnapshot, data: _nestedData, ...data } =
+    parsedData && typeof parsedData === 'object' && !Array.isArray(parsedData) ? parsedData : {};
   const { images, covers, videos } = knowledgeMedia(node, node._search_attributes || []);
   const name = localizedText(node.labels) || node.name || '';
   const description = localizedText(node.descriptions) || node.description || '';

@@ -37,6 +37,19 @@ test('formatting and patching Arango documents do not query SQLite knowledge tab
   expect(result.can_edit).toBe(true);
   expect(updated.owner_user_id).toBe(owner.id);
 });
+test('serialized entity data is flattened without masquerading as a graph wrapper', () => {
+  for (const data of ['{"mentions":{}}', { mentions: {}, data: 'legacy payload' }]) {
+    const result = arangoNodeResponse({ id: 'Q1', data }, owner);
+    expect(result.mentions).toEqual({});
+    expect(result.data).toBeUndefined();
+    const graphNode = result.data || result;
+    graphNode.id = `entity/${graphNode.id}`;
+    expect(graphNode.id).toBe('entity/Q1');
+  }
+  for (const data of ['null', '123', '"text"', '[]', 'invalid']) {
+    expect(arangoNodeResponse({ id: 'Q1', data }, owner).id).toBe('Q1');
+  }
+});
 test('JSON scalar text from the composer survives Arango creation and editing', () => {
   const store = new EnterpriseKnowledgeStore(new ArangoClient({ url: 'http://arango', username: 'u', password: 'p' }));
   for (const name of ['123', '0', 'true', 'false', 'null', '1.25']) {
