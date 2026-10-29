@@ -79,8 +79,9 @@ const handleEnterpriseKnowledge = enterpriseStore ? createEnterpriseKnowledgeHan
   serveMedia: serveStaticRoute,
   getSchema: project => ({
     classes: adminDb.query('SELECT * FROM classes WHERE project_id=? ORDER BY COALESCE(sort_order,rowid),name').all(project.id),
-    ontologies: adminDb.query('SELECT id,name,alias,color FROM ontologies WHERE project_id=?').all(project.id),
-    properties: adminDb.query('SELECT id,name,datatype,status FROM properties WHERE project_id=?').all(project.id),
+    ontologies: adminDb.query('SELECT * FROM ontologies WHERE project_id=?').all(project.id),
+    properties: adminDb.query('SELECT * FROM properties WHERE project_id=?').all(project.id),
+    ontology_properties: adminDb.query('SELECT op.* FROM ontology_properties op JOIN ontologies o ON o.id=op.ontology_id WHERE o.project_id=?').all(project.id),
   }),
 }) : null;
 const handleSqliteKnowledgeSync = createSqliteKnowledgeSync({

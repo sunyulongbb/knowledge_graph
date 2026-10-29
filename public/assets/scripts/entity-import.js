@@ -67,6 +67,10 @@
       if (status) status.textContent = result.batch
         ? `批量导入成功：新增 ${result.created} 个、更新 ${result.updated} 个实体，共 ${result.attributesCreated + result.attributesUpdated} 个属性值`
         : `导入成功：${result.attributesCreated + result.attributesUpdated} 个属性值`;
+      if (result.sync === 'pending') {
+        if (status) status.textContent += '。实体已保存，搜索索引正在更新，系统将自动重试。';
+        return;
+      }
       const next = new URL(window.location.href);
       next.searchParams.set('node', result.entityId);
       window.location.href = next.toString();

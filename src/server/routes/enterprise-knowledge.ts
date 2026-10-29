@@ -9,6 +9,9 @@ import {
 } from '../enterprise-knowledge.ts';
 import type { KnowledgeUser } from '../knowledge-access.ts';
 import { relationAttributeResponse } from '../relation-order.ts';
+import { importEnterpriseEntities } from '../enterprise-entity-import.ts';
+import { hiddenKnowledgeTypes } from '../ontology-filter.ts';
+import { EntityImportError, parseEntityImports, localizeEntityImportMedia, cleanupLocalizedEntityImport } from '../entity-import.ts';
 
 type Doc = Record<string, any>;
 type Dependencies = {
@@ -21,12 +24,13 @@ type Dependencies = {
   canCreate: (user: KnowledgeUser, project: Doc) => boolean;
   listProjects?: () => Doc[];
   serveMedia?: (req: Request, path: string) => Promise<Response | null>;
-  getSchema?: (project: Doc) => { classes: Doc[]; ontologies: Doc[]; properties: Doc[] };
+  getSchema?: (project: Doc) => { classes: Doc[]; ontologies: Doc[]; properties: Doc[]; ontology_properties?: Doc[] };
 };
 const integer = (value: string | null, fallback: number, max: number) => {
   const number = Number(value ?? fallback);
   return Number.isSafeInteger(number) && number >= 0 ? Math.min(number, max) : fallback;
 };
+const schemaReadPaths = new Set(['/api/kb/ontologies', '/api/kb/ontology/tree', '/api/kb/properties', '/api/kb/ontology/property']);
 export const enterpriseMediaPath = (path: string) => /^\/static\/uploads\/(?:.*\/)?(node-images|node-videos|node-pdfs)\//i.test(path.replace(/\/{2,}/g, '/'));
 export function enterpriseKnowledgePath(path: string) {
   return enterpriseMediaPath(path) || /^\/api\/kb\/(?:node(?:s)?(?:\/|$)|node-types$|entity(?:_|\/)|attributes(?:\/|$)|relations(?:\/|$)|graph$|edge$|stats$|classes$|gallery_|knowledge-|entry(?:\/|$)|shorts_|fetch$|clean\/)/.test(path)
@@ -34,7 +38,7 @@ export function enterpriseKnowledgePath(path: string) {
 }
 export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
   return async (req: Request, url: URL, method: string): Promise<Response | null> => {
-    if (!enterpriseKnowledgeEnabled() || !enterpriseKnowledgePath(url.pathname)) return null;
+    if (!enterpriseKnowledgeEnabled() || (!enterpriseKnowledgePath(url.pathname) && !(method === 'GET' && schemaReadPaths.has(url.pathname)))) return null;
     try {
       if (enterpriseMediaPath(url.pathname)) {
         const projects = url.searchParams.has('db') ? [deps.getProject(url.searchParams.get('db')!)].filter(Boolean) : deps.listProjects?.() || [deps.getProject('default')].filter(Boolean);
@@ -61,7 +65,64 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
       const user = deps.getUser(req);
       const path = url.pathname;
       const store = deps.store;
-      const schema = deps.getSchema?.(project);
+      const loggedIn = () => {
+        if (!user || user.id <= 0) throw new KnowledgeStoreError('请先登录', 401);
+        return user;
+      };
+      const synchronizeWrite = async () => {
+        if (!deps.sync) return 'disabled';
+        try { await deps.sync.afterWrite(database); return 'synced'; }
+        catch (error) { console.error('Knowledge saved to ArangoDB; Elasticsearch synchronization will retry:', error); return 'pending'; }
+      };
+      if (path === '/api/kb/entity/import' && method === 'POST') {
+        const current = loggedIn();
+        if (!deps.canCreate(current, project)) throw new KnowledgeStoreError('仅应用成员可以导入实体', 403);
+        if (!deps.sync) throw new KnowledgeStoreError('未配置 Elasticsearch 同步，无法导入实体', 503);
+        let input: unknown;
+        try { input = await req.json(); }
+        catch { throw new KnowledgeStoreError('无效的 JSON 请求'); }
+        parseEntityImports(input);
+        const localized = await localizeEntityImportMedia(input, Number(project.id));
+        let result: Doc;
+        try { result = await importEnterpriseEntities(store, database, Number(project.id), localized.input, current, () => deps.getSchema?.(project)); }
+        catch (error) { cleanupLocalizedEntityImport(localized.files); throw error; }
+        const sync = await synchronizeWrite();
+        return Response.json({ ok: true, ...result, filesLocalized: localized.files.length, sync,
+          ...(sync === 'pending' ? { warning: '实体已保存到 ArangoDB，Elasticsearch 同步暂未完成，后台将自动重试' } : {}) }, { status: sync === 'pending' ? 202 : 200 });
+      }
+      const importedSchema = await store.importSchema?.(database);
+      const schema = importedSchema || deps.getSchema?.(project);
+      if (method === 'GET' && schemaReadPaths.has(path)) {
+        const parse = (value: any) => { try { return typeof value === 'string' ? JSON.parse(value) : value || []; } catch { return []; } };
+        const status = url.searchParams.get('status') || 'active';
+        const q = (url.searchParams.get('q') || '').trim().toLocaleLowerCase();
+        const filter = (rows: Doc[]) => rows.filter(row => (status === 'all' || (row.status || 'active') === status)
+          && (!q || [row.name, ...parse(row.alias)].some(value => String(value || '').toLocaleLowerCase().includes(q))));
+        if (path === '/api/kb/properties') return Response.json(filter(schema?.properties || []).map(row => ({ ...row, alias: parse(row.alias), label: row.name })));
+        if (path === '/api/kb/ontology/property') {
+          const ontologyId = url.searchParams.get('ontology_id');
+          if (!ontologyId) throw new KnowledgeStoreError('缺少 ontology_id');
+          const ontologyIds = new Set([ontologyId]);
+          if (url.searchParams.get('include_inherited') === '1') {
+            let current = schema?.ontologies.find(row => row.id === ontologyId);
+            while (current?.parent_id && !ontologyIds.has(current.parent_id)) {
+              ontologyIds.add(current.parent_id);
+              current = schema?.ontologies.find(row => row.id === current!.parent_id);
+            }
+          }
+          const links = (schema?.ontology_properties || []).filter(row => ontologyIds.has(row.ontology_id));
+          return Response.json({ items: (schema?.properties || []).filter(row => links.some(link => link.property_id === row.id)).map(row => {
+            const isLocal = links.some(link => link.property_id === row.id && link.ontology_id === ontologyId);
+            return { ...row, label: row.name, is_local: isLocal, inherited: !isLocal, types: parse(row.types) };
+          }) });
+        }
+        const rows: Doc[] = filter(schema?.ontologies || []).map(row => ({ ...row, alias: parse(row.alias) }));
+        if (path === '/api/kb/ontologies') return Response.json(rows);
+        const flat = rows.filter(row => row.name !== '实体条目' && !row.alias.includes('Wikibase Item'));
+        const tree = (parent: string | null, ancestors = new Set<string>()): Doc[] => flat.filter(row => (row.parent_id || null) === parent && !ancestors.has(row.id))
+          .map(row => ({ ...row, label: row.name, children: tree(row.id, new Set([...ancestors, row.id])) }));
+        return Response.json({ items: tree(null), flat });
+      }
       const resultNode = (node: Doc) => {
         const result = arangoNodeResponse(node, user);
         if (!schema) return result;
@@ -85,19 +146,6 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
         if (!body || typeof body !== 'object' || Array.isArray(body)) throw new KnowledgeStoreError('请求必须是 JSON 对象');
       }
       const id = cleanKnowledgeId(url.searchParams.get('id') || url.searchParams.get('entityId') || url.searchParams.get('entity_id') || body.id || body.entityId || body.entity_id);
-      const loggedIn = () => {
-        if (!user || user.id <= 0) throw new KnowledgeStoreError('请先登录', 401);
-        return user;
-      };
-      const synchronizeWrite = async () => {
-        if (deps.backup) {
-          try { await deps.backup.afterWrite(database); }
-          catch (error) { console.error('Knowledge saved to ArangoDB; SQLite backup will retry:', error); }
-        }
-        if (!deps.sync) return 'disabled';
-        try { await deps.sync.afterWrite(database); return 'synced'; }
-        catch (error) { console.error('Knowledge saved to ArangoDB; Elasticsearch synchronization will retry:', error); return 'pending'; }
-      };
       if (path === '/api/kb/entity_search' && method === 'GET') {
         if (!deps.search) throw new KnowledgeStoreError('未配置 Elasticsearch 知识检索', 503);
         const classId = url.searchParams.get('class_id');
@@ -122,8 +170,8 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
           propertyId: url.searchParams.get('property_id'), propertyValue: url.searchParams.get('property_value'),
           definedClasses: ['1', 'true'].includes(url.searchParams.get('defined_class_only') || '') && schema ? schema.classes.map(cls => cls.id) : null,
           definedTypes: ['1', 'true'].includes(url.searchParams.get('defined_type_only') || '') && schema ? schema.ontologies.map(type => type.id) : null,
-          excludeTypes: ['1', 'true'].includes(url.searchParams.get('hide_entity') || '') && schema
-            ? schema.ontologies.filter(type => ['entity', '实体'].includes(String(type.name || '').trim().toLowerCase()) || String(type.alias || '').trim().toLowerCase() === 'entity').map(type => type.id) : [],
+          excludeTypes: ['1', 'true'].includes(url.searchParams.get('hide_entity') || '')
+            ? hiddenKnowledgeTypes(schema?.ontologies) : [],
         }); } catch (error) {
           console.error('Elasticsearch knowledge search failed:', error);
           throw new KnowledgeStoreError('Elasticsearch 知识检索暂时不可用，请检查同步器状态', 503);
@@ -321,7 +369,7 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
           database: deps.getProject(url.searchParams.get('db') || 'default')?.name,
         }, { status: 409 });
       }
-      if (error instanceof KnowledgeStoreError || error instanceof TypeError || error instanceof RangeError) {
+      if (error instanceof KnowledgeStoreError || error instanceof EntityImportError || error instanceof TypeError || error instanceof RangeError) {
         return Response.json({ error: error.message }, { status: error instanceof KnowledgeStoreError ? error.status : 400 });
       }
       console.error('Enterprise knowledge request failed:', error);

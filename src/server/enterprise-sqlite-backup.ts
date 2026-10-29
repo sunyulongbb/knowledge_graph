@@ -12,10 +12,6 @@ export class EnterpriseSqliteBackup {
   status(database: string) {
     return this.db.query('SELECT database_name,entities,links,completed_at FROM enterprise_knowledge_backups WHERE database_name=?').get(database);
   }
-  async afterWrite(database: string) {
-    await this.running.get(database)?.catch(() => {});
-    return this.flush(database);
-  }
   flush(database: string): Promise<void> {
     const current = this.running.get(database);
     if (current) return current;
@@ -28,9 +24,11 @@ export class EnterpriseSqliteBackup {
   private async capture(database: string) {
     // One read transaction captures entity/link together. Replace the last good
     // snapshot only after the whole graph was successfully received.
+    const schema = await this.store.importSchema?.(database);
     const [snapshot] = await this.store.query(database,
-      'RETURN { entity: (FOR doc IN entity RETURN doc), link: (FOR edge IN link RETURN edge) }');
+      `RETURN { entity: (FOR doc IN entity RETURN doc), link: (FOR edge IN link RETURN edge)${schema ? ', knowledge_schema: (FOR doc IN knowledge_schema RETURN doc)' : ''} }`);
     if (!snapshot || !Array.isArray(snapshot.entity) || !Array.isArray(snapshot.link)) throw new Error('Incomplete ArangoDB backup snapshot');
+    if (schema && !Array.isArray(snapshot.knowledge_schema)) throw new Error('Incomplete ArangoDB schema backup snapshot');
     this.db.run(`INSERT INTO enterprise_knowledge_backups(database_name,snapshot_json,entities,links,completed_at)
       VALUES(?,?,?,?,?) ON CONFLICT(database_name) DO UPDATE SET snapshot_json=excluded.snapshot_json,
       entities=excluded.entities,links=excluded.links,completed_at=excluded.completed_at`,

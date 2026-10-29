@@ -3,8 +3,46 @@ import { ArangoClient, ElasticsearchClient } from '../src/server/arangodb.ts';
 import { EnterpriseKnowledgeStore } from '../src/server/enterprise-knowledge.ts';
 import { EnterpriseKnowledgeSearch, buildEnterpriseSearchQuery, entitySearchProjection } from '../src/server/enterprise-search.ts';
 import { createEnterpriseKnowledgeHandler } from '../src/server/routes/enterprise-knowledge.ts';
+import { hiddenKnowledgeTypes } from '../src/server/ontology-filter.ts';
 const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 const owner = { id: 42, username: 'owner' };
+
+test('knowledge list hidden types include imported IDs, legacy aliases and default IDs without hiding ordinary types', () => {
+  const hidden = hiddenKnowledgeTypes([
+    { id: 'imported-item', name: '实体条目' },
+    { id: 'alias-item', name: '引用', alias: '["Wikibase Item"]' },
+    { id: 'array-item', name: '引用', alias: ['实体条目'] },
+    { id: 'legacy-item', name: '引用', description: '由实体导入中的 wikibase-item 属性值自动创建' },
+    { id: 'ordinary', name: '人物' },
+  ]);
+  for (const id of ['imported-item', 'alias-item', 'array-item', 'legacy-item', 'ontology/wikibase-item', '实体条目']) expect(hidden).toContain(id);
+  expect(hidden).not.toContain('ordinary');
+});
+
+test('knowledge list excludes item types in the ES query while reference searches remain available', async () => {
+  const before = process.env.KNOWLEDGE_STORAGE_BACKEND;
+  process.env.KNOWLEDGE_STORAGE_BACKEND = 'arangodb';
+  try {
+    const queries: any[] = [];
+    const store = { ensure: async () => {}, importSchema: async () => ({ classes: [], properties: [], ontologies: [{ id: 'imported-item', name: '实体条目' }] }),
+      searchAccess: async () => [{ key: 'allowed', can_edit: true, can_manage: true }] } as any;
+    const es = new ElasticsearchClient({ url: 'http://es' }, async (_input, init) => {
+      const query = JSON.parse(String(init?.body)).query;
+      queries.push(query);
+      return reply({ hits: { total: { value: query.bool.must_not ? 0 : 1 }, hits: [] } });
+    });
+    const handler = createEnterpriseKnowledgeHandler({ store, search: new EnterpriseKnowledgeSearch(store, es),
+      getUser: () => owner, getProject: () => ({ id: 7, name: 'app' }), canCreate: () => true });
+    for (const flag of ['1', 'true', '']) {
+      const url = new URL('http://local/api/kb/entity_search?db=app&hide_entity=' + flag);
+      const response = (await handler(new Request(url), url, 'GET'))!;
+      expect(response.status).toBe(200);
+      expect((await response.json()).total).toBe(flag ? 0 : 1);
+      if (flag) expect(queries.at(-1).bool.must_not[0].terms.type).toContain('imported-item');
+      else expect(queries.at(-1).bool.must_not).toBeUndefined();
+    }
+  } finally { if (before === undefined) delete process.env.KNOWLEDGE_STORAGE_BACKEND; else process.env.KNOWLEDGE_STORAGE_BACKEND = before; }
+});
 
 test('ES predicates preserve category/media/type filters and keep property and value in one nested attribute', () => {
   const query = buildEnterpriseSearchQuery({ limit: 20, offset: 0, q: '知识', classIds: ['class/a'], definedTypes: ['Thing'], hasMedia: true, propertyId: 'P2', propertyValue: 'A*B?' }, ['allowed']);

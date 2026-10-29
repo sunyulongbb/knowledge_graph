@@ -3,7 +3,7 @@ import { knowledgeMedia } from '../shared/knowledge-media.ts';
 import { randomUUID } from 'node:crypto';
 import {
   ArangoClient, arangoDatabaseName, configFromEnvironment,
-  documentKey, entityDocument, edgeDocuments,
+  documentKey, entityDocument, edgeDocuments, ensureApplicationDatabase,
 } from './arangodb.ts';
 import { normalizeEntityTaxonomy } from '../shared/entity-taxonomy.ts';
 import { normalizeDatatype, normalizeStatement, uiDatatype, valueTypeFor } from '../shared/wikidata.ts';
@@ -11,6 +11,7 @@ import { resolveRelationOrder, normalizeIncomingOrder } from './relation-order.t
 import type { KnowledgeUser } from './knowledge-access.ts';
 
 type Doc = Record<string, any>;
+export type ImportSchema = { classes: Doc[]; ontologies: Doc[]; properties: Doc[]; ontology_properties: Doc[] };
 export class KnowledgeStoreError extends Error {
   constructor(message: string, readonly status = 400) { super(message); }
 }
@@ -111,10 +112,38 @@ export class EnterpriseKnowledgeStore {
     if (!canUseArangoKnowledge(node, user, mode)) throw new KnowledgeStoreError(mode === 'read' ? '知识不存在或无权访问' : '无权修改该知识', mode === 'read' ? 404 : 403);
     return node!;
   }
-  async transaction<T>(database: string, work: (id: string) => Promise<T>): Promise<T> {
+  async importSchema(database: string, trx?: string): Promise<ImportSchema | null> {
+    try {
+      const { body } = await this.client.database(database, '/_api/document/knowledge_schema/definitions', {
+        headers: trx ? { 'x-arango-trx-id': trx } : undefined,
+      });
+      return body?.classes && body?.ontologies && body?.properties ? body : null;
+    } catch (error: any) {
+      if (error.status === 404 && [1202, 1203].includes(error.body?.errorNum)) return null;
+      throw error;
+    }
+  }
+  async ensureImportSchema(database: string) {
+    try { await this.ensure(database); }
+    catch (error: any) {
+      if (error.status !== 404 || ![1203, 1228].includes(error.body?.errorNum)) throw error;
+      // An explicit import can initialize an application's empty graph directly.
+      await ensureApplicationDatabase(this.client, database);
+      this.ready.delete(database);
+      await this.ensure(database);
+    }
+    try { await this.client.database(database, '/_api/collection/knowledge_schema'); }
+    catch (error: any) {
+      if (error.status !== 404 || error.body?.errorNum !== 1203) throw error;
+      await this.client.database(database, '/_api/collection', {
+        method: 'POST', body: JSON.stringify({ name: 'knowledge_schema', type: 2 }),
+      }).catch((error: any) => { if (error.status !== 409) throw error; });
+    }
+  }
+  async transaction<T>(database: string, work: (id: string) => Promise<T>, extraCollections: string[] = []): Promise<T> {
     await this.ensure(database);
     const { body } = await this.client.database(database, '/_api/transaction/begin', {
-      method: 'POST', body: JSON.stringify({ collections: { exclusive: ['entity', 'link'] }, waitForSync: true, lockTimeout: 10 }),
+      method: 'POST', body: JSON.stringify({ collections: { exclusive: ['entity', 'link', ...extraCollections] }, waitForSync: true, lockTimeout: 10 }),
     });
     const id = body?.result?.id;
     if (!id) throw new Error('ArangoDB transaction did not return an ID');

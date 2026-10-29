@@ -1,3 +1,20 @@
+/** Types hidden from knowledge lists; reference pickers can still query them. */
+export function hiddenKnowledgeTypes(ontologies: Record<string, any>[] = []): string[] {
+  const names = new Set(['entity', '实体', '实体条目', 'wikibase item']);
+  const hidden = new Set([...names, 'ontology/wikibase-item']);
+  for (const ontology of ontologies) {
+    let aliases = ontology.alias;
+    if (typeof aliases === 'string') {
+      try { aliases = JSON.parse(aliases); } catch { aliases = [aliases]; }
+    }
+    if ([ontology.name, ...(Array.isArray(aliases) ? aliases : [])].some(value => names.has(String(value || '').trim().toLowerCase()))
+      || String(ontology.description || '').toLowerCase().includes('wikibase-item 属性值自动创建')) {
+      if (ontology.id) hidden.add(String(ontology.id));
+    }
+  }
+  return [...hidden];
+}
+
 // UNION deduplicates visited IDs, including malformed cyclic hierarchies.
 // Seed the selected ID even if its ontology record no longer exists.
 export const ontologyTypeFilterSql = `lower(trim(n.type)) IN (

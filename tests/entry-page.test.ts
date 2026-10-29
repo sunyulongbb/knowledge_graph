@@ -569,7 +569,7 @@ test('entity editor uses the post-composer hierarchy without changing existing c
   expect(css).toContain('.entity-composer-footer');
   expect(page).toContain('id="entityDisplayImageWrap" class="wd-entity-avatar-wrap empty social-avatar-wrap" hidden');
   expect(page).toContain('id="composerUserAvatar" class="composer-user-avatar" hidden');
-  expect(page).toContain('/assets/scripts/entity-import.js?v=20260921-6');
+  expect(page).toContain('/assets/scripts/entity-import.js?v=20261029-1');
   expect(page).toContain('/assets/scripts/detail-panel.js?v=20261010-related-order3');
   expect(readFileSync('public/assets/scripts/entity-import.js', 'utf8')).toContain("window.addEventListener('kb-auth-change'");
   expect(readFileSync('public/assets/scripts/entity-import.js', 'utf8')).toContain("document.getElementById('composerUserAvatar')");

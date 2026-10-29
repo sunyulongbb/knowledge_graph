@@ -1,5 +1,7 @@
 # 实体 JSON 导入格式
 
+使用 ArangoDB（Enterprise）时，此接口直接将实体、属性关系和导入的本体、属性、分类定义写入 ArangoDB，并在提交后同步到 Elasticsearch。SQLite 仅由定时任务保存知识备份，不参与导入写入。若 ES 暂时不可用，响应返回 `sync: "pending"` 和提示信息，后台会自动重试；无需手动执行 SQLite 知识同步。
+
 单个实体沿用 `{ "version": 1, "entity": { ... } }` 格式。批量导入可直接使用实体对象数组，也可使用原单实体文档组成的数组：
 
 ```json
