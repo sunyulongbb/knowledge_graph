@@ -1,0 +1,12 @@
+{
+  "tileSize": 256,
+  "minZoom": 0,
+  "maxNativeZoom": 5,
+  "maxZoom": 9,
+  "countries": 242,
+  "cities": 1251,
+  "tiles": 1365,
+  "source": "Natural Earth 50m",
+  "attribution": "Made with Natural Earth",
+  "license": "Public domain"
+}

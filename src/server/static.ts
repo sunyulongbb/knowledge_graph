@@ -122,6 +122,15 @@ export async function serveStaticRoute(req: Request, pathname: string) {
     }
     return null;
   }
+  if (pathname.startsWith('/maps/world/')) {
+    if (!/^\/maps\/world\/(?:manifest\.json|places\.json|tiles\/[0-5]\/\d{1,2}\/\d{1,2}\.svg)$/.test(pathname)) return new Response('Not Found', { status: 404 });
+    const file = Bun.file(`public${pathname}`);
+    if (pathname.endsWith('.svg') && new URL(req.url).searchParams.get('theme') === 'dark' && await file.exists()) {
+      const svg = (await file.text()).replaceAll('#eef3f7', '#111827').replaceAll('#fafbf8', '#1f2937').replaceAll('#c3cdd2', '#475569');
+      return new Response(svg, { headers: { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=3600' } });
+    }
+    return await file.exists() ? makeResponse(file) : new Response('Not Found', { status: 404 });
+  }
 
   if (pathname.startsWith("/js/")) {
     const file = Bun.file(`public${pathname}`);

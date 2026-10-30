@@ -104,7 +104,7 @@
   sync();
   return { sync, close: closeLayoutDrawer };
   }
-  const layoutIcons = { list: 'fa-list', grid: 'fa-grip', timeline: 'fa-timeline', semantic: 'fa-diagram-project', manage: 'fa-table' };
+  const layoutIcons = { list: 'fa-list', grid: 'fa-grip', timeline: 'fa-timeline', geographic: 'fa-earth-americas', family: 'fa-sitemap', manage: 'fa-table' };
   const layoutPicker = createInlineChoice(tblLayoutSelect, { options: 'tblLayoutOptions', drawer: 'tblLayoutDrawer', trigger: 'btnLayoutDrawer', control: 'tblLayoutControl' }, layoutIcons);
   const sortControl = document.getElementById('tblSortControl');
   const sortPicker = createInlineChoice(tblSortSelect, { options: 'tblSortOptions', drawer: 'tblSortDrawer', trigger: 'btnSortDrawer', control: 'tblSortControl' }, { modified_desc: 'fa-clock', hot: 'fa-fire-flame-curved' });
@@ -115,10 +115,11 @@
   const btnDeleteSelected = document.getElementById("btnDeleteSelected");
   const tblCount = document.getElementById("tblCount");
   const tblPagination = document.getElementById("tblPagination");
-  const TABLE_LAYOUT_MODES = ["manage", "list", "grid", "timeline", "semantic"];
+  const TABLE_LAYOUT_MODES = ["manage", "list", "grid", "timeline", "geographic", "family"];
   const normalizeTableLayoutMode = (mode) =>
     mode === "table"
       ? "manage"
+      : mode === 'semantic' ? 'geographic'
       : TABLE_LAYOUT_MODES.includes(mode)
         ? mode
         : "manage";
@@ -137,7 +138,7 @@
   const isInfiniteTableLayoutMode = (mode = window.kbTableLayoutMode) =>
     mode === "list" || mode === "grid";
 
-  let semanticMapRuntimePromise = null;
+  let geographicMapRuntimePromise = null;
   const applySemanticMapSelection = (nodeId) => {
     if (typeof window.setTableSelection !== "function") return;
     window.setTableSelection(nodeId, true);
@@ -170,28 +171,32 @@
       script.addEventListener("error", () => reject(new Error(`加载失败：${src}`)));
       document.head.appendChild(script);
     });
-  const ensureSemanticMapRuntime = () => {
-    if (window.__kbSemanticMapRuntimeLoaded) return Promise.resolve();
-    if (!semanticMapRuntimePromise) {
-      semanticMapRuntimePromise = loadSemanticMapScript(
-        "/node_modules/deck.gl/dist.min.js",
-        "kbDeckGlRuntime",
+  const ensureGeographicMapRuntime = () => {
+    if (window.knowledgeGeography) return Promise.resolve();
+    if (!geographicMapRuntimePromise) {
+      const style = document.getElementById('kbLeafletStyle') || document.createElement('link');
+      style.id = 'kbLeafletStyle'; style.rel = 'stylesheet'; style.href = '/node_modules/leaflet/dist/leaflet.css';
+      if (!style.isConnected) document.head.appendChild(style);
+      geographicMapRuntimePromise = loadSemanticMapScript(
+        "/node_modules/leaflet/dist/leaflet.js",
+        "kbLeafletRuntime",
       )
         .then(() =>
           loadSemanticMapScript(
-            "/assets/scripts/semantic-map.js?v=20260906-2",
-            "kbSemanticMapRuntime",
+            "/assets/scripts/geographic-map.js?v=20261030-auto-focus",
+            "kbGeographicMapRuntime",
           ),
         )
         .then(() => {
-          window.__kbSemanticMapRuntimeLoaded = true;
+          window.__kbGeographicMapRuntimeLoaded = true;
         })
         .catch((error) => {
-          semanticMapRuntimePromise = null;
-          console.error("加载语义地图失败", error);
+          geographicMapRuntimePromise = null;
+          document.getElementById('geographicStatus').textContent = '地图组件加载失败，请刷新页面后重试。';
+          throw error;
         });
     }
-    return semanticMapRuntimePromise;
+    return geographicMapRuntimePromise;
   };
 
   const clampGridSize = (value) =>
@@ -225,7 +230,7 @@
     const normalized = normalizeTableLayoutMode(mode);
     window.kbTableLayoutMode = normalized;
     if (sortControl) {
-      const visible = ['manage', 'list', 'grid'].includes(normalized);
+      const visible = ['manage', 'list', 'grid', 'family'].includes(normalized);
       sortControl.style.display = visible ? '' : 'none';
       if (!visible) sortPicker.close(false);
     }
@@ -252,35 +257,34 @@
     }
     const timelineControls = document.getElementById("timelineControls");
     const timelineView = document.getElementById("timelineView");
-    const semanticMapView = document.getElementById("semanticMapView");
+    const geographicMapView = document.getElementById("geographicMapView");
+    if (normalized !== 'geographic') window.knowledgeGeography?.cancel();
+    const familyView = document.getElementById('knowledgeFamilyView');
+    if (familyView) familyView.style.display = normalized === 'family' ? 'block' : 'none';
+    if (normalized !== 'family') window.knowledgeFamily?.cancel();
     const tableWrap = document.querySelector("#tablePanel > .tbl-wrap");
     if (timelineControls)
       timelineControls.style.display =
         normalized === "timeline" ? "flex" : "none";
     if (timelineView)
       timelineView.style.display = normalized === "timeline" ? "block" : "none";
-    if (semanticMapView)
-      semanticMapView.style.display = normalized === "semantic" ? "block" : "none";
+    if (geographicMapView)
+      geographicMapView.style.display = normalized === "geographic" ? "flex" : "none";
     if (tableWrap)
       tableWrap.style.display =
-        normalized === "timeline" || normalized === "semantic" ? "none" : "";
+        normalized === "timeline" || normalized === "geographic" || normalized === 'family' ? "none" : "";
     if (tblPagination) {
-      tblPagination.style.display = normalized === "manage" ? "flex" : "none";
+      tblPagination.style.display = ['manage', 'family'].includes(normalized) ? "flex" : "none";
     }
     if (typeof window.renderTableList === "function") {
       window.renderTableList();
     }
     if (normalized === "manage") window.openEntityManageTable?.();
     else window.closeEntityManageTable?.();
+    if (normalized === 'family') void window.renderKnowledgeFamily?.(window.kbTableNodes || []);
     updateGridManualLoadButton();
     if (normalized === "timeline") loadTablePage({ resetPage: true });
-    if (normalized === "semantic") {
-      void ensureSemanticMapRuntime().then(() => {
-        requestAnimationFrame(() => {
-          window.dispatchEvent(new Event("resize"));
-        });
-      });
-    }
+    if (normalized === 'geographic') void ensureGeographicMapRuntime().then(() => window.knowledgeGeography.setFilters(window.kbGeographicFilters || {})).catch(() => {});
   };
   window.applyTableLayoutMode = applyTableLayoutMode;
   applyGridSize(getInitialGridSize(), false);
@@ -761,6 +765,14 @@
         url.searchParams.set("has_media", "1");
       }
       url.searchParams.set("hide_entity", "1");
+      window.kbGeographicFilters = Object.fromEntries(url.searchParams);
+      if (window.kbTableLayoutMode === 'geographic') {
+        await ensureGeographicMapRuntime();
+        await window.knowledgeGeography.setFilters(window.kbGeographicFilters);
+        if (tblPagination) tblPagination.style.display = 'none';
+        window.setStatus?.(false, '地理位置地图');
+        return;
+      }
 
       const resp = await fetch(url);
       if (!resp.ok) {
@@ -816,7 +828,7 @@
       updateTblPageInfo();
       if (tblPagination) {
         tblPagination.style.display =
-          window.kbTableLayoutMode === "manage" ? "flex" : "none";
+          ['manage', 'family'].includes(window.kbTableLayoutMode) ? "flex" : "none";
       }
 
       if (tblCount) {
@@ -850,6 +862,7 @@
       if (window.kbTableLayoutMode === "manage") {
         window.openEntityManageTable?.();
       }
+      if (window.kbTableLayoutMode === 'family') void window.renderKnowledgeFamily?.(window.kbTableNodes || []);
       updateGridManualLoadButton();
       if (isInfiniteTableLayoutMode()) {
         setTimeout(() => {
@@ -860,7 +873,7 @@
       if (opts.scrollToTop === true) {
         try {
           const list = document.getElementById("tblNodes");
-          const container = list?.closest?.(".tbl-wrap") || list;
+          const container = window.kbTableLayoutMode === 'family' ? document.getElementById('knowledgeFamilyView') : list?.closest?.(".tbl-wrap") || list;
           if (container) {
             container.scrollTop = 0;
           }

@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Database } from "bun:sqlite";
+import { attributeEarthPoint } from '../shared/geography.ts';
 
 type ArangoConfig = {
   url: string;
@@ -618,14 +619,16 @@ function referencedEntityIds(value: unknown): string[] {
 
 export function entityDocument(node: Record<string, any>, syncVersion?: string, classIds: string[] = []) {
   const { name, description, aliases, ...fields } = node;
+  const labels = localizedValueMap(name), descriptions = localizedValueMap(description), aliasMap = localizedAliasMap(aliases);
   return {
     ...fields,
     _key: documentKey(fields.id),
     sqlite_id: String(fields.id),
     class_ids: classIds,
-    labels: localizedValueMap(name),
-    descriptions: localizedValueMap(description),
-    aliases: localizedAliasMap(aliases),
+    labels,
+    descriptions,
+    aliases: aliasMap,
+    search_text: [...Object.values(labels), ...Object.values(descriptions), ...Object.values(aliasMap).flat()].map((value: any) => value?.value || '').join(' '),
     created_at_sort: sortableDate(fields.created_at),
     updated_at_sort: sortableDate(fields.updated_at || fields.created_at),
     ...(syncVersion ? { sync_version: syncVersion } : {}),
@@ -860,6 +863,7 @@ export function edgeDocuments(node: Record<string, any>, attributes: AttributeRo
       : Array.isArray(datavalue.value) ? datavalue.value : [datavalue.value];
 
     for (const [valueIndex, value] of claimValues.entries()) {
+      const geo = attributeEarthPoint(value, claim.datatype);
       const valueClaim = {
         ...claim,
         mainsnak: datavalue
@@ -885,6 +889,7 @@ export function edgeDocuments(node: Record<string, any>, attributes: AttributeRo
           property_name: attribute.property_name_snapshot || "",
           ...valueClaim,
           attribute: { ...attribute },
+          ...(geo ? { geo } : {}),
           ...(syncVersion ? { sync_version: syncVersion } : {}),
         });
       }

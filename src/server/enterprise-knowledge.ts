@@ -62,6 +62,10 @@ export function arangoNodeResponse(node: Doc, user: KnowledgeUser | null): Doc {
 // This predicate stays inside AQL so pagination/counts cannot leak private entities.
 const READ_FILTER = `( @full OR @admin OR doc.visibility == null OR doc.visibility == 'public'
   OR (@uid > 0 AND (doc.owner_user_id == @uid OR doc.project_id IN @projects OR @uid IN NOT_NULL(doc.maintainer_ids, []))) )`;
+export function knowledgeReadAccess(user: KnowledgeUser | null, alias = 'doc') {
+  return { filter: READ_FILTER.replace(/\bdoc\b/g, alias), bindVars: { full: Boolean(user?.fullAccess), admin: user?.role === 'admin', uid: user?.id || -1,
+    projects: [...(user?.ownedProjectIds || []), ...(user?.memberProjectIds || [])] } };
+}
 export class EnterpriseKnowledgeStore {
   private readonly ready = new Map<string, Promise<void>>();
   constructor(readonly client: ArangoClient) {}
@@ -450,11 +454,45 @@ export class EnterpriseKnowledgeStore {
   async relations(database: string, id: string, user: KnowledgeUser | null, direction = 'both') {
     await this.require(database, id, user);
     const vertex = `entity/${documentKey(cleanKnowledgeId(id))}`;
-    const rows = await this.query(database, `FOR edge IN link
+    const rows = await this.query(database, `WITH entity
+      FOR neighbor, edge IN 1..1 ANY @vertex link
       FILTER edge._from != edge._to AND ((@outgoing AND edge._from == @vertex) OR (@incoming AND edge._to == @vertex))
       LET source = DOCUMENT(edge._from) LET target = DOCUMENT(edge._to)
       FILTER source != null AND target != null RETURN { edge, source, target }`, { vertex, outgoing: direction !== 'incoming', incoming: direction !== 'outgoing' });
     return rows.filter(row => canUseArangoKnowledge(row.source, user) && canUseArangoKnowledge(row.target, user));
+  }
+  async relationshipCards(database: string, ids: string[], user: KnowledgeUser | null) {
+    const rootAccess = knowledgeReadAccess(user);
+    const neighborAccess = knowledgeReadAccess(user, 'neighbor');
+    const rows = await this.query(database, `WITH entity
+      FOR key IN @keys LET doc = DOCUMENT('entity', key)
+        FILTER doc != null AND ${rootAccess.filter}
+        LET relations = (FOR neighbor, edge IN 1..1 ANY doc._id link
+          FILTER edge._from != edge._to AND neighbor != null AND ${neighborAccess.filter}
+          LIMIT 41 RETURN { node: neighbor, edge })
+        RETURN { node: doc, relations }`, { ...rootAccess.bindVars, keys: [...new Set(ids.map(id => documentKey(cleanKnowledgeId(id))))] });
+    return rows.filter(row => canUseArangoKnowledge(row.node, user)).map((row): Doc => ({ ...row,
+      truncated: row.relations.length > 40,
+      relations: row.relations.slice(0, 40).filter((relation: Doc) => canUseArangoKnowledge(relation.node, user)),
+    }));
+  }
+  async relationPaths(database: string, id: string, user: KnowledgeUser | null, limit = 500) {
+    const vertex = `entity/${documentKey(cleanKnowledgeId(id))}`;
+    const maximum = Math.max(1, Math.min(1000, Math.floor(limit) || 500));
+    const access = READ_FILTER.replace(/\bdoc\b/g, 'neighbor');
+    const rows = await this.query(database, `WITH entity
+      FOR neighbor, edge, path IN 1..2 ANY @vertex link
+      PRUNE blocked = neighbor == null OR (edge != null AND edge._from == edge._to) OR NOT (${access})
+      OPTIONS { order: 'bfs', uniqueVertices: 'path', uniqueEdges: 'path' }
+      FILTER NOT blocked AND neighbor._id != @vertex
+      LIMIT @limit
+      RETURN { vertices: path.vertices, edges: path.edges }`, {
+      vertex, limit: maximum + 1, full: Boolean(user?.fullAccess), admin: user?.role === 'admin', uid: user?.id || -1,
+      projects: [...(user?.ownedProjectIds || []), ...(user?.memberProjectIds || [])],
+    });
+    // Defense in depth: never return paths with an unreadable intermediate vertex.
+    return { paths: rows.slice(0, maximum).filter(row => row.vertices?.every((node: Doc) => canUseArangoKnowledge(node, user))),
+      truncated: rows.length > maximum, limit: maximum };
   }
 }
 export function arangoAttributeResponse(attr: Doc) {

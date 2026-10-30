@@ -10,7 +10,14 @@ import {
 import type { KnowledgeUser } from '../knowledge-access.ts';
 import { relationAttributeResponse } from '../relation-order.ts';
 import { importEnterpriseEntities } from '../enterprise-entity-import.ts';
+import { importEnterpriseOntologies } from '../enterprise-ontology-import.ts';
+import { OntologyImportError } from '../ontology-import.ts';
 import { hiddenKnowledgeTypes } from '../ontology-filter.ts';
+import { buildRelationInsights } from '../relation-insights.ts';
+import { handleEnterpriseReports } from '../enterprise-reports.ts';
+import { ArangoKnowledgeSearch } from '../arango-knowledge-search.ts';
+import { GeographicKnowledgeSearch } from '../geographic-search.ts';
+import { deriveSchemaFromKnowledge, maintainPropertySchema } from '../schema-from-knowledge.ts';
 import { EntityImportError, parseEntityImports, localizeEntityImportMedia, cleanupLocalizedEntityImport } from '../entity-import.ts';
 
 type Doc = Record<string, any>;
@@ -30,15 +37,20 @@ const integer = (value: string | null, fallback: number, max: number) => {
   const number = Number(value ?? fallback);
   return Number.isSafeInteger(number) && number >= 0 ? Math.min(number, max) : fallback;
 };
-const schemaReadPaths = new Set(['/api/kb/ontologies', '/api/kb/ontology/tree', '/api/kb/properties', '/api/kb/ontology/property']);
+const schemaReadPaths = new Set(['/api/kb/ontologies', '/api/kb/ontology/tree', '/api/kb/properties', '/api/kb/property_search', '/api/kb/ontology/property']);
+const propertyWritePaths = new Set(['/api/kb/property_create', '/api/kb/property_update', '/api/kb/property_delete', '/api/kb/ontology/property']);
 export const enterpriseMediaPath = (path: string) => /^\/static\/uploads\/(?:.*\/)?(node-images|node-videos|node-pdfs)\//i.test(path.replace(/\/{2,}/g, '/'));
 export function enterpriseKnowledgePath(path: string) {
-  return enterpriseMediaPath(path) || /^\/api\/kb\/(?:node(?:s)?(?:\/|$)|node-types$|entity(?:_|\/)|attributes(?:\/|$)|relations(?:\/|$)|graph$|edge$|stats$|classes$|gallery_|knowledge-|entry(?:\/|$)|shorts_|fetch$|clean\/)/.test(path)
+  return enterpriseMediaPath(path) || /^\/api\/kb\/(?:node(?:s)?(?:\/|$)|node-types$|entity(?:_|\/)|geography(?:\/|$)|discover(?:\/|$)|attributes(?:\/|$)|relations(?:\/|$)|reports(?:\/|$)|graph$|edge$|stats$|classes$|gallery_|knowledge-|entry(?:\/|$)|shorts_|fetch$|clean\/)/.test(path)
     || path.startsWith('/api/wiki/') || path.startsWith('/api/knowledge/') || path.startsWith('/api/sparql/import');
 }
 export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
+  const arangoSearch = new ArangoKnowledgeSearch(deps.store);
+  const geographicSearch = new GeographicKnowledgeSearch(deps.store);
   return async (req: Request, url: URL, method: string): Promise<Response | null> => {
-    if (!enterpriseKnowledgeEnabled() || (!enterpriseKnowledgePath(url.pathname) && !(method === 'GET' && schemaReadPaths.has(url.pathname)))) return null;
+    if (!enterpriseKnowledgeEnabled() || (!enterpriseKnowledgePath(url.pathname) && !(method === 'GET' && schemaReadPaths.has(url.pathname))
+      && !(method === 'POST' && ['/api/kb/ontologies/import', '/api/kb/properties/from-knowledge'].includes(url.pathname))
+      && !(['POST', 'DELETE'].includes(method) && propertyWritePaths.has(url.pathname)))) return null;
     try {
       if (enterpriseMediaPath(url.pathname)) {
         const projects = url.searchParams.has('db') ? [deps.getProject(url.searchParams.get('db')!)].filter(Boolean) : deps.listProjects?.() || [deps.getProject('default')].filter(Boolean);
@@ -65,6 +77,10 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
       const user = deps.getUser(req);
       const path = url.pathname;
       const store = deps.store;
+      if (path === '/api/kb/reports' || path.startsWith('/api/kb/reports/')) {
+        return await handleEnterpriseReports(req, url, method, { store, project, user,
+          canCreate: Boolean(user && deps.canCreate(user, project)), legacySchema: () => deps.getSchema?.(project) });
+      }
       const loggedIn = () => {
         if (!user || user.id <= 0) throw new KnowledgeStoreError('请先登录', 401);
         return user;
@@ -74,6 +90,36 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
         try { await deps.sync.afterWrite(database); return 'synced'; }
         catch (error) { console.error('Knowledge saved to ArangoDB; Elasticsearch synchronization will retry:', error); return 'pending'; }
       };
+      if (['POST', 'DELETE'].includes(method) && propertyWritePaths.has(path)) {
+        const current = loggedIn();
+        if (!deps.canCreate(current, project)) throw new KnowledgeStoreError('需要应用成员权限才能管理属性', 403);
+        let input: Doc;
+        if (method === 'DELETE') input = Object.fromEntries(url.searchParams);
+        else { try { input = await req.json(); } catch { throw new KnowledgeStoreError('请求内容无效'); } }
+        if (!input || typeof input !== 'object' || Array.isArray(input)) throw new KnowledgeStoreError('请求必须是 JSON 对象');
+        const operation = path.endsWith('property_create') ? 'create' : path.endsWith('property_update') ? 'update' : path.endsWith('property_delete') ? 'delete' : method === 'DELETE' ? 'unlink' : 'link';
+        return Response.json(await maintainPropertySchema(store, database, Number(project.id), operation, input, () => deps.getSchema?.(project)));
+      }
+      if (path === '/api/kb/properties/from-knowledge' && method === 'POST') {
+        const current = loggedIn();
+        if (!deps.canCreate(current, project)) throw new KnowledgeStoreError('需要应用成员权限才能反向生成属性', 403);
+        let input: Doc;
+        try { input = await req.json(); } catch { throw new KnowledgeStoreError('请求内容无效'); }
+        if (!input || typeof input !== 'object' || Array.isArray(input) || (input.ontology_id != null && typeof input.ontology_id !== 'string')) throw new KnowledgeStoreError('本体标识无效');
+        const result = await deriveSchemaFromKnowledge(store, database, Number(project.id), current, String(input.ontology_id || '').trim(), () => deps.getSchema?.(project));
+        return Response.json({ ok: true, ...result });
+      }
+      if (path === '/api/kb/ontologies/import' && method === 'POST') {
+        const current = loggedIn();
+        if (!deps.canCreate(current, project)) throw new KnowledgeStoreError('仅应用成员可以导入本体', 403);
+        const raw = await req.text();
+        if (new TextEncoder().encode(raw).length > 5 * 1024 * 1024) return Response.json({ error: 'JSON 文件不能超过 5 MB' }, { status: 413 });
+        let input: unknown;
+        try { input = JSON.parse(raw.replace(/^\uFEFF/, '')); }
+        catch { throw new KnowledgeStoreError('JSON 格式错误，请检查文件'); }
+        const result = await importEnterpriseOntologies(store, database, Number(project.id), input, () => deps.getSchema?.(project));
+        return Response.json({ ok: true, ...result });
+      }
       if (path === '/api/kb/entity/import' && method === 'POST') {
         const current = loggedIn();
         if (!deps.canCreate(current, project)) throw new KnowledgeStoreError('仅应用成员可以导入实体', 403);
@@ -99,6 +145,19 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
         const filter = (rows: Doc[]) => rows.filter(row => (status === 'all' || (row.status || 'active') === status)
           && (!q || [row.name, ...parse(row.alias)].some(value => String(value || '').toLocaleLowerCase().includes(q))));
         if (path === '/api/kb/properties') return Response.json(filter(schema?.properties || []).map(row => ({ ...row, alias: parse(row.alias), label: row.name })));
+        if (path === '/api/kb/property_search') {
+          const ontology = url.searchParams.get('ontology_id') || '';
+          const typeName = (url.searchParams.get('type_name') || schema?.classes.find(row => row.id === url.searchParams.get('class_id'))?.name || '').trim().toLowerCase();
+          const links = schema?.ontology_properties || [];
+          const rows = filter(schema?.properties || []).map(row => {
+            const ids = [...new Set(links.filter(link => link.property_id === row.id).map(link => link.ontology_id))];
+            return { ...row, label: row.name, alias: parse(row.alias), types: parse(row.types), ontology_ids: ids,
+              ontology_names: ids.map(id => schema?.ontologies.find(item => item.id === id)?.name || id), linked_to_ontology: ids.includes(ontology) };
+          }).filter(row => (!ontology || url.searchParams.get('association_mode') !== 'linked' || row.linked_to_ontology)
+            && (!typeName || parse(row.types).some((type: unknown) => String(type).trim().toLowerCase() === typeName)));
+          const offset = integer(url.searchParams.get('offset'), 0, 1_000_000), limit = integer(url.searchParams.get('limit'), 20, 500);
+          return Response.json({ items: rows.slice(offset, offset + limit), total: rows.length });
+        }
         if (path === '/api/kb/ontology/property') {
           const ontologyId = url.searchParams.get('ontology_id');
           if (!ontologyId) throw new KnowledgeStoreError('缺少 ontology_id');
@@ -146,8 +205,32 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
         if (!body || typeof body !== 'object' || Array.isArray(body)) throw new KnowledgeStoreError('请求必须是 JSON 对象');
       }
       const id = cleanKnowledgeId(url.searchParams.get('id') || url.searchParams.get('entityId') || url.searchParams.get('entity_id') || body.id || body.entityId || body.entity_id);
-      if (path === '/api/kb/entity_search' && method === 'GET') {
-        if (!deps.search) throw new KnowledgeStoreError('未配置 Elasticsearch 知识检索', 503);
+      if (path === '/api/kb/geography/viewport' && method === 'GET') {
+        const selected = url.searchParams.get('class_id');
+        const classes = selected ? new Set([selected]) : null;
+        if (classes && schema) {
+          let added = true;
+          while (added) { added = false; for (const row of schema.classes) if (classes.has(row.parent_id) && !classes.has(row.id)) { classes.add(row.id); added = true; } }
+        }
+        const result = await geographicSearch.search(database, url.searchParams, user, classes ? [...classes] : null,
+          url.searchParams.get('hide_entity') === '1' ? hiddenKnowledgeTypes(schema?.ontologies) : []);
+        return Response.json({ ...result, items: result.items.map(item => ({ ...item, node: resultNode(item.node) })), source: 'arangodb-geo' });
+      }
+      if (path === '/api/kb/entity/relationships' && method === 'POST') {
+        if (!Array.isArray(body.ids) || body.ids.length > 100 || body.ids.some((id: unknown) => typeof id !== 'string' || !id.trim() || id.length > 512)) {
+          throw new KnowledgeStoreError('请提供不超过 100 个有效实体 ID');
+        }
+        if (!body.ids.length) return Response.json({ items: [] });
+        const rows = await store.relationshipCards(database, body.ids, user);
+        return Response.json({ items: rows.map(row => ({ node: resultNode(row.node), truncated: row.truncated,
+          relations: row.relations.map((relation: Doc) => ({ node: resultNode(relation.node),
+            propertyId: relation.edge.property_id, propertyName: relation.edge.property_name || relation.edge.property_id || '关联',
+            direction: relation.edge._from === row.node._id ? 'outgoing' : 'incoming' })) })) });
+      }
+      if (['/api/kb/entity_search', '/api/kb/discover/search'].includes(path) && method === 'GET') {
+        const discovery = path === '/api/kb/discover/search';
+        const backend = discovery ? 'elasticsearch' : 'arangosearch';
+        if (discovery && !deps.search) throw new KnowledgeStoreError('未配置 Elasticsearch 首页与检索服务', 503);
         const classId = url.searchParams.get('class_id');
         let classIds: string[] | null = classId ? [classId] : null;
         if (classId && schema) {
@@ -160,23 +243,41 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
           classIds = [...descendants];
         }
         let page;
-        try { page = await deps.search.search(database, user, {
+        const selectedType = url.searchParams.get('type');
+        const discoveryTypes = discovery && selectedType ? new Set([selectedType]) : null;
+        if (discoveryTypes && schema) {
+          let added = true;
+          while (added) {
+            added = false;
+            for (const type of schema.ontologies) if (discoveryTypes.has(type.parent_id) && !discoveryTypes.has(type.id)) { discoveryTypes.add(type.id); added = true; }
+          }
+        }
+        const propertyInput = url.searchParams.get('property_id');
+        const propertyId = discovery && propertyInput ? schema?.properties.find(property => property.id === propertyInput || String(property.name || '').trim().toLowerCase() === propertyInput.trim().toLowerCase())?.id || propertyInput : propertyInput;
+        if (discovery) {
+          const from = url.searchParams.get('updated_from'), to = url.searchParams.get('updated_to');
+          if ([from, to].some(date => date && (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date))) throw new KnowledgeStoreError('更新时间格式无效');
+          if (from && to && from > to) throw new KnowledgeStoreError('开始日期不能晚于结束日期');
+        }
+        try { page = await (discovery ? deps.search! : arangoSearch).search(database, user, {
           q: url.searchParams.get('q'), limit: integer(url.searchParams.get('limit'), 20, 500),
           offset: integer(url.searchParams.get('offset'), 0, 1_000_000),
-          classIds, type: url.searchParams.get('type'), order: url.searchParams.get('order'),
+          classIds, type: discoveryTypes ? null : selectedType, ...(discoveryTypes ? { includeTypes: [...discoveryTypes] } : {}), order: url.searchParams.get('order'),
           emptyType: url.searchParams.has('type') && url.searchParams.get('type') === '',
           hasImage: ['1', 'true'].includes(url.searchParams.get('has_image') || ''),
           hasMedia: ['1', 'true'].includes(url.searchParams.get('has_media') || ''),
-          propertyId: url.searchParams.get('property_id'), propertyValue: url.searchParams.get('property_value'),
+          propertyId, propertyValue: url.searchParams.get('property_value'),
+          ...(discovery ? { matchMode: url.searchParams.get('match_mode'), searchScope: url.searchParams.get('search_scope'),
+            excludeQuery: url.searchParams.get('exclude_q'), updatedFrom: url.searchParams.get('updated_from'), updatedTo: url.searchParams.get('updated_to') } : {}),
           definedClasses: ['1', 'true'].includes(url.searchParams.get('defined_class_only') || '') && schema ? schema.classes.map(cls => cls.id) : null,
           definedTypes: ['1', 'true'].includes(url.searchParams.get('defined_type_only') || '') && schema ? schema.ontologies.map(type => type.id) : null,
           excludeTypes: ['1', 'true'].includes(url.searchParams.get('hide_entity') || '')
             ? hiddenKnowledgeTypes(schema?.ontologies) : [],
         }); } catch (error) {
-          console.error('Elasticsearch knowledge search failed:', error);
-          throw new KnowledgeStoreError('Elasticsearch 知识检索暂时不可用，请检查同步器状态', 503);
+          console.error(`${backend} search failed:`, error);
+          throw new KnowledgeStoreError(discovery ? 'Elasticsearch 首页与检索服务暂时不可用，请检查同步器状态' : 'ArangoSearch 知识检索暂时不可用，请检查搜索视图', 503);
         }
-        return Response.json({ nodes: page.nodes.map(resultNode), total: page.total, searchBackend: 'elasticsearch' }, { headers: { 'X-Knowledge-Search': 'elasticsearch' } });
+        return Response.json({ nodes: page.nodes.map(resultNode), total: page.total, searchBackend: backend }, { headers: { 'X-Knowledge-Search': backend } });
       }
       if (path === '/api/kb/classes' && method === 'GET') {
         const summary = await store.summary(database, user);
@@ -241,10 +342,15 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
         await store.remove(database, id, loggedIn());
         return Response.json({ ok: true, success: true, sync: await synchronizeWrite() });
       }
-      if (path === '/api/kb/node' && method === 'GET') {
+      if (['/api/kb/node', '/api/kb/node/relation-insights'].includes(path) && method === 'GET') {
         if (!id) throw new KnowledgeStoreError('缺少知识 ID');
         const node = await store.require(database, id, user);
-        node._search_attributes = await store.attributes(database, id);
+        const [attributes, graph] = await Promise.all([
+          path === '/api/kb/node' ? store.attributes(database, id) : Promise.resolve([]),
+          store.relationPaths?.(database, id, user, integer(url.searchParams.get('relation_limit'), 500, 1000)),
+        ]);
+        node._search_attributes = attributes;
+        if (graph) return Response.json({ node: resultNode(node), ...buildRelationInsights(node, graph.paths, resultNode, graph.truncated) });
         const rows = await store.relations(database, id, user);
         const neighbors = new Map<string, Doc>();
         const incomingRelations: Doc[] = [];
@@ -369,7 +475,7 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
           database: deps.getProject(url.searchParams.get('db') || 'default')?.name,
         }, { status: 409 });
       }
-      if (error instanceof KnowledgeStoreError || error instanceof EntityImportError || error instanceof TypeError || error instanceof RangeError) {
+      if (error instanceof KnowledgeStoreError || error instanceof EntityImportError || error instanceof OntologyImportError || error instanceof TypeError || error instanceof RangeError) {
         return Response.json({ error: error.message }, { status: error instanceof KnowledgeStoreError ? error.status : 400 });
       }
       console.error('Enterprise knowledge request failed:', error);

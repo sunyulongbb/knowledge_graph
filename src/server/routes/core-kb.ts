@@ -133,6 +133,12 @@ export async function handleCoreKbRoutes(
   url: URL,
   method: string,
 ) {
+  // The discovery UI has a dedicated endpoint; Lite retains its existing search implementation.
+  if (url.pathname === '/api/kb/discover/search' && method === 'GET') {
+    const legacyUrl = new URL(url);
+    legacyUrl.pathname = '/api/kb/entity_search';
+    return handleCoreKbRoutes(req, legacyUrl, method);
+  }
   const dbParam = (url.searchParams.get("db") || "").trim();
   const scopedProject =
     dbParam && dbParam !== "app" ? getProjectByIdentifier(dbParam) : null;

@@ -7,6 +7,69 @@ import { hiddenKnowledgeTypes } from '../src/server/ontology-filter.ts';
 const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 const owner = { id: 42, username: 'owner' };
 
+test('discovery supports bounded fuzzy matching, phrase/all/any modes and advanced filters without changing ACL', () => {
+  const options = { q: 'scientsit', limit: 20, offset: 0, searchScope: 'name', excludeQuery: '排除', updatedFrom: '2026-10-01', updatedTo: '2026-10-30', includeTypes: ['parent', 'child'] };
+  const fuzzy = buildEnterpriseSearchQuery(options, ['allowed']);
+  expect(fuzzy.bool.filter).toContainEqual({ ids: { values: ['allowed'] } });
+  expect(fuzzy.bool.filter).toContainEqual({ terms: { type: ['parent', 'child'] } });
+  expect(fuzzy.bool.filter).toContainEqual({ range: { updated_at_sort: { gte: '2026-10-01T00:00:00.000Z', lte: '2026-10-30T23:59:59.999Z' } } });
+  const clauses = fuzzy.bool.must[0].bool.should;
+  expect(clauses[1].multi_match).toMatchObject({ fuzziness: 'AUTO', prefix_length: 1, max_expansions: 30 });
+  expect(clauses[1].multi_match.fields).not.toContain('descriptions.*.value');
+  expect(clauses[2].multi_match.type).toBe('bool_prefix');
+  expect(fuzzy.bool.must_not[0].multi_match.query).toBe('排除');
+  for (const mode of ['phrase', 'all', 'any']) {
+    const query = buildEnterpriseSearchQuery({ ...options, matchMode: mode }, ['allowed']);
+    expect(query.bool.must[0].multi_match.type).toBe(mode === 'phrase' ? 'phrase' : 'best_fields');
+    expect(query.bool.must[0].multi_match).not.toHaveProperty('fuzziness');
+  }
+});
+
+test('ES match fragments are requested with neutral markers and returned separately from source content', async () => {
+  let request: any;
+  const search = new EnterpriseKnowledgeSearch({ searchAccess: async () => [{ key: 'allowed', can_edit: false, can_manage: false }] } as any,
+    new ElasticsearchClient({ url: 'http://es' }, async (_input, init) => {
+      request = JSON.parse(String(init?.body));
+      return reply({ hits: { total: { value: 1 }, hits: [{ _id: 'allowed', _source: { id: 'Q1', description: '原始内容' },
+        highlight: { 'labels.zh.value': ['\uE000科学家\uE001'], 'descriptions.zh.value': ['<img onerror=bad>\uE000科学\uE001'], 'aliases.en.value': ['\uE000Scientist\uE001'] } }] } });
+    }));
+  const result = await search.search('app', owner, { q: '科学家', limit: 20, offset: 0 });
+  expect(request.highlight.pre_tags).toEqual(['\uE000']); expect(request.highlight.post_tags).toEqual(['\uE001']);
+  expect(result.nodes[0]!.description).toBe('原始内容');
+  expect(result.nodes[0]!.searchHighlights).toMatchObject({ name: ['\uE000科学家\uE001'], aliases: ['\uE000Scientist\uE001'] });
+});
+
+test('discovery resolves ontology descendants and property names and rejects invalid date filters', async () => {
+  const previous = process.env.KNOWLEDGE_STORAGE_BACKEND; process.env.KNOWLEDGE_STORAGE_BACKEND = 'arangodb';
+  try {
+    let options: any;
+    const handler = createEnterpriseKnowledgeHandler({ store: { ensure: async () => {}, importSchema: async () => ({ classes: [], ontologies: [{ id: 'parent' }, { id: 'child', parent_id: 'parent' }], properties: [{ id: 'P1', name: '职业' }] }) } as any,
+      search: { search: async (_db: string, _user: any, value: any) => { options = value; return { nodes: [], total: 0 }; } } as any,
+      getUser: () => owner, getProject: () => ({ id: 7, name: 'app' }), canCreate: () => true });
+    const url = new URL('http://local/api/kb/discover/search?db=app&type=parent&property_id=' + encodeURIComponent('职业') + '&match_mode=phrase&search_scope=name&exclude_q=bad');
+    expect((await handler(new Request(url), url, 'GET'))!.status).toBe(200);
+    expect(options).toMatchObject({ type: null, includeTypes: ['parent', 'child'], propertyId: 'P1', matchMode: 'phrase', searchScope: 'name', excludeQuery: 'bad' });
+    for (const dates of ['updated_from=2026-02-31', 'updated_from=2026-10-30&updated_to=2026-10-01']) {
+      const invalid = new URL('http://local/api/kb/discover/search?db=app&' + dates);
+      expect((await handler(new Request(invalid), invalid, 'GET'))!.status).toBe(400);
+    }
+  } finally { if (previous === undefined) delete process.env.KNOWLEDGE_STORAGE_BACKEND; else process.env.KNOWLEDGE_STORAGE_BACKEND = previous; }
+});
+
+test('discovery search uses ES relevance while home can explicitly keep latest-update ordering', async () => {
+  const requests: any[] = [];
+  const store = { searchAccess: async () => [{ key: 'allowed', can_edit: true, can_manage: true }] } as any;
+  const es = new ElasticsearchClient({ url: 'http://es' }, async (_input, init) => {
+    requests.push(JSON.parse(String(init?.body)));
+    return reply({ hits: { total: { value: 0 }, hits: [] } });
+  });
+  const search = new EnterpriseKnowledgeSearch(store, es);
+  await search.search('app', owner, { q: '科学家', limit: 20, offset: 0, order: 'relevance' });
+  expect(requests[0].sort[0]).toEqual({ _score: 'desc' });
+  await search.search('app', owner, { q: '科学家', limit: 20, offset: 0, order: 'modified_desc' });
+  expect(requests[1].sort[0]).toHaveProperty('updated_at_sort');
+});
+
 test('knowledge list hidden types include imported IDs, legacy aliases and default IDs without hiding ordinary types', () => {
   const hidden = hiddenKnowledgeTypes([
     { id: 'imported-item', name: '实体条目' },
@@ -19,7 +82,7 @@ test('knowledge list hidden types include imported IDs, legacy aliases and defau
   expect(hidden).not.toContain('ordinary');
 });
 
-test('knowledge list excludes item types in the ES query while reference searches remain available', async () => {
+test('discovery excludes item types in the ES query when requested', async () => {
   const before = process.env.KNOWLEDGE_STORAGE_BACKEND;
   process.env.KNOWLEDGE_STORAGE_BACKEND = 'arangodb';
   try {
@@ -34,7 +97,7 @@ test('knowledge list excludes item types in the ES query while reference searche
     const handler = createEnterpriseKnowledgeHandler({ store, search: new EnterpriseKnowledgeSearch(store, es),
       getUser: () => owner, getProject: () => ({ id: 7, name: 'app' }), canCreate: () => true });
     for (const flag of ['1', 'true', '']) {
-      const url = new URL('http://local/api/kb/entity_search?db=app&hide_entity=' + flag);
+      const url = new URL('http://local/api/kb/discover/search?db=app&hide_entity=' + flag);
       const response = (await handler(new Request(url), url, 'GET'))!;
       expect(response.status).toBe(200);
       expect((await response.json()).total).toBe(flag ? 0 : 1);
@@ -106,7 +169,7 @@ test('deep ES paging uses PIT/search_after and preserves total hits', async () =
   expect(requests.some(request => request.body.search_after)).toBe(true);
   expect(requests.at(-1).path).toBe('/_pit');
 });
-test('home/list shared endpoint reports ES and returns 503 on ES failure without an Arango list fallback', async () => {
+test('home/discovery endpoint reports ES and returns 503 on ES failure without an Arango list fallback', async () => {
   const before = process.env.KNOWLEDGE_STORAGE_BACKEND;
   process.env.KNOWLEDGE_STORAGE_BACKEND = 'arangodb';
   try {
@@ -114,7 +177,7 @@ test('home/list shared endpoint reports ES and returns 503 on ES failure without
     let fail = false;
     const search = { search: async () => { if (fail) throw new Error('ES offline'); return { nodes: [{ id: 'Q1', labels: { zh: { value: 'ES结果' } } }], total: 1 }; } } as any;
     const handler = createEnterpriseKnowledgeHandler({ store, search, getUser: () => owner, getProject: () => ({ name: 'app', id: 7 }), canCreate: () => true });
-    const url = new URL('http://localhost/api/kb/entity_search?db=app');
+    const url = new URL('http://localhost/api/kb/discover/search?db=app');
     const ok = await handler(new Request(url), url, 'GET');
     expect(ok?.headers.get('X-Knowledge-Search')).toBe('elasticsearch');
     expect((await ok!.json()).searchBackend).toBe('elasticsearch');

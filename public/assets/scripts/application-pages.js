@@ -14,7 +14,11 @@
   let activePortraitRoot = null;
   const portraitModal = () => activePortraitRoot || byId('appHomeContent').querySelector('[data-home-inspiration-modal]');
   const pageSize = 20;
-  const fields = { q: 'appSearchQuery', type: 'appSearchType', property_id: 'appSearchProperty', property_value: 'appSearchValue', order: 'appSearchOrder' };
+  const fields = { q: 'appSearchQuery', type: 'appSearchType', property_id: 'appSearchProperty', property_value: 'appSearchValue', order: 'appSearchOrder', match_mode: 'appSearchMatchMode', search_scope: 'appSearchScope', exclude_q: 'appSearchExclude', updated_from: 'appSearchFrom', updated_to: 'appSearchTo' };
+  const searchDefault = key => key === 'order' ? 'relevance' : key === 'match_mode' ? 'fuzzy' : key === 'search_scope' ? 'all' : '';
+  function highlighted(value) {
+    return escape(value).replaceAll('\uE000', '<mark>').replaceAll('\uE001', '</mark>');
+  }
   async function api(path, params = {}) {
     const url = new URL(path, location.origin);
     const db = new URLSearchParams(location.search).get('db');
@@ -34,7 +38,10 @@
     let picture = '';
     const source = node.image || node.images?.[0];
     if (typeof source === 'string' && /^(https?:\/\/|\/(?!\/))/i.test(source)) picture = `<img src="${escape(source)}" alt="" width="92" height="72" loading="lazy">`;
-    return `<article class="app-knowledge-item">${picture}<div><a href="${escape(nodeUrl(node))}">${escape(node.name || node.label || node.id)}</a><p>${escape(node.description || node.desc_zh || '暂无描述')}</p><small class="muted">${escape(node.typeLabel || node.type || '未设置本体')} · ${escape((node.updated_at || node.created_at || '').slice(0, 10))}</small></div></article>`;
+    const hits = node.searchHighlights || {};
+    const title = hits.name?.length ? highlighted(hits.name[0]) : escape(node.name || node.label || node.id);
+    const description = hits.description?.length ? hits.description.map(highlighted).join(' … ') : escape(node.description || node.desc_zh || '暂无描述');
+    return `<article class="app-knowledge-item">${picture}<div><a href="${escape(nodeUrl(node))}">${title}</a><p>${description}</p>${hits.aliases?.length ? `<p class="app-search-alias-match">别名匹配：${highlighted(hits.aliases[0])}</p>` : ''}<small class="muted">${escape(node.typeLabel || node.type || '未设置本体')} · ${escape((node.updated_at || node.created_at || '').slice(0, 10))}</small></div></article>`;
   }
   function imageCandidates(value) {
     if (Array.isArray(value)) return value.flatMap(imageCandidates);
@@ -571,7 +578,7 @@
     const version = ++homeVersion;
     homeBusy = true; homeError = ''; homeRetry = { page: nextPage, category }; renderHome();
     try {
-      const data = await api('/api/kb/entity_search', { order: 'modified_desc', limit: homePageSize, offset: (nextPage - 1) * homePageSize, class_id: category, hide_entity: '1', defined_class_only: '1' });
+      const data = await api('/api/kb/discover/search', { order: 'modified_desc', limit: homePageSize, offset: (nextPage - 1) * homePageSize, class_id: category, hide_entity: '1', defined_class_only: '1' });
       if (version !== homeVersion) return;
       const count = Math.max(0, Number(data.total) || 0);
       const lastPage = Math.max(1, Math.ceil(count / homePageSize));
@@ -650,7 +657,7 @@
     homeHoverCategory = '';
     homeSelectedCategory = ''; homePage = 1; homeTotal = 0; homeBusy = false; homeError = '';
     const results = await Promise.allSettled([
-      api('/api/kb/entity_search', { order: 'modified_desc', limit: homePageSize, offset: 0, hide_entity: '1', defined_class_only: '1' }),
+      api('/api/kb/discover/search', { order: 'modified_desc', limit: homePageSize, offset: 0, hide_entity: '1', defined_class_only: '1' }),
       api('/api/kb/classes'),
       api('/api/applications', { scope: 'market' }),
     ]);
@@ -685,16 +692,20 @@
     const params = Object.fromEntries(Object.entries(fields).map(([key, id]) => [key, byId(id).value.trim()]));
     params.limit = pageSize; params.offset = (page - 1) * pageSize; params.hide_entity = '1';
     if (byId('appSearchImage').checked) params.has_image = '1';
+    if (params.updated_from && params.updated_to && params.updated_from > params.updated_to) {
+      byId('appSearchResults').innerHTML = '<p role="alert">开始日期不能晚于结束日期。</p>'; byId('appSearchPaging').hidden = true; return;
+    }
     writeSearchRoute();
     byId('appSearchResults').innerHTML = '<p class="muted" role="status">正在搜索…</p>';
     byId('appSearchPaging').hidden = true;
     try {
-      const data = await api('/api/kb/entity_search', params);
+      const data = await api('/api/kb/discover/search', params);
       if (version !== searchVersion || window.kbViewMode !== 'app_search') return;
       total = Number(data.total) || 0;
       const lastPage = Math.max(1, Math.ceil(total / pageSize));
       if (page > lastPage) { page = lastPage; return search(); }
-      byId('appSearchResults').innerHTML = `<p class="muted" role="status">找到 ${total} 条知识</p>${(data.nodes || []).map(card).join('') || '<p class="app-search-empty">没有找到匹配的知识，请尝试减少筛选条件。</p>'}`;
+      const mode = { fuzzy: '智能模糊匹配', phrase: '完整短语匹配', all: '包含全部词语', any: '包含任意词语' }[params.match_mode] || '智能模糊匹配';
+      byId('appSearchResults').innerHTML = `<p class="muted" role="status">${mode} · 找到 ${total} 条知识</p>${(data.nodes || []).map(card).join('') || '<p class="app-search-empty">没有找到匹配的知识，请尝试智能模糊匹配、缩短关键词或减少筛选条件。</p>'}`;
       byId('appSearchPaging').hidden = total === 0;
       byId('appSearchPageLabel').textContent = `第 ${page} / ${lastPage} 页`;
       byId('appSearchPrev').disabled = page <= 1;
@@ -706,24 +717,33 @@
   window.loadApplicationSearch = function () {
     const params = new URLSearchParams(location.search);
     Object.entries(fields).forEach(([key, id]) => {
-      const value = params.get(`search_${key}`) || (key === 'order' ? 'modified_desc' : '');
+      const value = params.get(`search_${key}`) || searchDefault(key);
       if (key === 'type' && value && !Array.from(byId(id).options).some((item) => item.value === value)) byId(id).append(new Option(value, value));
       byId(id).value = value;
     });
     byId('appSearchImage').checked = params.get('search_image') === '1';
-    byId('appSearchAdvanced').open = ['type', 'property_id', 'property_value'].some((key) => params.has(`search_${key}`)) || byId('appSearchImage').checked;
+    byId('appSearchAdvanced').open = ['type', 'property_id', 'property_value', 'exclude_q', 'updated_from', 'updated_to'].some((key) => params.has(`search_${key}`)) || byId('appSearchImage').checked || (params.has('search_match_mode') && params.get('search_match_mode') !== 'fuzzy') || (params.has('search_search_scope') && params.get('search_search_scope') !== 'all');
     const requested = Number(params.get('search_page') || 1); page = Number.isSafeInteger(requested) && requested > 0 ? requested : 1;
     populateTypes(params.get('search_type') || '').catch(() => { byId('appSearchTypeHint').textContent = '本体选项加载失败，可继续搜索或重新进入页面重试。'; });
     search();
   };
   byId('btnApplicationSearch').addEventListener('click', () => window.setViewMode('app_search'));
   byId('appHomeSearch').addEventListener('click', () => window.setViewMode('app_search'));
+  byId('appHomeSearchForm')?.addEventListener('submit', event => {
+    event.preventDefault();
+    const url = new URL(location.href);
+    for (const key of Object.keys(fields)) url.searchParams.delete(`search_${key}`);
+    url.searchParams.delete('search_image'); url.searchParams.set('search_page', '1');
+    const query = byId('appHomeSearchQuery').value.trim();
+    if (query) url.searchParams.set('search_q', query);
+    history.replaceState(history.state, '', url); window.setViewMode('app_search');
+  });
   byId('appHomeBrowse').addEventListener('click', () => window.setViewMode('table'));
   byId('appHomeMaintenance').addEventListener('click', () => {
     if (currentHomeApplicationId) window.openApplicationDetails?.(currentHomeApplicationId);
   });
   byId('appSearchForm').addEventListener('submit', (event) => { event.preventDefault(); page = 1; search(); });
-  byId('appSearchReset').addEventListener('click', () => { Object.entries(fields).forEach(([key, id]) => { byId(id).value = key === 'order' ? 'modified_desc' : ''; }); byId('appSearchImage').checked = false; page = 1; search(); });
+  byId('appSearchReset').addEventListener('click', () => { Object.entries(fields).forEach(([key, id]) => { byId(id).value = searchDefault(key); }); byId('appSearchImage').checked = false; page = 1; search(); });
   byId('appSearchPrev').addEventListener('click', () => { if (page > 1) { page--; search(); } });
   byId('appSearchNext').addEventListener('click', () => { if (page * pageSize < total) { page++; search(); } });
   function revealCategoryChildren(event) {

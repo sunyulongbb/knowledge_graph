@@ -65,3 +65,12 @@ test('home and search render safe entity links and preserve application and side
   expect(route.get('node')).toBe('Q1');
   expect(flatten([{ id: 'root', name: 'Root', children: [{ id: 'child', name: 'Child' }] }]).map((item: any) => item.id)).toEqual(['root', 'child']);
 });
+
+test('search cards highlight matched fragments while escaping document HTML and preserving matched aliases', () => {
+  const { card } = setup();
+  const html = card({ id: 'Q1', name: '原始名称', description: '原始描述', searchHighlights: {
+    name: ['\uE000科学家\uE001'], description: ['<img src=x onerror=bad>\uE000科学\uE001'], aliases: ['\uE000Scientist\uE001'],
+  } });
+  expect(html).toContain('<mark>科学家</mark>'); expect(html).toContain('别名匹配：<mark>Scientist</mark>');
+  expect(html).toContain('&lt;img'); expect(html).not.toContain('<img src=x'); expect(html).not.toContain('\uE000');
+});

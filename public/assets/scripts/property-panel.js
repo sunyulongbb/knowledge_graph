@@ -1409,6 +1409,27 @@
     }
 
     const btnPropertyAdd = byId("btnPropertyAdd");
+    const deriveButton = byId('btnPropertyFromKnowledge');
+    if (deriveButton && !deriveButton.dataset.bound) {
+      deriveButton.dataset.bound = '1';
+      deriveButton.addEventListener('click', async () => {
+        const status = byId('propertyDeriveStatus'), details = byId('propertyDeriveDetails'), list = byId('propertyDeriveConflicts');
+        deriveButton.disabled = true; details.hidden = true; list.replaceChildren();
+        status.textContent = selectedOntologyId ? '正在从当前本体的知识数据中整理属性…' : '正在从当前应用的知识数据中整理属性…';
+        try {
+          const url = appendCurrentDbToUrl(new URL('/api/kb/properties/from-knowledge', window.location.origin));
+          const result = await apiJson(url.toString(), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ontology_id: selectedOntologyId || '' }) });
+          status.textContent = `生成完成：新增 ${result.propertiesCreated} 个属性、${result.associationsCreated} 个本体关联${result.ontologiesCreated ? `，补齐 ${result.ontologiesCreated} 个本体定义` : ''}${result.conflicts?.length ? `；${result.conflicts.length} 项需要检查` : ''}${result.skippedWithoutType ? '；部分知识缺少本体，未建立关联' : ''}。`;
+          for (const conflict of result.conflicts || []) {
+            const item = document.createElement('li'); item.textContent = `${conflict.propertyId}：${conflict.reason}${conflict.datatypes?.length ? `（${conflict.datatypes.join('、')}）` : ''}`; list.append(item);
+          }
+          details.hidden = !(result.conflicts || []).length;
+          propertyPage = 1;
+          await Promise.all([loadPropertyList(), loadOntologyTree()]);
+        } catch (error) { status.textContent = `生成失败：${error?.message || error}`; }
+        finally { deriveButton.disabled = false; }
+      });
+    }
     if (btnPropertyAdd && !btnPropertyAdd.dataset.bound) {
       btnPropertyAdd.dataset.bound = "1";
       btnPropertyAdd.addEventListener("click", () => openPropertyModal("add"));

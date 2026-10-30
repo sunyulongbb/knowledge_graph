@@ -69,7 +69,7 @@
       customElements.whenDefined("media-video-layout"),
     ]).then(() => true);
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20261012-classification" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20261030-schema-derive" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -85,6 +85,7 @@
     });
   </script>
   <script src="/js/cytoscape.min.js?v=20261023"></script>
+  <script src="/assets/scripts/report-visuals.js?v=20261030-1"></script>
   <script src="https://unpkg.com/cytoscape-edgehandles@4.0.1/cytoscape-edgehandles.js"></script>
   <script src="/js/cytoscape-dagre.min.js?v=20261023"></script>
   <script>
@@ -2008,7 +2009,8 @@
             <option value="list">列表布局</option>
             <option value="grid">网格布局</option>
             <option value="timeline">时间轴布局</option>
-            <option value="semantic">语义地图布局</option>
+            <option value="geographic">地理位置地图</option>
+            <option value="family">关系谱系</option>
           </select>
           <div id="tblGridZoomControls" class="table-grid-zoom" style="display:none;" role="group" aria-label="网格缩放">
             <button id="btnTblGridZoomOut" class="btn icon sm" type="button" title="缩小缩略图" aria-label="缩小缩略图">
@@ -2782,21 +2784,11 @@
             <div id="tblNodes" class="entity-list" role="list" aria-label="实体列表"></div>
           </div>
           <div id="timelineView" class="timeline-view" aria-label="知识时间轴" style="display:none;"></div>
-          <div id="semanticMapView" class="semantic-map-view" aria-label="知识语义地图" style="display:none;">
-            <div id="deck-root" data-embed="1"></div>
-            <div class="semantic-map-hidden" aria-hidden="true">
-              <input id="semanticSearchInput" type="search" autocomplete="off" />
-              <button id="semanticSearchButton" type="button"></button>
-              <div id="semanticSearchResults"></div>
-              <div id="semanticDetailHot"></div>
-              <div id="semanticDetailBody"></div>
-              <div id="semanticStats"></div>
-            </div>
-            <div class="semantic-map-legend">
-              <div class="semantic-map-legend__title">图例</div>
-              <div id="semanticLegend" class="semantic-map-legend__list"></div>
-            </div>
-            <div id="semanticTooltip" class="semantic-map-tooltip"></div>
+          <div id="knowledgeFamilyView" class="knowledge-family-view" aria-label="知识关系谱系" aria-live="polite" style="display:none;"></div>
+          <div id="geographicMapView" class="geographic-map-view" aria-label="知识地理位置地图" style="display:none;">
+            <div class="geographic-map-toolbar"><div class="geographic-place-search"><i class="fa-solid fa-location-dot" aria-hidden="true"></i><input id="geographicPlaceInput" type="search" placeholder="定位国家或城市，支持中文和英文" aria-label="定位国家或城市" autocomplete="off"><div id="geographicPlaceResults" class="geographic-place-results"></div></div><button id="geographicFocus" type="button" class="btn">聚焦实体</button><button id="geographicWorld" type="button" class="btn">全球视野</button><button id="geographicRefresh" type="button" class="btn">刷新知识</button></div>
+            <div id="geographicMap" class="geographic-map" role="region" aria-label="全球国家与城市离线地图"></div>
+            <div class="geographic-map-status"><span id="geographicStatus" role="status">移动地图查看对应区域的知识</span><small id="geographicBasemapStatus">离线底图 · 国家与主要城市 · 蓝色标记为知识位置</small></div>
           </div>
           <div id="tblPagination" style="
                 margin: 0;
@@ -2860,7 +2852,7 @@
             </form>
             <aside class="knowledge-report-create-note" aria-label="生成说明">
               <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
-              <div><strong>报告将如何生成</strong><p>系统使用标题和全部关键词综合匹配目标知识，再围绕高相关目标及其一层关联内容形成章节。</p></div>
+              <div><strong>报告将如何生成</strong><p>系统根据关键词匹配主实体，自动整理知识信息、关联关系图和统计图。</p></div>
             </aside>
           </div>
         </div>
@@ -2874,11 +2866,34 @@
             </div>
           </div>
           <form id="reportEditForm" class="knowledge-report-edit" hidden>
-            <label>报告标题<input id="reportEditTitle" class="kb-input" type="text" maxlength="160" /></label>
-            <label>关键词<input id="reportEditKeywords" class="kb-input" type="text" placeholder="使用逗号分隔" /></label>
-            <label>概述<textarea id="reportEditSummary" class="kb-input" rows="4"></textarea></label>
-            <div id="reportEditSections" class="knowledge-report-edit-sections"></div>
-            <div><button class="btn btn-primary" type="submit">保存修改</button><button id="btnReportEditCancel" class="btn" type="button">取消</button></div>
+            <div class="knowledge-report-toolbar knowledge-report-create-toolbar">
+              <div class="knowledge-report-toolbar-title"><span class="knowledge-report-toolbar-icon" aria-hidden="true"><i class="fa-regular fa-file-lines"></i></span><div><h1>编辑报告</h1><p>完善报告信息，调整概述和章节内容</p></div></div>
+              <button id="btnReportEditBack" class="btn knowledge-report-back" type="button"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> 返回报告</button>
+            </div>
+            <div class="knowledge-report-create-stage">
+              <div class="knowledge-report-form">
+                <div class="knowledge-report-form-heading"><span>报告信息</span><small>修改后保存，更新当前报告内容</small></div>
+                <div class="knowledge-report-field">
+                  <label for="reportEditTitle"><span>报告标题</span><em>必填</em></label>
+                  <input id="reportEditTitle" class="kb-input" type="text" maxlength="160" placeholder="例如：美国政治人物对华政策分析" required />
+                  <small>使用清晰、具体的主题名称，便于查找和阅读。</small>
+                </div>
+                <div class="knowledge-report-field">
+                  <label for="reportEditKeywordInput"><span>关键词</span><em>至少 1 个</em></label>
+                  <div class="knowledge-report-keyword-box">
+                    <div id="reportEditKeywordChips" class="knowledge-report-keywords"></div>
+                    <div class="knowledge-report-keyword-entry"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input id="reportEditKeywordInput" type="text" maxlength="60" placeholder="输入关键词，按回车添加" /><button id="btnReportEditAddKeyword" class="btn" type="button"><i class="fa-solid fa-plus" aria-hidden="true"></i> 添加</button></div>
+                  </div>
+                  <small>建议添加 2–5 个关键词，用于匹配报告主题相关的知识。</small>
+                  <input id="reportEditKeywords" type="hidden" />
+                </div>
+                <div class="knowledge-report-field"><label for="reportEditSummary"><span>报告概述</span></label><textarea id="reportEditSummary" class="kb-input" rows="4" placeholder="简要介绍报告主题与主要内容"></textarea></div>
+                <div class="knowledge-report-form-heading knowledge-report-content-heading"><span>章节内容</span><small>调整各章节的介绍文字</small></div>
+                <div id="reportEditSections" class="knowledge-report-edit-sections"></div>
+                <div class="knowledge-report-form-actions"><span id="reportEditStatus" class="muted" role="status"></span><button id="btnReportEditCancel" class="btn" type="button">取消</button><button id="btnReportEditSave" class="btn btn-primary" type="submit"><i class="fa-solid fa-check" aria-hidden="true"></i> 保存修改</button></div>
+              </div>
+              <aside class="knowledge-report-create-note" aria-label="编辑说明"><i class="fa-solid fa-circle-info" aria-hidden="true"></i><div><strong>保存与重新生成</strong><p>保存会更新报告文字。修改关键词后，如需更新关联图、知识内容和统计，请返回报告并点击“重新生成”；重新生成会覆盖手动修改的概述与章节介绍。</p></div></aside>
+            </div>
           </form>
           <article id="reportDetailContent" class="knowledge-report-document" aria-live="polite"></article>
         </div>
@@ -2977,6 +2992,7 @@
                   <span class="muted">双击属性编辑，选中后删除</span>
                 </div>
                 <div class="ontology-toolbar__group ontology-toolbar__controls">
+                  <button id="btnPropertyFromKnowledge" class="btn sm" type="button" title="从当前所选本体的知识数据生成属性和关联；未选择本体时处理当前应用"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> 从知识生成</button>
                   <button id="btnPropertyAdd" class="btn sm icon primary" type="button" title="新增属性" aria-label="新增属性">
                     <i class="fa-solid fa-plus"></i>
                   </button>
@@ -2990,6 +3006,8 @@
                     aria-label="搜索属性">
                 </div>
               </div>
+              <div id="propertyDeriveStatus" class="property-derive-status muted" role="status"></div>
+              <details id="propertyDeriveDetails" class="property-derive-details" hidden><summary>查看未处理项</summary><ul id="propertyDeriveConflicts"></ul></details>
               <div class="tbl-wrap ontology-table-wrap">
                 <div id="propertyTable" class="business-grid-host" aria-label="属性管理表格"></div>
               </div>
@@ -3786,7 +3804,7 @@
                 </section>
                 <section id="detailIncomingRelations" class="detail-related-section" hidden>
                   <div class="detail-related-heading">
-                    <div class="detail-attr-title">关联信息</div>
+                    <div id="detailRelationHeading" class="detail-attr-title">关联信息</div>
                     <div class="detail-related-heading-meta">
                       <span id="detailIncomingRelationStatus" class="detail-related-order-status" role="status"></span>
                       <span id="detailIncomingRelationCount"></span>
@@ -4801,19 +4819,30 @@
       </section>
       <section id="applicationHomePanel" class="application-content-page" style="display:none">
         <div class="app-page-heading app-home-heading"><div><h1 id="appHomeName">应用首页</h1><p id="appHomeCount" class="muted"></p></div><div class="app-page-actions"><button id="appHomeMaintenance" type="button" class="btn icon" title="应用维护" aria-label="应用维护" hidden><i class="fa-solid fa-user-gear" aria-hidden="true"></i><span>应用维护</span></button><button id="appHomeSearch" type="button" class="btn icon" title="搜索知识" aria-label="搜索知识"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><span>搜索知识</span></button><button id="appHomeBrowse" type="button" class="btn icon" title="浏览知识" aria-label="浏览知识"><i class="fa-solid fa-table-cells" aria-hidden="true"></i><span>浏览知识</span></button></div></div>
+        <form id="appHomeSearchForm" class="app-search-query app-home-search-form"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input id="appHomeSearchQuery" type="search" class="kb-input" placeholder="搜索当前应用的知识，支持模糊匹配" aria-label="首页知识检索" maxlength="200"><button class="btn primary" type="submit">搜索知识</button></form>
         <div id="appHomeContent" class="app-home-dashboard"></div>
       </section>
       <section id="applicationSearchPanel" class="panel application-content-page" style="display:none">
         <div class="app-page-heading"><h1>搜索</h1><span class="muted">搜索当前应用中你有权访问的知识</span></div>
         <form id="appSearchForm" class="app-search-form">
           <div class="app-search-query"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input id="appSearchQuery" type="search" class="kb-input" placeholder="搜索名称、别名、描述或实体编号" aria-label="搜索关键词"><button class="btn primary" type="submit">搜索</button></div>
-          <details id="appSearchAdvanced" class="app-search-advanced"><summary>高级搜索</summary><div class="app-search-fields">
-            <label>本体类型<select id="appSearchType" class="kb-select"><option value="">全部本体</option></select><small class="muted" id="appSearchTypeHint">包含所选本体及所有子本体</small></label>
+          <details id="appSearchAdvanced" class="app-search-advanced"><summary><span class="app-search-advanced-title"><i class="fa-solid fa-sliders" aria-hidden="true"></i> 高级搜索</span><span class="app-search-advanced-caption">精细筛选，找到更相关的知识</span><i class="fa-solid fa-chevron-down app-search-advanced-arrow" aria-hidden="true"></i></summary><div class="app-search-fields">
+            <fieldset class="app-search-field-group"><legend>匹配设置</legend><div class="app-search-field-grid">
+            <label>匹配方式<select id="appSearchMatchMode" class="kb-select"><option value="fuzzy">智能模糊匹配</option><option value="phrase">完整短语</option><option value="all">包含全部词语</option><option value="any">包含任意词语</option></select><small class="muted">智能模式支持拼写容错和名称前缀，优先展示精确匹配</small></label>
+            <label>检索范围<select id="appSearchScope" class="kb-select"><option value="all">名称、别名和描述</option><option value="name">仅名称和别名</option></select></label>
+            <label class="app-search-field-wide">排除词语<input id="appSearchExclude" class="kb-input" placeholder="输入不希望结果包含的词语"></label>
+            </div></fieldset>
+            <fieldset class="app-search-field-group"><legend>知识范围</legend><div class="app-search-field-grid">
+            <label class="app-search-field-wide">本体类型<select id="appSearchType" class="kb-select"><option value="">全部本体</option></select><small class="muted" id="appSearchTypeHint">包含所选本体及所有子本体</small></label>
             <label>属性<input id="appSearchProperty" class="kb-input" placeholder="属性名称或编号，例如 P31"></label>
-            <label>属性值<input id="appSearchValue" class="kb-input" placeholder="包含的属性值"></label>
-            <label>排序<select id="appSearchOrder" class="kb-select"><option value="modified_desc">最新更新</option><option value="hot">最热</option><option value="created_desc">最新创建</option></select></label>
-            <label class="app-search-checkbox"><input id="appSearchImage" type="checkbox">仅包含图片的知识</label><button id="appSearchReset" type="button" class="btn">清除条件</button>
-          </div></details>
+            <label>属性值<input id="appSearchValue" class="kb-input" placeholder="输入属性值中的关键词"></label>
+            </div></fieldset>
+            <fieldset class="app-search-field-group"><legend>时间与展示</legend><div class="app-search-field-grid">
+            <label>更新开始日期<input id="appSearchFrom" class="kb-input" type="date"></label>
+            <label>更新结束日期<input id="appSearchTo" class="kb-input" type="date"></label>
+            <label class="app-search-field-wide">结果排序<select id="appSearchOrder" class="kb-select"><option value="relevance">相关度优先</option><option value="modified_desc">最新更新优先</option><option value="created_desc">最新创建优先</option></select></label>
+            </div></fieldset>
+          </div><div class="app-search-filter-actions"><label class="app-search-checkbox"><input id="appSearchImage" type="checkbox"><span>仅显示有图片的知识</span></label><div><button id="appSearchReset" type="button" class="btn">重置条件</button><button type="submit" class="btn primary"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> 应用筛选</button></div></div></details>
         </form>
         <div id="appSearchResults" class="app-search-results"></div>
         <div id="appSearchPaging" class="app-search-paging" hidden><button id="appSearchPrev" type="button" class="btn">上一页</button><span id="appSearchPageLabel" class="muted"></span><button id="appSearchNext" type="button" class="btn">下一页</button></div>
@@ -5877,7 +5906,32 @@
 
     let currentReportDetailId = "";
     let currentReportDetail = null;
+    let reportDetailLoadVersion = 0;
     let reportKeywords = [];
+    let reportEditKeywordValues = [];
+
+    function renderReportEditKeywordChips() {
+      const host = document.getElementById('reportEditKeywordChips');
+      const hidden = document.getElementById('reportEditKeywords');
+      if (hidden) hidden.value = JSON.stringify(reportEditKeywordValues);
+      if (host) host.innerHTML = reportEditKeywordValues.map((keyword, index) => `<button type="button" data-remove-edit-report-keyword="${index}" aria-label="移除关键词 ${escapeHtml(keyword)}">${escapeHtml(keyword)} <i class="fa-solid fa-xmark" aria-hidden="true"></i></button>`).join('');
+    }
+
+    function addReportEditKeyword(value) {
+      String(value || '').split(/[,，、;；\n]+/).map(item => item.trim()).filter(Boolean).forEach(keyword => {
+        if (!reportEditKeywordValues.includes(keyword) && reportEditKeywordValues.length < 12) reportEditKeywordValues.push(keyword);
+      });
+      renderReportEditKeywordChips();
+    }
+
+    function setReportEditing(editing) {
+      const form = document.getElementById('reportEditForm');
+      if (form) form.hidden = !editing;
+      const toolbar = document.querySelector('#reportDetailPanel > .knowledge-report-detail-actions');
+      if (toolbar) toolbar.hidden = editing;
+      if (reportDetailContent) reportDetailContent.hidden = editing;
+      if (!editing) requestAnimationFrame(() => syncReportCanvasBleed());
+    }
 
     function reportApiUrl(path = '') {
       const api = new URL(`/api/kb/reports${path}`, window.location.origin);
@@ -5915,6 +5969,7 @@
 
     function renderReportDetailFromData(detail) {
       if (!reportDetailContent) return;
+      setReportEditing(false);
       destroyReportCanvasGraph();
       currentReportDetail = detail;
       const keywords = Array.isArray(detail.keywords) ? detail.keywords : [];
@@ -5940,6 +5995,7 @@
           <h2>${sectionIndex + 1}. ${escapeHtml(section.title || section.keyword || '相关内容')}</h2>
           <p class="knowledge-report-section-intro">${escapeHtml(section.introduction || '')}</p>
           <div class="knowledge-report-items">${renderItems(primary)}</div>
+          ${section.attributes?.length ? `<details class="report-attribute-details"><summary>知识属性（${Number(section.attributeCount) || section.attributes.length} 项）</summary><dl>${section.attributes.map(attribute => `<div><dt>${escapeHtml(attribute.name || '')}</dt><dd>${escapeHtml(attribute.value || '')}</dd></div>`).join('')}</dl>${section.attributeCount > section.attributes.length ? '<p class="muted">展示部分属性，可点击主实体查看全部。</p>' : ''}</details>` : ''}
           ${related.length ? `<h3 class="knowledge-report-related-title">相关内容</h3><div class="knowledge-report-items related">${renderItems(related)}</div>` : ''}
         </section>`;
       }).join('');
@@ -5950,7 +6006,12 @@
           <div class="knowledge-report-document-meta"><span>更新于 ${escapeHtml(reportDate(detail.updatedAt))}</span>${keywords.map((keyword) => `<span>${escapeHtml(keyword)}</span>`).join('')}</div>
         </header>
         <section class="knowledge-report-summary"><h2>概述</h2><p>${escapeHtml(detail.summary || '')}</p></section>
+        ${detail.mainEntities?.length ? `<section class="report-main-entities"><h2>关键词匹配的主实体</h2>${detail.mainEntities.map(item => `<button type="button" data-report-source-id="${escapeHtml(item.id)}"><strong>${escapeHtml(item.name)}</strong><small>${(item.matchedKeywords || []).map(escapeHtml).join('、')}</small></button>`).join('')}</section>` : ''}
+        ${detail.unmatchedKeywords?.length ? `<p class="knowledge-report-canvas-hint">未匹配关键词：${detail.unmatchedKeywords.map(escapeHtml).join('、')}</p>` : ''}
+        <section id="reportStatistics" class="report-statistics" hidden></section>
         <section class="knowledge-report-canvas" id="reportCanvasSection" hidden>
+          <h2>实体关联关系图</h2>
+          <p class="knowledge-report-canvas-hint">高亮圆环表示主实体，箭头表示关系方向。点击实体突出关联，双击查看知识详情。${detail.analysis?.truncated ? '图中展示部分关联数据。' : ''}</p>
           <div id="reportCanvasGraph" class="report-canvas-graph" role="img" aria-label="关联画布关系图"></div>
         </section>
         ${sectionHtml || '<p class="knowledge-report-empty">暂无可整理的知识内容。</p>'}
@@ -5964,6 +6025,7 @@
         image.addEventListener('error', removeUnavailableImage, { once: true });
         if (image.complete && image.naturalWidth === 0) removeUnavailableImage();
       });
+      window.renderReportStatistics?.(document.getElementById('reportStatistics'), detail.statistics);
       void loadReportCanvasGraph(detail);
     }
 
@@ -6003,6 +6065,15 @@
       const section = document.getElementById('reportCanvasSection');
       const host = document.getElementById('reportCanvasGraph');
       if (!section || !host) return;
+      if (detail?.graph) {
+        section.hidden = !detail.graph.nodes?.length;
+        if (section.hidden) return;
+        syncReportCanvasBleed();
+        reportCanvasCy = window.renderGeneratedReportGraph?.(host, detail.graph) || null;
+        if (!reportCanvasCy) host.textContent = '关系图组件未加载，请刷新页面后重试。';
+        bindReportCanvasResize();
+        return;
+      }
       const wantedName = String(detail?.title || '').trim();
       if (!wantedName || typeof window.cytoscape !== 'function') {
         section.hidden = true;
@@ -6018,6 +6089,7 @@
         const listResponse = await fetch(scopedUrl('/api/graph-canvases'));
         if (!listResponse.ok) throw new Error(`HTTP ${listResponse.status}`);
         const listPayload = await listResponse.json();
+        if (currentReportDetail !== detail) return;
         const canvases = Array.isArray(listPayload?.items) ? listPayload.items : [];
         const matched = canvases.find((item) => String(item?.name || '').trim() === wantedName);
         if (!matched?.id) {
@@ -6027,6 +6099,7 @@
         const graphResponse = await fetch(scopedUrl(`/api/graph-canvases/${encodeURIComponent(matched.id)}`));
         if (!graphResponse.ok) throw new Error(`HTTP ${graphResponse.status}`);
         const payload = await graphResponse.json();
+        if (currentReportDetail !== detail) return;
         const graph = payload?.graph || {};
         const elements = [
           ...(Array.isArray(graph.nodes) ? graph.nodes : []),
@@ -6060,19 +6133,23 @@
         } catch { }
         bindReportCanvasResize();
       } catch (err) {
+        if (currentReportDetail !== detail) return;
         console.warn('load report canvas graph failed', err);
         section.hidden = true;
       }
     }
 
     async function renderReportDetail(reportId) {
+      const version = ++reportDetailLoadVersion;
       currentReportDetailId = String(reportId || '');
       destroyReportCanvasGraph();
       reportDetailContent.innerHTML = '<p class="muted">正在加载报告…</p>';
       try {
         const result = await fetchReportDetail(reportId);
+        if (version !== reportDetailLoadVersion) return;
         renderReportDetailFromData(result.report || {});
       } catch (err) {
+        if (version !== reportDetailLoadVersion) return;
         reportDetailContent.innerHTML = `<p class="knowledge-report-error">${escapeHtml(err?.message || '报告加载失败')}</p>`;
       }
     }
@@ -7877,38 +7954,68 @@
       if (!currentReportDetail) return;
       const form = document.getElementById('reportEditForm');
       document.getElementById('reportEditTitle').value = currentReportDetail.title || '';
-      document.getElementById('reportEditKeywords').value = (currentReportDetail.keywords || []).join('，');
+      reportEditKeywordValues = [...new Set(currentReportDetail.keywords || [])].slice(0, 12);
+      renderReportEditKeywordChips();
+      document.getElementById('reportEditKeywordInput').value = '';
+      document.getElementById('reportEditStatus').textContent = '';
       document.getElementById('reportEditSummary').value = currentReportDetail.summary || '';
       const sectionsHost = document.getElementById('reportEditSections');
-      if (sectionsHost) sectionsHost.innerHTML = (currentReportDetail.sections || []).map((section, index) => `<label>${escapeHtml(section.title || `章节 ${index + 1}`)}<textarea class="kb-input" rows="3" data-report-section-intro="${index}">${escapeHtml(section.introduction || '')}</textarea></label>`).join('');
-      if (form) form.hidden = false;
-      if (reportDetailContent) reportDetailContent.hidden = true;
+      if (sectionsHost) sectionsHost.innerHTML = (currentReportDetail.sections || []).map((section, index) => `<div class="knowledge-report-field"><label for="reportEditSection${index}"><span>${index + 1}. ${escapeHtml(section.title || `章节 ${index + 1}`)}</span></label><textarea id="reportEditSection${index}" class="kb-input" rows="3" data-report-section-intro="${index}">${escapeHtml(section.introduction || '')}</textarea></div>`).join('') || '<p class="knowledge-report-field muted">暂无可编辑章节。</p>';
+      setReportEditing(true);
+      document.getElementById('reportDetailPanel').scrollTop = 0;
+      document.getElementById('reportEditTitle').focus();
     });
     document.getElementById('btnReportEditCancel')?.addEventListener('click', () => {
-      document.getElementById('reportEditForm').hidden = true;
-      if (reportDetailContent) reportDetailContent.hidden = false;
+      setReportEditing(false);
+    });
+    document.getElementById('btnReportEditBack')?.addEventListener('click', () => setReportEditing(false));
+    const reportEditKeywordInput = document.getElementById('reportEditKeywordInput');
+    const commitReportEditKeyword = () => {
+      addReportEditKeyword(reportEditKeywordInput?.value || '');
+      if (reportEditKeywordInput) reportEditKeywordInput.value = '';
+    };
+    document.getElementById('btnReportEditAddKeyword')?.addEventListener('click', () => { commitReportEditKeyword(); reportEditKeywordInput?.focus(); });
+    reportEditKeywordInput?.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' || event.isComposing) return;
+      event.preventDefault(); commitReportEditKeyword();
+    });
+    document.getElementById('reportEditKeywordChips')?.addEventListener('click', event => {
+      const button = event.target instanceof Element ? event.target.closest('[data-remove-edit-report-keyword]') : null;
+      if (!button) return;
+      reportEditKeywordValues.splice(Number(button.dataset.removeEditReportKeyword), 1); renderReportEditKeywordChips();
     });
     document.getElementById('reportEditForm')?.addEventListener('submit', async (event) => {
       event.preventDefault();
       if (!currentReportDetailId || !currentReportDetail) return;
+      const saveButton = document.getElementById('btnReportEditSave');
+      if (saveButton?.disabled) return;
+      commitReportEditKeyword();
+      const title = document.getElementById('reportEditTitle').value.trim();
+      const status = document.getElementById('reportEditStatus');
+      if (!title || !reportEditKeywordValues.length) { status.textContent = title ? '请至少添加一个关键词。' : '请填写报告标题。'; return; }
+      const savedId = currentReportDetailId;
+      const version = reportDetailLoadVersion;
       const sections = structuredClone(currentReportDetail.sections || []);
       document.querySelectorAll('[data-report-section-intro]').forEach((field) => {
         const index = Number(field.dataset.reportSectionIntro);
         if (sections[index]) sections[index].introduction = field.value.trim();
       });
       try {
-        const result = await requestJson(reportApiUrl(`/${encodeURIComponent(currentReportDetailId)}`), {
+        for (const id of ['btnReportEditSave', 'btnReportEditCancel', 'btnReportEditBack']) document.getElementById(id).disabled = true;
+        status.textContent = '正在保存…';
+        const result = await requestJson(reportApiUrl(`/${encodeURIComponent(savedId)}`), {
           method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-            title: document.getElementById('reportEditTitle').value,
-            keywords: document.getElementById('reportEditKeywords').value,
+            title,
+            keywords: reportEditKeywordValues.slice(),
             summary: document.getElementById('reportEditSummary').value,
             sections,
           }),
         });
-        document.getElementById('reportEditForm').hidden = true;
-        reportDetailContent.hidden = false;
+        if (savedId !== currentReportDetailId || version !== reportDetailLoadVersion) return;
+        setReportEditing(false);
         renderReportDetailFromData(result.report);
-      } catch (err) { alert(`保存失败：${err?.message || err}`); }
+      } catch (err) { if (savedId === currentReportDetailId && version === reportDetailLoadVersion) status.textContent = `保存失败：${err?.message || err}`; }
+      finally { for (const id of ['btnReportEditSave', 'btnReportEditCancel', 'btnReportEditBack']) document.getElementById(id).disabled = false; }
     });
     document.getElementById('btnReportDetailRegenerate')?.addEventListener('click', async () => {
       if (!currentReportDetailId || !currentReportDetail) return;
@@ -17503,15 +17610,17 @@
       window.kbOntologyTreeModuleReady = import("/assets/generated/ontology-tree.js?v=20261005-class-scroll");
   </script>
   <script type="module" src="/assets/scripts/vis-ontology-panel.js?v=20261012-classification"></script>
-  <script src="/assets/scripts/property-panel.js?v=20260915-1"></script>
-  <script src="/assets/scripts/table-panel.js?v=20261008-pagination"></script>
+  <script src="/assets/scripts/property-panel.js?v=20261030-derive"></script>
+  <script src="/assets/scripts/knowledge-family.js?v=20261030-1"></script>
+  <script src="/assets/scripts/table-panel.js?v=20261030-map-auto-focus"></script>
   <script src="/assets/scripts/table-selection.js?v=20261010-crumb-label"></script>
   <script src="/assets/scripts/entity-manage-table.js?v=20261028-cover-url"></script>
   <script src="/assets/scripts/attr-panel.js?v=20260925-tail-suggestions"></script>
   <script src="/assets/scripts/entity-import.js?v=20261029-1"></script>
   <!-- relation-panel.js 已移除，使用 edgehandles 拖拽创建关系 -->
   <script src="/assets/scripts/schema-panel.js?v=20261011-member-access"></script>
-  <script src="/assets/scripts/detail-panel.js?v=20261012-canvas-details"></script>
+  <script src="/assets/scripts/relation-insights.js?v=20261030-2"></script>
+  <script src="/assets/scripts/detail-panel.js?v=20261030-recommendations"></script>
   <script src="/assets/scripts/graph-classification.js?v=20261012"></script>
   <script src="/assets/scripts/graph-details.js?v=20261012-classification"></script>
   <script src="/assets/scripts/knowledge-interactions.js?v=20260904-1"></script>
@@ -17521,7 +17630,7 @@
   <script src="/assets/scripts/home-media-viewer.js?v=20261012-detail-keep"></script>
   <script src="/assets/scripts/manual-classify.js?v=20260929-existing-classes"></script>
   <script src="/assets/scripts/knowledge-context-menu.js?v=20260928-3"></script>
-  <script src="/assets/scripts/application-pages.js?v=20261012-detail-keep"></script>
+  <script src="/assets/scripts/application-pages.js?v=20261030-es-discovery"></script>
   <script src="/assets/scripts/user-profile.js?v=20260924-5"></script>
   <script src="/assets/scripts/sidebar-panel.js?v=20260924-4"></script>
   <script src="/assets/scripts/auth-panel.js?v=20261012-user-id"></script>

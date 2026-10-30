@@ -649,6 +649,8 @@
   }
 
   function renderIncomingRelations(relations, options = {}) {
+    const heading = document.getElementById("detailRelationHeading");
+    if (heading) heading.textContent = "关联信息";
     const section = document.getElementById("detailIncomingRelations");
     const host = document.getElementById("detailIncomingRelationGroups");
     const count = document.getElementById("detailIncomingRelationCount");
@@ -1611,7 +1613,7 @@
           '<div class="muted">未找到详情</div>';
         return;
       }
-      renderIncomingRelations(data && data.incomingRelations, {
+      if (!window.renderKnowledgeRelations?.(data && data.relationInsights, doc, showNodeDetailInline)) renderIncomingRelations(data && data.incomingRelations, {
         nodeId: String((doc && (doc._id || doc.id)) || fullId || "").trim(),
         canEdit: typeof window.canEditCurrentKnowledge === "function" ? Boolean(window.canEditCurrentKnowledge()) : false,
         order: doc && doc.relation_order ? doc.relation_order.incoming : null,

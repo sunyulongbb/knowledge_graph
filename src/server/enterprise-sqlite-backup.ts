@@ -25,10 +25,16 @@ export class EnterpriseSqliteBackup {
     // One read transaction captures entity/link together. Replace the last good
     // snapshot only after the whole graph was successfully received.
     const schema = await this.store.importSchema?.(database);
+    let reports = false;
+    if (this.store.client?.database) {
+      try { await this.store.client.database(database, '/_api/collection/knowledge_reports'); reports = true; }
+      catch (error: any) { if (error.status !== 404 || error.body?.errorNum !== 1203) throw error; }
+    }
     const [snapshot] = await this.store.query(database,
-      `RETURN { entity: (FOR doc IN entity RETURN doc), link: (FOR edge IN link RETURN edge)${schema ? ', knowledge_schema: (FOR doc IN knowledge_schema RETURN doc)' : ''} }`);
+      `RETURN { entity: (FOR doc IN entity RETURN doc), link: (FOR edge IN link RETURN edge)${schema ? ', knowledge_schema: (FOR doc IN knowledge_schema RETURN doc)' : ''}${reports ? ', knowledge_reports: (FOR doc IN knowledge_reports RETURN doc)' : ''} }`);
     if (!snapshot || !Array.isArray(snapshot.entity) || !Array.isArray(snapshot.link)) throw new Error('Incomplete ArangoDB backup snapshot');
     if (schema && !Array.isArray(snapshot.knowledge_schema)) throw new Error('Incomplete ArangoDB schema backup snapshot');
+    if (reports && !Array.isArray(snapshot.knowledge_reports)) throw new Error('Incomplete ArangoDB report backup snapshot');
     this.db.run(`INSERT INTO enterprise_knowledge_backups(database_name,snapshot_json,entities,links,completed_at)
       VALUES(?,?,?,?,?) ON CONFLICT(database_name) DO UPDATE SET snapshot_json=excluded.snapshot_json,
       entities=excluded.entities,links=excluded.links,completed_at=excluded.completed_at`,
