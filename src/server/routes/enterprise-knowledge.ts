@@ -41,7 +41,7 @@ const schemaReadPaths = new Set(['/api/kb/ontologies', '/api/kb/ontology/tree', 
 const propertyWritePaths = new Set(['/api/kb/property_create', '/api/kb/property_update', '/api/kb/property_delete', '/api/kb/ontology/property']);
 export const enterpriseMediaPath = (path: string) => /^\/static\/uploads\/(?:.*\/)?(node-images|node-videos|node-pdfs)\//i.test(path.replace(/\/{2,}/g, '/'));
 export function enterpriseKnowledgePath(path: string) {
-  return enterpriseMediaPath(path) || /^\/api\/kb\/(?:node(?:s)?(?:\/|$)|node-types$|entity(?:_|\/)|attributes(?:\/|$)|relations(?:\/|$)|graph$|edge$|stats$|classes$|gallery_|knowledge-|entry(?:\/|$)|shorts_|fetch$|clean\/)/.test(path)
+  return enterpriseMediaPath(path) || /^\/api\/kb\/(?:node(?:s)?(?:\/|$)|node-types$|discover\/search$|entity(?:_|\/)|attributes(?:\/|$)|relations(?:\/|$)|graph$|edge$|stats$|classes$|gallery_|knowledge-|entry(?:\/|$)|shorts_|fetch$|clean\/)/.test(path)
     || path.startsWith('/api/wiki/') || path.startsWith('/api/knowledge/') || path.startsWith('/api/comments/') || path.startsWith('/api/sparql/import');
 }
 export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
@@ -243,10 +243,6 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
           }))
         });
       }
-      if (['/api/kb/entity_search', '/api/kb/discover/search'].includes(path) && method === 'GET') {
-        const discovery = path === '/api/kb/discover/search';
-        const backend = discovery ? 'elasticsearch' : 'arangosearch';
-        if (discovery && !deps.search) throw new KnowledgeStoreError('未配置 Elasticsearch 首页与检索服务', 503);
         const interaction = path.match(/^\/api\/knowledge\/([^/]+)(?:\/(interaction|comments|like|share))?$/);
         const commentDelete = path.match(/^\/api\/comments\/([^/]+)$/);
         if (interaction || (commentDelete && method === 'DELETE')) {
@@ -275,8 +271,10 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
             ...(action === 'share' ? { shareUrl: shareUrl.toString() } : {})
           }, { status: action === 'comments' && method === 'POST' ? 201 : 200 });
         }
-        if (path === '/api/kb/entity_search' && method === 'GET') {
-          if (!deps.search) throw new KnowledgeStoreError('未配置 Elasticsearch 知识检索', 503);
+      if (['/api/kb/entity_search', '/api/kb/discover/search'].includes(path) && method === 'GET') {
+        const discovery = path === '/api/kb/discover/search';
+        const backend = discovery ? 'elasticsearch' : 'arangosearch';
+        if (discovery && !deps.search) throw new KnowledgeStoreError('未配置 Elasticsearch 首页与检索服务', 503);
           const classId = url.searchParams.get('class_id');
           let classIds: string[] | null = classId ? [classId] : null;
           if (classId && schema) {

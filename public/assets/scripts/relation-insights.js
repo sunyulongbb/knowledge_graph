@@ -37,18 +37,21 @@
       button.addEventListener('click', () => open(node));
       return button;
     };
-    const grid = element('div', 'relation-card-grid');
+    const grid = element('div', 'relation-recommendation-list');
+    grid.setAttribute('role', 'list');
     const cards = recommendations.map(item => {
       const card = element('article', 'relation-card relation-recommendation');
+      card.setAttribute('role', 'listitem');
       const heading = element('div', 'relation-card-heading');
       heading.append(nodeButton(item.node, 'relation-entity-link'), element('span', 'relation-entity-type', item.node.typeLabel || item.node.ontology?.name || '实体'));
-      card.append(heading, element('span', 'relation-recommendation-label', item.evidenceLabel));
+      heading.append(element('span', 'relation-recommendation-label', item.evidenceLabel));
+      card.append(heading);
       if (item.node.description) card.append(element('p', 'relation-card-description', item.node.description));
       const reasons = element('ul', 'relation-recommendation-reasons');
       for (const reason of item.reasons || []) reasons.append(element('li', '', reason));
-      card.append(reasons);
       const details = element('details', 'relation-recommendation-evidence');
       details.append(element('summary', '', '为什么推荐'));
+      if (reasons.children.length) details.append(reasons);
       for (const path of item.paths || []) {
         const chain = element('div', 'relation-path');
         path.nodes.forEach((node, index) => {

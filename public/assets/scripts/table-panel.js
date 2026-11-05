@@ -227,10 +227,11 @@
   };
 
   const applyTableLayoutMode = (mode) => {
+    const previousMode = window.kbTableLayoutMode;
     const normalized = normalizeTableLayoutMode(mode);
     window.kbTableLayoutMode = normalized;
     if (sortControl) {
-      const visible = ['manage', 'list', 'grid', 'family'].includes(normalized);
+      const visible = ['manage', 'list', 'grid'].includes(normalized);
       sortControl.style.display = visible ? '' : 'none';
       if (!visible) sortPicker.close(false);
     }
@@ -274,16 +275,16 @@
       tableWrap.style.display =
         normalized === "timeline" || normalized === "geographic" || normalized === 'family' ? "none" : "";
     if (tblPagination) {
-      tblPagination.style.display = ['manage', 'family'].includes(normalized) ? "flex" : "none";
+      tblPagination.style.display = normalized === 'manage' ? "flex" : "none";
     }
     if (typeof window.renderTableList === "function") {
       window.renderTableList();
     }
     if (normalized === "manage") window.openEntityManageTable?.();
     else window.closeEntityManageTable?.();
-    if (normalized === 'family') void window.renderKnowledgeFamily?.(window.kbTableNodes || []);
+    if (normalized === 'family') void loadTablePage({ resetPage: true });
     updateGridManualLoadButton();
-    if (normalized === "timeline") loadTablePage({ resetPage: true });
+    if (normalized === "timeline" || (previousMode === "family" && ["manage", "list", "grid"].includes(normalized))) loadTablePage({ resetPage: true });
     if (normalized === 'geographic') void ensureGeographicMapRuntime().then(() => window.knowledgeGeography.setFilters(window.kbGeographicFilters || {})).catch(() => {});
   };
   window.applyTableLayoutMode = applyTableLayoutMode;
@@ -774,6 +775,13 @@
         return;
       }
 
+      if (window.kbTableLayoutMode === 'family') {
+        if (tblPagination) tblPagination.style.display = 'none';
+        await window.renderKnowledgeFamily?.(Object.fromEntries(url.searchParams));
+        if (requestVersion === tblLoadVersion) window.setStatus?.(false, '知识关系谱系');
+        return;
+      }
+
       const resp = await fetch(url);
       if (!resp.ok) {
         const error = await resp.json().catch(() => null);
@@ -828,7 +836,7 @@
       updateTblPageInfo();
       if (tblPagination) {
         tblPagination.style.display =
-          ['manage', 'family'].includes(window.kbTableLayoutMode) ? "flex" : "none";
+          window.kbTableLayoutMode === 'manage' ? "flex" : "none";
       }
 
       if (tblCount) {
@@ -862,7 +870,6 @@
       if (window.kbTableLayoutMode === "manage") {
         window.openEntityManageTable?.();
       }
-      if (window.kbTableLayoutMode === 'family') void window.renderKnowledgeFamily?.(window.kbTableNodes || []);
       updateGridManualLoadButton();
       if (isInfiniteTableLayoutMode()) {
         setTimeout(() => {

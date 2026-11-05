@@ -69,7 +69,7 @@
       customElements.whenDefined("media-video-layout"),
     ]).then(() => true);
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20261030-schema-derive" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20261105-family-caption-fix" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -3802,26 +3802,6 @@
                     加载详情中…
                   </div>
                 </section>
-                <section id="detailIncomingRelations" class="detail-related-section" hidden>
-                  <div class="detail-related-heading">
-                    <div id="detailRelationHeading" class="detail-attr-title">关联信息</div>
-                    <div class="detail-related-heading-meta">
-                      <span id="detailIncomingRelationStatus" class="detail-related-order-status" role="status"></span>
-                      <span id="detailIncomingRelationCount"></span>
-                    </div>
-                  </div>
-                  <div id="detailIncomingRelationGroups" class="detail-related-groups"></div>
-                </section>
-                <section id="knowledgeComments" class="knowledge-comments" aria-label="评论区">
-                  <div class="detail-attr-title">评论</div>
-                  <div class="knowledge-comment-compose">
-                    <textarea id="knowledgeCommentInput" rows="3" maxlength="2000" placeholder="登录后发表评论…"></textarea>
-                    <button id="btnKnowledgeCommentSubmit" class="btn primary" type="button">发表评论</button>
-                  </div>
-                  <div id="knowledgeCommentMessage" class="muted knowledge-comment-message"></div>
-                  <div id="knowledgeCommentList" class="knowledge-comment-list"></div>
-                </section>
-                <div id="wikiMediaGrid" class="wiki-media-grid" style="display: none; margin-top: 12px"></div>
                 <!-- Inline wiki edit area (copied/adapted from kb_detail.html) -->
                 <div id="wikiEditInline" class="detail-edit-inline" style="display: none; margin-top: 8px">
                   <textarea id="wikiMdInline"
@@ -3904,6 +3884,26 @@
                         line-height: 1.6;
                       "></div>
                 </div>
+                <section id="detailIncomingRelations" class="detail-related-section" hidden>
+                  <div class="detail-related-heading">
+                    <div id="detailRelationHeading" class="detail-attr-title">关联信息</div>
+                    <div class="detail-related-heading-meta">
+                      <span id="detailIncomingRelationStatus" class="detail-related-order-status" role="status"></span>
+                      <span id="detailIncomingRelationCount"></span>
+                    </div>
+                  </div>
+                  <div id="detailIncomingRelationGroups" class="detail-related-groups"></div>
+                </section>
+                <section id="knowledgeComments" class="knowledge-comments" aria-label="评论区">
+                  <div class="detail-attr-title">评论</div>
+                  <div class="knowledge-comment-compose">
+                    <textarea id="knowledgeCommentInput" rows="3" maxlength="2000" placeholder="登录后发表评论…"></textarea>
+                    <button id="btnKnowledgeCommentSubmit" class="btn primary" type="button">发表评论</button>
+                  </div>
+                  <div id="knowledgeCommentMessage" class="muted knowledge-comment-message"></div>
+                  <div id="knowledgeCommentList" class="knowledge-comment-list"></div>
+                </section>
+                <div id="wikiMediaGrid" class="wiki-media-grid" style="display: none; margin-top: 12px"></div>
                 <div id="wikiBacklinksInline" style="display: none; margin-top: 12px">
                   <div class="muted" style="margin-bottom: 6px">
                     被以下页面提及
@@ -17611,15 +17611,15 @@
   </script>
   <script type="module" src="/assets/scripts/vis-ontology-panel.js?v=20261012-classification"></script>
   <script src="/assets/scripts/property-panel.js?v=20261030-derive"></script>
-  <script src="/assets/scripts/knowledge-family.js?v=20261030-1"></script>
-  <script src="/assets/scripts/table-panel.js?v=20261030-map-auto-focus"></script>
+  <script src="/assets/scripts/knowledge-family.js?v=20261105-gallery-text"></script>
+  <script src="/assets/scripts/table-panel.js?v=20261105-family-all"></script>
   <script src="/assets/scripts/table-selection.js?v=20261010-crumb-label"></script>
   <script src="/assets/scripts/entity-manage-table.js?v=20261028-cover-url"></script>
   <script src="/assets/scripts/attr-panel.js?v=20260925-tail-suggestions"></script>
   <script src="/assets/scripts/entity-import.js?v=20261029-1"></script>
   <!-- relation-panel.js 已移除，使用 edgehandles 拖拽创建关系 -->
   <script src="/assets/scripts/schema-panel.js?v=20261011-member-access"></script>
-  <script src="/assets/scripts/relation-insights.js?v=20261030-2"></script>
+  <script src="/assets/scripts/relation-insights.js?v=20261105-compact-list"></script>
   <script src="/assets/scripts/detail-panel.js?v=20261030-recommendations"></script>
   <script src="/assets/scripts/graph-classification.js?v=20261012"></script>
   <script src="/assets/scripts/graph-details.js?v=20261012-classification"></script>

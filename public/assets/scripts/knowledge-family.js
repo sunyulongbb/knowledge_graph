@@ -22,75 +22,100 @@
     window.setViewMode?.('knowledge_detail', { targetNodeId: node.id, focusDetailOnly: true });
   };
   const link = (node, className) => {
-    const button = element('button', className, label(node)); button.type = 'button';
+    const button = element('button', className, label(node)); button.type = 'button'; button.title = label(node);
     button.addEventListener('click', () => open(node)); return button;
   };
-  function draw(host, items) {
+  const mediaSources = value => {
+    if (Array.isArray(value)) return value.flatMap(mediaSources);
+    if (value && typeof value === 'object') return mediaSources(value.url || value.src || '');
+    if (typeof value !== 'string') return [];
+    const text = value.trim();
+    if (text.startsWith('[') || text.startsWith('{')) { try { return mediaSources(JSON.parse(text)); } catch { return []; } }
+    return /^(https?:\/\/|\/(?!\/)|data:(image|video)\/)/i.test(text) ? [text] : [];
+  };
+  function draw(host, items, ontologies = []) {
     host.replaceChildren();
-    const heading = element('header', 'knowledge-family-heading');
-    heading.append(element('div', '', '关系谱系'), element('p', '', '按本体浏览实体的亲缘与关联。关系来自当前知识库，点击名称可查看详情。'));
-    host.append(heading);
     if (!items.length) { host.append(element('p', 'knowledge-family-empty', '当前筛选下没有可展示的知识。')); return; }
+    const types = new Map(ontologies.map(type => [String(type.id), type]));
+    const pathFor = (key, fallback) => {
+      const names = [], seen = new Set();
+      let type = types.get(String(key));
+      while (type && !seen.has(type.id)) {
+        seen.add(type.id); names.unshift(type.name || type.label || type.id);
+        type = types.get(String(type.parent_id));
+      }
+      return names.length ? names.join(' / ') : fallback;
+    };
     const groups = new Map();
     for (const item of items) {
       const key = item.node.typeId || item.node.type || 'untyped';
-      if (!groups.has(key)) groups.set(key, { name: item.node.typeLabel || '未分类', items: [] });
+      if (!groups.has(key)) groups.set(key, { name: pathFor(key, item.node.typeLabel || key), items: [] });
       groups.get(key).items.push(item);
     }
-    const nav = element('nav', 'knowledge-family-nav'); nav.setAttribute('aria-label', '当前页本体分组'); host.append(nav);
+    const categoryFor = node => {
+      const labels = node.categoryLabels?.length ? node.categoryLabels : (node.classes || []).map(cls => cls.name || cls.label || cls.id);
+      return labels.length ? [...labels].sort().join(' / ') : node.classLabel || '未分类';
+    };
+    const nav = element('nav', 'knowledge-family-nav'); nav.setAttribute('aria-label', '本体分类导航'); host.append(nav);
     let groupIndex = 0;
-    for (const group of groups.values()) {
+    for (const group of [...groups.values()].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))) {
       const section = element('section', 'knowledge-family-group'); section.id = `knowledgeFamilyGroup${groupIndex++}`;
       const jump = element('button', '', `${group.name} · ${group.items.length}`); jump.type = 'button';
       jump.addEventListener('click', () => section.scrollIntoView({ behavior: 'smooth', block: 'start' })); nav.append(jump);
-      section.append(element('h2', '', group.name));
-      const grid = element('div', 'knowledge-family-grid');
+      const groupHeading = element('div', 'knowledge-family-group-heading');
+      groupHeading.append(element('h2', '', group.name), element('span', 'knowledge-family-count', String(group.items.length)));
+      section.append(groupHeading);
+      const categories = element('div', 'knowledge-family-categories');
+      let grid, textFlow, categorySection;
+      const categoryCounts = new Map();
       for (const item of group.items) {
-        const card = element('article', 'knowledge-family-card');
-        const header = element('header', 'knowledge-family-card-header');
-        const image = item.node.image || item.node.images?.[0];
-        if (typeof image === 'string' && /^(https?:\/\/|\/(?!\/))/i.test(image)) {
-          const img = element('img', ''); img.src = image; img.alt = ''; img.loading = 'lazy';
-          img.addEventListener('error', () => img.remove(), { once: true }); header.append(img);
-        }
-        const title = element('h3', ''); title.append(link(item.node, 'knowledge-family-name')); header.append(title); card.append(header);
-        if (item.node.description) card.append(element('p', 'knowledge-family-description', item.node.description));
-        const buckets = { parents: [], partners: [], children: [], other: [] };
-        const seen = new Set();
-        for (const relation of item.relations || []) {
-          const group = kind(relation), identity = `${group}:${relation.node.id}:${group === 'other' ? relation.propertyId + relation.direction : ''}`;
-          if (relation.node.id === item.node.id || seen.has(identity)) continue;
-          seen.add(identity); buckets[group].push(relation);
-        }
-        let rendered = 0;
-        for (const [key, caption] of [['parents', '亲代'], ['partners', '伴侣'], ['children', '后代'], ['other', '其他关联']]) {
-          const relations = buckets[key]; if (!relations.length) continue;
-          rendered += relations.length;
-          const block = element('div', `knowledge-family-relations knowledge-family-${key}`);
-          block.append(element('h4', '', `${caption} · ${relations.length}`));
-          const list = element('div', 'knowledge-family-links');
-          relations.forEach((relation, index) => {
-            const chip = link(relation.node, 'knowledge-family-chip');
-            chip.title = `${relation.direction === 'incoming' ? '指向当前实体' : '当前实体指向'} · ${relation.propertyName}`;
-            if (key === 'other') chip.append(element('small', '', `${relation.direction === 'incoming' ? '← ' : '→ '}${relation.propertyName}`));
-            chip.hidden = index >= 8; list.append(chip);
-          });
-          block.append(list);
-          if (relations.length > 8) {
-            let expanded = false;
-            const more = element('button', 'knowledge-family-more', `展开其余 ${relations.length - 8} 项`); more.type = 'button'; more.setAttribute('aria-expanded', 'false');
-            more.addEventListener('click', () => {
-              expanded = !expanded; [...list.children].forEach((child, index) => { child.hidden = !expanded && index >= 8; });
-              more.textContent = expanded ? '收起' : `展开其余 ${relations.length - 8} 项`; more.setAttribute('aria-expanded', String(expanded));
-            }); block.append(more);
-          }
-          card.append(block);
-        }
-        if (!rendered) card.append(element('p', 'knowledge-family-empty', '尚无可见的实体关系'));
-        if (item.truncated) card.append(element('small', 'knowledge-family-empty', '关联较多，当前展示部分关系。'));
-        grid.append(card);
+        const key = categoryFor(item.node);
+        categoryCounts.set(key, (categoryCounts.get(key) || 0) + 1);
       }
-      section.append(grid); host.append(section);
+      let category = null;
+      for (const item of group.items.sort((a, b) => categoryFor(a.node).localeCompare(categoryFor(b.node), 'zh-CN') || label(a.node).localeCompare(label(b.node), 'zh-CN'))) {
+        const nextCategory = categoryFor(item.node);
+        if (nextCategory !== category) {
+          category = nextCategory;
+          categorySection = element('details', 'knowledge-family-category-group'); categorySection.open = true;
+          const summary = element('summary', 'knowledge-family-category-summary');
+          const count = categoryCounts.get(category);
+          summary.append(element('h3', 'knowledge-family-category', category), element('span', 'knowledge-family-count', String(count)));
+          grid = element('div', 'knowledge-family-grid');
+          textFlow = element('div', 'knowledge-family-text-flow');
+          categorySection.append(summary, grid, textFlow); categories.append(categorySection);
+        }
+        const card = element('article', 'knowledge-family-card');
+        const textTarget = textFlow;
+        const node = item.node;
+        const media = link(node, 'knowledge-family-media'); media.textContent = '';
+        media.setAttribute('aria-label', label(node));
+        const image = mediaSources([node.covers, node.cover, node.image, node.images, node._attr_images])[0];
+        const video = mediaSources([node.videos, node.video, node._attr_videos])[0];
+        const hideMedia = () => {
+          media.hidden = true;
+          card.className = 'knowledge-family-card knowledge-family-card-text';
+          if (image || video) textTarget.append(card);
+        };
+        if (image) {
+          const img = element('img', ''); img.src = image; img.alt = ''; img.loading = 'lazy';
+          img.addEventListener('error', hideMedia, { once: true }); media.append(img);
+        } else if (video) {
+          const preview = element('video', ''); preview.src = video; preview.muted = true;
+          preview.playsInline = true; preview.preload = 'metadata';
+          preview.addEventListener('error', hideMedia, { once: true }); media.append(preview);
+        } else hideMedia();
+        if (video) {
+          const badge = element('span', 'knowledge-family-video-badge');
+          badge.append(element('i', 'fa-solid fa-play')); media.append(badge);
+        }
+        if (image || video) card.append(media);
+        const header = element('header', 'knowledge-family-card-header');
+        const title = element('h3', ''); title.append(link(node, 'knowledge-family-name'));
+        header.append(title); card.append(header);
+        (image || video ? grid : textTarget).append(card);
+      }
+      section.append(categories); host.append(section);
     }
   }
   window.knowledgeFamily = { kind, draw, cancel: () => { version++; } };
@@ -98,20 +123,50 @@
     const host = document.getElementById('knowledgeFamilyView'); if (!host) return;
     const requestVersion = ++version;
     host.replaceChildren(element('p', 'knowledge-family-empty', '正在整理实体关系…'));
-    const ids = [...new Set((nodes || []).map(node => String(node.id || node._id || '').replace(/^entity\//, '')).filter(Boolean))];
-    if (!ids.length) { draw(host, []); return; }
-    const url = new URL('/api/kb/entity/relationships', location.origin);
-    const db = new URLSearchParams(location.search).get('db'); if (db) url.searchParams.set('db', db);
+    const db = new URLSearchParams(location.search).get('db');
     try {
-      const items = [];
-      for (let offset = 0; offset < ids.length; offset += 100) {
-        if (requestVersion !== version || window.kbTableLayoutMode !== 'family') return;
-        const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: ids.slice(offset, offset + 100) }) });
-        const data = await response.json(); if (!response.ok) throw new Error(data.error || '关系加载失败');
-        items.push(...(data.items || []));
+      let ontologies = [];
+      const records = new Map((Array.isArray(nodes) ? nodes : []).map(node => [String(node.id || node._id), node]));
+      const active = () => requestVersion === version && window.kbTableLayoutMode === 'family';
+      const read = async url => {
+        const response = await fetch(url, { cache: 'no-store' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || '知识加载失败');
+        return data;
+      };
+      if (!Array.isArray(nodes)) {
+        const search = new URL('/api/kb/entity_search', location.origin);
+        Object.entries(nodes || {}).forEach(([key, value]) => search.searchParams.set(key, value));
+        if (db) search.searchParams.set('db', db);
+        search.searchParams.set('order', 'id'); search.searchParams.set('limit', '500');
+        for (let offset = 0; ; ) {
+          if (!active()) return;
+          search.searchParams.set('offset', String(offset));
+          const page = await read(search);
+          if (!active()) return;
+          const batch = page.nodes || [];
+          for (const node of batch) {
+            const id = String(node.id || node._id || '').replace(/^entity\//, '');
+            records.set(id, node);
+          }
+          offset += batch.length;
+          if (offset >= Number(page.total || 0)) break;
+          if (!batch.length) throw new Error('知识列表未完整加载，请重试');
+        }
+        const treeUrl = new URL('/api/kb/ontology/tree', location.origin);
+        if (db) treeUrl.searchParams.set('db', db);
+        const tree = await read(treeUrl);
+        if (!active()) return;
+        const flatten = rows => (rows || []).flatMap(row => [row, ...flatten(row.children)]);
+        ontologies = tree.flat || flatten(tree.items);
       }
+      const items = [...records.values()].map(node => ({ node }));
       if (requestVersion !== version || window.kbTableLayoutMode !== 'family') return;
-      draw(host, items);
+      draw(host, items, ontologies);
+      window.kbTableNodes = items.map(item => item.node);
+      window.kbTableTotalNodes = items.length;
+      const count = document.getElementById("tblCount");
+      if (count && !Array.isArray(nodes)) count.textContent = `共 ${items.length} 条知识 · 按本体分类整理`;
     } catch (error) {
       if (requestVersion !== version || window.kbTableLayoutMode !== 'family') return;
       const message = element('p', 'knowledge-family-empty', error.message || '关系加载失败'); message.setAttribute('role', 'alert');
