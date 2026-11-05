@@ -19,7 +19,7 @@
   };
   const open = node => {
     window.setTableSelection?.(node.id, true);
-    window.setViewMode?.('knowledge_detail', { targetNodeId: node.id, focusDetailOnly: true });
+    window.setViewMode?.('detail', { targetNodeId: node.id });
   };
   const link = (node, className) => {
     const button = element('button', className, label(node)); button.type = 'button'; button.title = label(node);

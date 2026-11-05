@@ -2603,6 +2603,69 @@
     }
   }
   // Inline wiki functions adapted from kb_detail.html
+  function bindWikiImagePaste() {
+    const host = document.getElementById('wikiEditInline');
+    if (!host || host.dataset.imagePasteBound) return;
+    host.dataset.imagePasteBound = 'true';
+    host.addEventListener('paste', async event => {
+      const clipboard = event.clipboardData;
+      const textarea = document.getElementById('wikiMdInline');
+      const cm = window.easyMDE?.codemirror;
+      if (event.target !== textarea && !event.target.closest?.('.CodeMirror')) return;
+      const html = clipboard?.getData?.('text/html');
+      if (html && window.kbClipboardMarkdown) {
+        const markdown = window.kbClipboardMarkdown.fromHtml(html);
+        if (markdown) {
+          event.preventDefault(); event.stopImmediatePropagation();
+          if (cm) cm.getDoc().replaceSelection(markdown);
+          else { textarea.setRangeText(markdown, textarea.selectionStart, textarea.selectionEnd, 'end'); textarea.dispatchEvent(new Event('input', { bubbles: true })); }
+          return;
+        }
+      }
+      const files = Array.from(clipboard?.items || []).filter(item => item.type?.startsWith('image/')).map(item => item.getAsFile()).filter(Boolean);
+      if (!files.length) files.push(...Array.from(clipboard?.files || []).filter(file => file.type.startsWith('image/')));
+      if (!files.length) return;
+      event.preventDefault(); event.stopImmediatePropagation();
+      const hints = document.getElementById('wikiHintsInline');
+      if (files.some(file => file.size > 20 * 1024 * 1024)) {
+        if (hints) hints.textContent = '\u56fe\u7247\u4e0d\u80fd\u8d85\u8fc7 20MB';
+        return;
+      }
+      const doc = cm?.getDoc();
+      const tokens = files.map(() => `<!-- wiki-image-${crypto.randomUUID()} -->`);
+      const pendingText = tokens.join('\n');
+      if (doc) doc.replaceSelection(pendingText);
+      else textarea.setRangeText(pendingText, textarea.selectionStart, textarea.selectionEnd, 'end');
+      const replace = (token, text) => {
+        const value = doc ? doc.getValue() : textarea.value;
+        const index = value.indexOf(token); if (index < 0) return;
+        if (doc) doc.replaceRange(text, doc.posFromIndex(index), doc.posFromIndex(index + token.length));
+        else { textarea.setRangeText(text, index, index + token.length, 'preserve'); textarea.dispatchEvent(new Event('input', { bubbles: true })); }
+      };
+      host.dataset.imageUploads = String(Number(host.dataset.imageUploads || 0) + files.length);
+      let failed = false;
+      if (hints) { hints.setAttribute('role', 'status'); hints.textContent = '\u56fe\u7247\u4e0a\u4f20\u4e2d\u2026'; }
+      await Promise.all(files.map(async (file, index) => {
+        try {
+          const form = new FormData();
+          const extension = file.type.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+          form.append('file', file, file.name?.includes('.') ? file.name : `pasted-image.${extension}`);
+          const url = new URL('/api/kb/upload-image', location.origin);
+          url.searchParams.set('db', new URLSearchParams(location.search).get('db') || 'default');
+          const response = await fetch(url, { method: 'POST', body: form });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok || !data.url) throw new Error(data.error || '\u56fe\u7247\u4e0a\u4f20\u5931\u8d25\uff0c\u8bf7\u91cd\u65b0\u7c98\u8d34');
+          replace(tokens[index], `![\u56fe\u7247](<${String(data.url).replaceAll('>', '%3E').replaceAll('<', '%3C')}>)`);
+        } catch (error) {
+          failed = true; replace(tokens[index], '');
+          if (hints) hints.textContent = error.message;
+        } finally {
+          host.dataset.imageUploads = String(Math.max(0, Number(host.dataset.imageUploads || 0) - 1));
+        }
+      }));
+      if (!failed && hints && Number(host.dataset.imageUploads) === 0) hints.textContent = '\u56fe\u7247\u5df2\u63d2\u5165\uff0c\u4fdd\u5b58\u540e\u751f\u6548';
+    }, true);
+  }
   function toggleWikiModeInline(editing) {
     const view = document.getElementById("wikiView");
     const edit = document.getElementById("wikiEditInline");
@@ -2612,6 +2675,7 @@
     const btnSave = document.getElementById("btnSaveWikiInline");
     const attrSection = document.getElementById("detailAttrSection");
     if (editing) {
+      bindWikiImagePaste();
       if (view) view.style.display = "none";
       if (edit) edit.style.display = "block";
       // hide detail attribute list while editing wiki inline
@@ -2655,7 +2719,7 @@
           const doc = cm.getDoc();
           const text = doc.getValue();
           const regex =
-            /!\[([^\]]*)\]\(((__easyMDE_paste_image_\d+__)|data:image\/[^)]+)\)/g;
+            /!\[((?:\\.|[^\]])*)\]\((<[^>]+>|[^)]+)\)/g;
           const existingMarks = doc.getAllMarks ? doc.getAllMarks() : [];
           existingMarks.forEach((mark) => {
             if (mark.__easyMDEPasteImageWidget) {
@@ -2665,12 +2729,12 @@
           let match;
           while ((match = regex.exec(text)) !== null) {
             const alt = match[1];
-            const key = match[2];
+            const key = match[2].replace(/^<|>$/g, '');
             let src = key;
             if (key.startsWith("__easyMDE_paste_image_")) {
               src = window.easyMDEPasteImages?.[key];
             }
-            if (!src) continue;
+            if (!src || !/^(https?:\/\/|\/(?!\/)|data:image\/)/i.test(src)) continue;
             const start = doc.posFromIndex(match.index);
             const end = doc.posFromIndex(match.index + match[0].length);
             const img = document.createElement("img");
@@ -2727,54 +2791,6 @@
 
         try {
           const cm = window.easyMDE.codemirror;
-          const inputField = cm.getInputField && cm.getInputField();
-          if (inputField) {
-            inputField.addEventListener("paste", async (event) => {
-              const clipboardData = event.clipboardData || window.clipboardData;
-              if (!clipboardData) return;
-              const items = Array.from(clipboardData.items || []);
-              const imageItem = items.find(
-                (item) => item.type && item.type.startsWith("image/"),
-              );
-              if (!imageItem) return;
-              event.preventDefault();
-              const file = imageItem.getAsFile();
-              if (!file) return;
-
-              const reader = new FileReader();
-              reader.onload = () => {
-                const dataUrl = reader.result;
-                if (!dataUrl) return;
-                const doc = cm.getDoc();
-                const cursor = doc.getCursor();
-                const imageKey = `__easyMDE_paste_image_${window.easyMDEPasteImageIndex++}__`;
-                window.easyMDEPasteImages[imageKey] = dataUrl;
-                const markdownImage = `![pasted image](${imageKey})`;
-                doc.replaceRange(markdownImage, cursor);
-                try {
-                  const start = cursor;
-                  const end = doc.posFromIndex(
-                    doc.indexFromPos(cursor) + markdownImage.length,
-                  );
-                  const img = document.createElement("img");
-                  img.src = dataUrl;
-                  img.alt = "pasted image";
-                  img.style.width = "100%";
-                  img.style.height = "auto";
-                  img.style.maxHeight = "400px";
-                  img.style.display = "block";
-                  cm.markText(start, end, {
-                    replacedWith: img,
-                    handleMouseEvents: true,
-                  });
-                } catch (innerErr) {
-                  console.warn("EasyMDE paste image widget failed", innerErr);
-                }
-              };
-              reader.readAsDataURL(file);
-            });
-          }
-
           if (typeof cm.on === "function") {
             cm.on("changes", () => {
               setTimeout(() => {
@@ -3084,6 +3100,10 @@
   }
 
   async function saveWikiInline(entityId, lang = "zh") {
+    if (Number(document.getElementById('wikiEditInline')?.dataset.imageUploads || 0) > 0) {
+      window.alert('\u8bf7\u7b49\u5f85\u56fe\u7247\u4e0a\u4f20\u5b8c\u6210\u540e\u518d\u4fdd\u5b58');
+      return;
+    }
     // prefer entityId stored on detailPanel
     try {
       const dp = document.getElementById("detailPanel");

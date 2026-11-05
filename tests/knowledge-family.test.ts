@@ -41,7 +41,9 @@ test('family cards emphasize media and names without rendering relationship info
   expect(nodes.some(node => node.className === 'knowledge-family-video-badge')).toBe(true);
   expect(nodes.some(node => node.className === 'knowledge-family-relations')).toBe(false);
   nodes.find(node => node.className === 'knowledge-family-media')!.events.click!();
-  expect(r.opened[0][1].targetNodeId).toBe('one');
+  expect(r.opened[0]).toEqual(['detail', { targetNodeId: 'one' }]);
+  nodes.find(node => node.className === 'knowledge-family-name')!.events.click!();
+  expect(r.opened[1]).toEqual(['detail', { targetNodeId: 'one' }]);
   r.window.knowledgeFamily.draw(r.host, [{ node: { id: 'empty', name: '<img onerror=bad>' } }]);
   expect(all(r.host).some(node => node.tag === 'img')).toBe(false);
   expect(all(r.host).some(node => node.className === 'knowledge-family-media')).toBe(false);
