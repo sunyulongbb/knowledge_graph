@@ -16,7 +16,7 @@ export async function ensureEntitySearchMapping(client: ElasticsearchClient, ind
 }
 /** Search-only projection; authoritative knowledge and values remain in ArangoDB. */
 export function entitySearchProjection(document: Doc) {
-  const { _id, _rev, _key, _search_attributes = [], ...fields } = document;
+  const { _id, _rev, _key, interactions, _search_attributes = [], ...fields } = document;
   const attributes: Doc[] = _search_attributes;
   const fingerprint = createHash('sha256').update(JSON.stringify([_rev, attributes])).digest('hex');
   const { images, videos, covers } = knowledgeMedia(fields, attributes);
