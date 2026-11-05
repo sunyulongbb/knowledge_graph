@@ -13,7 +13,7 @@ test('home pagination passes category and offset and clamps pages after data rem
   const h=setup(async (_: string,p:any)=>{calls.push(p);return {total:25,nodes:[{id:'last'}]};});
   await h.load(3,'category-a');
   expect(calls.map(p=>p.offset)).toEqual([48,24]);
-  expect(calls[1]).toMatchObject({limit:24,class_id:'category-a',defined_class_only:'1'});
+  expect(calls[1]).toMatchObject({order:'richness',limit:24,class_id:'category-a',defined_class_only:'1'});
   expect(h.state()).toMatchObject({homePage:2,homeTotal:25,homeSelectedCategory:'category-a',homeBusy:false});
 });
 test('newer category request wins and failed request retains visible knowledge', async () => {

@@ -578,7 +578,7 @@
     const version = ++homeVersion;
     homeBusy = true; homeError = ''; homeRetry = { page: nextPage, category }; renderHome();
     try {
-      const data = await api('/api/kb/discover/search', { order: 'modified_desc', limit: homePageSize, offset: (nextPage - 1) * homePageSize, class_id: category, hide_entity: '1', defined_class_only: '1' });
+      const data = await api('/api/kb/discover/search', { order: 'richness', limit: homePageSize, offset: (nextPage - 1) * homePageSize, class_id: category, hide_entity: '1', defined_class_only: '1' });
       if (version !== homeVersion) return;
       const count = Math.max(0, Number(data.total) || 0);
       const lastPage = Math.max(1, Math.ceil(count / homePageSize));
@@ -657,7 +657,7 @@
     homeHoverCategory = '';
     homeSelectedCategory = ''; homePage = 1; homeTotal = 0; homeBusy = false; homeError = '';
     const results = await Promise.allSettled([
-      api('/api/kb/discover/search', { order: 'modified_desc', limit: homePageSize, offset: 0, hide_entity: '1', defined_class_only: '1' }),
+      api('/api/kb/discover/search', { order: 'richness', limit: homePageSize, offset: 0, hide_entity: '1', defined_class_only: '1' }),
       api('/api/kb/classes'),
       api('/api/applications', { scope: 'market' }),
     ]);

@@ -72,7 +72,14 @@ const enterpriseSync = enterpriseStore && process.env.ELASTICSEARCH_URL?.trim()
 const handleEnterpriseKnowledge = enterpriseStore ? createEnterpriseKnowledgeHandler({
   store: enterpriseStore, sync: enterpriseSync,
   backup: enterpriseBackup,
-  search: enterpriseSync ? new EnterpriseKnowledgeSearch(enterpriseStore, enterpriseSync.elasticsearch) : undefined,
+  search: enterpriseSync ? new EnterpriseKnowledgeSearch(enterpriseStore, enterpriseSync.elasticsearch, () => {
+    const counts: Record<string, number> = {};
+    for (const table of ['knowledge_likes', 'knowledge_comments', 'knowledge_shares', 'knowledge_favorites']) {
+      const rows = adminDb.query(`SELECT replace(knowledge_id, 'entity/', '') AS id, COUNT(*) AS total FROM ${table} GROUP BY 1`).all() as { id: string; total: number }[];
+      for (const row of rows) counts[row.id] = (counts[row.id] || 0) + row.total;
+    }
+    return counts;
+  }) : undefined,
   getUser: getKnowledgeUser, getProject: getProjectByIdentifier,
   canCreate: (user, project) => user.role === 'admin' || applicationPermissions(adminDb, user, project).member,
   listProjects: () => adminDb.query('SELECT id,name FROM projects ORDER BY id').all(),

@@ -210,3 +210,21 @@ test('writes commit to Arango first and ES failure leaves a successful save mark
     } finally { console.error = originalError; }
   } finally { if (mode === undefined) delete process.env.KNOWLEDGE_STORAGE_BACKEND; else process.env.KNOWLEDGE_STORAGE_BACKEND = mode; }
 });
+
+
+test('home richness sorts existing ES documents before pagination with live interaction counts', async () => {
+  let request: any;
+  const es = new ElasticsearchClient({ url: 'http://es' }, async (_input, init) => {
+    request = JSON.parse(String(init?.body));
+    return reply({ hits: { total: { value: 0 }, hits: [] } });
+  });
+  const search = new EnterpriseKnowledgeSearch({ searchAccess: async () => [{ key: 'allowed' }] } as any, es, () => ({ allowed: 7 }));
+  await search.search('app', owner, { limit: 24, offset: 24, order: 'richness' });
+  expect(request).toMatchObject({ from: 24, size: 24, sort: [
+    { home_media: 'desc' }, { home_richness: 'desc' },
+    { updated_at_sort: { order: 'desc', unmapped_type: 'keyword' } }, { sqlite_id: 'asc' },
+  ] });
+  expect(request.runtime_mappings.home_richness.script.params.counts).toEqual({ allowed: 7 });
+  expect(request.runtime_mappings.home_media.script.source).toContain('params._source');
+  expect(request.query.bool.filter).toContainEqual({ ids: { values: ['allowed'] } });
+});

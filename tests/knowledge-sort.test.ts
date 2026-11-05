@@ -6,7 +6,7 @@ import { scopeKnowledgeSql } from '../src/server/knowledge-access.ts';
 test('entity search sorts before pagination, combines interactions and defaults to newest', () => {
   const source = readFileSync(new URL('../src/server/routes/core-kb.ts', import.meta.url), 'utf8');
   const start = source.indexOf('    const orderBy = (url.searchParams.get("order")');
-  const end = source.indexOf('    const nodes = db', start);
+  const end = source.indexOf('    const defaultElasticsearchProject', start);
   const order = new Function('url', `${source.slice(start, end)}; return orderClause;`);
   const db = new Database(':memory:');
   db.run('CREATE TABLE nodes(id TEXT, created_at TEXT, updated_at TEXT, visibility TEXT, owner_user_id INTEGER)');
@@ -22,5 +22,30 @@ test('entity search sorts before pagination, combines interactions and defaults 
   db.run("INSERT INTO knowledge_comments VALUES ('middle'),('middle')");
   expect(query('hot')).toEqual(['middle', 'old']);
   expect(query('invalid')).toEqual(['new', 'middle']);
+  db.close();
+});
+
+
+test('richness ranks media first, combines tags and interactions, and paginates globally', () => {
+  const source = readFileSync(new URL('../src/server/routes/core-kb.ts', import.meta.url), 'utf8');
+  const start = source.indexOf('    const orderBy = (url.searchParams.get("order")');
+  const end = source.indexOf('    const defaultElasticsearchProject', start);
+  const order = new Function('url', `${source.slice(start, end)}; return orderClause;`);
+  const db = new Database(':memory:');
+  db.run('CREATE TABLE nodes(id TEXT, tags TEXT, images TEXT, videos TEXT, pdf TEXT, data TEXT, created_at TEXT, updated_at TEXT)');
+  db.run('CREATE TABLE attributes(node_id TEXT, key TEXT, value TEXT, datatype TEXT)');
+  for (const table of ['knowledge_likes', 'knowledge_comments', 'knowledge_shares', 'knowledge_favorites']) db.run(`CREATE TABLE ${table}(knowledge_id TEXT)`);
+  const insert = db.query("INSERT INTO nodes VALUES (?, ?, ?, NULL, NULL, ?, '2026-01-01', '2026-01-01')");
+  insert.run('plain', '["a","b","c"]', '[]', '{}');
+  insert.run('image', '["a","a", ""]', '["/image.png"]', '{}');
+  insert.run('video', '["a","b"]', '[]', '{"video":"/video.mp4"}');
+  insert.run('invalid', 'broken', '[]', 'broken');
+  insert.run('attribute', '[]', '[]', '{}');
+  db.run("INSERT INTO attributes VALUES ('entity/attribute','image','/photo.png','commonsMedia')");
+  const query = (offset = 0) => db.query(`SELECT n.id FROM nodes n ${order(new URL('http://localhost/?order=richness'))} LIMIT 2 OFFSET ?`).all(offset).map((row: any) => row.id);
+  expect(query()).toEqual(['video', 'image']);
+  expect(query(2)).toEqual(['attribute', 'plain']);
+  for (let i = 0; i < 6; i++) db.run("INSERT INTO knowledge_shares VALUES ('entity/image')");
+  expect(query()).toEqual(['image', 'video']);
   db.close();
 });

@@ -2419,6 +2419,32 @@ export async function handleCoreKbRoutes(
       const popularity = ['knowledge_likes', 'knowledge_favorites', 'knowledge_comments']
         .map((table) => `(SELECT COUNT(*) FROM ${table} h WHERE h.knowledge_id IN (n.id, 'entity/' || n.id))`).join(' + ');
       orderClause = ` ORDER BY (${popularity}) DESC, datetime(COALESCE(n.updated_at, n.created_at)) DESC, n.rowid DESC`;
+    } else if (orderBy === "richness") {
+      // Media takes precedence; richness combines unique tags and current interactions.
+      const mediaValues = ["n.images", "n.videos", "n.pdf", ...["images", "image", "videos", "video", "pdf"].map(
+        (field) => `CASE WHEN json_valid(n.data) THEN json_extract(n.data, '$.${field}') END`,
+      )];
+      const hasMediaValue = mediaValues.map((value) => `EXISTS (
+        SELECT 1 FROM json_each(CASE WHEN json_valid(${value}) THEN ${value}
+          ELSE json_quote(${value}) END) media
+        WHERE trim(COALESCE(CASE WHEN media.type = 'object' THEN
+          COALESCE(json_extract(media.value, '$.url'), json_extract(media.value, '$.src'))
+          ELSE CAST(media.value AS TEXT) END, '')) <> ''
+      )`).join(' OR ');
+      const attributeMedia = `EXISTS (SELECT 1 FROM attributes a
+        WHERE a.node_id IN (n.id, 'entity/' || n.id)
+          AND trim(COALESCE(a.value, '')) NOT IN ('', '[]', 'null')
+          AND (a.datatype = 'commonsMedia' OR lower(a.key) IN ('image','images','video','videos','pdf','??','??')
+            OR lower(a.value) LIKE '%/node-images/%' OR lower(a.value) LIKE '%/node-videos/%'
+            OR lower(a.value) LIKE '%.mp4%' OR lower(a.value) LIKE '%.webm%'))`;
+      const tags = `(SELECT COUNT(DISTINCT trim(CAST(tag.value AS TEXT)))
+        FROM json_each(CASE WHEN json_valid(n.tags) AND json_type(n.tags) = 'array' THEN n.tags ELSE '[]' END) tag
+        WHERE tag.type = 'text' AND trim(tag.value) <> '')`;
+      const interactions = ['knowledge_likes', 'knowledge_comments', 'knowledge_shares', 'knowledge_favorites']
+        .map((table) => `(SELECT COUNT(*) FROM ${table} h WHERE h.knowledge_id IN (n.id, 'entity/' || n.id))`).join(' + ');
+      orderClause = ` ORDER BY CASE WHEN ${hasMediaValue} OR ${attributeMedia} THEN 1 ELSE 0 END DESC,
+        ((${tags}) * 5 + ${interactions}) DESC,
+        datetime(COALESCE(n.updated_at, n.created_at)) DESC, n.rowid DESC`;
     } else if (orderBy === "modified_desc") {
       orderClause =
         " ORDER BY datetime(COALESCE(n.updated_at, n.created_at)) DESC, n.rowid DESC";
@@ -2514,9 +2540,16 @@ export async function handleCoreKbRoutes(
         ...new Set(["entity", ...entityTypes.map((row) => String(row.type)), ...hiddenTypes.map((row) => String(row.id))]),
       ];
     }
+    // Rank all eligible local IDs before Elasticsearch applies its filters and pagination.
+    const rankedIds = shouldUseElasticsearch && orderBy === "richness"
+      ? db.query(`SELECT DISTINCT n.id FROM nodes n${joinClause} ${elasticsearchWhereClause}${orderClause}`)
+        .all(...params, ...(hasProjectScope ? [] : [elasticsearchProject.id]))
+        .map((row: any) => String(row.id))
+      : undefined;
     const elasticsearchResults = shouldUseElasticsearch
       ? await searchElasticsearchEntities(elasticsearchProjectName!, {
-        ids: eligibleIds,
+        ids: rankedIds || eligibleIds,
+        rankedIds,
         query: q,
         limit,
         offset,

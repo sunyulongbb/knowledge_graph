@@ -79,7 +79,8 @@ export function buildEnterpriseSearchQuery(options: EnterpriseSearchOptions, rea
   return { bool };
 }
 export class EnterpriseKnowledgeSearch {
-  constructor(readonly store: EnterpriseKnowledgeStore, readonly client: ElasticsearchClient) {}
+  constructor(readonly store: EnterpriseKnowledgeStore, readonly client: ElasticsearchClient,
+    readonly interactionCounts: () => Record<string, number> = () => ({})) {}
   async search(database: string, user: KnowledgeUser | null, options: EnterpriseSearchOptions) {
     // Only current ACL/identity metadata is read from ArangoDB. Text search,
     // content, filters, paging and counts are exclusively served by Elasticsearch.
@@ -91,7 +92,39 @@ export class EnterpriseKnowledgeSearch {
     const ascending = options.order?.endsWith('_asc');
     const field = options.order?.startsWith('created') ? 'created_at_sort' : 'updated_at_sort';
     const relevance = Boolean(options.q?.trim()) && (!options.order || ['relevance', 'hot'].includes(options.order));
-    const sort = options.order === 'id' ? [{ sqlite_id: 'asc' }] : relevance
+    const richness = options.order === 'richness';
+    // Runtime fields use the existing ES source, so already indexed knowledge is
+    // ranked immediately without waiting for an index rebuild or background sync.
+    const runtimeMappings = richness ? {
+      home_media: { type: 'long', script: { source: `
+        def s = params._source;
+        boolean media = s.has_media == true;
+        for (def key : ['images', 'videos', 'pdf']) {
+          def value = s[key];
+          if (value instanceof List) { for (def item : value) { if (item != null && item.toString().trim().length() > 0) media = true; } }
+          else if (value != null && !['', '[]', 'null'].contains(value.toString().trim())) media = true;
+        }
+        emit(media ? 1L : 0L);` } },
+      home_richness: { type: 'long', script: { source: `
+        def s = params._source;
+        def tags = s.tags;
+        def unique = new HashSet();
+        if (tags instanceof String) {
+          def text = tags.trim();
+          if (text.startsWith('[') && text.endsWith(']')) tags = text.substring(1, text.length() - 1).splitOnToken(',');
+          else tags = [];
+        }
+        if (tags != null) for (def tag : tags) {
+          if (tag == null) continue;
+          def text = tag.toString().trim();
+          if (text.startsWith('"') && text.endsWith('"') && text.length() >= 2) text = text.substring(1, text.length() - 1).trim();
+          if (text.length() > 0) unique.add(text);
+        }
+        def id = s.sqlite_id;
+        long interactions = id != null && params.counts.containsKey(id) ? (long)params.counts[id] : 0L;
+        emit(unique.size() * 5L + interactions);`, params: { counts: this.interactionCounts() } } },
+    } : undefined;
+    const sort = richness ? [{ home_media: 'desc' }, { home_richness: 'desc' }, { updated_at_sort: { order: 'desc', unmapped_type: 'keyword' } }, { sqlite_id: 'asc' }] : options.order === 'id' ? [{ sqlite_id: 'asc' }] : relevance
       ? [{ _score: 'desc' }, { sqlite_id: 'asc' }]
       : [{ [field]: { order: ascending ? 'asc' : 'desc', unmapped_type: 'keyword' } }, { sqlite_id: 'asc' }];
     const index = encodeURIComponent(elasticsearchEntityIndexName(database));
@@ -99,7 +132,7 @@ export class EnterpriseKnowledgeSearch {
       const highlight = options.q?.trim() ? { pre_tags: ['\uE000'], post_tags: ['\uE001'], require_field_match: true,
         fields: { 'labels.*.value': { number_of_fragments: 0 }, 'aliases.*.value': { number_of_fragments: 1, fragment_size: 100 },
           ...(options.searchScope === 'name' ? {} : { 'descriptions.*.value': { number_of_fragments: 2, fragment_size: 160 } }) } } : undefined;
-      const { body: result } = await this.client.send(path, { method: 'POST', body: JSON.stringify({ query, sort, track_total_hits: true, ...(highlight ? { highlight } : {}), ...body }) });
+      const { body: result } = await this.client.send(path, { method: 'POST', body: JSON.stringify({ query, sort, ...(runtimeMappings ? { runtime_mappings: runtimeMappings } : {}), track_total_hits: true, ...(highlight ? { highlight } : {}), ...body }) });
       if (result?.timed_out || result?._shards?.failed) throw new Error('Elasticsearch returned incomplete knowledge search results');
       return result;
     };

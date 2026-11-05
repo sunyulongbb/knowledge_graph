@@ -187,6 +187,7 @@ export async function searchElasticsearchEntities(
   projectName: string,
   options: {
     ids?: string[];
+    rankedIds?: string[];
     query: string;
     limit: number;
     offset: number;
@@ -231,7 +232,11 @@ export async function searchElasticsearchEntities(
       size: options.limit,
       track_total_hits: true,
       query: { bool },
-      sort: [{ [sortField]: { order: sortOrder, unmapped_type: "keyword" } }, { sqlite_id: "asc" }],
+      sort: options.rankedIds ? [{ _script: {
+        type: "number", order: "asc",
+        script: { lang: "painless", source: "def id = doc['sqlite_id'].value; return params.ranks.containsKey(id) ? params.ranks[id] : params.fallback;",
+          params: { ranks: Object.fromEntries(options.rankedIds.map((id, rank) => [id, rank])), fallback: options.rankedIds.length } },
+      } }, { sqlite_id: "asc" }] : [{ [sortField]: { order: sortOrder, unmapped_type: "keyword" } }, { sqlite_id: "asc" }],
     }),
   });
   return {
