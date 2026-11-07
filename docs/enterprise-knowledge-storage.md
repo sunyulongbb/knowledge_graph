@@ -2,7 +2,7 @@
 
 ## SQLite 备份
 
-Enterprise 以 ArangoDB 为知识主存储、ES 为检索索引，并将完整 entity/link 文档备份到 `app.sqlite` 的独立表 `enterprise_knowledge_backups`。每次知识写入后触发备份，后台默认每 60 秒重试和对账（`ENTERPRISE_SQLITE_BACKUP_INTERVAL_MS`）；ES 故障不影响备份。源读取成功后才替换快照，读取失败保留上一次成功版本。
+Enterprise 以 ArangoDB 为知识主存储、ES 为检索索引，并将完整 entity/link 文档备份到独立文件 `enterprise-knowledge-backups.sqlite` 的 `enterprise_knowledge_backups` 表。文件默认位于 `app.sqlite` 同目录，可用 `ENTERPRISE_SQLITE_BACKUP_PATH` 指定其他路径，不能指向主数据库。打开备份库时执行完整性快检，损坏时保留文件并报错。每次知识写入后触发备份，后台默认每 60 秒重试和对账（`ENTERPRISE_SQLITE_BACKUP_INTERVAL_MS`）；ES 故障不影响备份。源读取成功后才替换快照，读取失败保留上一次成功版本。原 app.sqlite 的备份表保留，新文件从 ArangoDB 重新生成快照。
 
 此表保存每个应用最新成功快照，包括权限、关系及完整 statement，不包含附件文件本身。`GET /api/kb/knowledge-sync/status` 的 `sqliteBackup` 返回最近成功备份时间与实体/边数量。页面 SQLite 导入仍读取旧 nodes/attributes 表，尚未提供从新备份表恢复的页面操作。快照目前整图读取到内存；独立灾备和历史版本保留需要另行复制数据库及附件。
 

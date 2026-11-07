@@ -61,7 +61,7 @@ const handleUserProfile = createUserProfileHandler(adminDb, getCurrentUser);
 
 console.log(`[Knowledge storage] ${enterpriseKnowledgeEnabled() ? 'arangodb (Enterprise)' : 'sqlite (Lite)'}`);
 const enterpriseStore = enterpriseKnowledgeEnabled() ? EnterpriseKnowledgeStore.configured() : null;
-const enterpriseBackup = enterpriseStore ? new EnterpriseSqliteBackup(adminDb, enterpriseStore) : undefined;
+const enterpriseBackup = enterpriseStore ? EnterpriseSqliteBackup.open(enterpriseStore, adminDb.filename) : undefined;
 enterpriseBackup?.start(async () => (adminDb.query('SELECT name FROM projects ORDER BY id').all() as { name: string }[]).map(project => project.name));
 const handleApplications = createApplicationHandler(adminDb, getCurrentUser, {
   provisionKnowledge: enterpriseStore ? name => ensureApplicationDatabase(enterpriseStore.client, name) : undefined,

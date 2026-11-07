@@ -1,6 +1,29 @@
 import { test, expect, spyOn } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { EnterpriseSqliteBackup } from '../src/server/enterprise-sqlite-backup.ts';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+test('file backups work independently of a corrupt application database and survive reopening', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'enterprise-backup-'));
+  const app = join(root, 'app.sqlite');
+  const path = join(root, 'enterprise-knowledge-backups.sqlite');
+  writeFileSync(app, 'damaged SQLite application file');
+  const snapshot = { entity: [{ _key: 'a' }], link: [] };
+  const store = { query: async () => [snapshot] } as any;
+  try {
+    const backup = EnterpriseSqliteBackup.open(store, app, path);
+    try { await backup.flush('project'); } finally { backup.close(); }
+    const reopened = EnterpriseSqliteBackup.open(store, app, path);
+    try { expect((reopened.status('project') as any).entities).toBe(1); } finally { reopened.close(); }
+    expect(readFileSync(app, 'utf8')).toBe('damaged SQLite application file');
+    expect(() => EnterpriseSqliteBackup.open(store, app, app)).toThrow('separate SQLite file');
+    writeFileSync(path, 'damaged backup file');
+    expect(() => EnterpriseSqliteBackup.open(store, app, path)).toThrow();
+    expect(readFileSync(path, 'utf8')).toBe('damaged backup file');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
 
 test('backup retains complete graph and keeps the last good snapshot after failure', async () => {
   const db = new Database(':memory:');

@@ -1,9 +1,27 @@
-import type { Database } from 'bun:sqlite';
+import { Database } from 'bun:sqlite';
+import { mkdirSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import type { EnterpriseKnowledgeStore } from './enterprise-knowledge.ts';
 
 /** Keep raw graph documents so statements, permissions and future fields survive. */
 export class EnterpriseSqliteBackup {
   private running = new Map<string, Promise<void>>();
+  /** Backups must not share the application's potentially damaged SQLite file. */
+  static open(store: EnterpriseKnowledgeStore, applicationFilename: string, filename = process.env.ENTERPRISE_SQLITE_BACKUP_PATH) {
+    const path = resolve(filename || resolve(dirname(applicationFilename), 'enterprise-knowledge-backups.sqlite'));
+    if (path === resolve(applicationFilename)) throw new Error('Knowledge backup must use a separate SQLite file');
+    mkdirSync(dirname(path), { recursive: true });
+    const db = new Database(path, { create: true });
+    try {
+      const checks = db.query('PRAGMA quick_check').all() as Record<string, unknown>[];
+      if (checks.length !== 1 || Object.values(checks[0]!)[0] !== 'ok') throw new Error(`Knowledge backup database is damaged: ${path}`);
+      db.run('PRAGMA journal_mode=WAL');
+      db.run('PRAGMA synchronous=FULL');
+      db.run('PRAGMA busy_timeout=10000');
+      return new EnterpriseSqliteBackup(db, store);
+    } catch (error) { db.close(); throw error; }
+  }
+  close() { this.db.close(); }
   constructor(private db: Database, private store: EnterpriseKnowledgeStore) {
     db.run(`CREATE TABLE IF NOT EXISTS enterprise_knowledge_backups (
       database_name TEXT PRIMARY KEY, snapshot_json TEXT NOT NULL,
