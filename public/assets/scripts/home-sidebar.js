@@ -5,7 +5,8 @@
   try { preference = localStorage.getItem('kb:home-sidebar') || ''; } catch {}
   function apply() {
     const collapsed = preference ? preference === 'collapsed' : media.matches;
-    document.body.dataset.homeSidebar = collapsed ? 'collapsed' : 'expanded';
+    document.documentElement.dataset.homeSidebar = collapsed ? 'collapsed' : 'expanded';
+    document.body.dataset.homeSidebar = document.documentElement.dataset.homeSidebar;
     button.setAttribute('aria-expanded', String(!collapsed));
     button.setAttribute('aria-label', collapsed ? '展开菜单' : '收起菜单');
     button.title = collapsed ? '展开菜单' : '收起菜单';

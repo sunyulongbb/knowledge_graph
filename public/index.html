@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-shell-pending>
 
 <head>
   <meta charset="utf-8" />
@@ -8,6 +8,13 @@
   <script src="/assets/scripts/application-scope.js?v=20261028-route-scope"></script>
 
   <script>
+    // Apply sidebar width before the first paint, including responsive defaults.
+    (function () {
+      let preference = '';
+      try { preference = localStorage.getItem('kb:home-sidebar') || ''; } catch {}
+      const collapsed = preference ? preference === 'collapsed' : window.matchMedia('(max-width: 1000px)').matches;
+      document.documentElement.dataset.homeSidebar = collapsed ? 'collapsed' : 'expanded';
+    })();
     // Restore the theme before styles and page content can paint.
     const kbDocumentRoot = document.documentElement;
     try {
@@ -70,9 +77,9 @@
     ]).then(() => true);
   </script>
   <link rel="stylesheet" href="/assets/styles/app.css?v=20261110-scrollbar-tracks" />
-  <link rel="stylesheet" href="/assets/styles/home-discovery.css?v=20261110-profile-avatar" />
+  <link rel="stylesheet" href="/assets/styles/home-discovery.css?v=20261110-embedded-detail" />
   <link rel="stylesheet" href="/assets/styles/shorts-page.css?v=20261110-home-shell" />
-  <link rel="stylesheet" href="/assets/styles/knowledge-explore.css?v=20261110-full-width" />
+  <link rel="stylesheet" href="/assets/styles/knowledge-explore.css?v=20261110-card-links" />
   <link rel="stylesheet" href="/assets/styles/quick-knowledge.css?v=20261110-composer" />
   <link rel="stylesheet" href="/assets/styles/home-waterfall.css?v=20261110-1" />
   <link rel="stylesheet" href="/assets/styles/home-popular.css?v=20261110-1" />
@@ -5785,6 +5792,8 @@
     const detailPanelNextSibling = detailPanel?.nextSibling || null;
     const knowledgeDetailPagePanel = document.getElementById("knowledgeDetailPagePanel");
     const knowledgeDetailPageHost = document.getElementById("knowledgeDetailPageHost");
+    // Share the discovery navigation while keeping the detail route independent.
+    if (knowledgeDetailPagePanel) document.getElementById('applicationHomePanel').appendChild(knowledgeDetailPagePanel);
     function mountDetailPanelStandalone(standalone) {
       if (!detailPanel) return;
       window.kbGraphDetails?.release();
@@ -7526,7 +7535,8 @@
       const isAppHome = normalized === 'app_home';
       const isExplore = normalized === 'app_explore';
       const isLearning = normalized === 'learning';
-      document.body.classList.toggle('home-discovery-active', isAppHome || isShorts || isExplore || isLearning || isProfile);
+      document.body.classList.toggle('home-discovery-active', isAppHome || isShorts || isExplore || isLearning || isProfile || isStandaloneDetail);
+      document.body.classList.toggle('home-detail-active', isStandaloneDetail);
       document.body.classList.toggle('home-profile-active', isProfile);
       document.body.classList.toggle('home-shorts-active', isShorts);
       document.body.classList.toggle('home-explore-active', isExplore);
@@ -7534,7 +7544,12 @@
       const isAppSearch = normalized === 'app_search';
       const isGlobalPage = isApplications || isUserManagement || isProfile || isAppHome || isAppSearch || isStandaloneDetail || isShorts || isExplore || isLearning;
       if (knowledgeDetailPagePanel) knowledgeDetailPagePanel.style.display = isStandaloneDetail ? '' : 'none';
-      document.getElementById('applicationHomePanel').style.display = isAppHome || isShorts || isExplore || isLearning || isProfile ? '' : 'none';
+      document.getElementById('applicationHomePanel').style.display = isAppHome || isShorts || isExplore || isLearning || isProfile || isStandaloneDetail ? '' : 'none';
+      // Reveal only after the initial route and sidebar layout have both applied.
+      // The callback runs after this synchronous view update, before painting.
+      if (document.documentElement.hasAttribute('data-shell-pending')) {
+        requestAnimationFrame(() => document.documentElement.removeAttribute('data-shell-pending'));
+      }
       window.syncHomeNavigation?.();
       document.getElementById('applicationSearchPanel').style.display = isAppSearch ? '' : 'none';
       document.getElementById('btnApplicationSearch').classList.toggle('active', isAppSearch);
@@ -17700,10 +17715,10 @@
   <script src="/assets/scripts/knowledge-context-menu.js?v=20260928-3"></script>
   <script src="/assets/scripts/quick-knowledge.js?v=20261110-composer"></script>
   <script src="/assets/scripts/home-waterfall.js?v=20261110-1"></script>
-  <script src="/assets/scripts/home-sidebar.js?v=20261110-1"></script>
-  <script src="/assets/scripts/application-pages.js?v=20261110-feed-route"></script>
+  <script src="/assets/scripts/home-sidebar.js?v=20261110-first-paint"></script>
+  <script src="/assets/scripts/application-pages.js?v=20261110-news-no-categories"></script>
   <script src="/assets/scripts/knowledge-learning.js?v=20261110-quiz-map"></script>
-  <script src="/assets/scripts/knowledge-explore.js?v=20261110-category-route"></script>
+  <script src="/assets/scripts/knowledge-explore.js?v=20261110-card-links"></script>
   <script src="/assets/scripts/user-profile.js?v=20261110-history"></script>
   <script src="/assets/scripts/sidebar-panel.js?v=20260924-4"></script>
   <script src="/assets/scripts/auth-panel.js?v=20261012-user-id"></script>

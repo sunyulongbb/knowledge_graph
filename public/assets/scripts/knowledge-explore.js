@@ -81,7 +81,7 @@
         const cover = urlOf(item.cover || item.covers?.[0]);
         const image = (video ? cover : '') || images[0]?.url || urlOf(item.image || item.images?.[0]) || cover;
         const title = item.name || item.label || item.id;
-        return `<button type="button" class="explore-knowledge-card explore-media-tile${!image&&!video?' is-text':''}" data-explore-node="${escape(item.id || item._id)}" aria-label="查看 ${escape(title)}" title="${escape(title)}">${image ? `<img src="${escape(image)}" alt="" loading="lazy" decoding="async">` : video ? `<video src="${escape(video)}" muted playsinline preload="metadata"></video>` : '<span class="explore-tile-placeholder"><i class="fa-regular fa-lightbulb" aria-hidden="true"></i></span>'}${video||images.length>1?`<span class="explore-tile-kind" aria-label="${video?'视频':'多图'}"><i class="${video?'fa-solid fa-play':'fa-regular fa-clone'}" aria-hidden="true"></i></span>`:''}<span class="explore-tile-caption"><strong>${escape(title)}</strong><small>${escape(item.description || '查看知识详情')}</small></span></button>`;
+        return `<article class="explore-knowledge-card explore-media-tile${!image&&!video?' is-text':''}" ><button type="button" class="explore-tile-media" data-explore-node="${escape(item.id || item._id)}" aria-label="查看 ${escape(title)}" title="${escape(title)}">${image ? `<img src="${escape(image)}" alt="" loading="lazy" decoding="async">` : video ? `<video src="${escape(video)}" muted playsinline preload="metadata"></video>` : '<span class="explore-tile-placeholder"><i class="fa-regular fa-lightbulb" aria-hidden="true"></i></span>'}${video||images.length>1?`<span class="explore-tile-kind" aria-label="${video?'视频':'多图'}"><i class="${video?'fa-solid fa-play':'fa-regular fa-clone'}" aria-hidden="true"></i></span>`:''}</button><span class="explore-tile-caption"><button type="button" data-explore-detail="${escape(item.id || item._id)}"><strong>${escape(title)}</strong></button><small>${escape(item.description || '查看知识详情')}</small></span></article>`;
       }).join('')}</div>` : '<div class="explore-state">该分类下暂无可浏览的知识，可继续探索子分类。</div>';
     const pages = Math.max(1, Math.ceil(total / pageSize));
     return `<section class="explore-group"><div class="explore-group-heading"><h2>${escape(name(current))}的知识</h2><span>${total} 条知识（含子分类）</span></div>${content}${!loadingItems && !itemsError && pages > 1 ? `<nav class="explore-pagination" aria-label="分类知识分页"><button type="button" data-explore-page="${page - 1}" ${page <= 1 ? 'disabled' : ''}>上一页</button><span>${page} / ${pages}</span><button type="button" data-explore-page="${page + 1}" ${page >= pages ? 'disabled' : ''}>下一页</button></nav>` : ''}</section>`;
@@ -153,6 +153,8 @@
     if (more) { const key = more.dataset.exploreMore; expanded.set(key, (expanded.get(key) || 6) + 6); render(); return; }
     const paging = event.target.closest('[data-explore-page]');
     if (paging && !paging.disabled) { void loadItems(Number(paging.dataset.explorePage)); return; }
+    const detail = event.target.closest('[data-explore-detail]');
+    if (detail) { window.setViewMode('knowledge_detail', { targetNodeId: detail.dataset.exploreDetail }); return; }
     const node = event.target.closest('[data-explore-node]');
     if (node) {
       window.kbShortsLaunch = { nodes: items.slice(), category: name(tree.byId.get(selected)) };
