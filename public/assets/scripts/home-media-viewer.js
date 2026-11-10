@@ -275,6 +275,11 @@
       catch(error){if(token===version)message(error.message);}finally{actionBusy=false;}
       return;
     }
+    if (kind === 'info' && page && node && typeof window.setViewMode === 'function') {
+      const id = idOf(node);
+      window.setViewMode('knowledge_detail', { targetNodeId: id });
+      return;
+    }
     if (kind === 'comment' || kind === 'info') { overlayMode = kind === 'comment' ? 'comments' : 'info'; overlayPage = 0; renderOverlay(); return; }
     const token = version; actionBusy = true;
     try {

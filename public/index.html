@@ -77,7 +77,7 @@
     ]).then(() => true);
   </script>
   <link rel="stylesheet" href="/assets/styles/app.css?v=20261110-scrollbar-tracks" />
-  <link rel="stylesheet" href="/assets/styles/home-discovery.css?v=20261110-embedded-detail" />
+  <link rel="stylesheet" href="/assets/styles/home-discovery.css?v=20261110-search-shell" />
   <link rel="stylesheet" href="/assets/styles/shorts-page.css?v=20261110-home-shell" />
   <link rel="stylesheet" href="/assets/styles/knowledge-explore.css?v=20261110-card-links" />
   <link rel="stylesheet" href="/assets/styles/quick-knowledge.css?v=20261110-composer" />
@@ -4836,14 +4836,13 @@
       <section id="applicationHomePanel" class="application-content-page" style="display:none">
         <aside class="home-discovery-sidebar" id="homeDiscoverySidebar" aria-label="首页导航">
           <div class="home-discovery-sidebar-head">
-          <button type="button" class="home-discovery-brand" data-home-action="applications" title="切换应用"><span class="home-discovery-mark" aria-hidden="true"><i class="fa-solid fa-layer-group"></i></span><span><strong id="homeDiscoveryBrand"></strong><small>发现 · 连接 · 创造</small></span></button>
+          <button type="button" class="home-discovery-brand" id="homeSidebarBrandToggle" aria-controls="homeDiscoverySidebar" aria-expanded="true"><span class="home-discovery-mark" id="homeDiscoveryLogo" aria-hidden="true"><i class="fa-solid fa-layer-group"></i></span><span><strong id="homeDiscoveryBrand"></strong><small>发现 · 连接 · 创造</small></span></button>
           <script>
             try {
               const brandScope = new URLSearchParams(location.search).get('db') || 'default';
               document.getElementById('homeDiscoveryBrand').textContent = localStorage.getItem(`kb:application-name:${brandScope}`) || '';
             } catch {}
           </script>
-          <button id="homeSidebarToggle" type="button" class="home-sidebar-toggle" aria-controls="homeDiscoverySidebar" aria-expanded="true" aria-label="收起菜单" title="收起菜单"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="3.5" width="19" height="17" rx="3.5"/><path d="M8.5 3.5v17"/><path class="home-sidebar-chevron" d="m16 9-3 3 3 3"/></svg></button>
           </div>
           <nav class="home-discovery-nav" aria-label="发现内容">
             <button type="button" data-home-feed="for-you" aria-current="page" title="For You · 为你推荐"><i class="fa-solid fa-house" aria-hidden="true"></i><span>For You<small>为你推荐</small></span></button>
@@ -5794,6 +5793,7 @@
     const knowledgeDetailPageHost = document.getElementById("knowledgeDetailPageHost");
     // Share the discovery navigation while keeping the detail route independent.
     if (knowledgeDetailPagePanel) document.getElementById('applicationHomePanel').appendChild(knowledgeDetailPagePanel);
+    document.getElementById('applicationHomePanel').appendChild(document.getElementById('applicationSearchPanel'));
     function mountDetailPanelStandalone(standalone) {
       if (!detailPanel) return;
       window.kbGraphDetails?.release();
@@ -7532,19 +7532,20 @@
       const isUserManagement = normalized === "user_management";
       const isApplications = normalized === 'applications';
       const isProfile = normalized === 'profile';
+      const isAppSearch = normalized === 'app_search';
       const isAppHome = normalized === 'app_home';
       const isExplore = normalized === 'app_explore';
       const isLearning = normalized === 'learning';
-      document.body.classList.toggle('home-discovery-active', isAppHome || isShorts || isExplore || isLearning || isProfile || isStandaloneDetail);
+      document.body.classList.toggle('home-discovery-active', isAppHome || isShorts || isExplore || isLearning || isProfile || isStandaloneDetail || isAppSearch);
+      document.body.classList.toggle('home-search-active', isAppSearch);
       document.body.classList.toggle('home-detail-active', isStandaloneDetail);
       document.body.classList.toggle('home-profile-active', isProfile);
       document.body.classList.toggle('home-shorts-active', isShorts);
       document.body.classList.toggle('home-explore-active', isExplore);
       document.body.classList.toggle('home-learning-active', isLearning);
-      const isAppSearch = normalized === 'app_search';
       const isGlobalPage = isApplications || isUserManagement || isProfile || isAppHome || isAppSearch || isStandaloneDetail || isShorts || isExplore || isLearning;
       if (knowledgeDetailPagePanel) knowledgeDetailPagePanel.style.display = isStandaloneDetail ? '' : 'none';
-      document.getElementById('applicationHomePanel').style.display = isAppHome || isShorts || isExplore || isLearning || isProfile || isStandaloneDetail ? '' : 'none';
+      document.getElementById('applicationHomePanel').style.display = isAppHome || isShorts || isExplore || isLearning || isProfile || isStandaloneDetail || isAppSearch ? '' : 'none';
       // Reveal only after the initial route and sidebar layout have both applied.
       // The callback runs after this synchronous view update, before painting.
       if (document.documentElement.hasAttribute('data-shell-pending')) {
@@ -17709,15 +17710,15 @@
   <script src="/assets/scripts/knowledge-access.js?v=20261011-member-access"></script>
   <script src="/assets/scripts/applications.js?v=20260927-settings-layout"></script>
   <script src="/assets/scripts/user-management.js?v=20260915-1"></script>
-  <script src="/assets/scripts/home-media-viewer.js?v=20261110-account-records"></script>
+  <script src="/assets/scripts/home-media-viewer.js?v=20261110-full-knowledge"></script>
   <script src="/assets/scripts/shorts-page.js?v=20261110-home-shell"></script>
   <script src="/assets/scripts/manual-classify.js?v=20260929-existing-classes"></script>
   <script src="/assets/scripts/knowledge-context-menu.js?v=20260928-3"></script>
   <script src="/assets/scripts/quick-knowledge.js?v=20261110-composer"></script>
   <script src="/assets/scripts/home-waterfall.js?v=20261110-1"></script>
-  <script src="/assets/scripts/home-sidebar.js?v=20261110-first-paint"></script>
-  <script src="/assets/scripts/application-pages.js?v=20261110-tag-explore"></script>
-  <script src="/assets/scripts/knowledge-learning.js?v=20261110-quiz-map"></script>
+  <script src="/assets/scripts/home-sidebar.js?v=20261110-brand-only"></script>
+  <script src="/assets/scripts/application-pages.js?v=20261110-sidebar-logo"></script>
+  <script src="/assets/scripts/knowledge-learning.js?v=20261110-node-info"></script>
   <script src="/assets/scripts/knowledge-explore.js?v=20261110-tag-explore"></script>
   <script src="/assets/scripts/user-profile.js?v=20261110-history"></script>
   <script src="/assets/scripts/sidebar-panel.js?v=20260924-4"></script>

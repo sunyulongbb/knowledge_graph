@@ -38,6 +38,17 @@
       brand.textContent = applicationName;
       try { localStorage.setItem(`kb:application-name:${new URLSearchParams(location.search).get('db') || 'default'}`, applicationName); } catch {}
     }
+    const logo = byId('homeDiscoveryLogo');
+    const logoSource = String(homeApplication?.image || byId('headerProjectAvatar')?.querySelector('img')?.getAttribute('src') || '').trim();
+    if (logo && logo.dataset.source !== logoSource) {
+      logo.dataset.source = logoSource;
+      logo.innerHTML = '<i class="fa-solid fa-layer-group" aria-hidden="true"></i>';
+      if (/^(https?:\/\/|\/(?!\/)|data:image\/)/i.test(logoSource)) {
+        const img = document.createElement('img'); img.alt = ''; img.src = logoSource;
+        img.onerror = () => { img.remove(); };
+        logo.append(img);
+      }
+    }
     const account = byId('homeDiscoveryAccount');
     if (account) account.textContent = window.authUser?.displayName || window.authUser?.username || '登录';
     const avatar = byId('homeDiscoveryAvatar');
@@ -1001,6 +1012,8 @@
   });
   byId('appSearchResults').addEventListener('click', (event) => { if (event.target.closest('[data-search-retry]')) search(); });
   const refresh = () => { homeVersion++; searchVersion++; if (window.kbViewMode === 'app_home') window.loadApplicationHome(); if (window.kbViewMode === 'app_search') window.loadApplicationSearch(); };
+  const headerLogo = byId('headerProjectAvatar');
+  if (headerLogo) new MutationObserver(syncHomeNavigation).observe(headerLogo, { childList:true, subtree:true, attributes:true, attributeFilter:['src'] });
   window.syncHomeNavigation = syncHomeNavigation;
   syncHomeNavigation();
   window.addEventListener('kb-auth-change', refresh);
