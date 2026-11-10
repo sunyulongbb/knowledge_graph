@@ -169,14 +169,16 @@ export class EnterpriseKnowledgeStore {
     await this.client.database(database, `/_api/document/entity/${node._key}`, { method: 'PATCH', headers: { 'x-arango-trx-id': trx }, body: JSON.stringify(changes) });
     return { ...node, ...changes };
   }
-  async searchAccess(database: string, user: KnowledgeUser | null) {
+  async searchAccess(database: string, user: KnowledgeUser | null, engagement = false) {
     const rows = await this.query(database, `FOR doc IN entity FILTER ${READ_FILTER}
       RETURN { _key: doc._key, id: doc.sqlite_id || doc.id, owner_user_id: doc.owner_user_id,
-        project_id: doc.project_id, visibility: doc.visibility, maintainer_ids: doc.maintainer_ids }`, {
+        project_id: doc.project_id, visibility: doc.visibility, maintainer_ids: doc.maintainer_ids
+        ${engagement ? ", engagement: { likes: LENGTH(NOT_NULL(doc.interactions.likes, [])), comments: LENGTH(NOT_NULL(doc.interactions.comments, [])), shares: TO_NUMBER(NOT_NULL(doc.interactions.shareCount, 0)) }" : ''} }`, {
       full: Boolean(user?.fullAccess), admin: user?.role === 'admin', uid: user?.id || -1,
       projects: [...(user?.ownedProjectIds || []), ...(user?.memberProjectIds || [])],
     });
     return rows.map(node => ({ key: String(node._key), id: String(node.id),
+      ...(engagement ? { engagement: node.engagement } : {}),
       can_edit: canUseArangoKnowledge(node, user, 'edit'), can_manage: canUseArangoKnowledge(node, user, 'manage') }));
   }
   async interact(database: string, id: string, user: KnowledgeUser | null, action = 'interaction', method = 'GET', input: Doc = {}) {

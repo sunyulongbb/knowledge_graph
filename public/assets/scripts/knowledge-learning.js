@@ -168,7 +168,7 @@
     const token=++detailVersion;currentId=id;relatedId='';level=null;levelError='';loading=true;nodeModalOpen=true;writeRoute();render();
     try {
       const progress=await api(`/routes/${route.id}/progress`,{nodeId:id});if(token!==detailVersion)return;route=progress.route;
-      const data=await api(`/routes/${route.id}/level?nodeId=${encodeURIComponent(id)}`);if(token!==detailVersion)return;level=data;
+      const data=await api(`/routes/${route.id}/level?nodeId=${encodeURIComponent(id)}`);if(token!==detailVersion)return;level=data;window.recordKnowledgeView?.(id);
     }catch(failure){if(token===detailVersion)levelError=failure.message;}
     if(token===detailVersion){loading=false;render();}
   }

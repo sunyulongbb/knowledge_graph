@@ -8,11 +8,22 @@
   let homePage = 1, homeTotal = 0, homeBusy = false, homeError = '';
   const homePageSize = 24;
   let homeFeedExhausted = false;
-  let homeFeed = 'for-you';
+  let homeFeed = readHomeFeed();
+  function readHomeFeed() {
+    const feed=new URLSearchParams(location.search).get('home_feed');
+    return ['popular','news'].includes(feed)?feed:'for-you';
+  }
+  function writeHomeFeedRoute() {
+    const url=new URL(location.href);
+    if(homeFeed==='for-you')url.searchParams.delete('home_feed');else url.searchParams.set('home_feed',homeFeed);
+    window.history.replaceState(window.history.state,'',url);
+  }
   function homeFeedOrder() {
     return homeFeed === 'popular' ? 'popular' : homeFeed === 'news' ? 'created_desc' : 'richness';
   }
+  function homeRequestSize() { return homeFeed === 'popular' ? 30 : homePageSize; }
   function syncHomeNavigation() {
+    document.body.classList.toggle('home-popular-active', window.kbViewMode === 'app_home' && homeFeed === 'popular');
     document.querySelectorAll('[data-home-feed]').forEach(button => {
       if (window.kbViewMode === 'app_home' && button.dataset.homeFeed === homeFeed) button.setAttribute('aria-current', 'page');
       else button.removeAttribute('aria-current');
@@ -22,9 +33,23 @@
       else button.removeAttribute('aria-current');
     });
     const brand = byId('homeDiscoveryBrand');
-    if (brand) brand.textContent = homeApplication?.title || homeApplication?.name || byId('headerProjectName')?.textContent.trim() || '知识空间';
+    const applicationName = String(homeApplication?.title || homeApplication?.name || byId('headerProjectName')?.textContent.trim() || '').trim();
+    if (brand && applicationName) {
+      brand.textContent = applicationName;
+      try { localStorage.setItem(`kb:application-name:${new URLSearchParams(location.search).get('db') || 'default'}`, applicationName); } catch {}
+    }
     const account = byId('homeDiscoveryAccount');
-    if (account) account.textContent = window.authUser?.displayName || window.authUser?.username || '账号与登录';
+    if (account) account.textContent = window.authUser?.displayName || window.authUser?.username || '登录';
+    const avatar = byId('homeDiscoveryAvatar');
+    if (avatar) {
+      const user = window.authUser, source = String(user?.avatar || '').trim(), identity = JSON.stringify([source,user?.displayName,user?.username]);
+      if (avatar.dataset.identity !== identity) {
+        avatar.dataset.identity = identity; avatar.replaceChildren(); avatar.className = 'home-sidebar-avatar';
+        if (/^(https?:\/\/|\/(?!\/))/i.test(source)) { const img=document.createElement('img');img.src=source;img.alt='';avatar.append(img); }
+        else if (user) avatar.textContent = source && !/[<>]/.test(source) && Array.from(source).length <= 8 ? source : Array.from(user.displayName || user.username || '我').slice(0,1).join('');
+        else avatar.classList.add('fa-regular','fa-user');
+      }
+    }
   }
   let homeRetry = { page: 1, category: '' };
   let homeNodes = [], homeVisibleNodes = [], homeCategories = [], homeSelectedCategory = '', homeInspirationIndex = 0, homeDrawCount = 1;
@@ -217,6 +242,27 @@
     url.searchParams.delete('node'); url.searchParams.delete('view');
     url.hash = new URLSearchParams({ view: 'knowledge_detail', node: id });
     location.hash = url.hash;
+  }
+  function homeNewsTimeline(nodes) {
+    const groups=new Map();
+    for(const node of nodes){
+      let raw=String(node.created_at||'').trim();
+      if(/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(raw)&&!/(Z|[+-]\d{2}:?\d{2})$/i.test(raw))raw=raw.replace(' ','T')+'Z';
+      const date=raw?new Date(raw):null,valid=date&&!Number.isNaN(date.getTime());
+      const day=valid?new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(date):'日期未记录';
+      const time=valid?new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',hour:'2-digit',minute:'2-digit',hour12:false}).format(date):'—';
+      if(!groups.has(day))groups.set(day,[]);
+      groups.get(day).push({node,time,iso:valid?date.toISOString():''});
+    }
+    return [...groups].map(([day,entries])=>`<section class="home-news-day"><h2><span class="home-news-day-dot" aria-hidden="true"></span>${escape(day)}</h2><ol>${entries.map(({node,time,iso})=>{
+      const id=node.id||node._id||'',title=node.name||node.label||id,image=firstImage(node)||firstCover(node),video=firstVideo(node);
+      return `<li class="home-news-event"><time ${iso?`datetime="${escape(iso)}"`:''}>${escape(time)}</time><span class="home-news-event-dot" aria-hidden="true"></span><article class="home-news-card" data-home-node-id="${escape(id)}"><div class="home-news-card-copy"><span class="home-news-type">${escape(node.typeLabel||node.type||'新知识')}</span><button type="button" class="home-news-title" data-home-node-id="${escape(id)}">${escape(title)}</button>${node.description?`<p>${escape(node.description)}</p>`:''}<button type="button" class="home-news-open" data-home-node-id="${escape(id)}">阅读知识 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button></div>${image?`<button type="button" class="home-news-thumb" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}"><img src="${escape(image)}" alt="" loading="lazy">${video?'<i class="fa-solid fa-play" aria-hidden="true"></i>':''}</button>`:''}</article></li>`;
+    }).join('')}</ol></section>`).join('');
+  }
+  function homePopularRow(node, index) {
+    const id=node.id||node._id||'', title=node.name||node.label||node.title||id;
+    const image=firstImage(node)||firstCover(node),video=firstVideo(node),stats=node.engagement;
+    return `<article class="home-popular-row" data-home-node-id="${escape(id)}"><span class="home-popular-rank ${index<3?'is-top-'+(index+1):''}">${String(index+1).padStart(2,'0')}</span><button type="button" class="home-popular-thumb" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}">${image?`<img src="${escape(image)}" alt="" loading="lazy">`:video?`<video src="${escape(video)}" muted playsinline preload="metadata"></video>`:'<i class="fa-regular fa-lightbulb" aria-hidden="true"></i>'}${video?'<span><i class="fa-solid fa-play" aria-hidden="true"></i> 视频</span>':''}</button><div class="home-popular-copy"><div class="home-popular-meta"><span>${escape(node.typeLabel||node.type||'知识')}</span><time>${escape(shortDate(node.updated_at||node.created_at))}</time></div><button class="home-popular-title" type="button" data-home-node-id="${escape(id)}">${escape(title)}</button>${node.description?`<p>${escape(node.description)}</p>`:''}<div class="home-popular-actions">${stats?`<span><i class="fa-regular fa-heart" aria-hidden="true"></i> ${Number(stats.likes)||0}</span><span><i class="fa-regular fa-comment" aria-hidden="true"></i> ${Number(stats.comments)||0}</span><span><i class="fa-solid fa-share" aria-hidden="true"></i> ${Number(stats.shares)||0}</span>`:''}<button type="button" data-home-node-id="${escape(id)}">查看详情 <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></button></div></div></article>`;
   }
   function homeWaterfallCard(node) {
     const id = node.id || node._id || '';
@@ -622,6 +668,7 @@
     void loadHomePage(homePage + 1, homeSelectedCategory, true);
   }
   function homePagination() {
+    if (homeFeed === 'popular') return homeBusy ? '<p class="home-popular-status" role="status">正在加载热门知识…</p>' : homeError ? `<p class="home-popular-status" role="alert">${escape(homeError)} <button class="btn" data-home-page-retry>重试</button></p>` : '';
     if (homeFeed === 'for-you') return `<div class="for-you-feed-tail"><div data-home-infinite-status>${homeInfiniteStatus()}</div><div data-home-feed-sentinel aria-hidden="true"></div></div>`;
     const pages = Math.max(1, Math.ceil(homeTotal / homePageSize));
     return '<nav class="app-home-pagination" aria-label="知识列表分页">' +
@@ -633,15 +680,16 @@
       (homeBusy ? '<p role="status">正在加载知识…</p>' : homeError ? '<p role="alert">' + escape(homeError) + ' <button class="btn" data-home-page-retry>重试</button></p>' : '');
   }
   async function loadHomePage(nextPage = 1, category = homeSelectedCategory, append = false) {
+    if (homeFeed === 'popular') { nextPage=1; category=''; append=false; }
     if (append && (homeBusy || homeFeedExhausted || category !== homeSelectedCategory || nextPage !== homePage + 1)) return;
     const version = ++homeVersion;
     homeBusy = true; homeError = ''; homeRetry = { page: nextPage, category, append };
     if (append) updateHomeInfiniteStatus(); else { homeFeedExhausted = false; renderHome(); }
     try {
-      const data = await api('/api/kb/discover/search', { order: homeFeedOrder(), limit: homePageSize, offset: (nextPage - 1) * homePageSize, class_id: category, hide_entity: '1', defined_class_only: '1' });
+      const data = await api('/api/kb/discover/search', { order: homeFeedOrder(), limit: homeRequestSize(), offset: (nextPage - 1) * homeRequestSize(), class_id: category, hide_entity: '1', defined_class_only: '1' });
       if (version !== homeVersion) return;
       const count = Math.max(0, Number(data.total) || 0);
-      const lastPage = Math.max(1, Math.ceil(count / homePageSize));
+      const lastPage = Math.max(1, Math.ceil(count / homeRequestSize()));
       if (append && nextPage > lastPage) { homeTotal = count; homeFeedExhausted = true; homeBusy = false; updateHomeInfiniteStatus(); return; }
       if (nextPage > lastPage) return loadHomePage(lastPage, category);
       homePage = nextPage; homeTotal = count; homeSelectedCategory = category;
@@ -651,7 +699,7 @@
         homeFeedExhausted = !(data.nodes || []).length;
         homeNodes = homeVisibleNodes = [...homeNodes, ...incoming]; homeBusy = false;
         window.homeWaterfall?.append(incoming.map(homeWaterfallCard).join('')); updateHomeInfiniteStatus();
-      } else { homeNodes = homeVisibleNodes = data.nodes || []; homeBusy = false; renderHome(); }
+      } else { homeNodes = homeVisibleNodes = (data.nodes || []).slice(0,homeRequestSize()); homeBusy = false; renderHome(); }
 
     } catch (error) {
       if (version !== homeVersion) return;
@@ -672,6 +720,16 @@
     const showJev = Boolean(inspiration?.hasJevAnalysis || window.authUser?.hasJevApiKey);
     const activeCategory = homeCategories.find((item) => item.id === homeSelectedCategory);
     const feedTitle = homeFeed === 'popular' ? 'Popular · 热门知识' : homeFeed === 'news' ? 'News · 最新发布' : 'For You · 为你推荐';
+    if(homeFeed==='news'){
+      content.innerHTML=`<section class="home-news-board">${homeCategoryNavigation()}<header class="home-news-heading"><span>LATEST KNOWLEDGE</span><h1>最新知识</h1><p>沿着时间，发现每一条新知识 · 共 ${homeTotal} 条</p></header><div class="home-news-timeline">${homeNewsTimeline(nodes)||(!homeBusy&&!homeError?'<p class="home-news-empty">暂无最新知识</p>':'')}</div>${homePagination()}</section>`;
+      if(scrollPanel)scrollPanel.scrollTop=scrollTop;
+      return;
+    }
+    if(homeFeed==='popular') {
+      content.innerHTML=`<section class="home-popular-board" aria-label="热门知识排行榜"><header class="home-popular-heading"><div><span>POPULAR KNOWLEDGE</span><h1>热门知识 <b>TOP 30</b></h1><p>按点赞、评论和分享热度排序，展示前 30 名。</p></div><i class="fa-solid fa-fire" aria-hidden="true"></i></header><div class="home-popular-list">${nodes.slice(0,30).map(homePopularRow).join('')||(!homeBusy&&!homeError?'<p class="home-popular-status">暂无热门知识</p>':'')}</div>${homePagination()}</section>`;
+      if(scrollPanel)scrollPanel.scrollTop=scrollTop;
+      return;
+    }
     content.innerHTML = `
       <dialog class="app-inspiration-modal" data-home-inspiration-modal aria-label="知识画像"><div class="app-inspiration-profile-layer" data-jev-profile-layer ${showJev ? '' : 'hidden'}>${showJev ? profileLoading() : ''}</div><div class="app-inspiration-modal-core"><button type="button" class="app-inspiration-close" data-home-inspiration-close aria-label="关闭"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button><div class="app-inspiration-draw-shell">${inspirationDrawContent(inspiration)}</div></div></dialog>
       <div class="app-home-workspace app-home-workspace--horizontal">
@@ -725,6 +783,7 @@
   window.closeHomeDetailDrawer = closeHomeDetailDrawer;
   window.addEventListener('hashchange', closeHomeDetailDrawer);
   window.loadApplicationHome = async function () {
+    homeFeed=readHomeFeed();writeHomeFeedRoute();
     window.homeWaterfall?.destroy(); homeFeedExhausted = false;
     syncHomeNavigation();
     const version = ++homeVersion;
@@ -733,12 +792,12 @@
     homeHoverCategory = '';
     homeSelectedCategory = ''; homePage = 1; homeTotal = 0; homeBusy = false; homeError = '';
     const results = await Promise.allSettled([
-      api('/api/kb/discover/search', { order: homeFeedOrder(), limit: homePageSize, offset: 0, hide_entity: '1', defined_class_only: '1' }),
+      api('/api/kb/discover/search', { order: homeFeedOrder(), limit: homeRequestSize(), offset: 0, hide_entity: '1', defined_class_only: '1' }),
       api('/api/kb/classes'),
       api('/api/applications', { scope: 'market' }),
     ]);
     if (version !== homeVersion) return;
-    homeNodes = results[0].status === 'fulfilled' ? results[0].value.nodes || [] : [];
+    homeNodes = results[0].status === 'fulfilled' ? (results[0].value.nodes || []).slice(0,homeRequestSize()) : [];
     homeVisibleNodes = homeNodes;
     homeTotal = results[0].status === 'fulfilled' ? Number(results[0].value.total) || 0 : 0;
     homeError = results[0].status === 'rejected' ? '知识加载失败' : '';
@@ -762,6 +821,7 @@
     if (feed) {
       if (homeFeed === feed.dataset.homeFeed && window.kbViewMode === 'app_home') return;
       homeFeed = feed.dataset.homeFeed;
+      writeHomeFeedRoute();
       if (window.kbViewMode !== 'app_home') { window.setViewMode('app_home'); return; }
       homeSelectedCategory = ''; homeNodes = homeVisibleNodes = []; homePage = 1; homeTotal = 0;
       syncHomeNavigation();
@@ -771,7 +831,7 @@
     const action = event.target.closest('[data-home-action]')?.dataset.homeAction;
     if (!action) return;
     if (action === 'theme') { byId('btnTheme')?.click(); return; }
-    if (action === 'account') { byId('btnAuth')?.click(); return; }
+    if (action === 'account') { if (window.authUser) window.setViewMode?.('profile'); else byId('btnAuth')?.click(); return; }
     if (action === 'create') { window.openQuickKnowledge?.(); return; }
     window.setViewMode?.(action);
   });
@@ -935,11 +995,12 @@
   window.syncHomeNavigation = syncHomeNavigation;
   syncHomeNavigation();
   window.addEventListener('kb-auth-change', refresh);
+  window.addEventListener('kb-auth-change', syncHomeNavigation);
   window.addEventListener('kb:knowledge-created', () => {
     if (window.kbViewMode === 'app_home') window.loadApplicationHome();
     if (window.kbViewMode === 'app_explore') window.loadKnowledgeExplore?.();
   });
   window.addEventListener('popstate', () => { if (window.kbViewMode === 'app_search') window.loadApplicationSearch(); });
-  new MutationObserver(() => { byId('appHomeName').textContent = byId('headerProjectName').textContent.trim() || '应用首页'; }).observe(byId('headerProjectName'), { childList: true, subtree: true, characterData: true });
+  new MutationObserver(() => { byId('appHomeName').textContent = byId('headerProjectName').textContent.trim() || '应用首页'; syncHomeNavigation(); }).observe(byId('headerProjectName'), { childList: true, subtree: true, characterData: true });
   refresh();
 })();

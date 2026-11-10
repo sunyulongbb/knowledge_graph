@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 
 const source = readFileSync('public/assets/scripts/application-pages.js', 'utf8');
-const block = source.slice(source.indexOf("  byId('applicationHomePanel').addEventListener('click'"), source.indexOf('  function writeSearchRoute()'));
+const block = 'function writeHomeFeedRoute() {}\n'+source.slice(source.indexOf("  byId('applicationHomePanel').addEventListener('click'"), source.indexOf('  function writeSearchRoute()'));
 
 test('home navigation opens existing views and account/theme controls', () => {
   const views: string[] = [], clicked: string[] = [];
@@ -16,6 +16,13 @@ test('home navigation opens existing views and account/theme controls', () => {
   }
   expect(views).toEqual(['shorts', 'app_explore', 'applications']);
   expect(clicked).toEqual(['quick-create', 'btnAuth', 'btnTheme']);
+});
+
+test('signed-in sidebar avatar opens profile instead of the login dialog',()=>{
+  let click:Function;const views:string[]=[];
+  new Function('byId','window',block)(()=>({addEventListener:(_:string,handler:Function)=>{click=handler;}}),{authUser:{id:1},setViewMode:(view:string)=>views.push(view)});
+  click!({target:{closest:(selector:string)=>selector==='[data-home-action]'?{dataset:{homeAction:'account'}}:null}});
+  expect(views).toEqual(['profile']);
 });
 
 test('changing home feed resets category and pagination before requesting new content', () => {

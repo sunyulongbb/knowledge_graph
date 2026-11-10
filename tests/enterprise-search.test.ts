@@ -20,6 +20,15 @@ test('popular homepage ranks by server interaction counts with stable tie breake
   expect(request.query.bool.filter).toContainEqual({ ids: { values: ['allowed'] } });
 });
 
+test('popular ranking uses live Arango engagement instead of stale legacy SQLite counts',async()=>{
+  let request:any;
+  const es=new ElasticsearchClient({url:'http://es'},async(_input,init)=>{request=JSON.parse(String(init?.body));return reply({hits:{total:{value:1},hits:[{_id:'allowed',_source:{id:'Q1'}}]}});});
+  const store={searchAccess:async()=>[{key:'allowed',id:'Q1',engagement:{likes:4,comments:2,shares:1}}]} as any;
+  const result=await new EnterpriseKnowledgeSearch(store,es,()=>({Q1:1000})).search('app',owner,{limit:30,offset:0,order:'popular'});
+  expect(request.runtime_mappings.home_popularity.script.params.counts.Q1).toBe(7);
+  expect(result.nodes[0]?.engagement).toEqual({likes:4,comments:2,shares:1});
+});
+
 test('discovery supports bounded fuzzy matching, phrase/all/any modes and advanced filters without changing ACL', () => {
   const options = { q: 'scientsit', limit: 20, offset: 0, searchScope: 'name', excludeQuery: '排除', updatedFrom: '2026-10-01', updatedTo: '2026-10-30', includeTypes: ['parent', 'child'] };
   const fuzzy = buildEnterpriseSearchQuery(options, ['allowed']);

@@ -1,11 +1,12 @@
 (function () {
   const byId = (id) => document.getElementById(id);
   const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const sections = { applications: '关联应用', knowledge: '关联知识', likes: '点赞历史', favorites: '收藏历史', comments: '评论历史' };
+  const sections = { likes: '点赞', favorites: '收藏', history: '浏览历史', applications: '关联应用', knowledge: '关联知识', comments: '评论历史' };
   const modules = { user: '用户', role: '角色', permission: '权限', application: '应用', knowledge: '知识', system: '系统' };
   const actions = { view: '查看', create: '创建', update: '编辑', delete: '删除', audit: '审核', like: '点赞', comment: '评论', share: '分享', favorite: '收藏', config: '配置', log: '日志', members: '管理成员', review: '审批申请' };
   let summaryVersion = 0, listVersion = 0, currentSection = 'applications', page = 1, totalPages = 1, counts = {}, busy = false;
-  const date = (value) => value ? escape(String(value).replace('T', ' ').slice(0, 19)) : '暂无记录';
+  const date = (value) => value ? escape(String(value).replace('T', ' ').slice(0, 19)) : '时间未记录';
+  document.getElementById('applicationHomePanel').append(byId('userProfilePanel'));
   async function api(section, pageNumber = 1) {
     const url = new URL('/api/account/profile', location.origin);
     url.searchParams.set('section', section); url.searchParams.set('page', pageNumber);
@@ -80,7 +81,7 @@
   function renderTabs() {
     byId('accountTabs').innerHTML = Object.entries(sections).map(([key, label]) => `<button id="accountTab-${key}" type="button" role="tab" aria-controls="accountActivity" aria-selected="${key === currentSection}" tabindex="${key === currentSection ? 0 : -1}" class="${key === currentSection ? 'active' : ''}" data-profile-section="${key}">${label} <span>${Number(counts[key] || 0)}</span></button>`).join('');
     byId('accountActivity').setAttribute('aria-labelledby', `accountTab-${currentSection}`);
-    byId('accountRecordHint').textContent = currentSection === 'applications' || currentSection === 'knowledge' ? '本人创建或参与维护的内容。' : currentSection === 'comments' ? '展示保留的评论记录；无权访问的知识内容不会显示。' : '展示当前保留的点赞或收藏记录，已取消的记录不在此列。';
+    byId('accountRecordHint').textContent = currentSection === 'history' ? '最近浏览的知识，重复浏览更新到最前，最多保留 500 条；从功能启用后开始记录。' : currentSection === 'applications' || currentSection === 'knowledge' ? '本人创建或参与维护的内容。' : currentSection === 'comments' ? '展示保留的评论记录；无权访问的知识内容不会显示。' : '展示当前保留的点赞或收藏记录，已取消的记录不在此列。';
   }
   function syncPagination() {
     byId('btnProfilePrevious').disabled = busy || page <= 1;
@@ -121,7 +122,7 @@
       const data = await api('summary');
       if (token !== summaryVersion) return;
       const params = new URLSearchParams(location.search);
-      currentSection = Object.hasOwn(sections, params.get('profileTab')) ? params.get('profileTab') : 'applications';
+      currentSection = Object.hasOwn(sections, params.get('profileTab')) ? params.get('profileTab') : 'likes';
       page = Math.max(1, Number(params.get('profilePage')) || 1); if (!Number.isSafeInteger(page)) page = 1;
       counts = data.counts; renderSummary(data); byId('btnProfileEdit').disabled = false; byId('accountRecords').hidden = false;
       await loadRecords();
@@ -142,7 +143,7 @@
     if (button.dataset.profileApp) { window.openApplicationDetails?.(button.dataset.profileApp); return; }
     if (button.dataset.profileNode) {
       const url = new URL(location.href); url.searchParams.set('db', button.dataset.projectSlug || 'app'); url.searchParams.delete('node'); url.searchParams.delete('view');
-      url.hash = new URLSearchParams({ view: 'detail', node: button.dataset.profileNode }).toString(); location.href = url;
+      url.hash = new URLSearchParams({ view: 'shorts', node: button.dataset.profileNode }).toString(); location.href = url;
     }
   });
   byId('accountTabs').addEventListener('keydown', (event) => {

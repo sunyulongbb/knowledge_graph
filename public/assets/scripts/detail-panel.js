@@ -1607,6 +1607,7 @@
       const data = await resp.json();
       if (!isLatestDetailLoad()) return;
       const doc = data && data.node;
+      if(doc) window.recordKnowledgeView?.(doc.id || doc._id);
       const neighbors = data && data.neighbors;
       if (!doc) {
         inner.querySelector("#wikiView").innerHTML =

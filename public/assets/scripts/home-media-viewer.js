@@ -23,6 +23,7 @@
   }
   let dialog, refs, node, media = [], mediaIndex = 0, version = 0, requestController;
   let imageDetailsVisible = false;
+  let favorited = false;
   let history = [];
   let journey = null;
   let embedded = null;
@@ -141,6 +142,15 @@
     } catch (error) { if (token === version && dialog.open) message(error.message); }
   }
   function renderNode(data) {
+    favorited=false;
+    if(refs.favorite){refs.favorite.setAttribute('aria-pressed','false');refs.favoriteLabel.textContent='收藏';}
+    window.recordKnowledgeView?.(idOf(data),scope);
+    if(window.authUser) {
+      const token=version;
+      api('/api/account/knowledge/favorites',{id:idOf(data)}).then(state=>{
+        if(token!==version)return;favorited=Boolean(state.favorited);refs.favorite.setAttribute('aria-pressed',String(favorited));refs.favoriteLabel.textContent=favorited?'已收藏':'收藏';
+      }).catch(()=>{});
+    }
     node = data; media = collectMedia(node); mediaIndex = 0; overlayMode = ''; refs.overlay.hidden = true;
     refs.title.textContent = node.name || node.label || idOf(node);
     refs.description.textContent = node.description || node.desc_zh || '';
@@ -259,6 +269,12 @@
   }
   async function action(kind) {
     if (busy || actionBusy || !node) return;
+    if(kind==='favorite'){
+      const token=version;actionBusy=true;
+      try{const state=await api('/api/account/knowledge/favorites',{id:idOf(node)},{method:favorited?'DELETE':'POST'});if(token===version){favorited=Boolean(state.favorited);refs.favorite.setAttribute('aria-pressed',String(favorited));refs.favoriteLabel.textContent=favorited?'已收藏':'收藏';message(favorited?'已添加到个人收藏':'已取消收藏');}}
+      catch(error){if(token===version)message(error.message);}finally{actionBusy=false;}
+      return;
+    }
     if (kind === 'comment' || kind === 'info') { overlayMode = kind === 'comment' ? 'comments' : 'info'; overlayPage = 0; renderOverlay(); return; }
     const token = version; actionBusy = true;
     try {
@@ -303,7 +319,7 @@
       <div class="home-reel-playback" data-ref="playback" hidden><button data-ref="play" aria-label="播放">▶</button><button data-ref="mute" aria-label="关闭声音">关闭声音</button><span data-ref="time" class="home-reel-time">0:00 / 0:00</span></div>
       <input data-ref="seek" class="home-reel-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="视频进度">
       <section class="home-reel-overlay" data-ref="overlay" hidden><header><strong data-ref="overlayTitle"></strong><button data-ref="overlayClose" aria-label="关闭信息">×</button></header><p data-ref="overlayText"></p><div class="home-reel-pages"><button data-ref="overlayPrev">上一页</button><span data-ref="overlayCount"></span><button data-ref="overlayNext">下一页</button></div><form data-ref="commentForm"><textarea data-ref="commentInput" maxlength="2000" rows="2" placeholder="写下评论…" aria-label="评论内容"></textarea><button type="submit">发送评论</button></form></section>
-    </div></div><aside class="home-reel-rail"><button data-action="like" data-ref="like" aria-label="点赞"><i class="fa-regular fa-heart" aria-hidden="true"></i><b data-ref="likeCount">0</b></button><button data-action="comment" aria-label="评论"><i class="fa-regular fa-comment" aria-hidden="true"></i><b data-ref="commentCount">0</b></button><button data-action="share" aria-label="分享"><i class="fa-solid fa-share" aria-hidden="true"></i><b data-ref="shareCount">0</b></button><button data-ref="up" aria-label="返回上一条浏览历史"><i class="fa-solid fa-chevron-up" aria-hidden="true"></i><small>上一条历史</small></button><button data-ref="down" aria-label="向下随机翻页"><i class="fa-solid fa-chevron-down" aria-hidden="true"></i><small>随机下一条</small></button></aside><div class="home-reel-status" data-ref="status" role="status" aria-live="polite"></div>`;
+    </div></div><aside class="home-reel-rail"><button data-action="favorite" data-ref="favorite" aria-label="????" aria-pressed="false"><i class="fa-regular fa-bookmark" aria-hidden="true"></i><small data-ref="favoriteLabel">收藏</small></button><button data-action="like" data-ref="like" aria-label="点赞"><i class="fa-regular fa-heart" aria-hidden="true"></i><b data-ref="likeCount">0</b></button><button data-action="comment" aria-label="评论"><i class="fa-regular fa-comment" aria-hidden="true"></i><b data-ref="commentCount">0</b></button><button data-action="share" aria-label="分享"><i class="fa-solid fa-share" aria-hidden="true"></i><b data-ref="shareCount">0</b></button><button data-ref="up" aria-label="返回上一条浏览历史"><i class="fa-solid fa-chevron-up" aria-hidden="true"></i><small>上一条历史</small></button><button data-ref="down" aria-label="向下随机翻页"><i class="fa-solid fa-chevron-down" aria-hidden="true"></i><small>随机下一条</small></button></aside><div class="home-reel-status" data-ref="status" role="status" aria-live="polite"></div>`;
     refs = Object.fromEntries(Array.from(dialog.querySelectorAll('[data-ref]')).map((el) => [el.dataset.ref, el]));
     dialog.querySelectorAll('button').forEach((button) => { if (button.type !== 'submit' || !button.closest('form')) button.type = 'button'; });
     document.body.append(dialog);
@@ -421,6 +437,11 @@
     if (window.kbViewMode !== 'shorts' && reloadDetail && reloadDetail.scope === currentScope()) open(reloadDetail.id, {nodes:reloadDetail.nodes || [],category:reloadDetail.category});
     reloadDetail = null;
   }, {once:true});
+  window.addEventListener('kb-auth-change',()=>{
+    if(!dialog?.open||!node||!refs.favorite)return;
+    favorited=false;refs.favorite.setAttribute('aria-pressed','false');refs.favoriteLabel.textContent='收藏';
+    if(window.authUser){const token=version;api('/api/account/knowledge/favorites',{id:idOf(node)}).then(state=>{if(token!==version)return;favorited=Boolean(state.favorited);refs.favorite.setAttribute('aria-pressed',String(favorited));refs.favoriteLabel.textContent=favorited?'已收藏':'收藏';}).catch(()=>{});}
+  });
   window.homeKnowledgeMediaViewer = { open, close, goTo, collectMedia, textPages,
     isEmbedded: () => !!embedded,
     isPage: () => !!page,

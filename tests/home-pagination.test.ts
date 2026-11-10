@@ -18,8 +18,16 @@ test('popular and news request server sorting on every page', async () => {
     const calls: any[] = [];
     const h = setup(async (_: string, params: any) => { calls.push(params); return { total: 50, nodes: [] }; }, feed);
     await h.load(2);
-    expect(calls[0]).toMatchObject({ order, offset: 24, limit: 24 });
+    expect(calls[0]).toMatchObject({ order, offset: feed === 'popular' ? 0 : 24, limit: feed === 'popular' ? 30 : 24 });
   }
+});
+
+test('popular requests only the first thirty rankings and cannot navigate to a later page',async()=>{
+  const calls:any[]=[];
+  const h=setup(async(_:string,params:any)=>{calls.push(params);return{total:200,nodes:Array.from({length:40},(_,index)=>({id:String(index)}))};},'popular');
+  await h.load(9,'ignored-category');
+  expect(calls[0]).toMatchObject({order:'popular',offset:0,limit:30,class_id:''});
+  expect(h.state().homePage).toBe(1);expect(h.state().homeNodes).toHaveLength(30);
 });
 test('home pagination passes category and offset and clamps pages after data removal', async () => {
   const calls: any[]=[];

@@ -1,5 +1,6 @@
 import { EnterpriseKnowledgeSearch } from './enterprise-search.ts';
 import { createLearningHandler } from './learning.ts';
+import { createAccountActivity } from './account-activity.ts';
 import { createSqliteKnowledgeSync } from './sqlite-knowledge-sync.ts';
 import { EnterpriseSqliteBackup } from './enterprise-sqlite-backup.ts';
 import { createGraphCanvasHandler } from './graph-canvases.ts';
@@ -58,10 +59,11 @@ if (initialAdmin) {
   }
 }
 const handleGraphCanvases = createGraphCanvasHandler(adminDb, getKnowledgeUser, getProjectByIdentifier);
-const handleUserProfile = createUserProfileHandler(adminDb, getCurrentUser);
 
 console.log(`[Knowledge storage] ${enterpriseKnowledgeEnabled() ? 'arangodb (Enterprise)' : 'sqlite (Lite)'}`);
 const enterpriseStore = enterpriseKnowledgeEnabled() ? EnterpriseKnowledgeStore.configured() : null;
+const accountActivity = createAccountActivity({ db: adminDb, store: enterpriseStore, getUser: getCurrentUser, getProject: getProjectByIdentifier });
+const handleUserProfile = createUserProfileHandler(adminDb, getCurrentUser, accountActivity);
 const handleLearning = createLearningHandler({ db: adminDb, store: enterpriseStore, getUser: getCurrentUser, getKnowledgeUser, getProject: getProjectByIdentifier });
 const enterpriseBackup = enterpriseStore ? EnterpriseSqliteBackup.open(enterpriseStore, adminDb.filename) : undefined;
 enterpriseBackup?.start(async () => (adminDb.query('SELECT name FROM projects ORDER BY id').all() as { name: string }[]).map(project => project.name));
@@ -137,6 +139,8 @@ const server = Bun.serve({
       const requestUrl = url;
       const response = await knowledgeContext.run({ user: getKnowledgeUser(req) }, async () => {
       const url = requestUrl;
+      const activityResponse = await accountActivity.handle(req, url);
+      if (activityResponse) return activityResponse;
       const learningResponse = await handleLearning(req, url);
       if (learningResponse) return learningResponse;
       const sqliteSyncResponse = await handleSqliteKnowledgeSync(req, url);

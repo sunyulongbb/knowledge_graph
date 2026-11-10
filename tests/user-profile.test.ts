@@ -40,7 +40,7 @@ test('profile exposes only the current account, effective permissions and relate
     const data = await response.json();
     expect(data.user.id).toBe(1);
     expect(data.user.email).toBe('me@example.test');
-    expect(data.counts).toEqual({ applications: 2, knowledge: 2, likes: 3, favorites: 1, comments: 2 });
+    expect(data.counts).toEqual({ applications: 2, knowledge: 2, likes: 3, favorites: 1, comments: 2, history: 0 });
     expect(data.permissions.map((permission: any) => permission.code)).toEqual(['application:create']);
     expect(JSON.stringify(data)).not.toContain('secret-hash');
     expect(JSON.stringify(data)).not.toContain('private@example.test');

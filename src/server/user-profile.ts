@@ -1,9 +1,11 @@
 import type { Database } from 'bun:sqlite';
 import { accessCondition } from './knowledge-access.ts';
+import { ensureAccountActivitySchema } from './account-activity.ts';
 
 const json = (body: unknown, init: ResponseInit = {}) => Response.json(body, { ...init, headers: { 'Cache-Control': 'no-store' } });
 
-export function createUserProfileHandler(db: Database, getUser: (req: Request) => any) {
+export function createUserProfileHandler(db: Database, getUser: (req: Request) => any, activity?: { enterprise: boolean; counts: (user: any) => Promise<Record<string, number>>; records: (user: any, section: string) => Promise<any[]> }) {
+  ensureAccountActivitySchema(db);
   const hasTable = (name: string) => Boolean(db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(name));
   const tableColumns = (name: string) => new Set(hasTable(name) ? (db.query(`PRAGMA table_info(${name})`).all() as any[]).map((column) => String(column.name || '')) : []);
   const projectColumns = new Set((db.query("PRAGMA table_info(projects)").all() as any[]).map((column) => String(column.name || '')));
@@ -13,9 +15,9 @@ export function createUserProfileHandler(db: Database, getUser: (req: Request) =
     if (url.pathname !== '/api/account/profile') return null;
     if (method !== 'GET') return json({ error: '不支持的操作' }, { status: 405 });
     const user = getUser(req);
-    if (!user || user.status === 'disabled') return json({ error: '请先登录' }, { status: 401 });
+    if (!user || user.id <= 0 || user.status === 'disabled') return json({ error: '请先登录' }, { status: 401 });
     const section = url.searchParams.get('section') || 'summary';
-    if (!['summary', 'applications', 'knowledge', 'likes', 'favorites', 'comments'].includes(section)) return json({ error: '未知的记录类型' }, { status: 400 });
+    if (!['summary', 'applications', 'knowledge', 'likes', 'favorites', 'history', 'comments'].includes(section)) return json({ error: '未知的记录类型' }, { status: 400 });
     const requestedPage = Number(url.searchParams.get('page') || 1);
     if (!Number.isSafeInteger(requestedPage) || requestedPage < 1) return json({ error: '页码无效' }, { status: 400 });
     const appWhere = "p.name <> 'shared' AND (p.owner_user_id=? OR EXISTS (SELECT 1 FROM application_members m WHERE m.project_id=p.id AND m.user_id=?))";
@@ -47,6 +49,8 @@ export function createUserProfileHandler(db: Database, getUser: (req: Request) =
         (db.query(`SELECT created_at FROM ${table} WHERE user_id=?`).all(user.id) as any[]).forEach((row) => addActivity(row.created_at));
       }
       const activityDays = [...activityCounts].sort(([left], [right]) => left.localeCompare(right)).map(([date, count]) => ({ date, count }));
+      let personalCounts: Record<string, number> | null = null;
+      if (activity) { try { personalCounts = await activity.counts(user); } catch { return json({error:'个人记录加载失败，请重试'},{status:503}); } }
       return json({
         user: { id: basic.id, username: basic.username, displayName: basic.display_name || basic.username, avatar: basic.avatar || '', email: basic.email || '', phone: basic.phone || '', status: basic.status || 'active', createdAt: basic.created_at, lastLoginAt: basic.last_login_at, role: user.role, dataScope: user.dataScope || 'own' },
         roles: (user.roles || []).map((role: any) => ({ code: role.code, name: role.name, dataScope: role.data_scope })),
@@ -55,12 +59,20 @@ export function createUserProfileHandler(db: Database, getUser: (req: Request) =
         counts: {
           applications: count(`SELECT COUNT(*) AS total FROM projects p WHERE ${appWhere}`, relatedParams),
           knowledge: count(`SELECT COUNT(*) AS total FROM nodes n WHERE ${nodeWhere}`, relatedParams),
-          likes: count('SELECT COUNT(*) AS total FROM knowledge_likes WHERE user_id=?', [user.id]),
-          favorites: count('SELECT COUNT(*) AS total FROM knowledge_favorites WHERE user_id=?', [user.id]),
+          likes: personalCounts?.likes ?? count('SELECT COUNT(*) AS total FROM knowledge_likes WHERE user_id=?', [user.id]),
+          favorites: personalCounts?.favorites ?? count('SELECT COUNT(*) AS total FROM knowledge_favorites WHERE user_id=?', [user.id]),
+          history: personalCounts?.history ?? count("SELECT COUNT(*) AS total FROM account_knowledge_activity WHERE user_id=? AND kind='history'", [user.id]),
           comments: count('SELECT COUNT(*) AS total FROM knowledge_comments WHERE user_id=?', [user.id]),
         },
         activity: { year: activityYear, total: activityDays.reduce((sum, item) => sum + item.count, 0), days: activityDays },
       });
+    }
+    if (activity && (section === 'history' || section === 'favorites' || (section === 'likes' && activity.enterprise))) {
+      try {
+        const records = await activity.records(user, section), pageSize = 20;
+        const page = Math.min(requestedPage, Math.max(1, Math.ceil(records.length / pageSize)));
+        return json({ section, items: records.slice((page - 1) * pageSize, page * pageSize), total: records.length, page, pageSize });
+      } catch { return json({error:'个人记录加载失败，请重试'},{status:503}); }
     }
     let total: number, query: string, params: number[];
     if (section === 'applications') {
@@ -71,6 +83,10 @@ export function createUserProfileHandler(db: Database, getUser: (req: Request) =
       total = count(`SELECT COUNT(*) AS total FROM nodes n WHERE ${nodeWhere}`, relatedParams);
       query = `SELECT n.id,n.name,n.type,n.visibility,n.updated_at,p.name AS project_slug,p.title AS project_title,CASE WHEN n.owner_user_id=? THEN 'owner' ELSE 'maintainer' END AS relationship FROM nodes n LEFT JOIN projects p ON p.id=n.project_id WHERE ${nodeWhere} ORDER BY n.updated_at DESC,n.id DESC`;
       params = [user.id, ...relatedParams];
+    } else if (section === 'history') {
+      total = count("SELECT COUNT(*) AS total FROM account_knowledge_activity WHERE user_id=? AND kind='history'",[user.id]);
+      query = `SELECT h.created_at,n.id,n.name,n.type,p.name AS project_slug,p.title AS project_title FROM account_knowledge_activity h LEFT JOIN nodes n ON n.id=h.node_id AND n.project_id=h.project_id AND ${accessCondition(user,'n')} LEFT JOIN projects p ON p.id=h.project_id WHERE h.user_id=? AND h.kind='history' ORDER BY h.created_at DESC,h.node_id`;
+      params = [user.id];
     } else {
       const table = { likes: 'knowledge_likes', favorites: 'knowledge_favorites', comments: 'knowledge_comments' }[section as 'likes' | 'favorites' | 'comments'];
       total = count(`SELECT COUNT(*) AS total FROM ${table} WHERE user_id=?`, [user.id]);

@@ -82,10 +82,12 @@ export class EnterpriseKnowledgeSearch {
   constructor(readonly store: EnterpriseKnowledgeStore, readonly client: ElasticsearchClient,
     readonly interactionCounts: () => Record<string, number> = () => ({})) {}
   async search(database: string, user: KnowledgeUser | null, options: EnterpriseSearchOptions) {
-    // Only current ACL/identity metadata is read from ArangoDB. Text search,
+    // Current ACL/identity and requested engagement totals are read from ArangoDB. Text search,
     // content, filters, paging and counts are exclusively served by Elasticsearch.
     // This also excludes deleted entities and blocks stale public ES copies after revocation.
-    const access = await this.store.searchAccess(database, user);
+    const access = await this.store.searchAccess(database, user, options.order === 'popular');
+    const popularityCounts = options.order === 'popular' ? { ...this.interactionCounts() } : {};
+    if(options.order === 'popular')for(const row of access)if(row.engagement)popularityCounts[row.id]=Number(row.engagement.likes||0)+Number(row.engagement.comments||0)+Number(row.engagement.shares||0);
     const permissions = new Map(access.map(row => [row.key, row]));
     if (!permissions.size) return { nodes: [] as Doc[], total: 0 };
     const query = buildEnterpriseSearchQuery(options, [...permissions.keys()]);
@@ -99,7 +101,7 @@ export class EnterpriseKnowledgeSearch {
       home_popularity: { type: 'long', script: { source: `
         def id = params._source.sqlite_id;
         emit(id != null && params.counts.containsKey(id) ? (long)params.counts[id] : 0L);`,
-        params: { counts: this.interactionCounts() } } },
+        params: { counts: popularityCounts } } },
     } : richness ? {
       home_media: { type: 'long', script: { source: `
         def s = params._source;
@@ -175,7 +177,7 @@ export class EnterpriseKnowledgeSearch {
           const key = field.startsWith('labels.') ? 'name' : field.startsWith('descriptions.') ? 'description' : field.startsWith('aliases.') ? 'aliases' : '';
           if (key && Array.isArray(fragments)) highlights[key].push(...fragments.filter(value => typeof value === 'string'));
         }
-        nodes.push({ ...hit._source, searchHighlights: highlights, _current_permissions: { can_edit: permission.can_edit, can_manage: permission.can_manage } });
+        nodes.push({ ...hit._source, ...(options.order==='popular'&&permission.engagement?{engagement:permission.engagement}:{}), searchHighlights: highlights, _current_permissions: { can_edit: permission.can_edit, can_manage: permission.can_manage } });
       }
     }
     return { total: Number(result!.hits?.total?.value ?? result!.hits?.total ?? 0), nodes };

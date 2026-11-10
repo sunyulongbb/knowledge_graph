@@ -70,11 +70,13 @@
     ]).then(() => true);
   </script>
   <link rel="stylesheet" href="/assets/styles/app.css?v=20261110-scrollbar-tracks" />
-  <link rel="stylesheet" href="/assets/styles/home-discovery.css?v=20261110-sidebar-button" />
+  <link rel="stylesheet" href="/assets/styles/home-discovery.css?v=20261110-profile-avatar" />
   <link rel="stylesheet" href="/assets/styles/shorts-page.css?v=20261110-home-shell" />
-  <link rel="stylesheet" href="/assets/styles/knowledge-explore.css?v=20261110-1" />
+  <link rel="stylesheet" href="/assets/styles/knowledge-explore.css?v=20261110-full-width" />
   <link rel="stylesheet" href="/assets/styles/quick-knowledge.css?v=20261110-composer" />
   <link rel="stylesheet" href="/assets/styles/home-waterfall.css?v=20261110-1" />
+  <link rel="stylesheet" href="/assets/styles/home-popular.css?v=20261110-1" />
+  <link rel="stylesheet" href="/assets/styles/home-news.css?v=20261110-1" />
   <link rel="stylesheet" href="/assets/styles/knowledge-learning.css?v=20261110-1" />
   <link rel="stylesheet" href="/assets/styles/learning-journey.css?v=20261110-1" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
@@ -4827,7 +4829,13 @@
       <section id="applicationHomePanel" class="application-content-page" style="display:none">
         <aside class="home-discovery-sidebar" id="homeDiscoverySidebar" aria-label="首页导航">
           <div class="home-discovery-sidebar-head">
-          <button type="button" class="home-discovery-brand" data-home-action="applications" title="切换应用"><span class="home-discovery-mark" aria-hidden="true"><i class="fa-solid fa-layer-group"></i></span><span><strong id="homeDiscoveryBrand">知识空间</strong><small>发现 · 连接 · 创造</small></span></button>
+          <button type="button" class="home-discovery-brand" data-home-action="applications" title="切换应用"><span class="home-discovery-mark" aria-hidden="true"><i class="fa-solid fa-layer-group"></i></span><span><strong id="homeDiscoveryBrand"></strong><small>发现 · 连接 · 创造</small></span></button>
+          <script>
+            try {
+              const brandScope = new URLSearchParams(location.search).get('db') || 'default';
+              document.getElementById('homeDiscoveryBrand').textContent = localStorage.getItem(`kb:application-name:${brandScope}`) || '';
+            } catch {}
+          </script>
           <button id="homeSidebarToggle" type="button" class="home-sidebar-toggle" aria-controls="homeDiscoverySidebar" aria-expanded="true" aria-label="收起菜单" title="收起菜单"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="3.5" width="19" height="17" rx="3.5"/><path d="M8.5 3.5v17"/><path class="home-sidebar-chevron" d="m16 9-3 3 3 3"/></svg></button>
           </div>
           <nav class="home-discovery-nav" aria-label="发现内容">
@@ -4846,7 +4854,7 @@
             <button type="button" data-home-action="applications" title="应用中心"><i class="fa-solid fa-layer-group" aria-hidden="true"></i><span>应用中心</span></button>
           </div>
           <div class="home-discovery-footer">
-            <button type="button" data-home-action="account" title="账号与登录"><i class="fa-regular fa-user" aria-hidden="true"></i><span id="homeDiscoveryAccount">账号与登录</span></button>
+            <button type="button" data-home-action="account" title="个人信息" aria-label="个人信息"><i id="homeDiscoveryAvatar" class="home-sidebar-avatar fa-regular fa-user" aria-hidden="true"></i><span id="homeDiscoveryAccount">登录</span></button>
             <button type="button" data-home-action="theme" title="切换主题"><i class="fa-solid fa-circle-half-stroke" aria-hidden="true"></i><span>切换主题</span></button>
           </div>
         </aside>
@@ -4905,7 +4913,7 @@
           </section>
         </section>
         <section id="userProfilePanel" class="panel account-page" style="display:none;" aria-label="个人详情">
-          <div class="user-management-page__header"><div><h2>个人详情</h2><p class="muted">查看账号信息、访问权限和参与记录。</p></div><div class="account-header-actions"><button id="btnProfileEdit" class="btn" type="button">编辑资料</button></div></div>
+          <div class="user-management-page__header"><div><h2>个人信息</h2><p class="muted">查看点赞、收藏和浏览历史。</p></div><div class="account-header-actions"><button id="btnProfileEdit" class="btn" type="button">编辑资料</button></div></div>
           <div id="accountSummary" aria-live="polite"></div>
           <div id="accountRecords" hidden>
             <div id="accountTabs" class="system-management-tabs account-tabs" role="tablist" aria-label="个人关联与互动记录"></div>
@@ -7518,14 +7526,15 @@
       const isAppHome = normalized === 'app_home';
       const isExplore = normalized === 'app_explore';
       const isLearning = normalized === 'learning';
-      document.body.classList.toggle('home-discovery-active', isAppHome || isShorts || isExplore || isLearning);
+      document.body.classList.toggle('home-discovery-active', isAppHome || isShorts || isExplore || isLearning || isProfile);
+      document.body.classList.toggle('home-profile-active', isProfile);
       document.body.classList.toggle('home-shorts-active', isShorts);
       document.body.classList.toggle('home-explore-active', isExplore);
       document.body.classList.toggle('home-learning-active', isLearning);
       const isAppSearch = normalized === 'app_search';
       const isGlobalPage = isApplications || isUserManagement || isProfile || isAppHome || isAppSearch || isStandaloneDetail || isShorts || isExplore || isLearning;
       if (knowledgeDetailPagePanel) knowledgeDetailPagePanel.style.display = isStandaloneDetail ? '' : 'none';
-      document.getElementById('applicationHomePanel').style.display = isAppHome || isShorts || isExplore || isLearning ? '' : 'none';
+      document.getElementById('applicationHomePanel').style.display = isAppHome || isShorts || isExplore || isLearning || isProfile ? '' : 'none';
       window.syncHomeNavigation?.();
       document.getElementById('applicationSearchPanel').style.display = isAppSearch ? '' : 'none';
       document.getElementById('btnApplicationSearch').classList.toggle('active', isAppSearch);
@@ -17677,24 +17686,25 @@
   <script src="/assets/scripts/schema-panel.js?v=20261110-server-tag-order"></script>
   <script src="/assets/scripts/relation-insights.js?v=20261105-compact-list"></script>
   <script src="/assets/scripts/wiki-clipboard.js?v=20261105-html-paste"></script>
-  <script src="/assets/scripts/detail-panel.js?v=20261105-web-content-paste"></script>
+  <script src="/assets/scripts/account-history.js?v=20261110-1"></script>
+  <script src="/assets/scripts/detail-panel.js?v=20261110-browse-history"></script>
   <script src="/assets/scripts/graph-classification.js?v=20261012"></script>
   <script src="/assets/scripts/graph-details.js?v=20261012-classification"></script>
   <script src="/assets/scripts/knowledge-interactions.js?v=20260904-1"></script>
   <script src="/assets/scripts/knowledge-access.js?v=20261011-member-access"></script>
   <script src="/assets/scripts/applications.js?v=20260927-settings-layout"></script>
   <script src="/assets/scripts/user-management.js?v=20260915-1"></script>
-  <script src="/assets/scripts/home-media-viewer.js?v=20261110-shorts-page"></script>
+  <script src="/assets/scripts/home-media-viewer.js?v=20261110-account-records"></script>
   <script src="/assets/scripts/shorts-page.js?v=20261110-home-shell"></script>
   <script src="/assets/scripts/manual-classify.js?v=20260929-existing-classes"></script>
   <script src="/assets/scripts/knowledge-context-menu.js?v=20260928-3"></script>
   <script src="/assets/scripts/quick-knowledge.js?v=20261110-composer"></script>
   <script src="/assets/scripts/home-waterfall.js?v=20261110-1"></script>
   <script src="/assets/scripts/home-sidebar.js?v=20261110-1"></script>
-  <script src="/assets/scripts/application-pages.js?v=20261110-minimal-for-you"></script>
+  <script src="/assets/scripts/application-pages.js?v=20261110-feed-route"></script>
   <script src="/assets/scripts/knowledge-learning.js?v=20261110-quiz-map"></script>
-  <script src="/assets/scripts/knowledge-explore.js?v=20261110-1"></script>
-  <script src="/assets/scripts/user-profile.js?v=20260924-5"></script>
+  <script src="/assets/scripts/knowledge-explore.js?v=20261110-category-route"></script>
+  <script src="/assets/scripts/user-profile.js?v=20261110-history"></script>
   <script src="/assets/scripts/sidebar-panel.js?v=20260924-4"></script>
   <script src="/assets/scripts/auth-panel.js?v=20261012-user-id"></script>
   <script src="/assets/scripts/db-modal.js?v=20261005-class-click"></script>
