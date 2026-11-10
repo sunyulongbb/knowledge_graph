@@ -32,6 +32,23 @@ function setup(play?: (video: any) => Promise<void>, videosOnly = false) {
 }
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
+test('shorts page mounts nonmodal details, retains interactions and cleans up playback', async () => {
+  const h = setup(), seen: string[] = [];
+  const host: any = { appendChild: (dialog: any) => { dialog.parentNode = host; } };
+  h.viewer.open('one', { nodes: [{ id: 'one' }, { id: 'two' }], page: { host, onNodeChange: (id: string) => seen.push(id) } });
+  await tick();
+  expect(h.viewer.isPage()).toBe(true);
+  expect(h.viewer.isEmbedded()).toBe(false);
+  expect(h.body.style.overflow).toBe('auto');
+  expect(h.requests.some(url => url.includes('/comments'))).toBe(true);
+  await h.refs.down.onclick();
+  expect(seen).toEqual(['one', 'two']);
+  h.viewer.close();
+  expect(h.viewer.isPage()).toBe(false);
+  h.viewer.open('one'); await tick();
+  expect(h.body.style.overflow).toBe('hidden');
+});
+
 test('portrait reuses media navigation and receives loaded knowledge on each page', async () => {
   const h = setup(), seen: string[] = [];
   let closed = 0;

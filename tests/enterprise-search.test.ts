@@ -7,6 +7,19 @@ import { hiddenKnowledgeTypes } from '../src/server/ontology-filter.ts';
 const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 const owner = { id: 42, username: 'owner' };
 
+test('popular homepage ranks by server interaction counts with stable tie breakers', async () => {
+  let request: any;
+  const es = new ElasticsearchClient({ url: 'http://es' }, async (_input, init) => {
+    request = JSON.parse(String(init?.body));
+    return reply({ hits: { total: { value: 0 }, hits: [] } });
+  });
+  const store = { searchAccess: async () => [{ key: 'allowed' }] } as any;
+  await new EnterpriseKnowledgeSearch(store, es, () => ({ Q1: 9 })).search('app', owner, { limit: 24, offset: 0, order: 'popular' });
+  expect(request.sort).toEqual([{ home_popularity: 'desc' }, { updated_at_sort: { order: 'desc', unmapped_type: 'keyword' } }, { sqlite_id: 'asc' }]);
+  expect(request.runtime_mappings.home_popularity.script.params.counts).toEqual({ Q1: 9 });
+  expect(request.query.bool.filter).toContainEqual({ ids: { values: ['allowed'] } });
+});
+
 test('discovery supports bounded fuzzy matching, phrase/all/any modes and advanced filters without changing ACL', () => {
   const options = { q: 'scientsit', limit: 20, offset: 0, searchScope: 'name', excludeQuery: '排除', updatedFrom: '2026-10-01', updatedTo: '2026-10-30', includeTypes: ['parent', 'child'] };
   const fuzzy = buildEnterpriseSearchQuery(options, ['allowed']);

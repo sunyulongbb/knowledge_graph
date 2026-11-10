@@ -26,6 +26,7 @@
   let history = [];
   let journey = null;
   let embedded = null;
+  let page = null;
   let portrait = null;
   let feed = [], category = '', animations = [], departing = null;
   let scope = '', recent = [], busy = false, wheelAt = 0, wheelSum = 0, touchStart, muted = false;
@@ -150,6 +151,7 @@
     embedded?.onNodeChange?.(idOf(node));
     journey?.onNodeChange?.(idOf(node));
     portrait?.onNodeChange?.(node);
+    page?.onNodeChange?.(idOf(node));
   }
   async function loadNode(id) {
     requestController?.abort(); requestController = new AbortController(); const token = ++version;
@@ -285,6 +287,9 @@
     dialog?.classList.toggle('is-canvas-preview', false);
     if (endedEmbedded) document.body.append(dialog);
     endedEmbedded?.onClose?.();
+    const endedPage = page; page = null;
+    dialog?.classList.toggle('is-shorts-page', false);
+    if (endedPage) document.body.append(dialog);
   }
   function create() {
     dialog = document.createElement('dialog'); dialog.id = 'homeMediaViewer'; dialog.setAttribute('aria-label', '知识媒体详情');
@@ -302,7 +307,7 @@
     refs = Object.fromEntries(Array.from(dialog.querySelectorAll('[data-ref]')).map((el) => [el.dataset.ref, el]));
     dialog.querySelectorAll('button').forEach((button) => { if (button.type !== 'submit' || !button.closest('form')) button.type = 'button'; });
     document.body.append(dialog);
-    refs.close.onclick = close; dialog.addEventListener('close', () => { if (!dialog.open) cleanup(); });
+    refs.close.onclick = () => page ? window.setViewMode?.('app_home') : close(); dialog.addEventListener('close', () => { if (!dialog.open) cleanup(); });
     refs.left.onclick = () => moveMedia(-1); refs.right.onclick = () => moveMedia(1);
     refs.up.onclick = () => randomPage(-1); refs.down.onclick = () => randomPage(1);
     refs.play.onclick = refs.centerPlay.onclick = () => { message(''); const video = refs.stage.querySelector('video'); if (video) video.paused ? void playVideo(video) : video.pause(); };
@@ -358,9 +363,10 @@
     dialog.addEventListener('pointerup', (event) => { if (!touchStart) return; const dx = event.clientX - touchStart.x, dy = event.clientY - touchStart.y; touchStart = null; if (Math.max(Math.abs(dx), Math.abs(dy)) < 50) return; if (Math.abs(dx) > Math.abs(dy)) moveMedia(dx < 0 ? 1 : -1); else void randomPage(dy < 0 ? 1 : -1); });
     dialog.addEventListener('pointercancel', () => { touchStart = null; });
     // Canvas selection updates the node hash while the same embedded viewer stays open.
-    window.addEventListener('hashchange', () => { if (!embedded || window.kbViewMode !== 'vis') close(); });
+    window.addEventListener('hashchange', () => { if (page && window.kbViewMode === 'shorts') return; if (!embedded || window.kbViewMode !== 'vis') close(); });
     // 画布节点切换同时触发 popstate：内嵌详情保持打开，仅在路由离开关系画布时关闭
     window.addEventListener('popstate', () => {
+      if (page && window.kbViewMode === 'shorts') return;
       if (!embedded || window.kbViewMode !== 'vis' || !/view=vis/.test(String(window.location.hash))) close();
     });
   }
@@ -371,6 +377,9 @@
     category = options.category || '当前分类';
     if (!dialog) create();
     embedded = options.embedded || null;
+    page = options.page || null;
+    dialog.classList.toggle('is-shorts-page', !!page);
+    if (page?.host) page.host.appendChild(dialog);
     dialog.classList.toggle('is-canvas-preview', !!embedded);
     if (embedded?.host) embedded.host.appendChild(dialog);
     journey = options.journey || null;
@@ -389,7 +398,7 @@
     if (hint) hint.textContent = embedded ? '左右切媒体 · 上下切节点' : journey ? '← → 切媒体 · ↑ ↓ 沿线路漫游' : '← → 切媒体 · ↑ 历史 · ↓ 随机';
     if (!dialog.open) {
       focusBefore = document.activeElement;
-      if (embedded) dialog.show();
+      if (embedded || page) dialog.show();
       else { oldOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; dialog.showModal(); }
     }
     muted = false;
@@ -404,16 +413,17 @@
   } catch {}
   window.addEventListener('pagehide', () => {
     try {
-      if (dialog?.open && node && !journey && !portrait && !embedded) sessionStorage.setItem('kb-home-detail-reload', JSON.stringify({ id: idOf(node), scope, category, nodes: feed.map((item) => ({id:idOf(item)})) }));
+      if (dialog?.open && node && !journey && !portrait && !embedded && !page) sessionStorage.setItem('kb-home-detail-reload', JSON.stringify({ id: idOf(node), scope, category, nodes: feed.map((item) => ({id:idOf(item)})) }));
       else sessionStorage.removeItem('kb-home-detail-reload');
     } catch {}
   });
   window.addEventListener('load', () => {
-    if (reloadDetail && reloadDetail.scope === currentScope()) open(reloadDetail.id, {nodes:reloadDetail.nodes || [],category:reloadDetail.category});
+    if (window.kbViewMode !== 'shorts' && reloadDetail && reloadDetail.scope === currentScope()) open(reloadDetail.id, {nodes:reloadDetail.nodes || [],category:reloadDetail.category});
     reloadDetail = null;
   }, {once:true});
   window.homeKnowledgeMediaViewer = { open, close, goTo, collectMedia, textPages,
     isEmbedded: () => !!embedded,
-    updateFeed: (nodes) => { if (embedded) feed = nodes; },
+    isPage: () => !!page,
+    updateFeed: (nodes) => { if (embedded || page) feed = nodes; },
   };
 })();

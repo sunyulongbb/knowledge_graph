@@ -95,7 +95,12 @@ export class EnterpriseKnowledgeSearch {
     const richness = options.order === 'richness';
     // Runtime fields use the existing ES source, so already indexed knowledge is
     // ranked immediately without waiting for an index rebuild or background sync.
-    const runtimeMappings = richness ? {
+    const runtimeMappings = options.order === 'popular' ? {
+      home_popularity: { type: 'long', script: { source: `
+        def id = params._source.sqlite_id;
+        emit(id != null && params.counts.containsKey(id) ? (long)params.counts[id] : 0L);`,
+        params: { counts: this.interactionCounts() } } },
+    } : richness ? {
       home_media: { type: 'long', script: { source: `
         def s = params._source;
         boolean media = s.has_media == true;
@@ -124,7 +129,7 @@ export class EnterpriseKnowledgeSearch {
         long interactions = id != null && params.counts.containsKey(id) ? (long)params.counts[id] : 0L;
         emit(unique.size() * 5L + interactions);`, params: { counts: this.interactionCounts() } } },
     } : undefined;
-    const sort = richness ? [{ home_media: 'desc' }, { home_richness: 'desc' }, { updated_at_sort: { order: 'desc', unmapped_type: 'keyword' } }, { sqlite_id: 'asc' }] : options.order === 'id' ? [{ sqlite_id: 'asc' }] : relevance
+    const sort = options.order === 'popular' ? [{ home_popularity: 'desc' }, { updated_at_sort: { order: 'desc', unmapped_type: 'keyword' } }, { sqlite_id: 'asc' }] : richness ? [{ home_media: 'desc' }, { home_richness: 'desc' }, { updated_at_sort: { order: 'desc', unmapped_type: 'keyword' } }, { sqlite_id: 'asc' }] : options.order === 'id' ? [{ sqlite_id: 'asc' }] : relevance
       ? [{ _score: 'desc' }, { sqlite_id: 'asc' }]
       : [{ [field]: { order: ascending ? 'asc' : 'desc', unmapped_type: 'keyword' } }, { sqlite_id: 'asc' }];
     const index = encodeURIComponent(elasticsearchEntityIndexName(database));

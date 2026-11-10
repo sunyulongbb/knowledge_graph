@@ -70,6 +70,13 @@
     ]).then(() => true);
   </script>
   <link rel="stylesheet" href="/assets/styles/app.css?v=20261110-scrollbar-tracks" />
+  <link rel="stylesheet" href="/assets/styles/home-discovery.css?v=20261110-sidebar-button" />
+  <link rel="stylesheet" href="/assets/styles/shorts-page.css?v=20261110-home-shell" />
+  <link rel="stylesheet" href="/assets/styles/knowledge-explore.css?v=20261110-1" />
+  <link rel="stylesheet" href="/assets/styles/quick-knowledge.css?v=20261110-composer" />
+  <link rel="stylesheet" href="/assets/styles/home-waterfall.css?v=20261110-1" />
+  <link rel="stylesheet" href="/assets/styles/knowledge-learning.css?v=20261110-1" />
+  <link rel="stylesheet" href="/assets/styles/learning-journey.css?v=20261110-1" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -4818,9 +4825,36 @@
         <div id="knowledgeDetailPageHost" class="knowledge-detail-page__host"></div>
       </section>
       <section id="applicationHomePanel" class="application-content-page" style="display:none">
+        <aside class="home-discovery-sidebar" id="homeDiscoverySidebar" aria-label="首页导航">
+          <div class="home-discovery-sidebar-head">
+          <button type="button" class="home-discovery-brand" data-home-action="applications" title="切换应用"><span class="home-discovery-mark" aria-hidden="true"><i class="fa-solid fa-layer-group"></i></span><span><strong id="homeDiscoveryBrand">知识空间</strong><small>发现 · 连接 · 创造</small></span></button>
+          <button id="homeSidebarToggle" type="button" class="home-sidebar-toggle" aria-controls="homeDiscoverySidebar" aria-expanded="true" aria-label="收起菜单" title="收起菜单"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="3.5" width="19" height="17" rx="3.5"/><path d="M8.5 3.5v17"/><path class="home-sidebar-chevron" d="m16 9-3 3 3 3"/></svg></button>
+          </div>
+          <nav class="home-discovery-nav" aria-label="发现内容">
+            <button type="button" data-home-feed="for-you" aria-current="page" title="For You · 为你推荐"><i class="fa-solid fa-house" aria-hidden="true"></i><span>For You<small>为你推荐</small></span></button>
+            <button type="button" data-home-action="shorts" title="Short · 短视频"><i class="fa-solid fa-circle-play" aria-hidden="true"></i><span>Short<small>短视频</small></span></button>
+            <button type="button" data-home-feed="popular" title="Popular · 热门"><i class="fa-solid fa-fire" aria-hidden="true"></i><span>Popular<small>热门知识</small></span></button>
+            <button type="button" data-home-feed="news" title="News · 最新发布"><i class="fa-regular fa-newspaper" aria-hidden="true"></i><span>News<small>最新发布</small></span></button>
+            <button type="button" data-home-action="app_explore" title="Explore · 探索"><i class="fa-regular fa-compass" aria-hidden="true"></i><span>Explore<small>探索知识</small></span></button>
+            <button type="button" data-home-action="learning" title="Learning"><i class="fa-solid fa-graduation-cap" aria-hidden="true"></i><span>Learning<small>开启学习旅程</small></span></button>
+          </nav>
+          <button type="button" class="home-discovery-create" data-home-action="create" title="新增知识"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>新增知识</span></button>
+          <div class="home-discovery-tools" aria-label="工作空间">
+            <span class="home-discovery-section-label">工作空间</span>
+            <button type="button" data-home-action="table" title="知识库"><i class="fa-solid fa-table-cells-large" aria-hidden="true"></i><span>知识库</span></button>
+            <button type="button" data-home-action="vis" title="关系画布"><i class="fa-solid fa-diagram-project" aria-hidden="true"></i><span>关系画布</span></button>
+            <button type="button" data-home-action="applications" title="应用中心"><i class="fa-solid fa-layer-group" aria-hidden="true"></i><span>应用中心</span></button>
+          </div>
+          <div class="home-discovery-footer">
+            <button type="button" data-home-action="account" title="账号与登录"><i class="fa-regular fa-user" aria-hidden="true"></i><span id="homeDiscoveryAccount">账号与登录</span></button>
+            <button type="button" data-home-action="theme" title="切换主题"><i class="fa-solid fa-circle-half-stroke" aria-hidden="true"></i><span>切换主题</span></button>
+          </div>
+        </aside>
+        <div class="home-discovery-main">
         <div class="app-page-heading app-home-heading"><div><h1 id="appHomeName">应用首页</h1><p id="appHomeCount" class="muted"></p></div><div class="app-page-actions"><button id="appHomeMaintenance" type="button" class="btn icon" title="应用维护" aria-label="应用维护" hidden><i class="fa-solid fa-user-gear" aria-hidden="true"></i><span>应用维护</span></button><button id="appHomeSearch" type="button" class="btn icon" title="搜索知识" aria-label="搜索知识"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><span>搜索知识</span></button><button id="appHomeBrowse" type="button" class="btn icon" title="浏览知识" aria-label="浏览知识"><i class="fa-solid fa-table-cells" aria-hidden="true"></i><span>浏览知识</span></button></div></div>
         <form id="appHomeSearchForm" class="app-search-query app-home-search-form"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input id="appHomeSearchQuery" type="search" class="kb-input" placeholder="搜索当前应用的知识，支持模糊匹配" aria-label="首页知识检索" maxlength="200"><button class="btn primary" type="submit">搜索知识</button></form>
         <div id="appHomeContent" class="app-home-dashboard"></div>
+        </div>
       </section>
       <section id="applicationSearchPanel" class="panel application-content-page" style="display:none">
         <div class="app-page-heading"><h1>搜索</h1><span class="muted">搜索当前应用中你有权访问的知识</span></div>
@@ -5827,6 +5861,8 @@
     const KB_VIEW_MODES = new Set([
       "app_home",
       "app_search",
+      "app_explore",
+      "learning",
       "knowledge_detail",
       "entry",
       "table",
@@ -7139,6 +7175,8 @@
       return ({
         app_home: "应用首页",
         app_search: "应用搜索",
+        app_explore: "探索知识",
+        learning: "知识学习",
         report_home: "报告",
         report_generate: "新建报告",
         report_detail: "报告详情",
@@ -7257,6 +7295,9 @@
           : String(options.targetNodeId).trim();
       const detailCrumbLabel = String(options.detailCrumbLabel || "").trim();
       const previousMode = window.kbViewMode;
+      if (previousMode === 'learning' && normalized !== 'learning') window.stopKnowledgeLearning?.();
+      if (previousMode === 'app_home' && normalized !== 'app_home') window.homeWaterfall?.destroy();
+      if (previousMode === 'shorts' && normalized !== 'shorts') window.closeShortsPage?.();
       window.closeHomeDetailDrawer?.();
       const enteringDetail = normalized === "detail" || normalized === "knowledge_detail";
       const leavingDetail = previousMode === "detail" || previousMode === "knowledge_detail";
@@ -7349,6 +7390,12 @@
         }
       };
       if (kbViewModeInitialized && previousMode === normalized) {
+        if (normalized === 'learning') { window.loadKnowledgeLearning?.(); return; }
+        if (normalized === 'shorts') {
+          window.loadShortsPage?.(targetNodeIdRaw);
+          if (!skipRouteUpdate) syncHashForView('shorts', { nodeId: targetNodeIdRaw, includeNode: Boolean(targetNodeIdRaw), replace: replaceRoute });
+          return;
+        }
         if (usesEntityRouteNode) {
           syncActiveEntityEditor(targetNodeIdRaw, {
             force: hasTargetNode,
@@ -7469,13 +7516,22 @@
       const isApplications = normalized === 'applications';
       const isProfile = normalized === 'profile';
       const isAppHome = normalized === 'app_home';
+      const isExplore = normalized === 'app_explore';
+      const isLearning = normalized === 'learning';
+      document.body.classList.toggle('home-discovery-active', isAppHome || isShorts || isExplore || isLearning);
+      document.body.classList.toggle('home-shorts-active', isShorts);
+      document.body.classList.toggle('home-explore-active', isExplore);
+      document.body.classList.toggle('home-learning-active', isLearning);
       const isAppSearch = normalized === 'app_search';
-      const isGlobalPage = isApplications || isUserManagement || isProfile || isAppHome || isAppSearch || isStandaloneDetail;
+      const isGlobalPage = isApplications || isUserManagement || isProfile || isAppHome || isAppSearch || isStandaloneDetail || isShorts || isExplore || isLearning;
       if (knowledgeDetailPagePanel) knowledgeDetailPagePanel.style.display = isStandaloneDetail ? '' : 'none';
-      document.getElementById('applicationHomePanel').style.display = isAppHome ? '' : 'none';
+      document.getElementById('applicationHomePanel').style.display = isAppHome || isShorts || isExplore || isLearning ? '' : 'none';
+      window.syncHomeNavigation?.();
       document.getElementById('applicationSearchPanel').style.display = isAppSearch ? '' : 'none';
       document.getElementById('btnApplicationSearch').classList.toggle('active', isAppSearch);
       if (isAppHome) window.loadApplicationHome?.();
+      if (isExplore) window.loadKnowledgeExplore?.();
+      if (isLearning) window.loadKnowledgeLearning?.();
       if (isAppSearch) window.loadApplicationSearch?.();
       const userProfilePanel = document.getElementById('userProfilePanel');
       if (userProfilePanel) userProfilePanel.style.display = isProfile ? '' : 'none';
@@ -7597,7 +7653,7 @@
         try { renderTableList(); } catch { }
       } else if (isShorts) {
         try {
-          renderShortsList();
+          window.loadShortsPage?.(targetNodeIdRaw);
         } catch { }
       } else if (isGallery) {
         try {
@@ -7746,7 +7802,7 @@
       if (!skipRouteUpdate) {
         let routeNode = "";
         let includeNode = false;
-        routeNode = usesEntityRouteNode
+        routeNode = normalized === 'shorts' ? targetNodeIdRaw : usesEntityRouteNode
           ? targetNodeIdRaw ||
             (window.kbSelectedRowId || "").trim() ||
             (document.getElementById("fId")?.value || "").trim() ||
@@ -17613,7 +17669,7 @@
   <script src="/assets/scripts/property-panel.js?v=20261030-derive"></script>
   <script src="/assets/scripts/knowledge-family.js?v=20261105-family-inline-detail"></script>
   <script src="/assets/scripts/table-panel.js?v=20261110-tag-load-sync"></script>
-  <script src="/assets/scripts/table-selection.js?v=20261010-crumb-label"></script>
+  <script src="/assets/scripts/table-selection.js?v=20261110-shorts-page"></script>
   <script src="/assets/scripts/entity-manage-table.js?v=20261028-cover-url"></script>
   <script src="/assets/scripts/attr-panel.js?v=20260925-tail-suggestions"></script>
   <script src="/assets/scripts/entity-import.js?v=20261029-1"></script>
@@ -17628,10 +17684,16 @@
   <script src="/assets/scripts/knowledge-access.js?v=20261011-member-access"></script>
   <script src="/assets/scripts/applications.js?v=20260927-settings-layout"></script>
   <script src="/assets/scripts/user-management.js?v=20260915-1"></script>
-  <script src="/assets/scripts/home-media-viewer.js?v=20261012-detail-keep"></script>
+  <script src="/assets/scripts/home-media-viewer.js?v=20261110-shorts-page"></script>
+  <script src="/assets/scripts/shorts-page.js?v=20261110-home-shell"></script>
   <script src="/assets/scripts/manual-classify.js?v=20260929-existing-classes"></script>
   <script src="/assets/scripts/knowledge-context-menu.js?v=20260928-3"></script>
-  <script src="/assets/scripts/application-pages.js?v=20261105-home-richness"></script>
+  <script src="/assets/scripts/quick-knowledge.js?v=20261110-composer"></script>
+  <script src="/assets/scripts/home-waterfall.js?v=20261110-1"></script>
+  <script src="/assets/scripts/home-sidebar.js?v=20261110-1"></script>
+  <script src="/assets/scripts/application-pages.js?v=20261110-minimal-for-you"></script>
+  <script src="/assets/scripts/knowledge-learning.js?v=20261110-quiz-map"></script>
+  <script src="/assets/scripts/knowledge-explore.js?v=20261110-1"></script>
   <script src="/assets/scripts/user-profile.js?v=20260924-5"></script>
   <script src="/assets/scripts/sidebar-panel.js?v=20260924-4"></script>
   <script src="/assets/scripts/auth-panel.js?v=20261012-user-id"></script>

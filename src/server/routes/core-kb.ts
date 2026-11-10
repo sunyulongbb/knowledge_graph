@@ -2445,6 +2445,10 @@ export async function handleCoreKbRoutes(
       orderClause = ` ORDER BY CASE WHEN ${hasMediaValue} OR ${attributeMedia} THEN 1 ELSE 0 END DESC,
         ((${tags}) * 5 + ${interactions}) DESC,
         datetime(COALESCE(n.updated_at, n.created_at)) DESC, n.rowid DESC`;
+    } else if (orderBy === "popular") {
+      const interactions = ['knowledge_likes', 'knowledge_comments', 'knowledge_shares', 'knowledge_favorites']
+        .map((table) => `(SELECT COUNT(*) FROM ${table} h WHERE h.knowledge_id IN (n.id, 'entity/' || n.id))`).join(' + ');
+      orderClause = ` ORDER BY (${interactions}) DESC, datetime(COALESCE(n.updated_at, n.created_at)) DESC, n.rowid DESC`;
     } else if (orderBy === "modified_desc") {
       orderClause =
         " ORDER BY datetime(COALESCE(n.updated_at, n.created_at)) DESC, n.rowid DESC";

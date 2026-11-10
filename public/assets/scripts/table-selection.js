@@ -4273,6 +4273,7 @@ function __kbInitTableSelection() {
   }
 
   renderShortsList = async function () {
+    if (window.loadShortsPage) return window.loadShortsPage();
     const shortsPanel = document.getElementById("shortsPanel");
     const shortsList = document.getElementById("shortsList");
     const shortsCount = document.getElementById("shortsCount");
@@ -6496,7 +6497,7 @@ function __kbInitTableSelection() {
 
   if (window.kbViewMode === "shorts") {
     try {
-      renderShortsList();
+      window.loadShortsPage?.();
     } catch (err) {
       console.warn("shorts page rehydrate failed", err);
     }
