@@ -39,7 +39,16 @@
       try { localStorage.setItem(`kb:application-name:${new URLSearchParams(location.search).get('db') || 'default'}`, applicationName); } catch {}
     }
     const logo = byId('homeDiscoveryLogo');
-    const logoSource = String(homeApplication?.image || byId('headerProjectAvatar')?.querySelector('img')?.getAttribute('src') || '').trim();
+    const logoScope = new URLSearchParams(location.search).get('db') || 'default';
+    const headerLogoElement = byId('headerProjectAvatar');
+    const background = headerLogoElement?.style?.backgroundImage || '';
+    const backgroundMatch = background.match(/^url\(["']?(.*?)["']?\)$/);
+    let cachedLogo = '';
+    try { cachedLogo = localStorage.getItem(`kb:application-logo:${logoScope}`) || ''; } catch {}
+    const logoSource = String(homeApplication ? homeApplication.image || '' : headerLogoElement?.querySelector('img')?.getAttribute('src') || backgroundMatch?.[1] || cachedLogo).trim();
+    if (homeApplication || logoSource) {
+      try { localStorage.setItem(`kb:application-logo:${logoScope}`, logoSource); } catch {}
+    }
     if (logo && logo.dataset.source !== logoSource) {
       logo.dataset.source = logoSource;
       logo.innerHTML = '<i class="fa-solid fa-layer-group" aria-hidden="true"></i>';
@@ -838,6 +847,14 @@
       void loadHomePage(1, '');
       return;
     }
+    const workspaceLink = event.target.closest('[data-home-new-tab]');
+    if (workspaceLink) {
+      const url = new URL(location.href);
+      url.searchParams.delete('view'); url.searchParams.delete('node');
+      url.hash = new URLSearchParams({ view: workspaceLink.dataset.homeAction });
+      window.open(url.href, '_blank', 'noopener,noreferrer');
+      return;
+    }
     const action = event.target.closest('[data-home-action]')?.dataset.homeAction;
     if (!action) return;
     if (action === 'theme') { byId('btnTheme')?.click(); return; }
@@ -1013,7 +1030,7 @@
   byId('appSearchResults').addEventListener('click', (event) => { if (event.target.closest('[data-search-retry]')) search(); });
   const refresh = () => { homeVersion++; searchVersion++; if (window.kbViewMode === 'app_home') window.loadApplicationHome(); if (window.kbViewMode === 'app_search') window.loadApplicationSearch(); };
   const headerLogo = byId('headerProjectAvatar');
-  if (headerLogo) new MutationObserver(syncHomeNavigation).observe(headerLogo, { childList:true, subtree:true, attributes:true, attributeFilter:['src'] });
+  if (headerLogo) new MutationObserver(syncHomeNavigation).observe(headerLogo, { childList:true, subtree:true, attributes:true, attributeFilter:['src','style'] });
   window.syncHomeNavigation = syncHomeNavigation;
   syncHomeNavigation();
   window.addEventListener('kb-auth-change', refresh);

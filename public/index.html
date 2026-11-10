@@ -4841,6 +4841,13 @@
             try {
               const brandScope = new URLSearchParams(location.search).get('db') || 'default';
               document.getElementById('homeDiscoveryBrand').textContent = localStorage.getItem(`kb:application-name:${brandScope}`) || '';
+              const savedLogo = localStorage.getItem(`kb:application-logo:${brandScope}`) || '';
+              if (/^(https?:\/\/|\/(?!\/)|data:image\/)/i.test(savedLogo)) {
+                const logoImage = document.createElement('img'); logoImage.alt = ''; logoImage.src = savedLogo;
+                logoImage.onerror = () => logoImage.remove();
+                const logoHost = document.getElementById('homeDiscoveryLogo');
+                logoHost.dataset.source = savedLogo; logoHost.appendChild(logoImage);
+              }
             } catch {}
           </script>
           </div>
@@ -4855,9 +4862,9 @@
           <button type="button" class="home-discovery-create" data-home-action="create" title="新增知识"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>新增知识</span></button>
           <div class="home-discovery-tools" aria-label="工作空间">
             <span class="home-discovery-section-label">工作空间</span>
-            <button type="button" data-home-action="table" title="知识库"><i class="fa-solid fa-table-cells-large" aria-hidden="true"></i><span>知识库</span></button>
-            <button type="button" data-home-action="vis" title="关系画布"><i class="fa-solid fa-diagram-project" aria-hidden="true"></i><span>关系画布</span></button>
-            <button type="button" data-home-action="applications" title="应用中心"><i class="fa-solid fa-layer-group" aria-hidden="true"></i><span>应用中心</span></button>
+            <button type="button" data-home-new-tab="true" data-home-action="table" title="知识库"><i class="fa-solid fa-table-cells-large" aria-hidden="true"></i><span>知识库</span></button>
+            <button type="button" data-home-new-tab="true" data-home-action="vis" title="关系画布"><i class="fa-solid fa-diagram-project" aria-hidden="true"></i><span>关系画布</span></button>
+            <button type="button" data-home-new-tab="true" data-home-action="applications" title="应用中心"><i class="fa-solid fa-layer-group" aria-hidden="true"></i><span>应用中心</span></button>
           </div>
           <div class="home-discovery-footer">
             <button type="button" data-home-action="account" title="个人信息" aria-label="个人信息"><i id="homeDiscoveryAvatar" class="home-sidebar-avatar fa-regular fa-user" aria-hidden="true"></i><span id="homeDiscoveryAccount">登录</span></button>
@@ -17717,7 +17724,7 @@
   <script src="/assets/scripts/quick-knowledge.js?v=20261110-composer"></script>
   <script src="/assets/scripts/home-waterfall.js?v=20261110-1"></script>
   <script src="/assets/scripts/home-sidebar.js?v=20261110-brand-only"></script>
-  <script src="/assets/scripts/application-pages.js?v=20261110-sidebar-logo"></script>
+  <script src="/assets/scripts/application-pages.js?v=20261110-workspace-tabs"></script>
   <script src="/assets/scripts/knowledge-learning.js?v=20261110-node-info"></script>
   <script src="/assets/scripts/knowledge-explore.js?v=20261110-tag-explore"></script>
   <script src="/assets/scripts/user-profile.js?v=20261110-history"></script>

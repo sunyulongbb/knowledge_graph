@@ -48,3 +48,25 @@ test('feed navigation from Short returns to the homepage content instead of load
   click!({ target: { closest: (selector: string) => selector === '[data-home-feed]' ? ({ dataset: { homeFeed: 'for-you' } }) : null } });
   expect(views).toEqual(['app_home']);
 });
+
+
+test('workspace menus open a new tab in the current application without changing the home view', () => {
+  let click:Function;
+  const opened:any[]=[];
+  const views:string[]=[];
+  const location={href:'http://localhost/?db=demo&view=app_home&node=Q1#view=app_home'};
+  new Function('byId','window','location',block)(()=>({addEventListener:(_:string,handler:Function)=>{click=handler;}}),
+    {open:(...args:any[])=>opened.push(args),setViewMode:(view:string)=>views.push(view)},location);
+  for (const view of ['table','vis','applications']) {
+    click!({target:{closest:(selector:string)=>selector==='[data-home-new-tab]'?{dataset:{homeAction:view}}:null}});
+  }
+  expect(views).toEqual([]);
+  expect(opened.map(([href,target,features])=>{
+    const url=new URL(href);
+    expect(url.searchParams.get('db')).toBe('demo');
+    expect(url.searchParams.has('node')).toBe(false);
+    expect(target).toBe('_blank');
+    expect(features).toBe('noopener,noreferrer');
+    return new URLSearchParams(url.hash.slice(1)).get('view');
+  })).toEqual(['table','vis','applications']);
+});
