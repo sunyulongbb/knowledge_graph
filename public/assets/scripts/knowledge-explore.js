@@ -23,6 +23,7 @@
   panel.id = 'knowledgeExplorePage';
   panel.setAttribute('aria-label', '探索知识分类');
   document.getElementById('applicationHomePanel').append(panel);
+  let selectedTag = '';
   let tree = buildExploreTree([]), selected = '', items = [], total = 0, page = 1;
   let loadingTree = false, loadingItems = false, treeError = '', itemsError = '', treeVersion = 0, itemsVersion = 0;
   const expanded = new Map();
@@ -31,10 +32,11 @@
     if(window.kbViewMode!=='app_explore')return;
     const url=new URL(location.href);
     if(selected)url.searchParams.set('explore_category',selected);else url.searchParams.delete('explore_category');
-    if(selected&&page>1)url.searchParams.set('explore_page',String(page));else url.searchParams.delete('explore_page');
+    if(selectedTag)url.searchParams.set('explore_tag',selectedTag);else url.searchParams.delete('explore_tag');
+    if((selected||selectedTag)&&page>1)url.searchParams.set('explore_page',String(page));else url.searchParams.delete('explore_page');
     window.history.replaceState(window.history.state,'',url);
   }
-  const name = row => row.name || row.label || row.id;
+  const name = row => row?.name || row?.label || row?.id || selectedTag;
   const childrenOf = id => tree.children.get(id) || [];
   const imageUrl = value => typeof value === 'string' && /^(https?:\/\/|\/(?!\/))/i.test(value.trim()) ? value.trim() : '';
   async function api(path, params = {}) {
@@ -70,7 +72,7 @@
   }
   function knowledgeSection() {
     const current = tree.byId.get(selected);
-    if (!current) return '';
+    if (!current && !selectedTag) return '';
     const content = loadingItems ? '<div class="explore-state" role="status">正在加载分类知识…</div>'
       : itemsError ? `<div class="explore-state" role="alert">${escape(itemsError)} <button type="button" data-explore-retry-items>重试</button></div>`
       : items.length ? `<div class="explore-knowledge-grid">${items.map(item => {
@@ -84,15 +86,15 @@
         return `<article class="explore-knowledge-card explore-media-tile${!image&&!video?' is-text':''}" ><button type="button" class="explore-tile-media" data-explore-node="${escape(item.id || item._id)}" aria-label="查看 ${escape(title)}" title="${escape(title)}">${image ? `<img src="${escape(image)}" alt="" loading="lazy" decoding="async">` : video ? `<video src="${escape(video)}" muted playsinline preload="metadata"></video>` : '<span class="explore-tile-placeholder"><i class="fa-regular fa-lightbulb" aria-hidden="true"></i></span>'}${video||images.length>1?`<span class="explore-tile-kind" aria-label="${video?'视频':'多图'}"><i class="${video?'fa-solid fa-play':'fa-regular fa-clone'}" aria-hidden="true"></i></span>`:''}</button><span class="explore-tile-caption"><button type="button" data-explore-detail="${escape(item.id || item._id)}"><strong>${escape(title)}</strong></button><small>${escape(item.description || '查看知识详情')}</small></span></article>`;
       }).join('')}</div>` : '<div class="explore-state">该分类下暂无可浏览的知识，可继续探索子分类。</div>';
     const pages = Math.max(1, Math.ceil(total / pageSize));
-    return `<section class="explore-group"><div class="explore-group-heading"><h2>${escape(name(current))}的知识</h2><span>${total} 条知识（含子分类）</span></div>${content}${!loadingItems && !itemsError && pages > 1 ? `<nav class="explore-pagination" aria-label="分类知识分页"><button type="button" data-explore-page="${page - 1}" ${page <= 1 ? 'disabled' : ''}>上一页</button><span>${page} / ${pages}</span><button type="button" data-explore-page="${page + 1}" ${page >= pages ? 'disabled' : ''}>下一页</button></nav>` : ''}</section>`;
+    return `<section class="explore-group"><div class="explore-group-heading"><h2>${escape((selectedTag ? '#' + selectedTag : name(current)))}的知识</h2><span>${total} 条知识（含子分类）</span></div>${content}${!loadingItems && !itemsError && pages > 1 ? `<nav class="explore-pagination" aria-label="分类知识分页"><button type="button" data-explore-page="${page - 1}" ${page <= 1 ? 'disabled' : ''}>上一页</button><span>${page} / ${pages}</span><button type="button" data-explore-page="${page + 1}" ${page >= pages ? 'disabled' : ''}>下一页</button></nav>` : ''}</section>`;
   }
   function render() {
     const crumbs = ancestry(selected), activeRoot = crumbs[0]?.id || '';
     let content;
     if (loadingTree) content = '<div class="explore-state" role="status">正在加载分类…</div>';
     else if (treeError) content = `<div class="explore-state" role="alert">${escape(treeError)} <button type="button" data-explore-retry>重新加载</button></div>`;
-    else if (!tree.byId.size) content = '<div class="explore-state"><i class="fa-solid fa-shapes" aria-hidden="true"></i><h2>还没有分类</h2><p>在知识库中建立分类后，即可在这里探索。</p><button type="button" data-explore-workspace>管理分类</button></div>';
-    else if (selected) {
+    else if (!selectedTag && !tree.byId.size) content = '<div class="explore-state"><i class="fa-solid fa-shapes" aria-hidden="true"></i><h2>还没有分类</h2><p>在知识库中建立分类后，即可在这里探索。</p><button type="button" data-explore-workspace>管理分类</button></div>';
+    else if (selected || selectedTag) {
       content = `<nav class="explore-breadcrumbs" aria-label="分类路径"><button type="button" data-explore-category="">全部分类</button>${crumbs.map(row => `<span aria-hidden="true">/</span><button type="button" data-explore-category="${escape(row.id)}" ${row.id === selected ? 'aria-current="page"' : ''}>${escape(name(row))}</button>`).join('')}</nav>`;
       const children = childrenOf(selected);
       if (children.length) content += group('继续探索子分类', children, selected);
@@ -103,14 +105,14 @@
       content = recommended.length ? group('从这些分类开始', recommended, 'recommended') : '';
       for (const root of tree.roots) content += group(name(root), childrenOf(root.id).length ? childrenOf(root.id) : [root], root.id, root.id);
     }
-    panel.innerHTML = `<div class="explore-content"><header class="explore-heading"><p>EXPLORE KNOWLEDGE</p><h1>${escape(tree.byId.has(selected)?name(tree.byId.get(selected)):'探索知识')}</h1><span>从分类出发，发现值得深入的知识。</span></header>
+    panel.innerHTML = `<div class="explore-content"><header class="explore-heading"><p>EXPLORE KNOWLEDGE</p><h1>${escape(selectedTag ? '#' + selectedTag : tree.byId.has(selected)?name(tree.byId.get(selected)):'探索知识')}</h1><span>从分类出发，发现值得深入的知识。</span></header>
       <nav class="explore-topic-tabs" aria-label="一级分类"><button type="button" data-explore-category="" ${!selected ? 'aria-current="page"' : ''}>全部</button>${tree.roots.map(row => `<button type="button" data-explore-category="${escape(row.id)}" ${row.id === activeRoot ? 'aria-current="page"' : ''}>${escape(name(row))}</button>`).join('')}</nav>${content}</div>`;
   }
   async function loadItems(nextPage = 1) {
     const version = ++itemsVersion, category = selected;
     page = nextPage; loadingItems = true; itemsError = ''; render();
     try {
-      const data = await api('/api/kb/discover/search', { class_id: category, order: 'richness', limit: pageSize, offset: (page - 1) * pageSize });
+      const data = await api('/api/kb/discover/search', { class_id: category, tag: selectedTag, order: 'richness', limit: pageSize, offset: (page - 1) * pageSize });
       if (version !== itemsVersion || selected !== category) return;
       items = data.nodes || []; total = Number(data.total) || 0;
       const lastPage=Math.max(1,Math.ceil(total/pageSize));
@@ -121,6 +123,7 @@
   }
   function selectCategory(id) {
     if (id && !tree.byId.has(id)) return;
+    selectedTag = '';
     itemsVersion++; selected = id; items = []; total = 0; page = 1; itemsError = ''; loadingItems = false;
     writeExploreRoute();
     panel.scrollTop = 0;
@@ -129,7 +132,8 @@
   window.loadKnowledgeExplore = async function () {
     const version = ++treeVersion;
     const params=new URLSearchParams(location.search);
-    const requestedCategory=params.get('explore_category')||'';
+    selectedTag = (params.get('explore_tag') || '').trim();
+    const requestedCategory=selectedTag ? '' : params.get('explore_category')||'';
     const requestedPage=Number(params.get('explore_page')||1);
     loadingTree = true; treeError = ''; render();
     try {
@@ -138,9 +142,9 @@
       tree = buildExploreTree(Array.isArray(data) ? data : data.items || []);
       selected=tree.byId.has(requestedCategory)?requestedCategory:'';
       page=Number.isSafeInteger(requestedPage)&&requestedPage>0?requestedPage:1;
-      if(!selected)page=1;
+      if(!selected&&!selectedTag)page=1;
       writeExploreRoute();
-      loadingTree = false; render(); if (selected) void loadItems(page);
+      loadingTree = false; render(); if (selected || selectedTag) void loadItems(page);
     } catch (error) {
       if (version !== treeVersion) return;
       loadingTree = false; treeError = error.message || '分类加载失败'; render();

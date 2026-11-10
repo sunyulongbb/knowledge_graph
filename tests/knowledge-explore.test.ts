@@ -98,3 +98,18 @@ test('a deleted bookmarked category safely resets to all categories',async()=>{
   expect(new URL(h.location.href).searchParams.has('explore_page')).toBe(false);
   expect(h.requests).toHaveLength(1);
 });
+
+
+test('tag exploration restores exact tag filtering without requiring classifications', async () => {
+  const h = setup((url: URL) => url.pathname.endsWith('/classes') ? [] : { nodes: [{id:'Q1',name:'Tagged knowledge'}], total:1 }, '?db=demo&explore_tag=physics');
+  await h.window.loadKnowledgeExplore(); await tick();
+  expect(h.requests[1]?.searchParams.get('tag')).toBe('physics');
+  expect(h.requests[1]?.searchParams.get('class_id')).toBe('');
+  expect(h.panel.innerHTML).toContain('#physics');
+  expect(h.panel.innerHTML).toContain('Tagged knowledge');
+  expect(h.location.search).toContain('explore_tag=physics');
+  h.click('[data-explore-detail]', { exploreDetail:'Q1' });
+  expect(h.views).toEqual([['knowledge_detail', {targetNodeId:'Q1'}]]);
+  h.click('[data-explore-category]', {exploreCategory:''});
+  expect(h.location.search).not.toContain('explore_tag');
+});

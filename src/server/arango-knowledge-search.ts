@@ -55,6 +55,7 @@ export class ArangoKnowledgeSearch {
     const query = `FOR doc IN knowledge_search ${search}
       LET current = DOCUMENT(doc._id)
       FILTER current != null AND ${access.filter}
+        AND (@tag == '' OR @tag IN TO_ARRAY(IS_STRING(current.tags) ? JSON_PARSE(current.tags) : current.tags))
         AND (@classes == null OR LENGTH(INTERSECTION(NOT_NULL(current.class_ids, []), @classes)) > 0)
         AND (@type == null OR current.type == @type) AND (!@emptyType OR current.type == null OR current.type == '')
         AND (@definedClasses == null OR LENGTH(INTERSECTION(NOT_NULL(current.class_ids, []), @definedClasses)) > 0)
@@ -66,7 +67,7 @@ export class ArangoKnowledgeSearch {
           AND (@property == '' OR edge.property_id == @property)
           AND (@value == '' OR CONTAINS(LOWER(TO_STRING(edge.value)), @value)) LIMIT 1 RETURN 1) > 0)
       SORT ${sort} LIMIT @offset, @limit RETURN current`;
-    const bindVars: Doc = { ...access.bindVars, ...(q ? { q } : {}), classes: options.classIds ?? null, type: options.type || null,
+    const bindVars: Doc = { ...access.bindVars, ...(q ? { q } : {}), tag: String(options.tag || '').trim(), classes: options.classIds ?? null, type: options.type || null,
       emptyType: Boolean(options.emptyType), definedClasses: options.definedClasses ?? null, definedTypes: options.definedTypes ?? null,
       excluded: options.excludeTypes || [], hasImage: Boolean(options.hasImage), hasMedia: Boolean(options.hasMedia),
       property: options.propertyId || '', value: String(options.propertyValue || '').trim().toLowerCase(), offset: options.offset, limit: options.limit };

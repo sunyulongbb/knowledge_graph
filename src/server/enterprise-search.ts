@@ -26,7 +26,7 @@ export function entitySearchProjection(document: Doc) {
   };
 }
 export type EnterpriseSearchOptions = {
-  q?: string | null; limit: number; offset: number; order?: string | null;
+  tag?: string | null; q?: string | null; limit: number; offset: number; order?: string | null;
   classIds?: string[] | null; type?: string | null; emptyType?: boolean;
   hasImage?: boolean; hasMedia?: boolean; propertyId?: string | null; propertyValue?: string | null;
   definedClasses?: string[] | null; definedTypes?: string[] | null; excludeTypes?: string[];

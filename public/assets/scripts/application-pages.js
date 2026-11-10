@@ -269,14 +269,14 @@
     const image = firstImage(node), video = firstVideo(node), cover = firstCover(node);
     const author = node.owner_name || node.created_by_name || node.typeLabel || node.type || '知识分享';
     const description = String(node.description || node.desc_zh || '').trim();
-    const tags = Array.isArray(node.tags) ? node.tags.filter(tag => typeof tag === 'string').slice(0, 5) : [];
+    const tags = Array.isArray(node.tags) ? [...new Set(node.tags.filter(tag => typeof tag === 'string').map(tag => tag.trim()).filter(Boolean))].slice(0, 5) : [];
     const picture = image ? `<img src="${escape(image)}" alt="" loading="lazy" decoding="async">`
       : video ? `<video src="${escape(video)}" ${cover ? `poster="${escape(cover)}"` : ''} muted playsinline preload="metadata"></video><span class="for-you-video-badge"><i class="fa-solid fa-play" aria-hidden="true"></i> 视频</span>`
       : cover ? `<img src="${escape(cover)}" alt="" loading="lazy" decoding="async">` : '';
     return `<article class="for-you-card" data-home-node-id="${escape(id)}">
       <div class="for-you-card-header"><span class="for-you-avatar" aria-hidden="true">${escape(String(author).slice(0, 1))}</span><span><strong>${escape(author)}</strong><time>${escape(shortDate(node.updated_at || node.created_at))}</time></span><button type="button" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}" title="查看详情"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button></div>
       ${picture ? `<button data-home-open="shorts" class="for-you-card-media" type="button" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}的媒体">${picture}</button>` : ''}
-      <div class="for-you-card-content"><button type="button" class="for-you-card-title${picture ? '' : ' is-text-only'}" data-home-node-id="${escape(id)}">${escape(title)}</button>${description ? `<p>${escape(description.length > 900 ? description.slice(0, 900) + '…' : description)}</p>` : ''}${tags.length ? `<div class="for-you-card-tags">${tags.map(tag => `<span>#${escape(tag)}</span>`).join('')}</div>` : ''}</div>
+      <div class="for-you-card-content"><button type="button" class="for-you-card-title${picture ? '' : ' is-text-only'}" data-home-node-id="${escape(id)}">${escape(title)}</button>${description ? `<p>${escape(description.length > 900 ? description.slice(0, 900) + '…' : description)}</p>` : ''}${tags.length ? `<div class="for-you-card-tags">${tags.map(tag => `<button type="button" data-home-tag="${escape(tag)}">#${escape(tag)}</button>`).join('')}</div>` : ''}</div>
       <div class="for-you-card-actions"><button type="button" data-home-node-id="${escape(id)}"><i class="fa-regular fa-comment" aria-hidden="true"></i> 详情与评论</button><button type="button" data-home-node-id="${escape(id)}" aria-label="打开知识详情"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></button></div>
     </article>`;
   }
@@ -931,6 +931,15 @@
     if (paging) { if (!homeBusy && !paging.disabled) void loadHomePage(Number(paging.dataset.homePage)); return; }
     if (event.target.closest('[data-home-page-retry]')) { void loadHomePage(homeRetry.page, homeRetry.category); return; }
     const modal = byId('appHomeContent').querySelector('[data-home-inspiration-modal]');
+    const tagButton = event.target.closest('[data-home-tag]');
+    if (tagButton) {
+      const url = new URL(location.href);
+      url.searchParams.set('explore_tag', tagButton.dataset.homeTag);
+      url.searchParams.delete('explore_category'); url.searchParams.delete('explore_page');
+      window.history.replaceState(window.history.state, '', url);
+      window.setViewMode('app_explore');
+      return;
+    }
     const homeNodeButton = event.target.closest('[data-home-node-id]');
     if (homeNodeButton) {
       const node = homeNodes.find((item) => (item.id || item._id) === homeNodeButton.dataset.homeNodeId) || homeVisibleNodes.find((item) => (item.id || item._id) === homeNodeButton.dataset.homeNodeId);

@@ -306,8 +306,8 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
             if (from && to && from > to) throw new KnowledgeStoreError('开始日期不能晚于结束日期');
           }
           try {
-            page = await (discovery ? deps.search! : arangoSearch).search(database, user, {
-              q: url.searchParams.get('q'), limit: integer(url.searchParams.get('limit'), 20, 500),
+            page = await (discovery && !url.searchParams.get('tag')?.trim() ? deps.search! : arangoSearch).search(database, user, {
+              tag: discovery ? url.searchParams.get('tag') : null, q: url.searchParams.get('q'), limit: integer(url.searchParams.get('limit'), 20, 500),
               offset: integer(url.searchParams.get('offset'), 0, 1_000_000),
               classIds, type: discoveryTypes ? null : selectedType, ...(discoveryTypes ? { includeTypes: [...discoveryTypes] } : {}), order: url.searchParams.get('order'),
               emptyType: url.searchParams.has('type') && url.searchParams.get('type') === '',
