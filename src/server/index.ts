@@ -1,3 +1,4 @@
+import { apiErrorResponse } from './api-error.ts';
 import { EnterpriseKnowledgeSearch } from './enterprise-search.ts';
 import { createLearningHandler } from './learning.ts';
 import { createAccountActivity } from './account-activity.ts';
@@ -208,6 +209,7 @@ const server = Bun.serve({
         `${method} - ${url && url.pathname ? url.pathname : "unknown"} failed`,
         e,
       );
+      if (url.pathname.startsWith("/api/")) return apiErrorResponse(e);
       return new Response("Internal Server Error", { status: 500 });
     }
   },

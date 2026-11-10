@@ -28,6 +28,8 @@
   let loadingTree = false, loadingItems = false, treeError = '', itemsError = '', treeVersion = 0, itemsVersion = 0;
   const expanded = new Map();
   const pageSize = 12;
+  let treeReady = false, loadedDatabase = null, savedScrollTop = 0;
+  let exhausted = false, scrollTimer = 0, retryPage = 1, retryAppend = false;
   function writeExploreRoute() {
     if(window.kbViewMode!=='app_explore')return;
     const url=new URL(location.href);
@@ -73,8 +75,8 @@
   function knowledgeSection() {
     const current = tree.byId.get(selected);
     if (!current && !selectedTag) return '';
-    const content = loadingItems ? '<div class="explore-state" role="status">正在加载分类知识…</div>'
-      : itemsError ? `<div class="explore-state" role="alert">${escape(itemsError)} <button type="button" data-explore-retry-items>重试</button></div>`
+    const content = loadingItems && !items.length ? '<div class="explore-state" role="status">正在加载分类知识…</div>'
+      : itemsError && !items.length ? `<div class="explore-state" role="alert">${escape(itemsError)} <button type="button" data-explore-retry-items>重试</button></div>`
       : items.length ? `<div class="explore-knowledge-grid">${items.map(item => {
         const media = window.homeKnowledgeMediaViewer?.collectMedia(item) || [];
         const urlOf = value => imageUrl(typeof value === 'object' && value ? value.url || value.src : value);
@@ -85,10 +87,16 @@
         const title = item.name || item.label || item.id;
         return `<article class="explore-knowledge-card explore-media-tile${!image&&!video?' is-text':''}" ><button type="button" class="explore-tile-media" data-explore-node="${escape(item.id || item._id)}" aria-label="查看 ${escape(title)}" title="${escape(title)}">${image ? `<img src="${escape(image)}" alt="" loading="lazy" decoding="async">` : video ? `<video src="${escape(video)}" muted playsinline preload="metadata"></video>` : '<span class="explore-tile-placeholder"><i class="fa-regular fa-lightbulb" aria-hidden="true"></i></span>'}${video||images.length>1?`<span class="explore-tile-kind" aria-label="${video?'视频':'多图'}"><i class="${video?'fa-solid fa-play':'fa-regular fa-clone'}" aria-hidden="true"></i></span>`:''}</button><span class="explore-tile-caption"><button type="button" data-explore-detail="${escape(item.id || item._id)}"><strong>${escape(title)}</strong></button><small>${escape(item.description || '查看知识详情')}</small></span></article>`;
       }).join('')}</div>` : '<div class="explore-state">该分类下暂无可浏览的知识，可继续探索子分类。</div>';
-    const pages = Math.max(1, Math.ceil(total / pageSize));
-    return `<section class="explore-group"><div class="explore-group-heading"><h2>${escape((selectedTag ? '#' + selectedTag : name(current)))}的知识</h2><span>${total} 条知识（含子分类）</span></div>${content}${!loadingItems && !itemsError && pages > 1 ? `<nav class="explore-pagination" aria-label="分类知识分页"><button type="button" data-explore-page="${page - 1}" ${page <= 1 ? 'disabled' : ''}>上一页</button><span>${page} / ${pages}</span><button type="button" data-explore-page="${page + 1}" ${page >= pages ? 'disabled' : ''}>下一页</button></nav>` : ''}</section>`;
+    const status = loadingItems ? '<span role="status">正在加载知识…</span>'
+      : itemsError ? `<span role="alert">${escape(itemsError)}</span> <button type="button" data-explore-retry-items>重试</button>`
+      : exhausted || page * pageSize >= total ? '<span role="status">已经看完全部知识</span>'
+      : '<button type="button" data-explore-load-more>加载更多</button>';
+    return `<section class="explore-group"><div class="explore-group-heading"><h2>${escape((selectedTag ? '#' + selectedTag : name(current)))}的知识</h2><span>${total} 条知识（含子分类）</span></div>${content}<div class="explore-pagination" data-explore-load-status>${status}</div></section>`;
   }
+
   function render() {
+    const scrollTop = window.kbViewMode === 'app_explore' ? panel.scrollTop : savedScrollTop;
+    savedScrollTop = scrollTop;
     const crumbs = ancestry(selected), activeRoot = crumbs[0]?.id || '';
     let content;
     if (loadingTree) content = '<div class="explore-state" role="status">正在加载分类…</div>';
@@ -107,44 +115,92 @@
     }
     panel.innerHTML = `<div class="explore-content"><header class="explore-heading"><p>EXPLORE KNOWLEDGE</p><h1>${escape(selectedTag ? '#' + selectedTag : tree.byId.has(selected)?name(tree.byId.get(selected)):'探索知识')}</h1><span>从分类出发，发现值得深入的知识。</span></header>
       <nav class="explore-topic-tabs" aria-label="一级分类"><button type="button" data-explore-category="" ${!selected ? 'aria-current="page"' : ''}>全部</button>${tree.roots.map(row => `<button type="button" data-explore-category="${escape(row.id)}" ${row.id === activeRoot ? 'aria-current="page"' : ''}>${escape(name(row))}</button>`).join('')}</nav>${content}</div>`;
+    panel.scrollTop = scrollTop;
   }
-  async function loadItems(nextPage = 1) {
-    const version = ++itemsVersion, category = selected;
-    page = nextPage; loadingItems = true; itemsError = ''; render();
+  async function loadItems(nextPage = 1, append = false) {
+    if (append && (loadingItems || exhausted || nextPage !== page + 1)) return false;
+    const version = ++itemsVersion, category = selected, tag = selectedTag;
+    retryPage = nextPage; retryAppend = append;
+    loadingItems = true; itemsError = '';
+    if (!append) { items = []; exhausted = false; }
+    render();
     try {
-      const data = await api('/api/kb/discover/search', { class_id: category, tag: selectedTag, order: 'richness', limit: pageSize, offset: (page - 1) * pageSize });
-      if (version !== itemsVersion || selected !== category) return;
-      items = data.nodes || []; total = Number(data.total) || 0;
-      const lastPage=Math.max(1,Math.ceil(total/pageSize));
-      if(page>lastPage)return loadItems(lastPage);
+      const data = await api('/api/kb/discover/search', { class_id: category, tag, order: 'richness', limit: pageSize, offset: (nextPage - 1) * pageSize });
+      if (version !== itemsVersion || selected !== category || selectedTag !== tag) return false;
+      total = Math.max(0, Number(data.total) || 0);
+      const lastPage = Math.max(1, Math.ceil(total / pageSize));
+      if (!append && nextPage > lastPage) return loadItems(lastPage);
+      const seen = new Set(append ? items.map(item => String(item.id || item._id)) : []);
+      const incoming = (data.nodes || []).filter(item => {
+        const id = String(item.id || item._id);
+        if (seen.has(id)) return false;
+        seen.add(id); return true;
+      });
+      items = append ? [...items, ...incoming] : incoming;
+      page = nextPage;
+      exhausted = !incoming.length || page * pageSize >= total;
       writeExploreRoute();
-    } catch (error) { if (version === itemsVersion) itemsError = error.message || '知识加载失败'; }
+      return true;
+    } catch (error) { if (version === itemsVersion) itemsError = error.message || '知识加载失败'; return false; }
     finally { if (version === itemsVersion) { loadingItems = false; render(); } }
   }
+  function loadMoreItems() {
+    if (window.kbViewMode !== 'app_explore' || (!selected && !selectedTag) || loadingTree || loadingItems || itemsError || exhausted || page * pageSize >= total) return;
+    void loadItems(page + 1, true);
+  }
+  panel.addEventListener('scroll', () => {
+    if (window.kbViewMode !== 'app_explore') return;
+    savedScrollTop = panel.scrollTop;
+    clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(() => {
+      if (panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 150) loadMoreItems();
+    }, 120);
+  }, { passive: true });
   function selectCategory(id) {
     if (id && !tree.byId.has(id)) return;
     selectedTag = '';
+    clearTimeout(scrollTimer); exhausted = false;
     itemsVersion++; selected = id; items = []; total = 0; page = 1; itemsError = ''; loadingItems = false;
     writeExploreRoute();
-    panel.scrollTop = 0;
+    savedScrollTop = 0; panel.scrollTop = 0;
     render(); if (id) void loadItems();
   }
-  window.loadKnowledgeExplore = async function () {
+  window.loadKnowledgeExplore = async function ({ force = false } = {}) {
+    const params = new URLSearchParams(location.search);
+    const database = params.get('db') || 'default';
+    const requestedTag = (params.get('explore_tag') || '').trim();
+    const requestedCategory = requestedTag ? '' : params.get('explore_category') || '';
+    const requestedPage = Number(params.get('explore_page') || 1);
+    const targetPage = (requestedCategory || requestedTag) && Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+    // Returning from the viewer/details must retain the accumulated cards and DOM scroll state.
+    if (!force && treeReady && !treeError && loadedDatabase === database &&
+        requestedTag === selectedTag && requestedCategory === selected && targetPage <= page) {
+      panel.scrollTop = savedScrollTop;
+      writeExploreRoute();
+      return;
+    }
+    clearTimeout(scrollTimer); itemsVersion++; loadingItems = false; items = []; exhausted = false; itemsError = '';
+    treeReady = false; loadedDatabase = database;
+    savedScrollTop = 0; panel.scrollTop = 0;
     const version = ++treeVersion;
-    const params=new URLSearchParams(location.search);
-    selectedTag = (params.get('explore_tag') || '').trim();
-    const requestedCategory=selectedTag ? '' : params.get('explore_category')||'';
-    const requestedPage=Number(params.get('explore_page')||1);
+    selectedTag = requestedTag;
     loadingTree = true; treeError = ''; render();
     try {
       const data = await api('/api/kb/classes');
       if (version !== treeVersion) return;
       tree = buildExploreTree(Array.isArray(data) ? data : data.items || []);
       selected=tree.byId.has(requestedCategory)?requestedCategory:'';
-      page=Number.isSafeInteger(requestedPage)&&requestedPage>0?requestedPage:1;
-      if(!selected&&!selectedTag)page=1;
+      page = 1;
+      treeReady = true;
       writeExploreRoute();
-      loadingTree = false; render(); if (selected || selectedTag) void loadItems(page);
+      loadingTree = false; render();
+      if (selected || selectedTag) {
+        if (!await loadItems(1)) return;
+        // A refreshed/bookmarked infinite list represents a prefix, not just its last page.
+        while (version === treeVersion && page < targetPage && !exhausted) {
+          if (!await loadItems(page + 1, true)) break;
+        }
+      }
     } catch (error) {
       if (version !== treeVersion) return;
       loadingTree = false; treeError = error.message || '分类加载失败'; render();
@@ -155,20 +211,21 @@
     if (category) { selectCategory(category.dataset.exploreCategory); return; }
     const more = event.target.closest('[data-explore-more]');
     if (more) { const key = more.dataset.exploreMore; expanded.set(key, (expanded.get(key) || 6) + 6); render(); return; }
-    const paging = event.target.closest('[data-explore-page]');
-    if (paging && !paging.disabled) { void loadItems(Number(paging.dataset.explorePage)); return; }
+    if (event.target.closest('[data-explore-load-more]')) { loadMoreItems(); return; }
     const detail = event.target.closest('[data-explore-detail]');
-    if (detail) { window.setViewMode('knowledge_detail', { targetNodeId: detail.dataset.exploreDetail }); return; }
+    if (detail) { savedScrollTop = panel.scrollTop; clearTimeout(scrollTimer); window.setViewMode('knowledge_detail', { targetNodeId: detail.dataset.exploreDetail }); return; }
     const node = event.target.closest('[data-explore-node]');
     if (node) {
+      savedScrollTop = panel.scrollTop; clearTimeout(scrollTimer);
       window.kbShortsLaunch = { nodes: items.slice(), category: name(tree.byId.get(selected)) };
       window.setViewMode('shorts', { targetNodeId: node.dataset.exploreNode }); return;
     }
-    if (event.target.closest('[data-explore-retry]')) void window.loadKnowledgeExplore();
-    if (event.target.closest('[data-explore-retry-items]')) void loadItems(page);
+    if (event.target.closest('[data-explore-retry]')) void window.loadKnowledgeExplore({ force: true });
+    if (event.target.closest('[data-explore-retry-items]')) void loadItems(retryPage, retryAppend);
     if (event.target.closest('[data-explore-workspace]')) window.setViewMode('table');
   });
   window.addEventListener('kb-auth-change', () => {
+    treeReady = false; loadedDatabase = null;
     treeVersion++; itemsVersion++; tree = buildExploreTree([]); items = []; selected = '';
     if (window.kbViewMode === 'app_explore') void window.loadKnowledgeExplore();
   });

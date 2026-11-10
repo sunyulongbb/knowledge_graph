@@ -11,8 +11,14 @@
     const url = new URL('/api/account/profile', location.origin);
     url.searchParams.set('section', section); url.searchParams.set('page', pageNumber);
     const response = await fetch(url, { cache: 'no-store' });
-    const data = await response.json();
-    if (!response.ok) { const error = new Error(data.error || '加载失败'); error.status = response.status; throw error; }
+    let data;
+    try { data = await response.json(); } catch {
+      const error = new Error(response.ok ? '服务器返回的数据格式异常，请稍后重试。' : `个人信息加载失败（${response.status}），请稍后重试或联系管理员。`);
+      error.status = response.status;
+      throw error;
+    }
+    if (!response.ok) { const error = new Error(data?.error || `个人信息加载失败（${response.status}）`); error.status = response.status; throw error; }
+    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('服务器返回的数据格式异常，请稍后重试。');
     return data;
   }
   function avatar(user) {
