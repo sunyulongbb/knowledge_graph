@@ -14243,3 +14243,7 @@ table th {
 
 /* Entity captions must not inherit the application header surface. */
 .knowledge-family-card-header { min-height:0; border:0; background:transparent; box-shadow:none; }
+
+.detail-video-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; }
+.detail-video-set-cover { display:inline-flex; align-items:center; min-height:32px; }
+.detail-video-cover-status { color:var(--muted); font-size:12px; line-height:1.6; }

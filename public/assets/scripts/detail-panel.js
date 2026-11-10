@@ -1932,6 +1932,7 @@
           let currentPlayerEl = null;
           let activePlaylistIndex = 0;
           let detailCoverSaveQueue = Promise.resolve();
+          let detailManualCoverSaving = false, detailVideoDeleting = false;
 
           const captureDetailVideoCover = (videoEl) => {
             if (!(videoEl instanceof HTMLVideoElement)) return "";
@@ -1947,40 +1948,49 @@
             return canvas.toDataURL("image/jpeg", 0.82);
           };
 
-          const updateDetailVideoCover = async (item, playerEl) => {
-            if (!item || item.coverValidationStarted) return;
+          const updateDetailVideoCover = async (item, playerEl, { manual = false } = {}) => {
+            if (!doc?.can_edit && !canEditDefaultApplication()) {
+              if (manual) throw new Error('没有修改此知识的权限');
+              return;
+            }
+            if (!item || (!manual && (item.coverValidationStarted || item.poster)) || detailVideoDeleting) return;
             item.coverValidationStarted = true;
+            const revision = manual ? (item.coverRevision = (item.coverRevision || 0) + 1) : (item.coverRevision || 0);
+
+            const updateUrl = new URL(
+              "/api/kb/nodes/update",
+              window.location.origin,
+            );
+            if (typeof window.appendCurrentDbParam === "function") {
+              const scopedUrl = window.appendCurrentDbParam(updateUrl);
+              if (scopedUrl instanceof URL) updateUrl.search = scopedUrl.search;
+            }
 
             // Vidstack mounts a native <video> below media-player. Give the
             // provider a short window to finish mounting/loading after play.
             let nativeVideo = null;
-            for (let attempt = 0; attempt < 8; attempt += 1) {
+            for (let attempt = 0; attempt < (manual ? 1 : 8); attempt += 1) {
               nativeVideo =
                 playerEl instanceof HTMLVideoElement
                   ? playerEl
                   : playerEl.querySelector?.("video") || null;
               if (nativeVideo?.readyState >= 2 && nativeVideo.videoWidth) break;
-              await new Promise((resolve) => setTimeout(resolve, 125));
+              if (!manual) await new Promise((resolve) => setTimeout(resolve, 125));
             }
 
             try {
+              if (revision !== (item.coverRevision || 0) || detailVideoDeleting) return;
               const coverData = captureDetailVideoCover(nativeVideo);
               if (!coverData) {
                 item.coverValidationStarted = false;
+                if (manual) throw new Error('视频画面尚未就绪，请播放或定位到需要的画面后重试');
                 return;
               }
               const saveTask = detailCoverSaveQueue.then(async () => {
+                if (revision !== (item.coverRevision || 0) || detailVideoDeleting) return null;
                 const nextCovers = [...coverList];
                 while (nextCovers.length < videoUrls.length) nextCovers.push("");
                 nextCovers[item.index] = coverData;
-                const updateUrl = new URL(
-                  "/api/kb/nodes/update",
-                  window.location.origin,
-                );
-                if (typeof window.appendCurrentDbParam === "function") {
-                  const scopedUrl = window.appendCurrentDbParam(updateUrl);
-                  if (scopedUrl instanceof URL) updateUrl.search = scopedUrl.search;
-                }
                 const response = await fetch(updateUrl.toString(), {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
@@ -1989,20 +1999,27 @@
                     covers: nextCovers,
                   }),
                 });
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                const result = await response.json();
-                if (result?.ok === false) {
-                  throw new Error(result.error || result.detail || "封面更新失败");
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok || result?.ok === false) {
+                  throw new Error(result.error || result.detail || `封面更新失败（${response.status}）`);
                 }
                 return { result, nextCovers };
               });
               detailCoverSaveQueue = saveTask.catch(() => null);
-              const { result, nextCovers } = await saveTask;
+              const savedResult = await saveTask;
+              if (!savedResult) return;
+              const { result, nextCovers } = savedResult;
               const savedCovers = normalizeDetailCoverSlots(result?.node?.covers);
               const savedCover = savedCovers[item.index] || coverData;
               coverList.splice(0, coverList.length, ...(savedCovers.length ? savedCovers : nextCovers));
               item.poster = savedCover;
               item.coverValidated = true;
+              doc.covers = [...coverList]; doc.cover = coverList[0] || '';
+              const nodeId = String(doc?._id || doc?.id || fullId).replace(/^entity\//, '');
+              for (const list of [window.kbTableNodes, window.kbShortsNodes]) {
+                const cached = Array.isArray(list) ? list.find(node => String(node._id || node.id).replace(/^entity\//, '') === nodeId) : null;
+                if (cached) { cached.covers = [...coverList]; cached.cover = coverList[0] || ''; }
+              }
               try {
                 if (playerEl instanceof HTMLVideoElement) playerEl.poster = savedCover;
                 else playerEl.setAttribute("poster", savedCover);
@@ -2014,10 +2031,31 @@
                 thumb.style.backgroundImage = `url("${savedCover.replace(/"/g, "%22")}")`;
               }
             } catch (error) {
-              item.coverValidationStarted = false;
+              if (revision === (item.coverRevision || 0)) item.coverValidationStarted = false;
+              if (manual) throw error;
               console.warn("详情页视频封面自动校验失败", error);
             }
           };
+
+          if (doc?.can_edit || canEditDefaultApplication()) {
+            const actions = document.createElement('div'); actions.className = 'detail-video-actions';
+            const coverButton = document.createElement('button'); coverButton.type = 'button'; coverButton.className = 'btn sm detail-video-set-cover';
+            coverButton.textContent = '设置当前帧为封面'; coverButton.title = '将播放器当前显示的画面保存为该视频的封面';
+            const coverStatus = document.createElement('span'); coverStatus.className = 'detail-video-cover-status';
+            coverStatus.setAttribute('role', 'status'); coverStatus.setAttribute('aria-live', 'polite');
+            coverButton.addEventListener('click', async () => {
+              if (detailManualCoverSaving || detailVideoDeleting || !currentPlayerEl) return;
+              const item = playlistItems[activePlaylistIndex], player = currentPlayerEl;
+              detailManualCoverSaving = true; coverButton.disabled = true; coverStatus.textContent = '正在保存封面…';
+              try {
+                await updateDetailVideoCover(item, player, { manual: true });
+                coverStatus.textContent = '已将所选画面设为封面';
+              } catch (error) {
+                coverStatus.textContent = error?.name === 'SecurityError' ? '无法读取该视频的画面，请检查视频的跨域访问设置。' : error?.message || '封面保存失败，请重试';
+              } finally { detailManualCoverSaving = false; coverButton.disabled = false; }
+            });
+            actions.append(coverButton, coverStatus); playerStage.appendChild(actions);
+          }
 
           const updatePlaylistSelection = () => {
             if (!playlistNav) return;
@@ -2032,8 +2070,9 @@
 
           const deleteDetailVideoAt = async (index, deleteButton) => {
             const item = playlistItems[index];
-            if (!item) return;
+            if (!item || detailManualCoverSaving || detailVideoDeleting) return;
             if (!window.confirm(`确定删除视频 ${index + 1}？`)) return;
+            detailVideoDeleting = true;
             if (deleteButton) deleteButton.disabled = true;
             try {
               // Finish any cover correction first so it cannot write an old
@@ -2075,7 +2114,7 @@
               if (deleteButton) deleteButton.disabled = false;
               console.warn("详情页视频删除失败", error);
               window.alert(`视频删除失败：${error?.message || error}`);
-            }
+            } finally { detailVideoDeleting = false; }
           };
 
           const renderPlayerAt = (nextIndex) => {
