@@ -715,7 +715,7 @@
       if (append) {
         const seen = new Set(homeNodes.map(node => String(node.id || node._id)));
         const incoming = (data.nodes || []).filter(node => { const id = String(node.id || node._id); if (seen.has(id)) return false; seen.add(id); return true; });
-        homeFeedExhausted = !(data.nodes || []).length;
+        homeFeedExhausted = !incoming.length;
         homeNodes = homeVisibleNodes = [...homeNodes, ...incoming]; homeBusy = false;
         window.homeWaterfall?.append(incoming.map(homeWaterfallCard).join('')); updateHomeInfiniteStatus();
       } else { homeNodes = homeVisibleNodes = (data.nodes || []).slice(0,homeRequestSize()); homeBusy = false; renderHome(); }

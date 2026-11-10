@@ -1,3 +1,4 @@
+#applicationHomePanel .home-discovery-main { overflow-anchor: none; }
 #applicationHomePanel .app-knowledge-panel.is-for-you-feed { border: 0; background: transparent; overflow: visible; }
 #applicationHomePanel .is-for-you-feed .app-home-section-heading { padding-inline: 0; }
 .for-you-masonry { position: relative; display: grid; grid-template-columns: repeat(auto-fit,minmax(min(260px,100%),1fr)); gap: 16px; min-height: 1px; overflow-anchor: none; }

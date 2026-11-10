@@ -74,3 +74,13 @@ test('only one next-page request runs at a time and a failed append can be retri
   await h.load(3,'',true);
   expect(h.state().homeNodes.map((node:any)=>node.id)).toEqual(['one','two','three']);
 });
+
+test('a page containing only duplicates stops further automatic appends', async () => {
+  let requests = 0;
+  const h = setup(async () => { requests++; return { total: 2400, nodes: [{ id: 'one' }] }; });
+  await h.load(1);
+  await h.load(2, '', true);
+  await h.load(3, '', true);
+  expect(requests).toBe(2);
+  expect(h.state().homeNodes).toEqual([{ id: 'one' }]);
+});

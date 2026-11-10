@@ -16,10 +16,16 @@
     mount({ container, root, sentinel, onMore }) {
       this.destroy();
       if (!container || !root || !sentinel) return;
-      let frame = 0, stopped = false;
+      let frame = 0, scrollTimer = 0, stopped = false;
       const check = () => {
+        scrollTimer = 0;
         if (stopped || !root.getClientRects().length || window.kbViewMode !== 'app_home') return;
-        if (sentinel.getBoundingClientRect().top < root.getBoundingClientRect().bottom + 500) onMore();
+        if (sentinel.getBoundingClientRect().top <= root.getBoundingClientRect().bottom + 150) onMore();
+      };
+      // Only a settled scroll may request another page. Layout/media updates never fetch.
+      const onScroll = () => {
+        clearTimeout(scrollTimer);
+        scrollTimer = setTimeout(check, 120);
       };
       const layout = () => {
         frame = 0;
@@ -31,24 +37,21 @@
         cards.forEach((card, index) => { card.style.transform = `translate(${result.positions[index].x}px, ${result.positions[index].y}px)`; });
         container.style.height = `${result.height}px`;
         container.classList.add('is-masonry-ready');
-        check();
       };
       const schedule = () => { if (!frame && !stopped) frame = requestAnimationFrame(layout); };
       const resize = typeof ResizeObserver === 'function' ? new ResizeObserver(schedule) : null;
       const observe = () => { resize?.observe(container); Array.from(container.children).forEach(card => resize?.observe(card)); schedule(); };
-      const intersection = typeof IntersectionObserver === 'function' ? new IntersectionObserver(check, { root, rootMargin: '500px 0px' }) : null;
-      intersection?.observe(sentinel);
       container.addEventListener('load', schedule, true);
       container.addEventListener('loadedmetadata', schedule, true);
-      root.addEventListener('scroll', check, { passive: true });
+      root.addEventListener('scroll', onScroll, { passive: true });
       window.addEventListener('resize', schedule);
       current = {
         append(html) { container.insertAdjacentHTML('beforeend', html); observe(); },
         update: schedule,
         destroy() {
-          stopped = true; cancelAnimationFrame(frame); resize?.disconnect(); intersection?.disconnect();
+          stopped = true; cancelAnimationFrame(frame); clearTimeout(scrollTimer); resize?.disconnect();
           container.removeEventListener('load', schedule, true); container.removeEventListener('loadedmetadata', schedule, true);
-          root.removeEventListener('scroll', check); window.removeEventListener('resize', schedule);
+          root.removeEventListener('scroll', onScroll); window.removeEventListener('resize', schedule);
         },
       };
       observe();
