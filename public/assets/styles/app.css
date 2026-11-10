@@ -5481,9 +5481,9 @@ body {
 }
 
 .class-module .taxonomy-tree {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   height: auto;
-  min-height: 120px;
+  min-height: 0;
   padding: 8px 6px 10px;
 }
 
@@ -5509,9 +5509,10 @@ body {
 }
 
 .taxonomy-tags {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   max-height: 38%;
-  min-height: 44px;
+  min-height: 54px;
+  box-sizing: border-box;
   overflow: auto;
   padding: 9px 10px 10px;
   border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
@@ -10559,15 +10560,29 @@ body {
   overflow: auto;
 }
 
-#tablePanel .tbl-wrap {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+#tablePanel,
+#tablePanel *,
+#classAttrPanel,
+#classAttrPanel * {
+  scrollbar-width: none !important;
+  scrollbar-gutter: auto !important;
+  -ms-overflow-style: none !important;
 }
 
-#tablePanel .tbl-wrap::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-  display: none;
+#tablePanel::-webkit-scrollbar,
+#tablePanel *::-webkit-scrollbar,
+#classAttrPanel::-webkit-scrollbar,
+#classAttrPanel *::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+}
+
+#tablePanel .scroll-view-wrapper .x-scroll,
+#tablePanel .scroll-view-wrapper .y-scroll,
+#classAttrPanel .scroll-view-wrapper .x-scroll,
+#classAttrPanel .scroll-view-wrapper .y-scroll {
+  display: none !important;
 }
 
 #cywrap {

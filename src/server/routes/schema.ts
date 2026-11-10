@@ -1,4 +1,5 @@
 import { reorderClasses } from '../class-reorder.ts';
+import { sortTags } from '../tag-order.ts';
 import { loadPropertyTailSuggestions } from '../property-tail-suggestions.ts';
 import { db, getProjectByIdentifier } from "../db.ts";
 import { resolve } from "path";
@@ -876,6 +877,24 @@ export async function handleSchemaRoutes(
     }
   }
 
+  if (url.pathname === "/api/kb/tags" && method === "GET") {
+    const values: unknown[] = [];
+    for (const table of ["classes", "nodes"]) {
+      const rows = db.query(`SELECT tags FROM ${table}${hasProjectScope ? " WHERE project_id = ?" : ""}`).all(...scopedProjectParams()) as any[];
+      for (const row of rows) {
+        try {
+          const tags = JSON.parse(row.tags || "[]");
+          if (Array.isArray(tags)) values.push(...tags);
+        } catch {}
+      }
+    }
+    try {
+      const extras = JSON.parse(url.searchParams.get("custom_tags") || "[]");
+      if (Array.isArray(extras)) values.push(...extras);
+    } catch {}
+    return Response.json({ tags: sortTags(values) });
+  }
+
   if (url.pathname === "/api/kb/classes" && method === "GET") {
     const q = url.searchParams.get("q") || "";
     const querySql = hasProjectScope
@@ -923,7 +942,7 @@ export async function handleSchemaRoutes(
           image: row.image,
           sort_order: row.sort_order,
           instance_count: row.instance_count ?? 0,
-          tags: rowTags,
+          tags: sortTags(Array.isArray(rowTags) ? rowTags : []),
           analyses: rowAnalyses,
         };
       });

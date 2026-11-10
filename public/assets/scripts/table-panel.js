@@ -812,6 +812,7 @@
         tblLoadedNodes = nodes;
         tblGridLoadExhausted = false;
       }
+      window.dispatchEvent(new CustomEvent("kb:table-nodes-updated"));
       window.kbTablePage = tblPage;
       window.kbTablePageSize = tblPageSize;
       window.kbTableTotalNodes = data.total || nodes.length;

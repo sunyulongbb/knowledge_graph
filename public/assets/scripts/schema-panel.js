@@ -485,13 +485,18 @@
     return await resp.json();
   }
 
+  let classLoadVersion = 0;
   async function loadClasses(q) {
+    const version = ++classLoadVersion;
+    window.kbClassesLoadState = "loading";
+    window.dispatchEvent(new CustomEvent("kb:class-tags-updated"));
     try {
       const url = appendCurrentDbToUrl(
         new URL("/api/kb/classes", window.location.origin),
       );
       if (q && q.trim()) url.searchParams.set("q", q.trim());
       const data = await apiGet(url.toString());
+      if (version !== classLoadVersion) return;
       // API returns array directly now, but handle {items: []} just in case
       let items = Array.isArray(data)
         ? data
@@ -512,8 +517,13 @@
         };
       });
       window.kbClasses = items;
+      window.kbClassesLoadState = "ready";
       renderClassTree(items);
+      window.dispatchEvent(new CustomEvent("kb:class-tags-updated"));
     } catch (e) {
+      if (version !== classLoadVersion) return;
+      window.kbClassesLoadState = "error";
+      window.dispatchEvent(new CustomEvent("kb:class-tags-updated"));
       console.error("loadClasses", e);
       clsTree.innerHTML = '<div class="muted">加载失败</div>';
     }
@@ -3197,6 +3207,8 @@
 
   let currentTagClassId = null;
   let currentTagClassTags = [];
+  let orderedProjectTags = [];
+  let tagRequestVersion = 0;
   let entityTagUpdatePending = false;
 
   function setTagCreateOpen(open) {
@@ -3270,24 +3282,7 @@
   }
 
   function getAllClassTags() {
-    const classes = Array.isArray(window.kbClasses) ? window.kbClasses : [];
-    const tagMap = new Map();
-    classes.forEach((cls) => {
-      const tags = Array.isArray(cls?.tags) ? cls.tags : [];
-      tags.forEach((rawTag) => {
-        const tag = (rawTag ?? "").toString().trim();
-        if (!tag) return;
-        const key = tag.toLowerCase();
-        if (!tagMap.has(key)) tagMap.set(key, tag);
-      });
-    });
-    normalizeTagArray(window.kbProjectNodeTags || []).forEach((tag) => {
-      const key = tag.toLowerCase();
-      if (!tagMap.has(key)) tagMap.set(key, tag);
-    });
-    return Array.from(tagMap.values()).sort((a, b) =>
-      a.localeCompare(b, "zh-CN"),
-    );
+    return orderedProjectTags.slice();
   }
 
   function syncProjectTagsFromTableNodes() {
@@ -3312,10 +3307,7 @@
       ...normalizeTagArray(tags),
     ]);
     if (!currentTagClassId) {
-      currentTagClassTags = getAllClassTags();
-      if (tagMgrDesc)
-        tagMgrDesc.textContent = `全部标签（${currentTagClassTags.length}）`;
-      renderTagList(currentTagClassTags);
+      showTagPanelForClass(null);
     } else {
       renderTagList(currentTagClassTags);
     }
@@ -3408,8 +3400,20 @@
       const hint = document.createElement("span");
       hint.className = "muted";
       hint.style.fontSize = "12px";
-      hint.textContent = "暂无标签";
+      hint.textContent = window.kbClassesLoadState === "loading"
+        ? "标签加载中…"
+        : window.kbClassesLoadState === "error"
+          ? "标签加载失败，请重试"
+          : "暂无标签";
       tagList.appendChild(hint);
+      if (window.kbClassesLoadState === "error") {
+        const retry = document.createElement("button");
+        retry.type = "button";
+        retry.className = "btn sm";
+        retry.textContent = "重试";
+        retry.addEventListener("click", () => loadClasses(""));
+        tagList.appendChild(retry);
+      }
       return;
     }
     const entityTags = getEntityTagSet();
@@ -3504,11 +3508,9 @@
         return;
       }
       saveCustomTags([...loadCustomTags(), val]);
-      currentTagClassTags = getAllClassTags();
       tagInput.value = "";
       setTagCreateOpen(false);
-      renderTagList(currentTagClassTags);
-      if (tagMgrDesc) tagMgrDesc.textContent = `全部标签（${currentTagClassTags.length}）`;
+      showTagPanelForClass(null);
       if (tagMsg) {
         tagMsg.textContent = "已新增标签";
         setTimeout(() => {
@@ -3542,13 +3544,33 @@
   }
 
   function showTagPanelForClass(cls) {
+    const version = ++tagRequestVersion;
     if (!cls) {
       currentTagClassId = null;
-      currentTagClassTags = getAllClassTags();
-      if (tagMgrDesc)
-        tagMgrDesc.textContent = `全部标签（${currentTagClassTags.length}）`;
       if (tagInput) tagInput.placeholder = "输入新标签…";
-      renderTagList(currentTagClassTags);
+      const url = appendCurrentDbToUrl(new URL("/api/kb/tags", window.location.origin));
+      url.searchParams.set("custom_tags", JSON.stringify(loadCustomTags()));
+      if (!tagList.childNodes.length) tagList.textContent = "标签加载中…";
+      apiGet(url.toString()).then((data) => {
+        if (version !== tagRequestVersion) return;
+        orderedProjectTags = Array.isArray(data.tags) ? data.tags : [];
+        currentTagClassTags = getAllClassTags();
+        if (tagMgrDesc) tagMgrDesc.textContent = `全部标签（${currentTagClassTags.length}）`;
+        if (tagMsg) tagMsg.textContent = "";
+        renderTagList(currentTagClassTags);
+      }).catch(() => {
+        if (version !== tagRequestVersion) return;
+        if (tagMsg) {
+          tagMsg.textContent = "标签加载失败 ";
+          const retry = document.createElement("button");
+          retry.type = "button";
+          retry.className = "btn sm";
+          retry.textContent = "重试";
+          retry.onclick = () => showTagPanelForClass(null);
+          tagMsg.appendChild(retry);
+        }
+        if (!currentTagClassTags.length) tagList.textContent = "";
+      });
       return;
     }
     currentTagClassId = cls.id;
@@ -3638,13 +3660,15 @@
     );
   }
 
-  // Default to all tags when no class is selected
-  setTimeout(() => {
-    try {
-      syncProjectTagsFromTableNodes();
-      if (!window.kbSelectedClassId) showTagPanelForClass(null);
-    } catch {}
-  }, 200);
+  function refreshLoadedTags() {
+    syncProjectTagsFromTableNodes();
+    const selected = (window.kbClasses || []).find(
+      (item) => item.id === window.kbSelectedClassId,
+    );
+    showTagPanelForClass(selected || null);
+  }
+  window.addEventListener("kb:class-tags-updated", refreshLoadedTags);
+  refreshLoadedTags();
 
   window.showTagPanelForClass = showTagPanelForClass;
   window.refreshClsNewOptions = refreshClsNewOptions;

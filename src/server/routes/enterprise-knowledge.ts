@@ -1,4 +1,5 @@
 import type { EnterpriseKnowledgeSearch } from '../enterprise-search.ts';
+import { sortTags } from '../tag-order.ts';
 import type { EnterpriseSqliteBackup } from '../enterprise-sqlite-backup.ts';
 import { prepareEntityImageValues } from '../entity-media-images.ts';
 import { marked } from 'marked';
@@ -41,6 +42,7 @@ const schemaReadPaths = new Set(['/api/kb/ontologies', '/api/kb/ontology/tree', 
 const propertyWritePaths = new Set(['/api/kb/property_create', '/api/kb/property_update', '/api/kb/property_delete', '/api/kb/ontology/property']);
 export const enterpriseMediaPath = (path: string) => /^\/static\/uploads\/(?:.*\/)?(node-images|node-videos|node-pdfs)\//i.test(path.replace(/\/{2,}/g, '/'));
 export function enterpriseKnowledgePath(path: string) {
+  if (path === '/api/kb/tags') return true;
   return enterpriseMediaPath(path) || /^\/api\/kb\/(?:discover\/|geography\/|reports(?:\/|$)|node(?:s)?(?:\/|$)|node-types$|entity(?:_|\/)|attributes(?:\/|$)|relations(?:\/|$)|graph$|edge$|stats$|classes$|gallery_|knowledge-|entry(?:\/|$)|shorts_|fetch$|clean\/)/.test(path)
     || path.startsWith('/api/wiki/') || path.startsWith('/api/knowledge/') || path.startsWith('/api/comments/') || path.startsWith('/api/sparql/import');
 }
@@ -327,6 +329,18 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
           }
           return Response.json({ nodes: page.nodes.map(resultNode), total: page.total, searchBackend: backend }, { headers: { 'X-Knowledge-Search': backend } });
         }
+        if (path === '/api/kb/tags' && method === 'GET') {
+          const parseTags = (raw: any): any[] => {
+            try { const value = typeof raw === 'string' ? JSON.parse(raw) : raw; return Array.isArray(value) ? value : []; }
+            catch { return []; }
+          };
+          const tags = await store.tags(database, user);
+          return Response.json({ tags: sortTags([
+            ...tags,
+            ...(schema?.classes || []).flatMap(cls => parseTags(cls.tags)),
+            ...parseTags(url.searchParams.get('custom_tags')),
+          ]) });
+        }
         if (path === '/api/kb/classes' && method === 'GET') {
           const summary = await store.summary(database, user);
           const counts = new Map(summary.categories.map((row: Doc) => [row.id, row.count]));
@@ -334,7 +348,7 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
           const parse = (value: any) => { try { return typeof value === 'string' ? JSON.parse(value) : value || []; } catch { return []; } };
           return Response.json((schema?.classes || []).filter(cls => String(cls.name || '').toLowerCase().includes(q)).map(cls => ({
             ...cls, label: cls.name, parent: cls.parent_id, instance_count: counts.get(cls.id) || 0,
-            tags: parse(cls.tags), analyses: parse(cls.analyses),
+            tags: sortTags(parse(cls.tags)), analyses: parse(cls.analyses),
           })));
         }
         if (path === '/api/kb/entity/class') {

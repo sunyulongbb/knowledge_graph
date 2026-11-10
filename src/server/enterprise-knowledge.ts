@@ -240,6 +240,18 @@ export class EnterpriseKnowledgeStore {
       RETURN { total, nodes }`, binds);
     return rows[0] || { total: 0, nodes: [] };
   }
+  async tags(database: string, user: KnowledgeUser | null): Promise<string[]> {
+    const rows = await this.query(database, `FOR doc IN entity FILTER ${READ_FILTER}
+      LET tags = IS_ARRAY(doc.tags) ? doc.tags : (IS_STRING(doc.tags) ? JSON_PARSE(doc.tags) : [])
+      FOR tag IN (IS_ARRAY(tags) ? tags : [])
+      FILTER IS_STRING(tag) AND TRIM(tag) != ''
+      COLLECT name = TRIM(tag) RETURN name`, {
+      full: Boolean(user?.fullAccess), admin: user?.role === 'admin', uid: user?.id || -1,
+      projects: [...(user?.ownedProjectIds || []), ...(user?.memberProjectIds || [])],
+    });
+    return rows as string[];
+  }
+
   async summary(database: string, user: KnowledgeUser | null) {
     const bindVars = { full: Boolean(user?.fullAccess), admin: user?.role === 'admin', uid: user?.id || -1,
       projects: [...(user?.ownedProjectIds || []), ...(user?.memberProjectIds || [])] };
