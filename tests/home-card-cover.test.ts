@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 const source = readFileSync('public/assets/scripts/application-pages.js','utf8');
 const helpers = source.slice(source.indexOf('  function imageCandidates('),source.indexOf('  let homeDetailDrawer'));
 const card = source.slice(source.indexOf('  function homeKnowledgeCard('),source.indexOf('  function applicationBanner('));
-const render = new Function('escape', helpers + card + '; return homeKnowledgeCard;')((value:any)=>String(value??'').replace(/"/g,'&quot;'));
+const render = new Function('escape', 'knowledgeCardTags', helpers + card + '; return homeKnowledgeCard;')((value:any)=>String(value??'').replace(/"/g,'&quot;'),()=> '');
 test('home cards prefer images and video covers, using metadata only when no image exists', () => {
   const image = render({id:'a',images:'["/photo.jpg"]',covers:['/poster.jpg'],videos:['/video.mp4']});
   expect(image).toContain('src="/photo.jpg"');expect(image).not.toContain('<video');

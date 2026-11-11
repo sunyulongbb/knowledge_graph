@@ -77,7 +77,7 @@
     ]).then(() => true);
   </script>
   <link rel="stylesheet" href="/assets/styles/app.css?v=20261111-current-frame-cover" />
-  <link rel="stylesheet" href="/assets/styles/home-discovery.css?v=20261110-search-shell" />
+  <link rel="stylesheet" href="/assets/styles/home-discovery.css?v=20261112-auth-actions" />
   <link rel="stylesheet" href="/assets/styles/shorts-page.css?v=20261111-borderless-cards" />
   <link rel="stylesheet" href="/assets/styles/knowledge-card-tags.css?v=20261111-1" />
   <link rel="stylesheet" href="/assets/styles/search-trends.css?v=20261111-1" />
@@ -3766,6 +3766,7 @@
                 <button id="btnDetailNext" class="btn" type="button" disabled>下一个 <i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>
               </div>
               <div id="knowledgeInteractionBar" class="knowledge-interaction-bar" aria-label="知识互动">
+                <span class="knowledge-interaction-btn" aria-label="浏览量"><i class="fa-regular fa-eye" aria-hidden="true"></i><span>浏览</span><b id="knowledgeViewCount" data-knowledge-views="">0</b></span>
                 <button id="btnKnowledgeLike" class="knowledge-interaction-btn" type="button"><i class="fa-regular fa-thumbs-up"></i><span>点赞</span><b id="knowledgeLikeCount">0</b></button>
                 <button id="btnKnowledgeComment" class="knowledge-interaction-btn" type="button"><i class="fa-regular fa-comment"></i><span>评论</span><b id="knowledgeCommentCount">0</b></button>
                 <button id="btnKnowledgeShare" class="knowledge-interaction-btn" type="button"><i class="fa-solid fa-share-nodes"></i><span>转发</span><b id="knowledgeShareCount">0</b></button>
@@ -4872,7 +4873,9 @@
             <button type="button" data-home-new-tab="true" data-home-action="applications" title="应用中心"><i class="fa-solid fa-layer-group" aria-hidden="true"></i><span>应用中心</span></button>
           </div>
           <div class="home-discovery-footer">
-            <button type="button" data-home-action="account" title="个人信息" aria-label="个人信息"><i id="homeDiscoveryAvatar" class="home-sidebar-avatar fa-regular fa-user" aria-hidden="true"></i><span id="homeDiscoveryAccount">登录</span></button>
+            <button id="homeDiscoveryLogin" type="button" data-home-action="login" title="登录" aria-label="登录"><i class="fa-solid fa-arrow-right-to-bracket" aria-hidden="true"></i><span>登录</span></button>
+            <button id="homeDiscoveryAccountButton" type="button" data-home-action="account" title="个人信息" aria-label="个人信息" hidden><i id="homeDiscoveryAvatar" class="home-sidebar-avatar fa-regular fa-user" aria-hidden="true"></i><span id="homeDiscoveryAccount">登录</span></button>
+            <button id="homeDiscoveryLogout" type="button" data-home-action="logout" title="退出登录" aria-label="退出登录" hidden><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i><span>退出登录</span></button>
             <button type="button" data-home-action="theme" title="切换主题"><i class="fa-solid fa-circle-half-stroke" aria-hidden="true"></i><span>切换主题</span></button>
           </div>
         </aside>
@@ -17712,26 +17715,27 @@
   <script src="/assets/scripts/schema-panel.js?v=20261110-server-tag-order"></script>
   <script src="/assets/scripts/relation-insights.js?v=20261105-compact-list"></script>
   <script src="/assets/scripts/wiki-clipboard.js?v=20261105-html-paste"></script>
-  <script src="/assets/scripts/account-history.js?v=20261110-1"></script>
-  <script src="/assets/scripts/detail-panel.js?v=20261111-current-frame-cover"></script>
+  <script src="/assets/scripts/knowledge-views.js?v=20261112-1"></script>
+  <script src="/assets/scripts/account-history.js?v=20261112-view-counts"></script>
+  <script src="/assets/scripts/detail-panel.js?v=20261112-view-counts"></script>
   <script src="/assets/scripts/graph-classification.js?v=20261012"></script>
   <script src="/assets/scripts/graph-details.js?v=20261012-classification"></script>
   <script src="/assets/scripts/knowledge-interactions.js?v=20260904-1"></script>
   <script src="/assets/scripts/knowledge-access.js?v=20261011-member-access"></script>
   <script src="/assets/scripts/applications.js?v=20260927-settings-layout"></script>
   <script src="/assets/scripts/user-management.js?v=20260915-1"></script>
-  <script src="/assets/scripts/home-media-viewer.js?v=20261111-close-collapses"></script>
-  <script src="/assets/scripts/shorts-page.js?v=20261110-home-shell"></script>
+  <script src="/assets/scripts/home-media-viewer.js?v=20261112-personal-recommendations"></script>
+  <script src="/assets/scripts/shorts-page.js?v=20261112-menu-refresh"></script>
   <script src="/assets/scripts/manual-classify.js?v=20260929-existing-classes"></script>
   <script src="/assets/scripts/knowledge-context-menu.js?v=20260928-3"></script>
   <script src="/assets/scripts/quick-knowledge.js?v=20261111-category-expanded"></script>
   <script src="/assets/scripts/home-waterfall.js?v=20261111-compact-columns"></script>
   <script src="/assets/scripts/home-sidebar.js?v=20261110-brand-only"></script>
-  <script src="/assets/scripts/application-pages.js?v=20261111-card-tags"></script>
+  <script src="/assets/scripts/application-pages.js?v=20261112-menu-refresh"></script>
   <script src="/assets/scripts/knowledge-learning.js?v=20261111-copy-cleanup"></script>
   <script src="/assets/scripts/knowledge-relation-page.js?v=20261111-close-collapses"></script>
-  <script src="/assets/scripts/knowledge-big-bang.js?v=20261111-hidden-controls"></script>
-  <script src="/assets/scripts/knowledge-explore.js?v=20261111-card-tags"></script>
+  <script src="/assets/scripts/knowledge-big-bang.js?v=20261112-view-counts"></script>
+  <script src="/assets/scripts/knowledge-explore.js?v=20261112-view-counts"></script>
   <script src="/assets/scripts/user-profile.js?v=20261110-api-errors"></script>
   <script src="/assets/scripts/sidebar-panel.js?v=20260924-4"></script>
   <script src="/assets/scripts/auth-panel.js?v=20261012-user-id"></script>

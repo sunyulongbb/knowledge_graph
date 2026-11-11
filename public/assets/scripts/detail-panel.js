@@ -1607,7 +1607,11 @@
       const data = await resp.json();
       if (!isLatestDetailLoad()) return;
       const doc = data && data.node;
-      if(doc) window.recordKnowledgeView?.(doc.id || doc._id);
+      if (doc) {
+        const viewCount = document.getElementById('knowledgeViewCount');
+        if (viewCount) { viewCount.dataset.knowledgeViews = String(doc.id || doc._id).replace(/^entity\//,''); viewCount.dataset.db = new URLSearchParams(window.location.search).get('db') || 'default'; viewCount.textContent = String(Number(doc.viewCount) || 0); }
+        window.recordKnowledgeView?.(doc.id || doc._id);
+      }
       const neighbors = data && data.neighbors;
       if (!doc) {
         inner.querySelector("#wikiView").innerHTML =

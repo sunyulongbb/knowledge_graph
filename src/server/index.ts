@@ -1,3 +1,5 @@
+import { createKnowledgeRecommendations } from './knowledge-recommendations.ts';
+import { createKnowledgeViews } from './knowledge-views.ts';
 import { apiErrorResponse } from './api-error.ts';
 import { EnterpriseKnowledgeSearch } from './enterprise-search.ts';
 import { createLearningHandler } from './learning.ts';
@@ -63,6 +65,7 @@ const handleGraphCanvases = createGraphCanvasHandler(adminDb, getKnowledgeUser, 
 
 console.log(`[Knowledge storage] ${enterpriseKnowledgeEnabled() ? 'arangodb (Enterprise)' : 'sqlite (Lite)'}`);
 const enterpriseStore = enterpriseKnowledgeEnabled() ? EnterpriseKnowledgeStore.configured() : null;
+const knowledgeViews = createKnowledgeViews({db:adminDb,store:enterpriseStore,getUser:getKnowledgeUser,getProject:getProjectByIdentifier});
 const accountActivity = createAccountActivity({ db: adminDb, store: enterpriseStore, getUser: getCurrentUser, getProject: getProjectByIdentifier });
 const handleUserProfile = createUserProfileHandler(adminDb, getCurrentUser, accountActivity);
 const handleLearning = createLearningHandler({ db: adminDb, store: enterpriseStore, getUser: getCurrentUser, getKnowledgeUser, getProject: getProjectByIdentifier });
@@ -96,6 +99,10 @@ const handleEnterpriseKnowledge = enterpriseStore ? createEnterpriseKnowledgeHan
     ontology_properties: adminDb.query('SELECT op.* FROM ontology_properties op JOIN ontologies o ON o.id=op.ontology_id WHERE o.project_id=?').all(project.id),
   }),
 }) : null;
+const recommendations = createKnowledgeRecommendations({
+  db: adminDb, store: enterpriseStore, getUser: getKnowledgeUser, getProject: getProjectByIdentifier,
+  search: async (req, url) => (await handleEnterpriseKnowledge?.(req, url, 'GET')) || await handleCoreKbRoutes(req, url, 'GET'),
+});
 const handleSqliteKnowledgeSync = createSqliteKnowledgeSync({
   db: adminDb, getUser: getCurrentUser, getProject: getProjectByIdentifier,
   store: enterpriseStore, sync: enterpriseSync,
@@ -140,6 +147,10 @@ const server = Bun.serve({
       const requestUrl = url;
       const response = await knowledgeContext.run({ user: getKnowledgeUser(req) }, async () => {
       const url = requestUrl;
+      const recommendationResponse = await recommendations.handle(req, url);
+      if (recommendationResponse) return recommendationResponse;
+      const viewResponse = await knowledgeViews.handle(req, url);
+      if (viewResponse) return viewResponse;
       const activityResponse = await accountActivity.handle(req, url);
       if (activityResponse) return activityResponse;
       const learningResponse = await handleLearning(req, url);
@@ -202,8 +213,9 @@ const server = Bun.serve({
 
       return new Response("Not Found", { status: 404 });
       });
-      if (requestUrl.pathname.startsWith('/api/')) response.headers.set('Cache-Control', 'private, no-store');
-      return response;
+      const countedResponse = await knowledgeViews.decorate(response, requestUrl);
+      if (requestUrl.pathname.startsWith('/api/')) countedResponse.headers.set('Cache-Control', 'private, no-store');
+      return countedResponse;
     } catch (e) {
       console.warn(
         `${method} - ${url && url.pathname ? url.pathname : "unknown"} failed`,

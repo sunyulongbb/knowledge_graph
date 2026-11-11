@@ -7,6 +7,7 @@
   let homeHoverCategory = '', homeHoverTimer;
   let homePage = 1, homeTotal = 0, homeBusy = false, homeError = '';
   const homePageSize = 24;
+  let homeRecommendationSeed = crypto.randomUUID();
   let homeFeedExhausted = false;
   let homeFeed = readHomeFeed();
   function readHomeFeed() {
@@ -22,6 +23,13 @@
     return homeFeed === 'popular' ? 'popular' : homeFeed === 'news' ? 'created_desc' : 'richness';
   }
   function homeRequestSize() { return homeFeed === 'popular' ? 30 : homePageSize; }
+  function syncHomeAuthActions() {
+    const signedIn = Boolean(window.authUser);
+    const login = byId('homeDiscoveryLogin'), logout = byId('homeDiscoveryLogout'), account = byId('homeDiscoveryAccountButton');
+    if (login) login.hidden = signedIn;
+    if (logout) logout.hidden = !signedIn;
+    if (account) account.hidden = !signedIn;
+  }
   function syncHomeNavigation() {
     document.body.classList.toggle('home-popular-active', window.kbViewMode === 'app_home' && homeFeed === 'popular');
     document.querySelectorAll('[data-home-feed]').forEach(button => {
@@ -58,6 +66,7 @@
         logo.append(img);
       }
     }
+    syncHomeAuthActions();
     const account = byId('homeDiscoveryAccount');
     if (account) account.textContent = window.authUser?.displayName || window.authUser?.username || '登录';
     const avatar = byId('homeDiscoveryAvatar');
@@ -290,7 +299,7 @@
   function homePopularRow(node, index) {
     const id=node.id||node._id||'', title=node.name||node.label||node.title||id;
     const image=firstImage(node)||firstCover(node),video=firstVideo(node),stats=node.engagement;
-    return `<article class="home-popular-row" data-home-node-id="${escape(id)}"><span class="home-popular-rank ${index<3?'is-top-'+(index+1):''}">${String(index+1).padStart(2,'0')}</span><button type="button" data-home-open="shorts" class="home-popular-thumb" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}">${image?`<img src="${escape(image)}" alt="" loading="lazy">`:video?`<video src="${escape(video)}" muted playsinline preload="metadata"></video>`:'<i class="fa-regular fa-lightbulb" aria-hidden="true"></i>'}${video?'<span><i class="fa-solid fa-play" aria-hidden="true"></i> 视频</span>':''}</button><div class="home-popular-copy"><div class="home-popular-meta"><span>${escape(node.typeLabel||node.type||'知识')}</span><time>${escape(shortDate(node.updated_at||node.created_at))}</time></div><button class="home-popular-title" type="button" data-home-node-id="${escape(id)}">${escape(title)}</button>${node.description?`<p>${escape(node.description)}</p>`:''}${knowledgeCardTags(node)}<div class="home-popular-actions">${stats?`<span><i class="fa-regular fa-heart" aria-hidden="true"></i> ${Number(stats.likes)||0}</span><span><i class="fa-regular fa-comment" aria-hidden="true"></i> ${Number(stats.comments)||0}</span><span><i class="fa-solid fa-share" aria-hidden="true"></i> ${Number(stats.shares)||0}</span>`:''}<button type="button" data-home-node-id="${escape(id)}">查看详情 <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></button></div></div></article>`;
+    return `<article class="home-popular-row" data-home-node-id="${escape(id)}"><span class="home-popular-rank ${index<3?'is-top-'+(index+1):''}">${String(index+1).padStart(2,'0')}</span><button type="button" data-home-open="shorts" class="home-popular-thumb" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}">${image?`<img src="${escape(image)}" alt="" loading="lazy">`:video?`<video src="${escape(video)}" muted playsinline preload="metadata"></video>`:'<i class="fa-regular fa-lightbulb" aria-hidden="true"></i>'}${video?'<span><i class="fa-solid fa-play" aria-hidden="true"></i> 视频</span>':''}</button><div class="home-popular-copy"><div class="home-popular-meta"><span>${escape(node.typeLabel||node.type||'知识')}</span><time>${escape(shortDate(node.updated_at||node.created_at))}</time></div><button class="home-popular-title" type="button" data-home-node-id="${escape(id)}">${escape(title)}</button>${node.description?`<p>${escape(node.description)}</p>`:''}${knowledgeCardTags(node)}<div class="home-popular-actions"><span title="浏览量"><i class="fa-regular fa-eye" aria-hidden="true"></i> <b data-knowledge-views="${escape(id)}">${Number(node.viewCount)||0}</b></span>${stats?`<span><i class="fa-regular fa-heart" aria-hidden="true"></i> ${Number(stats.likes)||0}</span><span><i class="fa-regular fa-comment" aria-hidden="true"></i> ${Number(stats.comments)||0}</span><span><i class="fa-solid fa-share" aria-hidden="true"></i> ${Number(stats.shares)||0}</span>`:''}<button type="button" data-home-node-id="${escape(id)}">查看详情 <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></button></div></div></article>`;
   }
   function homeWaterfallCard(node) {
     const id = node.id || node._id || '';
@@ -306,7 +315,7 @@
     return `<article class="for-you-card" data-home-node-id="${escape(id)}">
       ${picture ? `<button data-home-open="shorts" class="for-you-card-media" type="button" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}的媒体">${picture}${video?'<span class="for-you-video-badge"><i class="fa-solid fa-play" aria-hidden="true"></i></span>':''}</button>` : `<button type="button" class="for-you-card-quote palette-${palette}${titleSize}" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}"><span class="for-you-note-label"><i class="fa-solid fa-book-open" aria-hidden="true"></i> ${escape(node.typeLabel || '\u77e5\u8bc6\u624b\u8bb0')}</span><strong class="for-you-card-text-title">${escape(title)}</strong>${description ? `<p>${escape(description.slice(0,360))}</p>` : ''}</button>`}
       <div class="for-you-card-content">${picture ? `<button type="button" class="for-you-card-title" data-home-node-id="${escape(id)}">${escape(title)}</button>` : ''}
-      ${knowledgeCardTags(node)}<div class="for-you-card-meta"><span class="for-you-avatar" aria-hidden="true">${escape(Array.from(String(author))[0] || '')}</span><span class="for-you-card-author">${escape(author)}</span>${likes !== undefined ? `<span class="for-you-card-stat"><i class="fa-regular fa-heart" aria-hidden="true"></i> ${Number(likes)||0}</span>` : `<time>${escape(shortDate(node.updated_at || node.created_at))}</time>`}</div></div>
+      ${knowledgeCardTags(node)}<div class="for-you-card-meta"><span class="for-you-avatar" aria-hidden="true">${escape(Array.from(String(author))[0] || '')}</span><span class="for-you-card-author">${escape(author)}</span><span class="for-you-card-stat" title="浏览量"><i class="fa-regular fa-eye" aria-hidden="true"></i> <b data-knowledge-views="${escape(id)}">${Number(node.viewCount)||0}</b></span>${likes !== undefined ? `<span class="for-you-card-stat"><i class="fa-regular fa-heart" aria-hidden="true"></i> ${Number(likes)||0}</span>` : `<time>${escape(shortDate(node.updated_at || node.created_at))}</time>`}</div></div>
     </article>`;
   }
   function homeKnowledgeCard(node) {
@@ -317,7 +326,7 @@
     const id = node.id || node._id || '';
     return `<article class="app-home-knowledge-card" data-home-node-id="${escape(id)}">
       <button type="button" data-home-open="shorts" class="app-home-card-media${cover || video ? '' : ' is-placeholder'}" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}">${cover ? `<img src="${escape(cover)}" alt="" loading="lazy">` : video ? `<video src="${escape(video)}" muted playsinline preload="metadata"></video><span class="app-media-type"><i class="fa-solid fa-play" aria-hidden="true"></i> 视频</span>` : '<i class="fa-solid fa-lightbulb" aria-hidden="true"></i>'}</button>
-      <div class="app-home-card-body"><div class="app-home-card-meta"><span>${escape(node.typeLabel || node.type || '知识实体')}</span><time>${escape(shortDate(node.updated_at || node.created_at))}</time></div><button type="button" class="app-home-card-title" title="${escape(title)}" data-home-node-id="${escape(id)}">${escape(title)}</button>${knowledgeCardTags(node)}<div class="app-home-card-footer"><span class="app-home-card-id">${escape(id)}</span><span>查看详情 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span></div></div>
+      <div class="app-home-card-body"><div class="app-home-card-meta"><span>${escape(node.typeLabel || node.type || '知识实体')}</span><time>${escape(shortDate(node.updated_at || node.created_at))}</time></div><button type="button" class="app-home-card-title" title="${escape(title)}" data-home-node-id="${escape(id)}">${escape(title)}</button>${knowledgeCardTags(node)}<div class="app-home-card-footer"><span title="浏览量"><i class="fa-regular fa-eye" aria-hidden="true"></i> <b data-knowledge-views="${escape(node.id || node._id || '')}">${Number(node.viewCount)||0}</b></span><span class="app-home-card-id">${escape(id)}</span><span>查看详情 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span></div></div>
     </article>`;
   }
   function applicationBanner() {
@@ -709,12 +718,13 @@
   }
   async function loadHomePage(nextPage = 1, category = homeSelectedCategory, append = false) {
     if (homeFeed === 'popular') { nextPage=1; category=''; append=false; }
+    if (!append && nextPage === 1 && homeFeed === 'for-you') homeRecommendationSeed = crypto.randomUUID();
     if (append && (homeBusy || homeFeedExhausted || category !== homeSelectedCategory || nextPage !== homePage + 1)) return;
     const version = ++homeVersion;
     homeBusy = true; homeError = ''; homeRetry = { page: nextPage, category, append };
     if (append) updateHomeInfiniteStatus(); else { homeFeedExhausted = false; renderHome(); }
     try {
-      const data = await api('/api/kb/discover/search', { order: homeFeedOrder(), limit: homeRequestSize(), offset: (nextPage - 1) * homeRequestSize(), class_id: category, hide_entity: '1', defined_class_only: '1' });
+      const data = await api(homeFeed === 'for-you' ? '/api/kb/recommendations' : '/api/kb/discover/search', { recommendation_seed: homeRecommendationSeed, order: homeFeedOrder(), limit: homeRequestSize(), offset: (nextPage - 1) * homeRequestSize(), class_id: category, hide_entity: '1', defined_class_only: '1' });
       if (version !== homeVersion) return;
       const count = Math.max(0, Number(data.total) || 0);
       const lastPage = Math.max(1, Math.ceil(count / homeRequestSize()));
@@ -811,7 +821,7 @@
   window.closeHomeDetailDrawer = closeHomeDetailDrawer;
   window.addEventListener('hashchange', closeHomeDetailDrawer);
   window.loadApplicationHome = async function () {
-    homeFeed=readHomeFeed();writeHomeFeedRoute();
+    homeFeed=readHomeFeed();writeHomeFeedRoute(); homeRecommendationSeed=crypto.randomUUID();
     window.homeWaterfall?.destroy(); homeFeedExhausted = false;
     syncHomeNavigation();
     const version = ++homeVersion;
@@ -820,7 +830,7 @@
     homeHoverCategory = '';
     homeSelectedCategory = ''; homePage = 1; homeTotal = 0; homeBusy = false; homeError = '';
     const results = await Promise.allSettled([
-      api('/api/kb/discover/search', { order: homeFeedOrder(), limit: homeRequestSize(), offset: 0, hide_entity: '1', defined_class_only: '1' }),
+      api(homeFeed === 'for-you' ? '/api/kb/recommendations' : '/api/kb/discover/search', { recommendation_seed: homeRecommendationSeed, order: homeFeedOrder(), limit: homeRequestSize(), offset: 0, hide_entity: '1', defined_class_only: '1' }),
       api('/api/kb/classes'),
       api('/api/applications', { scope: 'market' }),
     ]);
@@ -853,7 +863,10 @@
     if (event.target.closest('[data-home-infinite-retry]')) { void loadHomePage(homeRetry.page, homeRetry.category, homeRetry.append); return; }
     const feed = event.target.closest('[data-home-feed]');
     if (feed) {
-      if (homeFeed === feed.dataset.homeFeed && window.kbViewMode === 'app_home') return;
+      if (homeFeed === feed.dataset.homeFeed && window.kbViewMode === 'app_home') {
+        if (homeFeed === 'for-you') void window.loadApplicationHome?.();
+        return;
+      }
       homeFeed = feed.dataset.homeFeed;
       writeHomeFeedRoute();
       if (window.kbViewMode !== 'app_home') { window.setViewMode('app_home'); return; }
@@ -872,7 +885,10 @@
     }
     const action = event.target.closest('[data-home-action]')?.dataset.homeAction;
     if (!action) return;
+    if (action === 'shorts' && window.kbViewMode === 'shorts') { void window.refreshShortsPage?.(); return; }
     if (action === 'theme') { byId('btnTheme')?.click(); return; }
+    if (action === 'login') { byId('btnAuth')?.click(); return; }
+    if (action === 'logout') { void window.logout?.(); return; }
     if (action === 'account') { if (window.authUser) window.setViewMode?.('profile'); else byId('btnAuth')?.click(); return; }
     if (action === 'create') { window.openQuickKnowledge?.(); return; }
     window.setViewMode?.(action);
@@ -1072,6 +1088,7 @@
   syncHomeNavigation();
   window.addEventListener('kb-auth-change', refresh);
   window.addEventListener('kb-auth-change', syncHomeNavigation);
+  syncHomeAuthActions();
   window.addEventListener('kb:knowledge-created', () => {
     if (window.kbViewMode === 'app_home') window.loadApplicationHome();
     if (window.kbViewMode === 'app_explore') window.loadKnowledgeExplore?.();
