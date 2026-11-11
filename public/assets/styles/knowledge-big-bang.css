@@ -8,7 +8,11 @@
 .knowledge-big-bang header p { margin:0; color:var(--muted); font-size:12px; }
 .knowledge-big-bang button { pointer-events:auto; border:1px solid var(--border); border-radius:20px; padding:9px 16px; color:var(--fg); background:color-mix(in srgb,var(--surface-0) 94%,transparent); cursor:pointer; }
 .knowledge-big-bang button:hover { background:var(--surface-1); }
-.knowledge-big-bang button:focus-visible,.knowledge-big-bang canvas:focus-visible { outline:2px solid var(--accent); outline-offset:-3px; }
+.knowledge-big-bang button:focus-visible { outline:2px solid var(--accent); outline-offset:-3px; }
+.knowledge-big-bang canvas:focus,
+.knowledge-big-bang canvas:focus-visible,
+.big-bang-card-video > video:focus,
+.big-bang-card-video > video:focus-visible { outline:none; border:0; box-shadow:none; }
 .knowledge-big-bang header > button { align-self:flex-start; font-size:22px; }
 .knowledge-big-bang footer { position:absolute; bottom:24px; left:28px; right:28px; display:flex; align-items:center; justify-content:space-between; gap:12px; color:var(--muted); font-size:12px; pointer-events:none; }
 .knowledge-big-bang footer div { display:flex; gap:8px; }
@@ -39,3 +43,18 @@ body.home-big-bang-active > header { display:none !important; }
   --universe-card-3:color-mix(in srgb,#c5a16b 20%,var(--surface-0));
   --universe-card-4:color-mix(in srgb,#76a18a 20%,var(--surface-0));
 }
+.big-bang-selection [data-play][hidden] { display:none; }
+.big-bang-selection [data-play] { background:var(--accent); color:var(--on-accent,#fff); border-color:var(--accent); }
+.big-bang-card-video { position:absolute; z-index:2; background:#000; border-radius:2px; }
+.big-bang-card-video[hidden],.big-bang-card-video [hidden] { display:none; }
+.big-bang-card-video > video { display:block; width:100%; height:100%; object-fit:contain; border-radius:inherit; background:#000; }
+.knowledge-big-bang .big-bang-video-close { position:absolute; top:4px; right:4px; width:24px; height:24px; padding:0; border:0; border-radius:50%; background:#0009; color:#fff; font-size:18px; }
+.big-bang-card-video-controls { position:absolute; top:100%; left:0; right:0; display:flex; align-items:center; justify-content:center; gap:10px; padding-top:8px; color:var(--fg); font-size:11px; }
+.knowledge-big-bang .big-bang-card-video-controls button { padding:2px 12px; min-height:24px; font-size:18px; }
+.big-bang-card-video-controls button:disabled { opacity:.4; cursor:default; }
+.big-bang-card-video-status { position:absolute; left:0; right:0; bottom:100%; padding:6px; background:var(--surface-0); color:var(--fg); font-size:11px; text-align:center; }
+.big-bang-card-video-status:empty { display:none; }
+
+.knowledge-big-bang .big-bang-video-close,
+.big-bang-card-video-controls { display:none; }
+.big-bang-card-video > video { cursor:pointer; }

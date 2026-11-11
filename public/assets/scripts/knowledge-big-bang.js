@@ -22,6 +22,33 @@
     const x=point.x*Math.cos(yaw)+point.z*Math.sin(yaw),z=point.z*Math.cos(yaw)-point.x*Math.sin(yaw);
     return {x,y:point.y*Math.cos(pitch)-z*Math.sin(pitch),z:point.y*Math.sin(pitch)+z*Math.cos(pitch)+1500-165000*scale/Math.max(120,Math.min(300,scale*550))};
   }
+  function bigBangImageSources(node, media = []) {
+    const list = value => {
+      if (Array.isArray(value)) return value.flatMap(list);
+      if (value && typeof value === 'object') return list(value.url || value.src || '');
+      const text = String(value || '').trim();
+      if (text.startsWith('[')) { try { return list(JSON.parse(text)); } catch {} }
+      return /^(https?:\/\/|\/(?!\/)|data:image\/(?:jpeg|png|webp|gif|avif|bmp);)/i.test(text) ? [text] : [];
+    };
+    return [...new Set([
+      ...media.filter(item => item.kind === 'image').flatMap(item => list(item.url)),
+      ...list(node.images), ...list(node.image), ...list(node.covers), ...list(node.cover),
+    ])];
+  }
+  function bigBangVideos(node, media = []) {
+    const list = value => {
+      if (Array.isArray(value)) return value;
+      if (typeof value === 'string' && value.trim().startsWith('[')) { try { const parsed = JSON.parse(value); if (Array.isArray(parsed)) return parsed; } catch {} }
+      return value ? [value] : [];
+    };
+    const urlOf = value => String(typeof value === 'object' && value ? value.url || value.src || '' : value || '').trim();
+    const sources = [...new Set([...list(node.videos), ...list(node.video), ...media.filter(item => item.kind === 'video').map(item => item.url)].map(urlOf).filter(url => /^(https?:\/\/|\/(?!\/))/i.test(url)))];
+    const covers = list(node.covers).map(urlOf);
+    return sources.map((src, index) => {
+      const poster = covers[index] || (sources.length === 1 ? urlOf(node.cover) : '');
+      return { src, poster: /^(https?:\/\/|\/(?!\/)|data:image\/(?:jpeg|png|webp|gif|avif|bmp);)/i.test(poster) ? poster : '' };
+    });
+  }
   let active=null;
   const panel=document.createElement('section');
   panel.id='knowledgeBigBangPage';
@@ -36,7 +63,7 @@
   window.knowledgeBigBang={open:async function({category='',tag='',label='\u5168\u90e8\u77e5\u8bc6',host=panel}={}){
     active?.();
     const dialog=document.createElement('section');dialog.className='knowledge-big-bang';dialog.setAttribute('aria-label','Big Bang 知识宇宙');
-    dialog.innerHTML='<button type="button" class="big-bang-back" data-close aria-label="返回探索">←</button><canvas tabindex="0" aria-label="知识空间，拖动旋转，滚轮缩放，点击卡片选择知识"></canvas><div class="big-bang-status" role="status"></div><section class="big-bang-selection" hidden><strong></strong><p></p><button type="button" data-unfocus>\u8fd4\u56de\u5b87\u5b99</button><button type="button" data-detail>查看知识详情 ↗</button></section><footer><span>拖动旋转 · 滚轮缩放 · 点击知识</span><div><button type="button" data-zoom="1.2" aria-label="放大">＋</button><button type="button" data-zoom="0.8333" aria-label="缩小">−</button><button type="button" data-reset>重新展开</button></div></footer>';
+    dialog.innerHTML='<button type="button" class="big-bang-back" data-close aria-label="返回探索">←</button><canvas tabindex="0" aria-label="知识空间，拖动旋转，滚轮缩放，点击卡片选择知识"></canvas><div class="big-bang-status" role="status"></div><section class="big-bang-selection" hidden><strong></strong><p></p><button type="button" data-unfocus>\u8fd4\u56de\u5b87\u5b99</button><button type="button" data-play hidden>▶ 播放视频</button><button type="button" data-detail>查看知识详情 ↗</button></section><footer><span>拖动旋转 · 滚轮缩放 · 点击知识</span><div><button type="button" data-zoom="1.2" aria-label="放大">＋</button><button type="button" data-zoom="0.8333" aria-label="缩小">−</button><button type="button" data-reset>重新展开</button></div></footer>';
     host.append(dialog);
     const canvas=dialog.querySelector('canvas'),ctx=canvas.getContext('2d'),status=dialog.querySelector('[role=status]'),selection=dialog.querySelector('section');
 
@@ -54,8 +81,9 @@
     let nodes=[],points=[],hits=[],chosen=null,yaw=0,pitch=0,zoom=1,frame=0,start=performance.now(),closed=false,drag=null,w=0,h=0;
     let camera={x:0,y:0,z:0},flight=null;
     let momentum=null,lastFrame=0;
+    let videoCard=null,videoPlayer=null,videoNode=null;
     const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    function close(){if(closed)return;closed=true;controller.abort();cancelAnimationFrame(frame);observer.disconnect();themeObserver?.disconnect();window.removeEventListener('popstate',close);window.removeEventListener('hashchange',close);dialog.remove();if(active===close)active=null;}
+    function close(){if(closed)return;closed=true;closeVideo();controller.abort();cancelAnimationFrame(frame);observer.disconnect();themeObserver?.disconnect();window.removeEventListener('popstate',close);window.removeEventListener('hashchange',close);dialog.remove();if(active===close)active=null;}
     active=close;
     function schedule(){if(!frame&&!closed)frame=requestAnimationFrame(draw);}
     function draw(now){
@@ -71,7 +99,7 @@
       if(flight){
         const t=reduced?1:Math.min(1,(now-flight.start)/850),ease=t*t*(3-2*t);
         for(const key of ['x','y','z'])camera[key]=flight.from[key]+(flight.to[key]-flight.from[key])*ease;
-        if(t===1){flight=null;if(chosen!==null)selection.hidden=false;}
+        if(t===1){flight=null;}
       }
       hits=points.map((p,i)=>{
         const x=p.x*Math.cos(yaw)+p.z*Math.sin(yaw),z=p.z*Math.cos(yaw)-p.x*Math.sin(yaw);
@@ -94,8 +122,8 @@
         for(const char of chars){if(ctx.measureText(line+char).width>size-12){ctx.fillText(line,6,height*.75+row*size*.14);row++;line='';if(row===2)break;}line+=char;}if(row<2)ctx.fillText(line,6,height*.75+row*size*.14);
         }
         ctx.restore();
-        if(chosen===i){ctx.strokeStyle=palette.accent;ctx.lineWidth=2;ctx.strokeRect(x-size/2-3,y-height/2-3,size+6,height+6);}
       }
+      positionVideo();
       if(progress<1||flight||momentum)schedule();
     }
     const observer=new ResizeObserver(()=>{const rect=canvas.getBoundingClientRect();w=rect.width;h=rect.height;points=bigBangPoints(nodes.length,w,h);if(chosen!==null){camera=bigBangFocusTarget(points[chosen],yaw,pitch,Math.min(w,h)/1100*zoom);flight=null;}const dpr=Math.min(2,window.devicePixelRatio||1);canvas.width=w*dpr;canvas.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);schedule();});observer.observe(canvas);
@@ -104,11 +132,63 @@
     updatePalette();
     dialog.querySelector('[data-close]').onclick=()=>window.setViewMode('app_explore');dialog.addEventListener('cancel',event=>{event.preventDefault();close();});
 
-    function unfocus(){momentum=null;chosen=null;selection.hidden=true;flight={from:{...camera},to:{x:0,y:0,z:0},start:performance.now()};schedule();}
+    function stopVideo() {
+      if (!videoPlayer) return;
+      videoPlayer.pause();videoPlayer.removeAttribute('src');videoPlayer.load();
+    }
+    function closeVideo() {
+      stopVideo();videoPlayer=null;videoNode=null;
+      const card=videoCard;videoCard=null;
+      card?.remove();
+    }
+    function positionVideo() {
+      if(!videoCard)return;
+      const hit=hits.find(item=>item.i===videoNode);
+      videoCard.hidden=!hit;
+      if(!hit)return;
+      Object.assign(videoCard.style,{left:`${hit.x-hit.size/2}px`,top:`${hit.y-hit.size*hit.aspect/2}px`,width:`${hit.size}px`,height:`${hit.size*hit.aspect}px`});
+    }
+    function playVideo() {
+      if(chosen===null||closed)return;
+      const node=nodes[chosen],videos=bigBangVideos(node,window.homeKnowledgeMediaViewer?.collectMedia(node)||[]);
+      if(!videos.length)return;
+      closeVideo();momentum=null;videoNode=chosen;
+      videoCard=document.createElement('div');videoCard.className='big-bang-card-video';videoCard.setAttribute('aria-label',`播放 ${node.name||node.label||node.id||'知识视频'}`);
+      videoCard.innerHTML='<video playsinline preload="metadata" tabindex="0" role="button" aria-label="点击暂停或播放视频"></video><button type="button" class="big-bang-video-close" data-video-close aria-label="停止播放并显示封面">×</button><div class="big-bang-card-video-controls"><button type="button" data-video-prev aria-label="上一个视频">‹</button><span data-video-position></span><button type="button" data-video-next aria-label="下一个视频">›</button></div><span class="big-bang-card-video-status" data-video-status role="status"></span>';
+      dialog.append(videoCard);videoPlayer=videoCard.querySelector('video');
+      const player=videoPlayer,card=videoCard;let index=0;
+      const message=card.querySelector('[data-video-status]');
+      function showVideo(next) {
+        if(card!==videoCard)return;
+        stopVideo();index=next;
+        player.poster=videos[index].poster;player.src=videos[index].src;
+        card.querySelector('[data-video-position]').textContent=`${index+1} / ${videos.length}`;
+        card.querySelector('[data-video-prev]').disabled=index===0;
+        card.querySelector('[data-video-next]').disabled=index===videos.length-1;
+        card.querySelector('.big-bang-card-video-controls').hidden=videos.length===1;
+        message.textContent='';
+        const requestIndex=index,playing=player.play();playing?.catch(error=>{if(card===videoCard&&index===requestIndex&&error?.name!=='AbortError')message.textContent='点击卡片中的播放按钮开始播放。';});
+      }
+      card.querySelector('[data-video-close]').onclick=closeVideo;
+      card.querySelector('[data-video-prev]').onclick=()=>{if(index>0)showVideo(index-1);};
+      card.querySelector('[data-video-next]').onclick=()=>{if(index<videos.length-1)showVideo(index+1);};
+      card.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();closeVideo();canvas.focus();}});
+      const togglePlayback=()=>{
+        if(card!==videoCard)return;
+        if(player.paused){const playing=player.play();playing?.catch(()=>{if(card===videoCard)message.textContent='无法播放视频，请重试。';});}
+        else player.pause();
+      };
+      player.addEventListener('click',togglePlayback);
+      player.addEventListener('keydown',event=>{if(event.key===' '||event.key==='Enter'){event.preventDefault();togglePlayback();}});
+      player.addEventListener('error',()=>{if(card===videoCard)message.textContent='视频加载失败，请重试或查看知识详情。';});
+      positionVideo();showVideo(0);schedule();
+    }
+    dialog.querySelector('[data-play]').onclick=playVideo;
+    function unfocus(){closeVideo();momentum=null;chosen=null;selection.hidden=true;flight={from:{...camera},to:{x:0,y:0,z:0},start:performance.now()};schedule();}
     dialog.querySelector('[data-unfocus]').onclick=unfocus;
     function changeZoom(factor){zoom=Math.max(.35,Math.min(5,zoom*factor));schedule();}
     dialog.querySelectorAll('[data-zoom]').forEach(button=>button.onclick=()=>changeZoom(Number(button.dataset.zoom)));
-    dialog.querySelector('[data-reset]').onclick=()=>{momentum=null;chosen=null;selection.hidden=true;flight=null;camera={x:0,y:0,z:0};yaw=pitch=0;zoom=1;start=performance.now();schedule();};
+    dialog.querySelector('[data-reset]').onclick=()=>{closeVideo();momentum=null;chosen=null;selection.hidden=true;flight=null;camera={x:0,y:0,z:0};yaw=pitch=0;zoom=1;start=performance.now();schedule();};
     canvas.addEventListener('wheel',event=>{event.preventDefault();changeZoom(Math.exp(-event.deltaY*.001));},{passive:false});
     function moveScene(dx,dy,state){
       if(state.pan){
@@ -128,14 +208,14 @@
       const dx=event.clientX-drag.x,dy=event.clientY-drag.y,now=performance.now();
       drag.moved+=Math.abs(dx)+Math.abs(dy);
       if(drag.moved>=6){
-        chosen=null;selection.hidden=true;flight=null;
+        closeVideo();chosen=null;selection.hidden=true;flight=null;
         moveScene(dx,dy,drag);
         const elapsed=Math.max(8,now-drag.time);
         drag.dx=dx*16.67/elapsed;drag.dy=dy*16.67/elapsed;
       }
       drag.x=event.clientX;drag.y=event.clientY;drag.time=now;schedule();
     });
-    function select(i){momentum=null;chosen=i;const node=nodes[i];selection.hidden=true;flight={from:{...camera},to:bigBangFocusTarget(points[i],yaw,pitch,Math.min(w,h)/1100*zoom),start:performance.now()};selection.querySelector('strong').textContent=node.name||node.label||node.id;selection.querySelector('p').textContent=node.description||'探索这条知识的详细内容';schedule();}
+    function select(i){closeVideo();momentum=null;chosen=i;const node=nodes[i];selection.hidden=true;flight={from:{...camera},to:bigBangFocusTarget(points[i],yaw,pitch,Math.min(w,h)/1100*zoom),start:performance.now()};selection.querySelector('strong').textContent=node.name||node.label||node.id;selection.querySelector('p').textContent=node.description||'探索这条知识的详细内容';dialog.querySelector('[data-play]').hidden=!bigBangVideos(node,window.homeKnowledgeMediaViewer?.collectMedia(node)||[]).length;if(!dialog.querySelector('[data-play]').hidden)playVideo();schedule();}
     canvas.addEventListener('pointerup',event=>{if(drag&&drag.moved<6){const rect=canvas.getBoundingClientRect(),x=event.clientX-rect.left,y=event.clientY-rect.top;const hit=[...hits].reverse().find(p=>Math.abs(x-p.x)<p.size/2&&Math.abs(y-p.y)<p.size*p.aspect/2);if(hit)select(hit.i);else if(chosen!==null)unfocus();}else if(drag&&performance.now()-drag.time<90&&!reduced){momentum={dx:drag.dx,dy:drag.dy,pan:drag.pan,distance:drag.distance};schedule();}drag=null;});
     canvas.addEventListener('pointercancel',()=>{drag=null;momentum=null;});
     canvas.addEventListener('keydown',event=>{if(event.key==='Escape'){unfocus();return;}if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','+','-','Enter'].includes(event.key))event.preventDefault();if(event.key==='ArrowLeft')yaw-=.15;if(event.key==='ArrowRight')yaw+=.15;if(event.key==='ArrowUp')pitch-=.15;if(event.key==='ArrowDown')pitch+=.15;if(event.key==='+')changeZoom(1.2);if(event.key==='-')changeZoom(1/1.2);if(event.key==='Enter'&&nodes.length)select(chosen===null?0:(chosen+1)%nodes.length);schedule();});
@@ -145,7 +225,13 @@
       const url=new URL('/api/kb/discover/search',location.origin);const db=new URLSearchParams(location.search).get('db');if(db)url.searchParams.set('db',db);url.searchParams.set('limit','120');url.searchParams.set('order','richness');if(category)url.searchParams.set('class_id',category);if(tag)url.searchParams.set('tag',tag);
       const response=await fetch(url,{signal:controller.signal});if(!response.ok)throw Error('知识加载失败，请关闭后重试');const data=await response.json();if(closed)return;
       nodes=data.nodes||[];points=bigBangPoints(nodes.length,w||1200,h||800);start=performance.now();status.textContent=nodes.length?`${nodes.length} 个知识星点 · Enter 键依次选择`:'当前范围暂无知识';
-      nodes.forEach((node,i)=>{const media=window.homeKnowledgeMediaViewer?.collectMedia(node)||[];const url=media.find(item=>item.kind==='image')?.url;if(!url)return;const image=new Image();images.set(i,image);image.onload=schedule;image.src=url;});schedule();
+      nodes.forEach((node,i)=>{
+        const media=window.homeKnowledgeMediaViewer?.collectMedia(node)||[];
+        const sources=bigBangImageSources(node,media);if(!sources.length)return;
+        const image=new Image();let sourceIndex=0;images.set(i,image);image.onload=schedule;
+        image.onerror=()=>{if(closed)return;if(++sourceIndex<sources.length)image.src=sources[sourceIndex];else{images.delete(i);schedule();}};
+        image.src=sources[0];
+      });schedule();
     }catch(error){if(!closed)status.textContent=error.message;}
   }};
   window.addEventListener('kb-auth-change',()=>{

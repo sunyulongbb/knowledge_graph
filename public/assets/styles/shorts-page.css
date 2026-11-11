@@ -38,3 +38,12 @@ body.home-shorts-active #applicationHomePanel > #shortsPanel {
 
 #homeMediaViewer .home-reel-graph { display:none; }
 #homeMediaViewer.is-shorts-page .home-reel-graph { display:flex; }
+
+#homeMediaViewer.is-shorts-page,
+#homeMediaViewer.is-shorts-page .home-reel-viewport,
+#homeMediaViewer.is-shorts-page .home-reel-main,
+#homeMediaViewer.is-shorts-page .home-reel-stage {
+  border: 0;
+  box-shadow: none;
+}
+#homeMediaViewer.is-shorts-page .home-reel-stage:focus-visible { outline: none; }
