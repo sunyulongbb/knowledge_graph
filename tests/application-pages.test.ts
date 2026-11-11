@@ -74,3 +74,14 @@ test('search cards highlight matched fragments while escaping document HTML and 
   expect(html).toContain('<mark>科学家</mark>'); expect(html).toContain('别名匹配：<mark>Scientist</mark>');
   expect(html).toContain('&lt;img'); expect(html).not.toContain('<img src=x'); expect(html).not.toContain('\uE000');
 });
+
+test('knowledge tags normalize stored JSON, deduplicate and escape unsafe labels',()=>{
+ const source=readFileSync('public/assets/scripts/application-pages.js','utf8');
+ const block=source.slice(source.indexOf('  function knowledgeCardTags'),source.indexOf('  window.renderKnowledgeTags'));
+ const render=new Function('escape',block+';return knowledgeCardTags;')((value:any)=>String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'));
+ expect(render({tags:[]})).toBe('');
+ const html=render({tags:JSON.stringify(['alpha','alpha','beta','<unsafe>','fourth'])});
+ expect(html.match(/data-knowledge-tag=/g)).toHaveLength(3);
+ expect(html).toContain('&lt;unsafe>');expect(html).toContain('+1');expect(html).not.toContain('<unsafe>');
+ expect(render({tags:'alpha,beta'})).toContain('#beta');
+});

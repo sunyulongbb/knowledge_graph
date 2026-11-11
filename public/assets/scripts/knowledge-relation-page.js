@@ -31,10 +31,11 @@
   }
   const panel=document.createElement('section');panel.id='knowledgeRelationPage';
   document.getElementById('applicationHomePanel').append(panel);
-  panel.innerHTML='<header class="relation-page-heading"><button type="button" data-back class="btn">← 返回</button><div><h1>知识关联关系图</h1><p data-status role="status"></p></div><label class="relation-search"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input type="search" data-find placeholder="\u67e5\u627e\u56fe\u4e2d\u77e5\u8bc6" aria-label="\u67e5\u627e\u56fe\u4e2d\u77e5\u8bc6"></label><select data-layout aria-label="\u5173\u7cfb\u56fe\u5e03\u5c40"><option value="cose">\u529b\u5bfc\u5411</option><option value="dagre">\u6a2a\u5411\u5206\u5c42</option><option value="dagre-tb">\u7eb5\u5411\u5206\u5c42</option><option value="concentric">\u540c\u5fc3\u73af</option><option value="circle">\u5706\u5f62</option><option value="breadthfirst">\u5c42\u7ea7\u6811</option><option value="grid">\u7f51\u683c</option></select><button type="button" class="btn" data-fit>适应画布</button><button type="button" class="btn" data-retry>重新加载</button></header><div class="relation-page-body"><div class="relation-canvas-wrap"><div class="relation-page-canvas" role="region" aria-label="知识关联关系图，可拖动和缩放"></div><div class="relation-legend"></div><div class="relation-zoom"><button type="button" data-zoom="1.2" aria-label="\u653e\u5927">+</button><button type="button" data-zoom="0.8333" aria-label="\u7f29\u5c0f">-</button></div></div><aside class="relation-page-inspector"><div class="relation-phone"><div class="relation-phone-stage" aria-label="\u77e5\u8bc6\u5a92\u4f53"></div><div class="relation-phone-top"><span>\u77e5\u8bc6</span><span data-media-count></span></div><button type="button" class="relation-media-prev" data-media-prev aria-label="\u4e0a\u4e00\u4e2a\u5a92\u4f53">‹</button><button type="button" class="relation-media-next" data-media-next aria-label="\u4e0b\u4e00\u4e2a\u5a92\u4f53">›</button><div class="relation-phone-caption"><h2></h2><p></p><div><button type="button" data-detail>\u67e5\u770b\u8be6\u60c5</button><button type="button" data-expand>\u5c55\u5f00\u5173\u8054</button></div></div></div><div class="relation-node-list" hidden></div></aside></div>';
+  panel.innerHTML='<header class="relation-page-heading"><button type="button" data-back class="btn">← 返回</button><div><h1>知识关联关系图</h1><p data-status role="status"></p></div><label class="relation-search"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input type="search" data-find placeholder="\u67e5\u627e\u56fe\u4e2d\u77e5\u8bc6" aria-label="\u67e5\u627e\u56fe\u4e2d\u77e5\u8bc6"></label><select data-layout aria-label="\u5173\u7cfb\u56fe\u5e03\u5c40"><option value="cose">\u529b\u5bfc\u5411</option><option value="dagre">\u6a2a\u5411\u5206\u5c42</option><option value="dagre-tb">\u7eb5\u5411\u5206\u5c42</option><option value="concentric">\u540c\u5fc3\u73af</option><option value="circle">\u5706\u5f62</option><option value="breadthfirst">\u5c42\u7ea7\u6811</option><option value="grid">\u7f51\u683c</option></select><button type="button" class="btn" data-fit>适应画布</button><button type="button" class="btn" data-toggle-detail aria-expanded="true" aria-controls="relationDetailPanel">\u6536\u8d77\u8be6\u60c5</button><button type="button" class="btn" data-retry>重新加载</button></header><div class="relation-page-body"><div class="relation-canvas-wrap"><div class="relation-page-canvas" role="region" aria-label="知识关联关系图，可拖动和缩放"></div><div class="relation-legend"></div><div class="relation-zoom"><button type="button" data-zoom="1.2" aria-label="\u653e\u5927">+</button><button type="button" data-zoom="0.8333" aria-label="\u7f29\u5c0f">-</button></div></div><aside id="relationDetailPanel" class="relation-page-inspector"><div class="relation-detail-host"></div><div class="relation-detail-actions"><button type="button" class="btn" data-detail>\u5b8c\u6574\u8be6\u60c5</button><button type="button" class="btn" data-expand>\u5c55\u5f00\u5173\u8054</button></div></aside></div>';
   const status=panel.querySelector('[data-status]'),inspector=panel.querySelector('aside'),canvas=panel.querySelector('.relation-page-canvas');
   let cy=null,controller,version=0,current='',selected='',returnView='app_home',returnNode='',resize=null;
-  let previewVersion=0,previewMedia=[],previewIndex=0;
+
+  let detailsCollapsed=false;
   const expanded=new Set(),expanding=new Set(),relationCache=new Map();
   function layoutOptions(name,animate=false){return {name:name==='dagre-tb'?'dagre':name,animate,animationDuration:450,padding:70,rankDir:name==='dagre-tb'?'TB':'LR',nodeSep:55,rankSep:180,edgeSep:28,nodeDimensionsIncludeLabels:true,concentric:node=>node.data('center')?100:node.degree(),levelWidth:()=>2,minNodeSpacing:80,nodeRepulsion:()=>38000,idealEdgeLength:()=>180,randomize:name==='cose'};}
   function highlight(id){if(!cy)return;cy.elements().removeClass('is-neighbor is-dimmed');if(!id)return;const node=cy.nodes().filter(item=>item.id()===id);if(!node.length)return;const neighborhood=node.closedNeighborhood();cy.elements().not(neighborhood).addClass('is-dimmed');neighborhood.addClass('is-neighbor');}
@@ -48,26 +49,16 @@
     const pan={x:cy.width()/2-point.x*zoom,y:cy.height()/2-point.y*zoom};
     if(reduced)cy.pan(pan);else cy.animate({pan,duration:350,easing:'ease-in-out-cubic'});
   }
-  function stopPreview(){inspector.querySelectorAll('video').forEach(video=>{video.pause();video.removeAttribute('src');video.load();});}
-  function renderPreview(){
-    stopPreview();const stage=panel.querySelector('.relation-phone-stage');stage.replaceChildren();
-    const item=previewMedia[previewIndex];
-    if(item){const el=document.createElement(item.kind==='video'?'video':'img');el.src=item.url;if(item.kind==='video'){el.controls=true;el.playsInline=true;el.preload='metadata';}else el.alt=inspector.querySelector('h2').textContent;stage.append(el);}
-    else{const text=document.createElement('div');text.className='relation-phone-empty';text.textContent=inspector.querySelector('h2').textContent;stage.append(text);}
-    panel.querySelector('[data-media-count]').textContent=previewMedia.length?`${previewIndex+1} / ${previewMedia.length}`:'';
-    panel.querySelector('[data-media-prev]').hidden=panel.querySelector('[data-media-next]').hidden=previewMedia.length<2;
+  function showSharedDetail(id){
+    if(detailsCollapsed)return;
+    const viewer=window.homeKnowledgeMediaViewer;if(!viewer)return;
+    const nodes=cy?cy.nodes().map(node=>({id:node.id(),name:node.data('label')})):(relationCache.get(current)?.nodes||[]);
+    viewer.open(id,{nodes,category:'\u5173\u8054\u77e5\u8bc6',page:{host:panel.querySelector('.relation-detail-host'),mode:'relation',onCollapse:()=>setDetailsCollapsed(true),onNodeChange(nodeId){
+      if(nodeId===selected||!cy)return;const node=cy.getElementById(nodeId);if(node.empty())return;select(node.data(),false);void expandNode(nodeId);
+    }}});
   }
-  async function loadPreview(data){
-    const token=++previewVersion;previewIndex=0;previewMedia=window.homeKnowledgeMediaViewer?.collectMedia(data)||[];renderPreview();
-    try{
-      const url=new URL('/api/kb/node',location.origin),db=new URLSearchParams(location.search).get('db');if(db)url.searchParams.set('db',db);url.searchParams.set('id',data.id);
-      const response=await fetch(url,{signal:controller?.signal});if(!response.ok)return;const result=await response.json();if(token!==previewVersion||!result.node)return;
-      previewMedia=window.homeKnowledgeMediaViewer?.collectMedia(result.node)||[];previewIndex=0;
-      inspector.querySelector('p').textContent=result.node.description||data.description||'';renderPreview();
-    }catch(error){if(token===previewVersion&&error.name!=='AbortError')panel.querySelector('[data-media-count]').textContent='\u5a92\u4f53\u52a0\u8f7d\u5931\u8d25';}
-  }
-  function select(data){renderRelationList(data.id);highlight(data.id);centerSelection(data.id);selected=data.id;inspector.querySelector('h2').textContent=data.label;inspector.querySelector('p').textContent=data.description||'暂无描述';}
-  window.closeKnowledgeRelation=()=>{version++;previewVersion++;stopPreview();controller?.abort();resize?.disconnect();resize=null;cy?.destroy();cy=null;expanded.clear();expanding.clear();relationCache.clear();};
+  function select(data,preview=true){highlight(data.id);centerSelection(data.id);selected=data.id;if(preview)showSharedDetail(data.id);}
+  window.closeKnowledgeRelation=()=>{version++;if(window.homeKnowledgeMediaViewer?.isRelation?.())window.homeKnowledgeMediaViewer.close();controller?.abort();resize?.disconnect();resize=null;cy?.destroy();cy=null;expanded.clear();expanding.clear();relationCache.clear();};
   window.openKnowledgeRelation=(id)=>{
     if(window.kbViewMode!=='knowledge_graph'){returnView=window.kbViewMode||'app_home';returnNode=new URLSearchParams(location.hash.slice(1)).get('node')||'';}
     window.setViewMode('knowledge_graph',{targetNodeId:clean(id)});
@@ -76,20 +67,9 @@
     if(!cy)return;
     status.textContent=`${cy.nodes().length} \u4e2a\u77e5\u8bc6 · ${cy.edges().length} \u6761\u5173\u7cfb · ${expanded.size} \u4e2a\u8282\u70b9\u5df2\u5c55\u5f00`;
   }
-  function renderRelationList(id){
-    const list=panel.querySelector('.relation-node-list'),data=relationCache.get(id);list.replaceChildren();
-    if(!data)return;
-    const nodes=new Map((data.nodes||[]).map(node=>[clean(node.id||node._id),node]));
-    for(const [direction,title] of [['incoming','\u6307\u5411\u6211'],['outgoing','\u6211\u6307\u5411\u7684']]){
-      const neighbors=new Map();
-      for(const edge of data.edges||[]){const source=clean(edge.source),target=clean(edge.target);if((direction==='incoming'?target:source)!==id)continue;const key=direction==='incoming'?source:target;if(key===id||!nodes.has(key))continue;if(!neighbors.has(key))neighbors.set(key,new Set());neighbors.get(key).add(edge.label||edge.property_name||edge.type||'\u5173\u8054');}
-      const heading=document.createElement('small');heading.textContent=`${title} · ${neighbors.size}`;list.append(heading);
-      for(const [neighbor,labels] of neighbors){const button=document.createElement('button'),node=nodes.get(neighbor);button.type='button';button.textContent=`${node.name||node.label||neighbor} · ${[...labels].join(' / ')}`;button.title='\u70b9\u51fb\u5c06\u8be5\u77e5\u8bc6\u52a0\u5165\u56fe\u4e2d';button.onclick=()=>{void expandNode(id,neighbor);};list.append(button);}
-    }
-  }
   async function expandNode(id,onlyId=''){
     if(!cy||expanding.has(id))return;
-    if(expanded.has(id)&&!onlyId){renderRelationList(id);return;}
+    if(expanded.has(id)&&!onlyId)return;
     const token=version,graph=cy;expanding.add(id);
     status.textContent='\u6b63\u5728\u52a0\u8f7d\u5173\u8054\u2026';
     try{
@@ -118,7 +98,7 @@
         if(reduced){node.position(position);complete();}else node.animate({position,duration:450,complete});
 
       });
-      expanded.add(id);graph.getElementById(id).addClass('is-expanded');highlight(selected);refreshGraphSummary();if(selected===id)renderRelationList(id);
+      expanded.add(id);graph.getElementById(id).addClass('is-expanded');highlight(selected);refreshGraphSummary();
       const legend=panel.querySelector('.relation-legend'),seen=new Set(Array.from(legend.children).map(item=>item.textContent));
       for(const item of newNodes)if(!seen.has(item.data.group)){seen.add(item.data.group);const label=document.createElement('span');label.textContent=item.data.group;label.style.setProperty('--legend-color',item.data.color);legend.append(label);}
     }catch(error){if(token===version&&error.name!=='AbortError')status.textContent=error.message;}
@@ -127,7 +107,7 @@
   window.loadKnowledgeRelation=async function(id=''){
     id=clean(id||new URLSearchParams(location.hash.slice(1)).get('node'));
     window.closeKnowledgeRelation();const token=version;current=id;selected='';
-    inspector.querySelector('h2').textContent='';inspector.querySelector('p').textContent='';panel.querySelector('.relation-node-list').replaceChildren();panel.querySelector('.relation-legend').replaceChildren();panel.querySelector('[data-find]').value='';
+panel.querySelector('.relation-legend').replaceChildren();panel.querySelector('[data-find]').value='';
     if(!id){status.textContent='请从知识卡片的关系图按钮进入。';return;}
     status.textContent='正在加载关联知识…';controller=new AbortController();
     try{
@@ -160,8 +140,17 @@
       cy.on('dbltap','node',event=>{void expandNode(event.target.data().id);});
     }catch(error){if(token===version&&error.name!=='AbortError')status.textContent=error.message;}
   };
-  panel.querySelector('[data-media-prev]').onclick=()=>{if(previewMedia.length){previewIndex=(previewIndex-1+previewMedia.length)%previewMedia.length;renderPreview();}};
-  panel.querySelector('[data-media-next]').onclick=()=>{if(previewMedia.length){previewIndex=(previewIndex+1)%previewMedia.length;renderPreview();}};
+  function setDetailsCollapsed(collapsed){
+    detailsCollapsed=collapsed;
+    panel.classList.toggle('is-detail-collapsed',detailsCollapsed);
+    const button=panel.querySelector('[data-toggle-detail]');
+    button.textContent=detailsCollapsed?'\u5c55\u5f00\u8be6\u60c5':'\u6536\u8d77\u8be6\u60c5';
+    button.setAttribute('aria-expanded',String(!detailsCollapsed));
+    if(detailsCollapsed)inspector.querySelectorAll('video').forEach(video=>video.pause());
+    else if(selected)showSharedDetail(selected);
+    cy?.resize();
+  }
+  panel.querySelector('[data-toggle-detail]').onclick=()=>setDetailsCollapsed(!detailsCollapsed);
   panel.querySelector('[data-layout]').onchange=event=>cy?.layout(layoutOptions(event.target.value,true)).run();
   panel.querySelector('[data-find]').oninput=event=>{
     if(!cy)return;const query=event.target.value.trim().toLocaleLowerCase();

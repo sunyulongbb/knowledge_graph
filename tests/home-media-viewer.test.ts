@@ -322,3 +322,17 @@ test('shorts right rail opens relation graph for the currently visible knowledge
   h.viewer.close();h.viewer.open('one');await tick();
   h.refs.relationGraph.onclick();expect(h.graphRequests).toEqual(['one','two']);
 });
+
+test('relation graph reuses the shorts page viewer and closes the embedded panel locally',async()=>{
+ const h=setup();
+ h.viewer.open('one',{nodes:[{id:'one'}],page:{host:{appendChild(){}},mode:'relation'}});await tick();
+ expect(h.viewer.isRelation()).toBe(true);expect(h.viewer.isPage()).toBe(true);
+ h.refs.close.onclick();expect(h.viewer.isRelation()).toBe(false);
+});
+
+test('relation close icon invokes panel collapse without closing shared viewer',async()=>{
+ const h=setup();let collapsed=0;
+ h.viewer.open('one',{nodes:[{id:'one'}],page:{host:{appendChild(){}},mode:'relation',onCollapse:()=>collapsed++}});await tick();
+ h.refs.close.onclick();expect(collapsed).toBe(1);expect(h.viewer.isRelation()).toBe(true);
+ h.viewer.close();
+});

@@ -355,7 +355,7 @@
     refs = Object.fromEntries(Array.from(dialog.querySelectorAll('[data-ref]')).map((el) => [el.dataset.ref, el]));
     dialog.querySelectorAll('button').forEach((button) => { if (button.type !== 'submit' || !button.closest('form')) button.type = 'button'; });
     document.body.append(dialog);
-    refs.close.onclick = () => page ? window.setViewMode?.('app_home') : close(); dialog.addEventListener('close', () => { if (!dialog.open) cleanup(); });
+    refs.close.onclick = () => page?.mode==='relation' && page.onCollapse ? page.onCollapse() : page?.mode==='relation' ? close() : page ? window.setViewMode?.('app_home') : close(); dialog.addEventListener('close', () => { if (!dialog.open) cleanup(); });
     refs.left.onclick = () => moveMedia(-1); refs.right.onclick = () => moveMedia(1);
     refs.relationGraph.onclick = () => { if(!page || busy || !node)return;window.openKnowledgeRelation?.(idOf(node)); };
     refs.uploadVideo.onclick = () => { if(page && !busy && !uploadBusy)refs.videoFile.click(); };
@@ -420,10 +420,10 @@
     dialog.addEventListener('pointerup', (event) => { if (!touchStart) return; const dx = event.clientX - touchStart.x, dy = event.clientY - touchStart.y; touchStart = null; if (Math.max(Math.abs(dx), Math.abs(dy)) < 50) return; if (Math.abs(dx) > Math.abs(dy)) moveMedia(dx < 0 ? 1 : -1); else void randomPage(dy < 0 ? 1 : -1); });
     dialog.addEventListener('pointercancel', () => { touchStart = null; });
     // Canvas selection updates the node hash while the same embedded viewer stays open.
-    window.addEventListener('hashchange', () => { if (page && window.kbViewMode === 'shorts') return; if (!embedded || window.kbViewMode !== 'vis') close(); });
+    window.addEventListener('hashchange', () => { if (page && window.kbViewMode === (page.mode==='relation'?'knowledge_graph':'shorts')) return; if (!embedded || window.kbViewMode !== 'vis') close(); });
     // 画布节点切换同时触发 popstate：内嵌详情保持打开，仅在路由离开关系画布时关闭
     window.addEventListener('popstate', () => {
-      if (page && window.kbViewMode === 'shorts') return;
+      if (page && window.kbViewMode === (page.mode==='relation'?'knowledge_graph':'shorts')) return;
       if (!embedded || window.kbViewMode !== 'vis' || !/view=vis/.test(String(window.location.hash))) close();
     });
   }
@@ -486,6 +486,7 @@
   window.homeKnowledgeMediaViewer = { open, close, goTo, collectMedia, textPages,
     isEmbedded: () => !!embedded,
     isPage: () => !!page,
+    isRelation: () => page?.mode==='relation',
     updateFeed: (nodes) => { if (embedded || page) feed = nodes; },
   };
 })();

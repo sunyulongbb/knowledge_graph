@@ -33,6 +33,7 @@ try {
     const original=window.fetch.bind(window);
     window.fetch=async(input,options)=>{
       const url=new URL(typeof input==='string'?input:input.url||input,location.origin);
+      if(url.pathname==='/api/kb/node')return Response.json({node:{id:url.searchParams.get('id'),name:'Knowledge detail',description:'Shared shorts detail component in a mobile-width panel.'}});
       if(url.pathname==='/api/kb/node/graph'||url.pathname==='/api/kb/discover/search'){
         const center=url.searchParams.get('id')||'fixture-center';
         const nodes=Array.from({length:12},(_,i)=>({id:i===0?center:'fixture-'+i,name:i===0?'Knowledge ecosystem':('Knowledge '+i),type:i%3===0?'Topic':i%3===1?'Concept':'Application',description:'Connected knowledge used to verify graph rendering.'}));
@@ -56,7 +57,17 @@ try {
   await until(()=>evaluate(`document.querySelectorAll('#knowledgeRelationPage canvas').length>0`));
   assert.equal(await evaluate(`document.querySelector('#knowledgeRelationPage [data-layout]').value`),'cose');
   assert.equal(await evaluate(`document.querySelector('.relation-page-canvas')._cyreg.cy.nodes().length`),12);
-  assert.ok(await evaluate(`!!document.querySelector('.relation-phone-stage')`));
+  await until(()=>evaluate(`!!document.querySelector('.relation-detail-host #homeMediaViewer[open]')`));
+  assert.ok(await evaluate(`document.querySelector('.relation-detail-host #homeMediaViewer').getBoundingClientRect().width<=520`));
+  assert.equal(await evaluate(`document.querySelectorAll('#knowledgeRelationPage .relation-node-list').length`),0);
+  assert.ok(await evaluate(`(()=>{const host=document.querySelector('.relation-detail-host').getBoundingClientRect(),viewer=document.querySelector('.relation-detail-host #homeMediaViewer').getBoundingClientRect(),body=document.querySelector('.relation-page-body').getBoundingClientRect();return host.width>=400&&host.height>body.height-65&&Math.abs(viewer.height-host.height)<2;})()`));
+  const expandedCanvasWidth=await evaluate(`document.querySelector('.relation-page-canvas').getBoundingClientRect().width`);
+  await click('.relation-detail-host #homeMediaViewer [data-ref="close"]');
+  assert.equal(await evaluate(`getComputedStyle(document.getElementById('relationDetailPanel')).display`),'none');
+  assert.ok(await evaluate(`document.querySelector('.relation-page-canvas').getBoundingClientRect().width`)>expandedCanvasWidth);
+  await click('#knowledgeRelationPage [data-toggle-detail]');
+  assert.notEqual(await evaluate(`getComputedStyle(document.getElementById('relationDetailPanel')).display`),'none');
+  console.log('PASS: detail panel collapses and expands, graph width adapts.');
   const beforePositions=await evaluate(`Object.fromEntries(document.querySelector('.relation-page-canvas')._cyreg.cy.nodes().map(node=>[node.id(),node.position()]))`);
   await evaluate(`void document.querySelector('.relation-page-canvas')._cyreg.cy.getElementById('fixture-1').emit('tap')`);
   await until(()=>evaluate(`document.querySelector('.relation-page-canvas')._cyreg.cy.nodes().length>12`));
