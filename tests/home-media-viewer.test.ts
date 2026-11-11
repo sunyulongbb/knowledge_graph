@@ -17,18 +17,22 @@ function setup(play?: (video: any) => Promise<void>, videosOnly = false) {
     setAttribute() {} removeAttribute() {} load() {} pause() { this.paused = true; } play() { if (play) return play(this); this.paused = false; return Promise.resolve(); }
     show() { this.open = true; } showModal() { this.open = true; } close() { this.open = false; this.handlers.close?.forEach((fn) => fn()); } focus() {}
   }
-  const window: any = { addEventListener() {} };
+  const listeners: Record<string,Function> = {};
+  const graphRequests:string[]=[];
+  const window: any = { openKnowledgeRelation:(id:string)=>graphRequests.push(id), kbViewMode:'shorts', authUser:{id:1}, addEventListener(name:string,fn:Function) { listeners[name]=fn; } };
   const body = new Element('body'); body.style.overflow = 'auto';
   const requests: string[] = [];
+  const saves:any[]=[];
   const first = { id: 'one', name: '一', images: ['/a.jpg', '/b.jpg'], videos: ['/c.mp4'] };
   const second = { id: 'two', name: '二', images: ['/d.jpg'], videos: ['/e.mp4'] };
   if (videosOnly) { first.images = []; second.images = []; }
   const document = { body, activeElement: new Element('button'), createElement: (tag: string) => { const el = new Element(tag); elements.push(el); return el; } };
-  new Function('window', 'document', 'location', 'fetch', 'navigator', source)(window, document, { origin: 'https://example.test', search: '?db=mine' }, async (url: URL) => {
+  new Function('window', 'document', 'location', 'fetch', 'navigator', source)(window, document, { origin: 'https://example.test', search: '?db=mine' }, async (url: URL, options:any) => {
+    if(url.pathname==='/api/kb/nodes/update')saves.push(JSON.parse(options.body));
     requests.push(url.toString());
-    return { ok: true, json: async () => url.pathname.endsWith('/random') ? { node: second } : url.pathname === '/api/kb/node' ? { node: url.searchParams.get('id') === 'two' ? second : first } : { comments: [], likeCount: 2 } };
+    return { ok: true, json: async () => url.pathname.startsWith('/api/kb/upload-') ? {url:'/uploaded.'+(url.pathname.endsWith('image')?'png':'mp4')} : url.pathname.endsWith('/random') ? { node: second } : url.pathname === '/api/kb/node' ? { node: url.searchParams.get('id') === 'two' ? second : first } : { comments: [], likeCount: 2 } };
   }, {});
-  return { viewer: window.homeKnowledgeMediaViewer, get refs() { return refs; }, body, elements, requests };
+  return { viewer: window.homeKnowledgeMediaViewer, get refs() { return refs; }, body, elements, requests, listeners, saves, graphRequests };
 }
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -288,4 +292,33 @@ test('canvas mode embeds home viewer, pages only through its feed, and keeps med
   expect(h.refs.status.textContent).toBe('');
   h.viewer.close();expect(closed).toBe(1);expect(h.viewer.isEmbedded()).toBe(false);
   h.viewer.open('two');await tick();expect(h.body.style.overflow).toBe('hidden');
+});
+
+test('shorts pastes images and uploads video as appended media on the current scoped node',async()=>{
+  const h=setup();
+  h.viewer.open('one',{page:{host:{appendChild() {}}}});await tick();
+  let prevented=false;
+  const file=new File(['image'],'clipboard.png',{type:'image/png'});
+  h.listeners.paste({target:{closest:()=>null},clipboardData:{items:[{kind:'file',type:'image/png',getAsFile:()=>file}]},preventDefault(){prevented=true;}});
+  await tick();
+  expect(prevented).toBe(true);
+  expect(h.saves[0]).toEqual({id:'one',images:['/uploaded.png'],appendImages:true});
+  expect(h.refs.stage.children[0].src).toBe('/uploaded.png');
+  expect(h.requests.find(url=>url.includes('/upload-image'))).toContain('db=mine');
+  h.refs.videoFile.files=[new File(['video'],'clip.mp4',{type:'video/mp4'})];
+  await h.refs.videoFile.onchange();
+  expect(h.saves[1]).toEqual({id:'one',videos:['/uploaded.mp4'],covers:[''],appendVideos:true,appendCovers:true});
+  expect(h.refs.stage.children[0].src).toBe('/uploaded.mp4');
+  prevented=false;
+  h.listeners.paste({target:{closest:()=>({})},clipboardData:{items:[{kind:'file',type:'image/png',getAsFile:()=>file}]},preventDefault(){prevented=true;}});
+  await tick();expect(prevented).toBe(false);expect(h.saves).toHaveLength(2);
+});
+
+test('shorts right rail opens relation graph for the currently visible knowledge',async()=>{
+  const h=setup();
+  h.viewer.open('one',{nodes:[{id:'one'},{id:'two'}],page:{host:{appendChild(){}}}});await tick();
+  h.refs.relationGraph.onclick();expect(h.graphRequests).toEqual(['one']);
+  await h.refs.down.onclick();h.refs.relationGraph.onclick();expect(h.graphRequests).toEqual(['one','two']);
+  h.viewer.close();h.viewer.open('one');await tick();
+  h.refs.relationGraph.onclick();expect(h.graphRequests).toEqual(['one','two']);
 });

@@ -78,14 +78,16 @@
   </script>
   <link rel="stylesheet" href="/assets/styles/app.css?v=20261111-current-frame-cover" />
   <link rel="stylesheet" href="/assets/styles/home-discovery.css?v=20261110-search-shell" />
-  <link rel="stylesheet" href="/assets/styles/shorts-page.css?v=20261110-home-shell" />
-  <link rel="stylesheet" href="/assets/styles/knowledge-explore.css?v=20261110-scroll-load" />
+  <link rel="stylesheet" href="/assets/styles/shorts-page.css?v=20261111-graph-actions" />
+  <link rel="stylesheet" href="/assets/styles/knowledge-relation-page.css?v=20261111-graph-actions" />
+  <link rel="stylesheet" href="/assets/styles/knowledge-big-bang.css?v=20261111-no-header" />
+  <link rel="stylesheet" href="/assets/styles/knowledge-explore.css?v=20261111-relation-exclusive" />
   <link rel="stylesheet" href="/assets/styles/quick-knowledge.css?v=20261111-category-selected" />
-  <link rel="stylesheet" href="/assets/styles/home-waterfall.css?v=20261110-scroll-settled-3" />
+  <link rel="stylesheet" href="/assets/styles/home-waterfall.css?v=20261111-knowledge-notes" />
   <link rel="stylesheet" href="/assets/styles/home-popular.css?v=20261110-1" />
   <link rel="stylesheet" href="/assets/styles/home-news.css?v=20261110-full-width" />
   <link rel="stylesheet" href="/assets/styles/knowledge-learning.css?v=20261110-full-width" />
-  <link rel="stylesheet" href="/assets/styles/learning-journey.css?v=20261110-1" />
+  <link rel="stylesheet" href="/assets/styles/learning-journey.css?v=20261111-celebrate" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
   <link rel="stylesheet" href="/assets/generated/business-grid.css" />
   <script src="/assets/scripts/disable-search-autofill.js?v=20260905-2"></script>
@@ -4857,7 +4859,7 @@
             <button type="button" data-home-feed="popular" title="Popular · 热门"><i class="fa-solid fa-fire" aria-hidden="true"></i><span>Popular<small>热门知识</small></span></button>
             <button type="button" data-home-feed="news" title="News · 最新发布"><i class="fa-regular fa-newspaper" aria-hidden="true"></i><span>News<small>最新发布</small></span></button>
             <button type="button" data-home-action="app_explore" title="Explore · 探索"><i class="fa-regular fa-compass" aria-hidden="true"></i><span>Explore<small>探索知识</small></span></button>
-            <button type="button" data-home-action="learning" title="Learning"><i class="fa-solid fa-graduation-cap" aria-hidden="true"></i><span>Learning<small>开启学习旅程</small></span></button>
+                        <button type="button" data-home-action="learning" title="Learning"><i class="fa-solid fa-graduation-cap" aria-hidden="true"></i><span>Learning<small>开启学习旅程</small></span></button>
           </nav>
           <button type="button" class="home-discovery-create" data-home-action="create" title="新增知识"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>新增知识</span></button>
           <div class="home-discovery-tools" aria-label="工作空间">
@@ -5886,6 +5888,8 @@
       "app_home",
       "app_search",
       "app_explore",
+      "big_bang",
+      "knowledge_graph",
       "learning",
       "knowledge_detail",
       "entry",
@@ -7199,6 +7203,8 @@
       return ({
         app_home: "应用首页",
         app_search: "应用搜索",
+        big_bang: "\u77e5\u8bc6\u5b87\u5b99",
+        knowledge_graph: "\u77e5\u8bc6\u5173\u8054\u5173\u7cfb\u56fe",
         app_explore: "探索知识",
         learning: "知识学习",
         report_home: "报告",
@@ -7319,6 +7325,8 @@
           : String(options.targetNodeId).trim();
       const detailCrumbLabel = String(options.detailCrumbLabel || "").trim();
       const previousMode = window.kbViewMode;
+      if (previousMode === 'knowledge_graph' && normalized !== 'knowledge_graph') window.closeKnowledgeRelation?.();
+      if (previousMode === 'big_bang' && normalized !== 'big_bang') window.closeKnowledgeBigBang?.();
       if (previousMode === 'learning' && normalized !== 'learning') window.stopKnowledgeLearning?.();
       if (previousMode === 'app_home' && normalized !== 'app_home') window.homeWaterfall?.destroy();
       if (previousMode === 'shorts' && normalized !== 'shorts') window.closeShortsPage?.();
@@ -7414,6 +7422,8 @@
         }
       };
       if (kbViewModeInitialized && previousMode === normalized) {
+        if (normalized === 'knowledge_graph') { window.loadKnowledgeRelation?.(targetNodeIdRaw); if (!skipRouteUpdate) syncHashForView(normalized, {nodeId:targetNodeIdRaw,includeNode:Boolean(targetNodeIdRaw),replace:replaceRoute}); return; }
+        if (normalized === 'big_bang') { window.loadKnowledgeBigBang?.(); return; }
         if (normalized === 'learning') { window.loadKnowledgeLearning?.(); return; }
         if (normalized === 'shorts') {
           window.loadShortsPage?.(targetNodeIdRaw);
@@ -7541,7 +7551,9 @@
       const isProfile = normalized === 'profile';
       const isAppSearch = normalized === 'app_search';
       const isAppHome = normalized === 'app_home';
-      const isExplore = normalized === 'app_explore';
+      const isExplore = normalized === 'app_explore' || normalized === 'big_bang' || normalized === 'knowledge_graph';
+      document.body.classList.toggle('home-relation-active', normalized === 'knowledge_graph');
+      document.body.classList.toggle('home-big-bang-active', normalized === 'big_bang');
       const isLearning = normalized === 'learning';
       document.body.classList.toggle('home-discovery-active', isAppHome || isShorts || isExplore || isLearning || isProfile || isStandaloneDetail || isAppSearch);
       document.body.classList.toggle('home-search-active', isAppSearch);
@@ -7562,7 +7574,9 @@
       document.getElementById('applicationSearchPanel').style.display = isAppSearch ? '' : 'none';
       document.getElementById('btnApplicationSearch').classList.toggle('active', isAppSearch);
       if (isAppHome) window.loadApplicationHome?.();
-      if (isExplore) window.loadKnowledgeExplore?.();
+      if (normalized === 'app_explore') window.loadKnowledgeExplore?.();
+      if (normalized === 'big_bang') window.loadKnowledgeBigBang?.();
+      if (normalized === 'knowledge_graph') window.loadKnowledgeRelation?.(targetNodeIdRaw);
       if (isLearning) window.loadKnowledgeLearning?.();
       if (isAppSearch) window.loadApplicationSearch?.();
       const userProfilePanel = document.getElementById('userProfilePanel');
@@ -7834,7 +7848,7 @@
       if (!skipRouteUpdate) {
         let routeNode = "";
         let includeNode = false;
-        routeNode = normalized === 'shorts' ? targetNodeIdRaw : usesEntityRouteNode
+        routeNode = ['shorts','knowledge_graph'].includes(normalized) ? targetNodeIdRaw : usesEntityRouteNode
           ? targetNodeIdRaw ||
             (window.kbSelectedRowId || "").trim() ||
             (document.getElementById("fId")?.value || "").trim() ||
@@ -14096,7 +14110,7 @@
         replaceRoute,
         targetNodeId: initialNodeId,
       });
-      if (initialNodeId && !usesEntityRouteNode && initialMode !== "report_detail") {
+      if (initialNodeId && !usesEntityRouteNode && !["report_detail", "knowledge_graph", "shorts"].includes(initialMode)) {
         syncHashForView(initialMode, { replace: true, clearNode: true });
       }
       if (initialMode !== "vis") {
@@ -17702,16 +17716,18 @@
   <script src="/assets/scripts/knowledge-access.js?v=20261011-member-access"></script>
   <script src="/assets/scripts/applications.js?v=20260927-settings-layout"></script>
   <script src="/assets/scripts/user-management.js?v=20260915-1"></script>
-  <script src="/assets/scripts/home-media-viewer.js?v=20261110-full-knowledge"></script>
+  <script src="/assets/scripts/home-media-viewer.js?v=20261111-graph-actions"></script>
   <script src="/assets/scripts/shorts-page.js?v=20261110-home-shell"></script>
   <script src="/assets/scripts/manual-classify.js?v=20260929-existing-classes"></script>
   <script src="/assets/scripts/knowledge-context-menu.js?v=20260928-3"></script>
   <script src="/assets/scripts/quick-knowledge.js?v=20261111-category-expanded"></script>
-  <script src="/assets/scripts/home-waterfall.js?v=20261110-scroll-settled-3"></script>
+  <script src="/assets/scripts/home-waterfall.js?v=20261111-compact-columns"></script>
   <script src="/assets/scripts/home-sidebar.js?v=20261110-brand-only"></script>
-  <script src="/assets/scripts/application-pages.js?v=20261110-scroll-boundary-2"></script>
-  <script src="/assets/scripts/knowledge-learning.js?v=20261110-node-info"></script>
-  <script src="/assets/scripts/knowledge-explore.js?v=20261111-return-state"></script>
+  <script src="/assets/scripts/application-pages.js?v=20261111-relation-entry"></script>
+  <script src="/assets/scripts/knowledge-learning.js?v=20261111-celebrate-next"></script>
+  <script src="/assets/scripts/knowledge-relation-page.js?v=20261111-graph-actions"></script>
+  <script src="/assets/scripts/knowledge-big-bang.js?v=20261111-no-header"></script>
+  <script src="/assets/scripts/knowledge-explore.js?v=20261111-inline-bang"></script>
   <script src="/assets/scripts/user-profile.js?v=20261110-api-errors"></script>
   <script src="/assets/scripts/sidebar-panel.js?v=20260924-4"></script>
   <script src="/assets/scripts/auth-panel.js?v=20261012-user-id"></script>

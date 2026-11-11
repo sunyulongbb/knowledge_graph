@@ -1,6 +1,6 @@
 body.home-explore-active #applicationHomePanel > .home-discovery-main { display: none; }
 #knowledgeExplorePage { display: none; min-width: 0; min-height: 0; overflow: auto; overflow-anchor: none; background: var(--surface-0); scrollbar-width: none; }
-body.home-explore-active #knowledgeExplorePage { display: block; grid-column: 2; grid-row: 1; }
+body.home-explore-active:not(.home-big-bang-active):not(.home-relation-active) #knowledgeExplorePage { display: block; grid-column: 2; grid-row: 1; }
 .home-discovery-nav button[data-home-action="app_explore"][aria-current="page"] { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface-0)); }
 .explore-content { width: 100%; margin: 0; padding: 28px 24px 48px; box-sizing: border-box; }
 .explore-heading { position: static; display: block; padding: 0; border: 0; background: transparent; box-shadow: none; }

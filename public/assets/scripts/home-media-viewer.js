@@ -22,6 +22,7 @@
     return pages;
   }
   let dialog, refs, node, media = [], mediaIndex = 0, version = 0, requestController;
+  let uploadBusy = false;
   let imageDetailsVisible = false;
   let favorited = false;
   let history = [];
@@ -119,6 +120,32 @@
       if (item.kind === 'video') void playVideo(element, { deferBlocked: !!departing });
     }
     updateVideoControls();
+  }
+  async function uploadMedia(files, kind) {
+    if (!page || !node || busy || uploadBusy) return;
+    if (!window.authUser) { message('请先登录后上传'); return; }
+    const token = version, targetId = idOf(node);
+    uploadBusy = true; refs.uploadVideo.disabled = true;
+    try {
+      for (const file of files) {
+        const valid = kind === 'image' ? file.type.startsWith('image/') : /\.(mp4|webm|avi|mkv|ogg|mpeg)$/i.test(file.name);
+        if (!valid || file.size > (kind === 'image' ? 20 : 5000) * 1024 * 1024) throw Error(kind === 'image' ? '请选择不超过 20MB 的图片' : '请选择支持格式且不超过 5000MB 的视频');
+        message('正在上传并保存媒体…');
+        const form = new FormData();
+        form.append('file', file, file.name?.includes('.') ? file.name : `pasted-image.${file.type.split('/')[1] === 'jpeg' ? 'jpg' : file.type.split('/')[1] || 'png'}`);
+        const uploaded = await api(`/api/kb/upload-${kind}`, {}, { method:'POST', body:form });
+        if (token !== version || !dialog.open) return;
+        if (!uploaded.url) throw Error('上传未返回媒体地址');
+        const body = kind === 'image' ? { id:targetId, images:[uploaded.url], appendImages:true } : { id:targetId, videos:[uploaded.url], covers:[''], appendVideos:true, appendCovers:true };
+        await api('/api/kb/nodes/update', {}, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+        if (token !== version || !dialog.open) return;
+        const key = kind === 'image' ? 'images' : 'videos';
+        node[key] = [...list(node[key]), uploaded.url];
+        media = collectMedia(node); mediaIndex = media.findIndex(item => item.kind === kind && item.url === uploaded.url);
+        renderMedia(); message('上传成功，已添加到当前知识');
+      }
+    } catch (error) { if (token === version && error.name !== 'AbortError') message(error.message); }
+    finally { uploadBusy = false; refs.uploadVideo.disabled = false; refs.videoFile.value = ''; }
   }
   function moveMedia(direction) {
     if (busy || overlayMode || media.length < 2) return;
@@ -324,12 +351,21 @@
       <div class="home-reel-playback" data-ref="playback" hidden><button data-ref="play" aria-label="播放">▶</button><button data-ref="mute" aria-label="关闭声音">关闭声音</button><span data-ref="time" class="home-reel-time">0:00 / 0:00</span></div>
       <input data-ref="seek" class="home-reel-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="视频进度">
       <section class="home-reel-overlay" data-ref="overlay" hidden><header><strong data-ref="overlayTitle"></strong><button data-ref="overlayClose" aria-label="关闭信息">×</button></header><p data-ref="overlayText"></p><div class="home-reel-pages"><button data-ref="overlayPrev">上一页</button><span data-ref="overlayCount"></span><button data-ref="overlayNext">下一页</button></div><form data-ref="commentForm"><textarea data-ref="commentInput" maxlength="2000" rows="2" placeholder="写下评论…" aria-label="评论内容"></textarea><button type="submit">发送评论</button></form></section>
-    </div></div><aside class="home-reel-rail"><button data-action="favorite" data-ref="favorite" aria-label="????" aria-pressed="false"><i class="fa-regular fa-bookmark" aria-hidden="true"></i><small data-ref="favoriteLabel">收藏</small></button><button data-action="like" data-ref="like" aria-label="点赞"><i class="fa-regular fa-heart" aria-hidden="true"></i><b data-ref="likeCount">0</b></button><button data-action="comment" aria-label="评论"><i class="fa-regular fa-comment" aria-hidden="true"></i><b data-ref="commentCount">0</b></button><button data-action="share" aria-label="分享"><i class="fa-solid fa-share" aria-hidden="true"></i><b data-ref="shareCount">0</b></button><button data-ref="up" aria-label="返回上一条浏览历史"><i class="fa-solid fa-chevron-up" aria-hidden="true"></i><small>上一条历史</small></button><button data-ref="down" aria-label="向下随机翻页"><i class="fa-solid fa-chevron-down" aria-hidden="true"></i><small>随机下一条</small></button></aside><div class="home-reel-status" data-ref="status" role="status" aria-live="polite"></div>`;
+    </div></div><aside class="home-reel-rail"><button data-ref="relationGraph" class="home-reel-graph" aria-label="\u67e5\u770b\u77e5\u8bc6\u5173\u8054\u5173\u7cfb\u56fe"><i class="fa-solid fa-diagram-project" aria-hidden="true"></i><small>\u5173\u7cfb\u56fe</small></button><button data-ref="uploadVideo" class="home-reel-upload" aria-label="上传视频"><i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i><small>上传视频</small></button><input data-ref="videoFile" type="file" accept=".mp4,.webm,.avi,.mkv,.ogg,.mpeg" hidden><button data-action="favorite" data-ref="favorite" aria-label="????" aria-pressed="false"><i class="fa-regular fa-bookmark" aria-hidden="true"></i><small data-ref="favoriteLabel">收藏</small></button><button data-action="like" data-ref="like" aria-label="点赞"><i class="fa-regular fa-heart" aria-hidden="true"></i><b data-ref="likeCount">0</b></button><button data-action="comment" aria-label="评论"><i class="fa-regular fa-comment" aria-hidden="true"></i><b data-ref="commentCount">0</b></button><button data-action="share" aria-label="分享"><i class="fa-solid fa-share" aria-hidden="true"></i><b data-ref="shareCount">0</b></button><button data-ref="up" aria-label="返回上一条浏览历史"><i class="fa-solid fa-chevron-up" aria-hidden="true"></i><small>上一条历史</small></button><button data-ref="down" aria-label="向下随机翻页"><i class="fa-solid fa-chevron-down" aria-hidden="true"></i><small>随机下一条</small></button></aside><div class="home-reel-status" data-ref="status" role="status" aria-live="polite"></div>`;
     refs = Object.fromEntries(Array.from(dialog.querySelectorAll('[data-ref]')).map((el) => [el.dataset.ref, el]));
     dialog.querySelectorAll('button').forEach((button) => { if (button.type !== 'submit' || !button.closest('form')) button.type = 'button'; });
     document.body.append(dialog);
     refs.close.onclick = () => page ? window.setViewMode?.('app_home') : close(); dialog.addEventListener('close', () => { if (!dialog.open) cleanup(); });
     refs.left.onclick = () => moveMedia(-1); refs.right.onclick = () => moveMedia(1);
+    refs.relationGraph.onclick = () => { if(!page || busy || !node)return;window.openKnowledgeRelation?.(idOf(node)); };
+    refs.uploadVideo.onclick = () => { if(page && !busy && !uploadBusy)refs.videoFile.click(); };
+    refs.videoFile.onchange = () => uploadMedia(Array.from(refs.videoFile.files || []), 'video');
+    window.addEventListener('paste', event => {
+      if (!page || !dialog.open || window.kbViewMode !== 'shorts' || event.defaultPrevented || event.target?.closest?.('input,textarea,select,[contenteditable="true"],[role="textbox"]')) return;
+      const files = Array.from(event.clipboardData?.items || []).filter(item => item.kind === 'file' && item.type.startsWith('image/')).map(item => item.getAsFile()).filter(Boolean);
+      if (!files.length) return;
+      event.preventDefault(); void uploadMedia(files, 'image');
+    });
     refs.up.onclick = () => randomPage(-1); refs.down.onclick = () => randomPage(1);
     refs.play.onclick = refs.centerPlay.onclick = () => { message(''); const video = refs.stage.querySelector('video'); if (video) video.paused ? void playVideo(video) : video.pause(); };
     refs.stage.onclick = () => {

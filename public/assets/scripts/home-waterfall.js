@@ -1,6 +1,6 @@
 (function () {
-  function masonryPositions(heights, width, gap = 16, minWidth = 260) {
-    const columns = Math.max(1, Math.min(4, Math.floor((width + gap) / (minWidth + gap))));
+  function masonryPositions(heights, width, gap = 12, minWidth = 220) {
+    const columns = Math.max(1, Math.min(6, Math.floor((width + gap) / (minWidth + gap))));
     const cardWidth = Math.max(0, (width - gap * (columns - 1)) / columns);
     const bottoms = Array(columns).fill(0);
     const positions = heights.map(height => {

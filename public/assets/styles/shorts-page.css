@@ -31,3 +31,10 @@ body.home-shorts-active #applicationHomePanel > #shortsPanel {
 @media (max-width: 600px) {
   #homeMediaViewer.is-shorts-page { padding: 0; }
 }
+
+#homeMediaViewer .home-reel-upload { display:none; }
+#homeMediaViewer.is-shorts-page .home-reel-upload { display:flex; }
+#homeMediaViewer.is-shorts-page .home-reel-upload:disabled { opacity:.5; cursor:wait; }
+
+#homeMediaViewer .home-reel-graph { display:none; }
+#homeMediaViewer.is-shorts-page .home-reel-graph { display:flex; }

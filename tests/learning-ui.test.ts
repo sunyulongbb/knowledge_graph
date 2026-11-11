@@ -10,8 +10,23 @@ const pathLayout=new Function(source.slice(source.indexOf('  function learningPa
 test('learning path is ordered, connected and differentiates completed/current/pending levels',()=>{
   const map=pathLayout(['a','b','c'],['a'],'b');
   expect(map.points.map((p:any)=>p.state)).toEqual(['completed','current','pending']);
-  expect(map.points.map((p:any)=>p.y)).toEqual([76,224,372]);
-  expect(map.path).toContain('M 92 76');expect(map.path).toContain('Q');
+  expect(map.points.map((p:any)=>p.y)).toEqual([70,70,70]);
+  expect(map.path).toContain('M 80 70');expect(map.path).toContain('L');
+});
+
+test('learning map folds long routes into compact rows and preserves order on mobile',()=>{
+  const ids=Array.from({length:20},(_,index)=>String(index));
+  for(const width of [320,600,960]) {
+    const map=pathLayout(ids,[],ids[0],width);
+    expect(map.points.map((point:any)=>point.id)).toEqual(ids);
+    expect(new Set(map.points.map((point:any)=>`${point.x},${point.y}`)).size).toBe(ids.length);
+    expect(map.points.every((point:any)=>point.x>=80 && point.x<=map.width-80 && point.y<map.height)).toBe(true);
+    expect(map.path).toContain('C');
+    expect(map.height).toBeLessThan(1700);
+  }
+  expect(pathLayout(ids,[],ids[0],960).height).toBeLessThan(700);
+  expect(pathLayout([],[],'').height).toBe(180);
+  expect(pathLayout(['a'],[],'a').points[0].x).toBe(80);
 });
 
 function setup() {
@@ -55,8 +70,8 @@ function setup() {
   };
 }
 const tick=()=>new Promise(resolve=>setTimeout(resolve,0));
-async function solveQuiz(h:ReturnType<typeof setup>,nodeId:string) {
-  await h.click({learningStart:''});await tick();
+async function solveQuiz(h:ReturnType<typeof setup>,nodeId:string,start=true) {
+  if(start){await h.click({learningStart:''});await tick();}
   const quiz=h.quiz(),detail=await h.detail(nodeId);
   for(let index=0;index<quiz.questions.length;index++){
     await h.click({learningAnswer:correctLearningOption(quiz.questions[index],detail)});await tick();
@@ -85,7 +100,15 @@ test('manual learning UI adds/reorders/removes knowledge, saves, learns, browses
     await solveQuiz(h,'b');
     row=h.db.query('SELECT * FROM learning_routes').get() as any;
     expect(JSON.parse(row.completed_ids_json)).toEqual(['b']);expect(row.current_node_id).toBe('a');
+    expect(h.attributes.get('data-learning-screen')).toBe('quiz');
+    expect(h.dialog.open).toBe(false);
+    expect(h.panel.innerHTML).toContain('learning-celebration');
+    expect(h.panel.innerHTML).toContain('data-learning-next-level');
     await h.click({learningNextLevel:''});await tick();
+    expect(h.panel.innerHTML).toContain('data-learning-answer');
+    expect(h.panel.innerHTML).not.toContain('data-learning-start');
+    expect(new URL(h.location.href).searchParams.get('learning_level')).toBe('a');
+    await h.click({learningQuizReference:''});await tick();
     await h.click({learningRelated:'c'});await tick();
     expect(h.dialog.innerHTML).toContain('返回当前学习关卡');expect(h.dialog.innerHTML).toContain('描述c');
     expect((h.db.query('SELECT current_node_id FROM learning_routes').get() as any).current_node_id).toBe('a');
@@ -97,6 +120,28 @@ test('manual learning UI adds/reorders/removes knowledge, saves, learns, browses
     expect(h.panel.innerHTML).toContain('整条路线已完成');
     row=h.db.query('SELECT * FROM learning_routes').get() as any;
     expect(JSON.parse(row.completed_ids_json)).toEqual(['b','a']);
+  }finally{h.db.close();}
+});
+
+test('completed quizzes celebrate and wait for next step before starting the next node',async()=>{
+  const h=setup();try{
+    await h.window.loadKnowledgeLearning();await h.click({learningCreate:''});await h.click({learningMode:'manual'});
+    h.input('[data-learning-search]','a');await h.search();
+    await h.click({learningAdd:'a'});await h.click({learningAdd:'b'});await h.click({learningSave:''});await tick();
+    await h.click({learningLevel:'a'});await solveQuiz(h,'a');
+    expect(h.attributes.get('data-learning-screen')).toBe('quiz');
+    expect(h.dialog.open).toBe(false);
+    expect(new URL(h.location.href).searchParams.get('learning_level')).toBe('a');
+    expect(h.panel.innerHTML).toContain('learning-celebration');
+    expect(h.panel.innerHTML).not.toContain('data-learning-answer');
+    await h.click({learningNextLevel:''});await tick();
+    expect(new URL(h.location.href).searchParams.get('learning_level')).toBe('b');
+    expect(h.panel.innerHTML).toContain('data-learning-answer');
+    await solveQuiz(h,'b',false);
+    const row=h.db.query('SELECT * FROM learning_routes').get() as any;
+    expect(JSON.parse(row.completed_ids_json)).toEqual(['a','b']);
+    expect(h.panel.innerHTML).toContain('learning-quiz-finish');
+    expect(h.panel.innerHTML).not.toContain('data-learning-answer');
   }finally{h.db.close();}
 });
 

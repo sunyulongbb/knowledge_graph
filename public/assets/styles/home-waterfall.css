@@ -1,35 +1,38 @@
 #applicationHomePanel .home-discovery-main { overflow-anchor: none; }
 #applicationHomePanel .app-knowledge-panel.is-for-you-feed { border: 0; background: transparent; overflow: visible; }
 #applicationHomePanel .is-for-you-feed .app-home-section-heading { padding-inline: 0; }
-.for-you-masonry { position: relative; display: grid; grid-template-columns: repeat(auto-fit,minmax(min(260px,100%),1fr)); gap: 16px; min-height: 1px; overflow-anchor: none; }
+.for-you-masonry { position: relative; display: grid; grid-template-columns: repeat(auto-fit,minmax(min(220px,100%),1fr)); gap: 12px; min-height: 1px; overflow-anchor: none; }
 .for-you-masonry.is-masonry-ready { display: block; }
 .for-you-masonry.is-masonry-ready > * { position: absolute; top: 0; left: 0; box-sizing: border-box; }
-.for-you-card { min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-0); color: var(--fg); }
-.for-you-card-header { display: flex; align-items: center; gap: 10px; padding: 14px; }
-.for-you-avatar { flex-shrink: 0; display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: color-mix(in srgb,var(--accent) 14%,var(--surface-1)); color: var(--accent); font-size: 15px; font-weight: 600; }
-.for-you-card-header > span:nth-child(2) { flex: 1; min-width: 0; }
-.for-you-card-header strong { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; font-weight: 650; }
-.for-you-card-header time { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; }
-.for-you-card button { font: inherit; color: inherit; cursor: pointer; }
-.for-you-card-header > button { flex-shrink: 0; padding: 4px; border: 0; background: none; color: var(--muted); }
-.for-you-card-media { position: relative; display: block; width: calc(100% - 16px); padding: 0; margin: 0 8px; overflow: hidden; border: 0; border-radius: 5px; background: var(--surface-1); }
-.for-you-card-media img,.for-you-card-media video { display: block; width: 100%; height: auto; max-height: 560px; min-height: 100px; object-fit: contain; }
-.for-you-video-badge { position: absolute; bottom: 9px; left: 9px; padding: 4px 8px; border-radius: 12px; background: #0009; color: #fff; font-size: 10px; }
-.for-you-card-content { padding: 14px 14px 0; }
-.for-you-card .for-you-card-title { display: block; width: 100%; padding: 0; border: 0; background: none; text-align: left; font-size: 15px; font-weight: 600; line-height: 1.6; overflow-wrap: anywhere; }
-.for-you-card .for-you-card-title.is-text-only { padding-top: 2px; font-size: 22px; line-height: 1.4; font-weight: 500; letter-spacing: -.025em; }
-.for-you-card-content p { margin: 10px 0 0; white-space: pre-line; font-size: 13px; line-height: 1.75; overflow-wrap: anywhere; }
-.for-you-card-tags { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-top: 18px; color: var(--muted); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
-.for-you-card-tags > button { max-width:100%; padding:3px 9px; border:1px solid color-mix(in srgb,var(--accent) 22%,transparent); border-radius:12px; background:color-mix(in srgb,var(--accent) 8%,transparent); color:var(--accent); font:inherit; overflow-wrap:anywhere; text-align:left; cursor:pointer; }
-.for-you-card-tags > button:hover { background:color-mix(in srgb,var(--accent) 16%,transparent); }
-.for-you-card-tags > button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-
-.for-you-card-actions { display: flex; justify-content: space-between; align-items: center; padding: 16px 14px 14px; }
-.for-you-card-actions button { display: flex; align-items: center; gap: 7px; padding: 0; border: 0; background: none; color: var(--muted); font-size: 11px; }
-.for-you-card-actions i { font-size: 16px; }
-.for-you-card button:hover { color: var(--accent); }
-.for-you-card button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.for-you-card { min-width:0; color:var(--fg); background:transparent; }
+.for-you-card button { font:inherit; color:inherit; cursor:pointer; }
+.for-you-card-media { position:relative; display:block; width:100%; padding:0; margin:0; overflow:hidden; border:0; border-radius:14px; background:var(--surface-1); }
+.for-you-card-media img,.for-you-card-media video { display:block; width:100%; height:auto; max-height:none; object-fit:contain; }
+.for-you-video-badge { position:absolute; top:10px; right:10px; display:grid; place-items:center; width:24px; height:24px; border-radius:50%; background:#0005; color:#fff; font-size:10px; }
+.for-you-card-content { padding:9px 8px 0; }
+.for-you-card .for-you-card-title { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; width:100%; padding:0; border:0; background:none; text-align:left; font-size:13px; font-weight:550; line-height:1.55; overflow-wrap:anywhere; }
+.for-you-card-meta { display:flex; align-items:center; gap:6px; margin-top:8px; min-height:20px; color:var(--muted); font-size:11px; }
+.for-you-avatar { display:grid; place-items:center; flex-shrink:0; width:18px; height:18px; border-radius:50%; background:color-mix(in srgb,var(--accent) 12%,var(--surface-1)); color:var(--accent); font-size:10px; }
+.for-you-card-author { flex:1; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.for-you-card-meta time,.for-you-card-stat { flex-shrink:0; font-size:10px; }
+.for-you-card-stat { display:flex; align-items:center; gap:4px; }
+.for-you-card .for-you-card-quote { --note-color:#938050; position:relative; display:block; width:100%; padding:18px 18px 20px; overflow:hidden; border:1px solid color-mix(in srgb,var(--note-color) 22%,var(--border)); border-radius:14px; background:color-mix(in srgb,var(--note-color) 13%,var(--surface-0)); text-align:left; transition:background .18s ease; }
+.for-you-card-quote.palette-1 { --note-color:#528b79; }
+.for-you-card-quote.palette-2 { --note-color:#658bb0; }
+.for-you-card-quote.palette-3 { --note-color:#9981b2; }
+.for-you-card-quote.palette-4 { --note-color:#b88278; }
+.for-you-card-quote.palette-5 { --note-color:#8d9560; }
+.for-you-card-quote::after { content:''; display:block; width:26px; height:3px; margin-top:18px; border-radius:2px; background:color-mix(in srgb,var(--note-color) 65%,var(--surface-0)); }
+.for-you-note-label { display:flex; align-items:center; gap:6px; margin-bottom:15px; color:var(--muted); font-size:10px; font-weight:500; line-height:1.5; letter-spacing:.08em; overflow-wrap:anywhere; }
+.for-you-note-label i { color:var(--note-color); font-size:11px; }
+.for-you-card-text-title { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; color:var(--fg); font-family:"Noto Serif SC","Source Han Serif SC","Songti SC",SimSun,serif; font-size:23px; font-weight:700; line-height:1.5; letter-spacing:.015em; overflow-wrap:anywhere; }
+.for-you-card-quote.is-long-title .for-you-card-text-title { font-size:19px; line-height:1.55; }
+.for-you-card-quote p { display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; overflow:hidden; margin:12px 0 0; color:color-mix(in srgb,var(--fg) 72%,var(--surface-0)); font-size:12px; font-weight:400; line-height:1.85; white-space:pre-line; overflow-wrap:anywhere; }
+.for-you-card .for-you-card-quote:hover { background:color-mix(in srgb,var(--note-color) 19%,var(--surface-0)); }
+@media(prefers-reduced-motion:reduce) { .for-you-card .for-you-card-quote { transition:none; } }
+.for-you-card button:hover { color:var(--accent); }
+.for-you-card button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .for-you-feed-tail { padding: 28px 0 14px; text-align: center; color: var(--muted); font-size: 12px; }
 .for-you-feed-tail [data-home-infinite-status] { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; min-height: 36px; }
 [data-home-feed-sentinel] { height: 1px; }
-@media(max-width:600px) { .for-you-card { border-radius: 10px; } .for-you-card .for-you-card-title.is-text-only { font-size: 20px; } }
+@media(max-width:600px) { .for-you-card-media,.for-you-card .for-you-card-quote { border-radius:10px; } }

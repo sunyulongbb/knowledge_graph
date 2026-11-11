@@ -1,11 +1,21 @@
 (function () {
   const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  function learningPathLayout(ids, completed, current) {
-    const offsets = [-38, 8, 42, 0];
-    const points = ids.map((id,index) => ({ id, x:130 + offsets[index % offsets.length], y:76 + index * 148,
-      state: completed.includes(id) ? 'completed' : id === current ? 'current' : 'pending' }));
-    const path = points.map((point,index) => index ? `Q ${points[index-1].x} ${point.y - 74}, ${point.x} ${point.y}` : `M ${point.x} ${point.y}`).join(' ');
-    return {points,path,height:Math.max(180,ids.length * 148 + 60)};
+  function learningPathLayout(ids, completed, current, availableWidth = 960) {
+    const columns = Math.min(5, Math.max(2, Math.floor(availableWidth / 160)), Math.max(1, ids.length));
+    const width = columns * 160;
+    const points = ids.map((id, index) => {
+      const row = Math.floor(index / columns), column = index % columns;
+      return { id, x:80 + (row % 2 ? columns - 1 - column : column) * 160, y:70 + row * 150,
+        state:completed.includes(id) ? 'completed' : id === current ? 'current' : 'pending' };
+    });
+    const path = points.map((point, index) => {
+      if (!index) return `M ${point.x} ${point.y}`;
+      const previous = points[index - 1];
+      if (previous.y === point.y) return `L ${point.x} ${point.y}`;
+      const bend = point.x + (Math.floor(index / columns) % 2 ? 64 : -64);
+      return `C ${bend} ${previous.y}, ${bend} ${point.y}, ${point.x} ${point.y}`;
+    }).join(' ');
+    return { points, path, width, height:Math.max(180, Math.ceil(ids.length / columns) * 150 + 20) };
   }
   const panel = document.createElement('section'); panel.id = 'knowledgeLearningPage'; panel.setAttribute('aria-label','知识学习');
   document.getElementById('applicationHomePanel').append(panel);
@@ -64,10 +74,10 @@
   }
   function map() {
     const active=currentId || route.currentNodeId || route.nodeIds[0];
-    const layout=learningPathLayout(route.nodeIds,route.completedIds,active);
-    return `<aside class="learning-map"><div class="learning-map-heading"><strong>学习地图</strong><span>${route.completedCount} / ${route.levelCount} 关</span></div><progress max="100" value="${route.progress}" aria-label="路线进度"></progress><ol class="learning-path" style="height:${layout.height}px"><svg viewBox="0 0 260 ${layout.height}" preserveAspectRatio="none" aria-hidden="true"><path d="${layout.path}"></path></svg>${layout.points.map((point,index)=>{
+    const layout=learningPathLayout(route.nodeIds,route.completedIds,active,Math.min(1000,(window.innerWidth || 1024)-64));
+    return `<aside class="learning-map"><div class="learning-map-heading"><strong>学习地图</strong><span>${route.completedCount} / ${route.levelCount} 关</span></div><progress max="100" value="${route.progress}" aria-label="路线进度"></progress><ol class="learning-path" style="height:${layout.height}px"><svg viewBox="0 0 ${layout.width} ${layout.height}" preserveAspectRatio="none" aria-hidden="true"><path d="${layout.path}"></path></svg>${layout.points.map((point,index)=>{
       const node=routeNodes.find(item=>idOf(item)===point.id);
-      return `<li style="left:${point.x/260*100}%;top:${point.y}px" class="is-${point.state}"><button type="button" data-learning-level="${escape(point.id)}" ${busy?'disabled':''} ${point.id===active?'aria-current="step"':''} title="${escape(nameOf(node))}">${point.state==='completed'?'<i class="fa-solid fa-check" aria-hidden="true"></i>':index+1}</button><span>${escape(nameOf(node))}</span></li>`;
+      return `<li style="left:${point.x/layout.width*100}%;top:${point.y}px" class="is-${point.state}"><button type="button" data-learning-level="${escape(point.id)}" ${busy?'disabled':''} ${point.id===active?'aria-current="step"':''} title="${escape(nameOf(node))}">${point.state==='completed'?'<i class="fa-solid fa-check" aria-hidden="true"></i>':index+1}</button><span>${escape(nameOf(node))}</span></li>`;
     }).join('')}</ol><div class="learning-map-destination"><i class="fa-solid fa-flag-checkered" aria-hidden="true"></i><strong>旅程终点，新的起点</strong><small>顺序可自由选择，关联距离不代表难度。</small></div></aside>`;
   }
   function valueText(value) {
@@ -86,12 +96,15 @@
       <section class="learning-lesson-section"><h3>主要属性</h3>${level.attributes?.length?`<dl>${level.attributes.slice(0,20).map(attr=>`<div><dt>${escape(attr.property_label_zh||attr.property||attr.key)}</dt><dd>${escape(valueText(attr.value))}</dd></div>`).join('')}</dl>`:'<p class="muted">暂无属性信息</p>'}</section>
       ${!relatedId&&screen!=='quiz'?`<div class="learning-complete-bar"><p>通过基于这条知识生成的选择题，完成本站学习。</p><button class="btn primary" type="button" data-learning-start ${busy?'disabled':''}>${completed?'复习练习':'开始学习'} <i class="fa-solid fa-play" aria-hidden="true"></i></button></div>`:''}</div>`;
   }
+  function celebration() {
+    return `<div class="learning-celebration" aria-hidden="true"><b>🎉</b>${Array.from({length:18},(_,i)=>`<i style="--x:${(i%9-4)*28}px;--y:${-65-(i%4)*24}px;--turn:${i*53}deg;--delay:${i%3*45}ms;--confetti-color:${['#58a879','#e8b34e','#818cf8','#ec899b'][i%4]}"></i>`).join('')}</div>`;
+  }
   function renderQuiz() {
     const actions='<button class="btn" type="button" data-learning-exit-quiz><i class="fa-solid fa-xmark" aria-hidden="true"></i> 返回地图</button>';
     if(!quiz)return top('准备练习','正在根据知识内容生成题目…',actions)+notice();
-    if(quiz.finished)return top('完成一站！','每一道题，都是知识之间更牢固的连接。',actions)+`<div class="learning-quiz-finish"><span><i class="fa-solid fa-check" aria-hidden="true"></i></span><h2>${escape(quiz.name)}</h2><p>本关 ${quiz.questions.length} 道题全部答对</p><strong>路线进度 ${route.progress}%</strong><p>${escape(quiz.feedback?.explanation || '')}</p>${route.progress===100?'<p>整条路线已完成，随时可以回来复习。</p>':''}<div><button class="btn" type="button" data-learning-exit-quiz>返回地图</button>${route.currentNodeId?'<button class="btn primary" type="button" data-learning-next-level>学习下一站</button>':''}</div></div>`;
+    if(quiz.finished)return top('完成一站！','每一道题，都是知识之间更牢固的连接。',actions)+`<div class="learning-quiz-finish">${celebration()}<span><i class="fa-solid fa-check" aria-hidden="true"></i></span><h2>${escape(quiz.name)}</h2><p>本关 ${quiz.questions.length} 道题全部答对</p><strong>路线进度 ${route.progress}%</strong><p>${escape(quiz.feedback?.explanation || '')}</p>${route.progress===100?'<p>整条路线已完成，随时可以回来复习。</p>':''}<div><button class="btn" type="button" data-learning-exit-quiz>返回地图</button>${route.currentNodeId?'<button class="btn primary" type="button" data-learning-next-level>下一步</button>':''}</div></div>`;
     const question=quiz.questions[quiz.index];
-    return top('专注练习',quiz.name,actions)+notice()+`<div class="learning-quiz-shell"><div class="learning-quiz-topline"><span>第 ${quiz.index+1} / ${quiz.questions.length} 题</span><button type="button" data-learning-quiz-reference>查看知识依据</button></div><progress value="${quiz.index}" max="${quiz.questions.length}" aria-label="答题进度"></progress><p class="learning-quiz-tip">${escape(quiz.note || '')}</p><h2>${escape(question.prompt)}</h2><div class="learning-quiz-options">${question.options.map((option,index)=>`<button type="button" data-learning-answer="${escape(option.id)}" ${busy||quiz.feedback?.correct?'disabled':''} class="${quiz.selected===option.id?(quiz.feedback?(quiz.feedback.correct?'is-correct':'is-wrong'):'is-selected'):''}"><b>${String.fromCharCode(65+index)}</b><span>${escape(option.text)}</span>${quiz.selected===option.id&&quiz.feedback?`<i class="fa-solid fa-${quiz.feedback.correct?'check':'xmark'}" aria-hidden="true"></i>`:''}</button>`).join('')}</div>${quiz.feedback?`<div class="learning-quiz-feedback ${quiz.feedback.correct?'is-correct':'is-wrong'}" role="status"><strong>${quiz.feedback.correct?'答对了！':'再试一次'}</strong><p>${escape(quiz.feedback.explanation)}</p>${quiz.feedback.correct?'<button class="btn primary" type="button" data-learning-next-question>下一题 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>':''}</div>`:'<p class="learning-quiz-tip">选择一个答案。答错可以重试，不扣分。</p>'}</div>`;
+    return top('专注练习',quiz.name,actions)+notice()+`<div class="learning-quiz-shell"><div class="learning-quiz-topline"><span>第 ${quiz.index+1} / ${quiz.questions.length} 题</span><button type="button" data-learning-quiz-reference>查看知识依据</button></div><progress value="${quiz.index}" max="${quiz.questions.length}" aria-label="答题进度"></progress><p class="learning-quiz-tip">${escape(quiz.note || '')}</p><h2>${escape(question.prompt)}</h2><div class="learning-quiz-options">${question.options.map((option,index)=>`<button type="button" data-learning-answer="${escape(option.id)}" ${busy||quiz.feedback?.correct?'disabled':''} class="${quiz.selected===option.id?(quiz.feedback?(quiz.feedback.correct?'is-correct':'is-wrong'):'is-selected'):''}"><b>${String.fromCharCode(65+index)}</b><span>${escape(option.text)}</span>${quiz.selected===option.id&&quiz.feedback?`<i class="fa-solid fa-${quiz.feedback.correct?'check':'xmark'}" aria-hidden="true"></i>`:''}</button>`).join('')}</div>${quiz.feedback?`<div class="learning-quiz-feedback ${quiz.feedback.correct?'is-correct':'is-wrong'}" role="status">${quiz.feedback.correct?celebration():''}<strong>${quiz.feedback.correct?'答对了！':'再试一次'}</strong><p>${escape(quiz.feedback.explanation)}</p>${quiz.feedback.correct?'<button class="btn primary" type="button" data-learning-next-question>下一题 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>':''}</div>`:'<p class="learning-quiz-tip">选择一个答案。答错可以重试，不扣分。</p>'}</div>`;
   }
   function render() {
     const scroll=panel.scrollTop;panel.setAttribute('data-learning-screen',screen);
@@ -185,6 +198,7 @@
     quiz.selected=optionId;quiz.feedback=null;busy=true;error='';render();const token=detailVersion;
     try{const data=await api(`/routes/${route.id}/answer`,{attemptId:quiz.attemptId,questionId:question.id,optionId});if(token!==detailVersion)return;
       route=data.route;quiz.feedback=data;quiz.finished=data.finished;
+      if(data.finished)panel.scrollTop=0;
     }catch(failure){if(token===detailVersion)error=failure.message;}
     if(token===detailVersion){busy=false;render();}
   }
@@ -221,7 +235,7 @@
     if(data.learningAnswer){void answerQuiz(data.learningAnswer);return;}
     if('learningNextQuestion'in data){if(quiz?.feedback?.correct){quiz.index++;quiz.selected='';quiz.feedback=null;panel.scrollTop=0;render();}return;}
     if('learningExitQuiz'in data){++detailVersion;screen='learn';quiz=null;currentId=route.currentNodeId||currentId;error='';writeRoute();render();return;}
-    if('learningNextLevel'in data){const next=route.currentNodeId;screen='learn';quiz=null;writeRoute();if(next)void selectLevel(next);else render();return;}
+    if('learningNextLevel'in data){if(busy||!quiz?.finished||!route?.currentNodeId)return;currentId=route.currentNodeId;relatedId='';level=null;levelError='';void startQuiz();return;}
     if('learningQuizReference'in data){void selectLevel(currentId);return;}
     if(data.learningRelated){void browseRelated(data.learningRelated);return;}
     if('learningReturnLevel'in data){void selectLevel(currentId);return;}
@@ -238,6 +252,7 @@
     else if(target==='edit')newDraft();else await showHome();
   };
   window.addEventListener('kb-auth-change',()=>{closeNodeDialog();quiz=null;++viewVersion;++detailVersion;++searchVersion;busy=false;route=null;draft=null;results=[];if(window.kbViewMode==='learning')void showHome();});
+  window.addEventListener('resize',()=>{if(window.kbViewMode==='learning' && screen==='learn' && route)render();});
   window.stopKnowledgeLearning=()=>{closeNodeDialog();quiz=null;++viewVersion;++detailVersion;++searchVersion;clearTimeout(searchTimer);busy=false;};
   if(window.kbViewMode==='learning')void window.loadKnowledgeLearning();
 })();

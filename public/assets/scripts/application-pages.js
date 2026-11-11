@@ -29,7 +29,7 @@
       else button.removeAttribute('aria-current');
     });
     document.querySelectorAll('[data-home-action="shorts"], [data-home-action="app_explore"], [data-home-action="learning"]').forEach(button => {
-      if (window.kbViewMode === button.dataset.homeAction) button.setAttribute('aria-current', 'page');
+      if (window.kbViewMode === button.dataset.homeAction || (window.kbViewMode === 'big_bang' && button.dataset.homeAction === 'app_explore')) button.setAttribute('aria-current', 'page');
       else button.removeAttribute('aria-current');
     });
     const brand = byId('homeDiscoveryBrand');
@@ -105,7 +105,7 @@
     const hits = node.searchHighlights || {};
     const title = hits.name?.length ? highlighted(hits.name[0]) : escape(node.name || node.label || node.id);
     const description = hits.description?.length ? hits.description.map(highlighted).join(' … ') : escape(node.description || node.desc_zh || '暂无描述');
-    return `<article class="app-knowledge-item">${picture}<div><a href="${escape(nodeUrl(node))}">${title}</a><p>${description}</p>${hits.aliases?.length ? `<p class="app-search-alias-match">别名匹配：${highlighted(hits.aliases[0])}</p>` : ''}<small class="muted">${escape(node.typeLabel || node.type || '未设置本体')} · ${escape((node.updated_at || node.created_at || '').slice(0, 10))}</small></div></article>`;
+    return `<article class="app-knowledge-item" data-knowledge-id="${escape(node.id || node._id)}">${picture}<div><a href="${escape(nodeUrl(node))}">${title}</a><p>${description}</p>${hits.aliases?.length ? `<p class="app-search-alias-match">别名匹配：${highlighted(hits.aliases[0])}</p>` : ''}<small class="muted">${escape(node.typeLabel || node.type || '未设置本体')} · ${escape((node.updated_at || node.created_at || '').slice(0, 10))}</small></div></article>`;
   }
   function imageCandidates(value) {
     if (Array.isArray(value)) return value.flatMap(imageCandidates);
@@ -289,15 +289,15 @@
     const image = firstImage(node), video = firstVideo(node), cover = firstCover(node);
     const author = node.owner_name || node.created_by_name || node.typeLabel || node.type || '知识分享';
     const description = String(node.description || node.desc_zh || '').trim();
-    const tags = Array.isArray(node.tags) ? [...new Set(node.tags.filter(tag => typeof tag === 'string').map(tag => tag.trim()).filter(Boolean))].slice(0, 5) : [];
-    const picture = image ? `<img src="${escape(image)}" alt="" loading="lazy" decoding="async">`
-      : video ? `<video src="${escape(video)}" ${cover ? `poster="${escape(cover)}"` : ''} muted playsinline preload="metadata"></video><span class="for-you-video-badge"><i class="fa-solid fa-play" aria-hidden="true"></i> 视频</span>`
-      : cover ? `<img src="${escape(cover)}" alt="" loading="lazy" decoding="async">` : '';
+    const picture = image || cover ? `<img src="${escape(image || cover)}" alt="" loading="lazy" decoding="async">`
+      : video ? `<video src="${escape(video)}" muted playsinline preload="metadata"></video>` : '';
+    const likes = node._interaction?.likes;
+    const palette = Array.from(String(id || title)).reduce((hash,char)=>(Math.imul(hash,31)+char.codePointAt(0))>>>0,0)%6;
+    const titleSize = Array.from(title).length > 28 ? ' is-long-title' : '';
     return `<article class="for-you-card" data-home-node-id="${escape(id)}">
-      <div class="for-you-card-header"><span class="for-you-avatar" aria-hidden="true">${escape(String(author).slice(0, 1))}</span><span><strong>${escape(author)}</strong><time>${escape(shortDate(node.updated_at || node.created_at))}</time></span><button type="button" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}" title="查看详情"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button></div>
-      ${picture ? `<button data-home-open="shorts" class="for-you-card-media" type="button" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}的媒体">${picture}</button>` : ''}
-      <div class="for-you-card-content"><button type="button" class="for-you-card-title${picture ? '' : ' is-text-only'}" data-home-node-id="${escape(id)}">${escape(title)}</button>${description ? `<p>${escape(description.length > 900 ? description.slice(0, 900) + '…' : description)}</p>` : ''}${tags.length ? `<div class="for-you-card-tags">${tags.map(tag => `<button type="button" data-home-tag="${escape(tag)}">#${escape(tag)}</button>`).join('')}</div>` : ''}</div>
-      <div class="for-you-card-actions"><button type="button" data-home-node-id="${escape(id)}"><i class="fa-regular fa-comment" aria-hidden="true"></i> 详情与评论</button><button type="button" data-home-node-id="${escape(id)}" aria-label="打开知识详情"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></button></div>
+      ${picture ? `<button data-home-open="shorts" class="for-you-card-media" type="button" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}的媒体">${picture}${video?'<span class="for-you-video-badge"><i class="fa-solid fa-play" aria-hidden="true"></i></span>':''}</button>` : `<button type="button" class="for-you-card-quote palette-${palette}${titleSize}" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}"><span class="for-you-note-label"><i class="fa-solid fa-book-open" aria-hidden="true"></i> ${escape(node.typeLabel || '\u77e5\u8bc6\u624b\u8bb0')}</span><strong class="for-you-card-text-title">${escape(title)}</strong>${description ? `<p>${escape(description.slice(0,360))}</p>` : ''}</button>`}
+      <div class="for-you-card-content">${picture ? `<button type="button" class="for-you-card-title" data-home-node-id="${escape(id)}">${escape(title)}</button>` : ''}
+      <div class="for-you-card-meta"><span class="for-you-avatar" aria-hidden="true">${escape(Array.from(String(author))[0] || '')}</span><span class="for-you-card-author">${escape(author)}</span>${likes !== undefined ? `<span class="for-you-card-stat"><i class="fa-regular fa-heart" aria-hidden="true"></i> ${Number(likes)||0}</span>` : `<time>${escape(shortDate(node.updated_at || node.created_at))}</time>`}</div></div>
     </article>`;
   }
   function homeKnowledgeCard(node) {

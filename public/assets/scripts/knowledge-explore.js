@@ -113,7 +113,7 @@
       content = recommended.length ? group('从这些分类开始', recommended, 'recommended') : '';
       for (const root of tree.roots) content += group(name(root), childrenOf(root.id).length ? childrenOf(root.id) : [root], root.id, root.id);
     }
-    panel.innerHTML = `<div class="explore-content"><header class="explore-heading"><p>EXPLORE KNOWLEDGE</p><h1>${escape(selectedTag ? '#' + selectedTag : tree.byId.has(selected)?name(tree.byId.get(selected)):'探索知识')}</h1><span>从分类出发，发现值得深入的知识。</span></header>
+    panel.innerHTML = `<div class="explore-content"><header class="explore-heading"><p>EXPLORE KNOWLEDGE</p><h1>${escape(selectedTag ? '#' + selectedTag : tree.byId.has(selected)?name(tree.byId.get(selected)):'探索知识')}</h1><span>从分类出发，发现值得深入的知识。</span><button class="btn" type="button" data-explore-big-bang><i class="fa-solid fa-atom" aria-hidden="true"></i> Big Bang \u77e5\u8bc6\u5b87\u5b99</button></header>
       <nav class="explore-topic-tabs" aria-label="一级分类"><button type="button" data-explore-category="" ${!selected ? 'aria-current="page"' : ''}>全部</button>${tree.roots.map(row => `<button type="button" data-explore-category="${escape(row.id)}" ${row.id === activeRoot ? 'aria-current="page"' : ''}>${escape(name(row))}</button>`).join('')}</nav>${content}</div>`;
     panel.scrollTop = scrollTop;
   }
@@ -207,6 +207,7 @@
     }
   };
   panel.addEventListener('click', event => {
+    if(event.target.closest('[data-explore-big-bang]')) { savedScrollTop=panel.scrollTop; clearTimeout(scrollTimer); window.setViewMode('big_bang'); return; }
     const category = event.target.closest('[data-explore-category]');
     if (category) { selectCategory(category.dataset.exploreCategory); return; }
     const more = event.target.closest('[data-explore-more]');
