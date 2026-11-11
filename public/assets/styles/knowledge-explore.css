@@ -87,3 +87,6 @@ body.home-explore-active:not(.home-big-bang-active):not(.home-relation-active) #
 #knowledgeExplorePage .explore-tile-caption button { pointer-events:auto; padding:0; border:0; background:transparent; color:inherit; text-align:left; cursor:pointer; }
 #knowledgeExplorePage .explore-tile-caption button:hover { text-decoration:underline; }
 #knowledgeExplorePage .explore-media-tile:focus-within .explore-tile-caption { opacity:1; transform:none; }
+
+#knowledgeExplorePage .explore-heading { position:relative; padding-right:56px; }
+#knowledgeExplorePage .explore-heading [data-explore-big-bang] { position:absolute; top:0; right:0; display:grid; place-items:center; width:40px; height:40px; margin:0; padding:0; border-radius:12px; font-size:17px; }

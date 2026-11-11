@@ -56,3 +56,26 @@ test('actual application startup preserves graph node for deferred page scripts'
    expect(syncCalls).toEqual([]);
  }
 });
+
+test('incremental payloads keep stable edge ids and category colors regardless of result order',()=>{
+ const a={id:'a',type:'Topic'},b={id:'b',type:'Concept'},c={id:'c',type:'Topic'};
+ const relation={source:'a',target:'b',type:'related',label:'Related'};
+ const first=elements({nodes:[a,b],edges:[relation]},'a');
+ const next=elements({nodes:[c,b,a],edges:[{source:'c',target:'a',label:'Other'},relation]},'a');
+ expect(first.find((item:any)=>item.data.source)?.data.id).toBe(next.find((item:any)=>item.data.source==='a')?.data.id);
+ expect(first.find((item:any)=>item.data.id==='a')?.data.color).toBe(next.find((item:any)=>item.data.id==='a')?.data.color);
+ expect(first.find((item:any)=>item.data.id==='b')?.data.color).toBe(next.find((item:any)=>item.data.id==='b')?.data.color);
+});
+
+const placeExpansion=new Function(source.slice(source.indexOf('  function expansionPositions'),source.indexOf('  const panel='))+';return expansionPositions;')();
+const overlaps=(a:any,b:any)=>a.x1<b.x2&&a.x2>b.x1&&a.y1<b.y2&&a.y2>b.y1;
+test('incremental placement avoids existing nodes, long labels and reserved animation destinations',()=>{
+ const occupied=[{x1:-100,x2:100,y1:-100,y2:130},{x1:120,x2:340,y1:-100,y2:160},{x1:-340,x2:-120,y1:-150,y2:180}];
+ const snapshot=JSON.stringify(occupied);
+ const first=placeExpansion({x:0,y:0},Array.from({length:25},()=>({width:220,height:180})),occupied);
+ const second=placeExpansion({x:190,y:0},Array.from({length:12},()=>({width:260,height:240})),[...occupied,...first.map((item:any)=>item.box)]);
+ const boxes=[...occupied,...first.map((item:any)=>item.box),...second.map((item:any)=>item.box)];
+ for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++)expect(overlaps(boxes[i],boxes[j])).toBe(false);
+ expect(JSON.stringify(occupied)).toBe(snapshot);
+ expect(placeExpansion({x:0,y:0},[],occupied)).toEqual([]);
+});

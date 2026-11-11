@@ -33,10 +33,11 @@ try {
     const original=window.fetch.bind(window);
     window.fetch=async(input,options)=>{
       const url=new URL(typeof input==='string'?input:input.url||input,location.origin);
-      if(url.pathname==='/api/kb/node/graph'){
-        const center=url.searchParams.get('id');
+      if(url.pathname==='/api/kb/node/graph'||url.pathname==='/api/kb/discover/search'){
+        const center=url.searchParams.get('id')||'fixture-center';
         const nodes=Array.from({length:12},(_,i)=>({id:i===0?center:'fixture-'+i,name:i===0?'Knowledge ecosystem':('Knowledge '+i),type:i%3===0?'Topic':i%3===1?'Concept':'Application',description:'Connected knowledge used to verify graph rendering.'}));
-        return Response.json({nodes,edges:nodes.slice(1).map((node,i)=>({source:i%2?node.id:center,target:i%2?center:node.id,label:i%3===0?'depends on':'related to'}))});
+        if(url.pathname==='/api/kb/node/graph'&&center!=='fixture-center')nodes.push({id:center+'-extra',name:'Additional knowledge',type:'Concept'});
+        return Response.json({nodes,total:nodes.length,edges:nodes.slice(1).map((node,i)=>({source:i%2?node.id:center,target:i%2?center:node.id,label:i%3===0?'depends on':'related to'}))});
       }
       return original(input,options);
     };
@@ -47,12 +48,28 @@ try {
   await until(()=>evaluate(`document.querySelectorAll('#knowledgeRelationPage canvas').length>0`)).catch(async error=>{console.error('Page state',await evaluate(`({url:location.href,title:document.title,graph:!!document.getElementById('knowledgeRelationPage'),mode:window.kbViewMode,status:document.querySelector('#knowledgeRelationPage [data-status]')?.textContent})`),errors);throw error;});
   assert.equal(await evaluate(`new URLSearchParams(location.hash.slice(1)).get('node')`),'fixture-center');
   assert.ok(await evaluate(`document.querySelector('.relation-page-canvas').getBoundingClientRect().height>200`));
-  assert.ok(await evaluate(`document.querySelector('#knowledgeRelationPage [data-status]').textContent.includes('12')`));
+  await until(()=>evaluate(`document.querySelector('#knowledgeRelationPage [data-status]').textContent.includes('12')`)).catch(async error=>{console.error(await evaluate(`document.querySelector('#knowledgeRelationPage [data-status]').textContent`),errors);throw error;});
   await cdp('Page.reload',{ignoreCache:true});
   await until(()=>evaluate(`document.querySelectorAll('#knowledgeRelationPage canvas').length>0`));
   assert.equal(await evaluate(`new URLSearchParams(location.hash.slice(1)).get('node')`),'fixture-center');
   await evaluate(`window.dispatchEvent(new CustomEvent('kb-auth-change'))`);
   await until(()=>evaluate(`document.querySelectorAll('#knowledgeRelationPage canvas').length>0`));
+  assert.equal(await evaluate(`document.querySelector('#knowledgeRelationPage [data-layout]').value`),'cose');
+  assert.equal(await evaluate(`document.querySelector('.relation-page-canvas')._cyreg.cy.nodes().length`),12);
+  assert.ok(await evaluate(`!!document.querySelector('.relation-phone-stage')`));
+  const beforePositions=await evaluate(`Object.fromEntries(document.querySelector('.relation-page-canvas')._cyreg.cy.nodes().map(node=>[node.id(),node.position()]))`);
+  await evaluate(`void document.querySelector('.relation-page-canvas')._cyreg.cy.getElementById('fixture-1').emit('tap')`);
+  await until(()=>evaluate(`document.querySelector('.relation-page-canvas')._cyreg.cy.nodes().length>12`));
+  assert.ok(await evaluate(`!!document.querySelector('.relation-page-canvas')._cyreg.cy.getElementById('fixture-center').length`));
+  const afterPositions=await evaluate(`Object.fromEntries(document.querySelector('.relation-page-canvas')._cyreg.cy.nodes().filter(node=>${JSON.stringify(Object.keys(beforePositions))}.includes(node.id())).map(node=>[node.id(),node.position()]))`);
+  assert.deepEqual(afterPositions,beforePositions);
+  await sleep(500);
+  assert.ok(await evaluate(`(()=>{const cy=document.querySelector('.relation-page-canvas')._cyreg.cy,node=cy.getElementById('fixture-1'),p=node.renderedPosition();return Math.abs(p.x-cy.width()/2)<2&&Math.abs(p.y-cy.height()/2)<2;})()`));
+  console.log('PASS: selected node centers smoothly without changing model positions.');
+
+  await evaluate(`void document.querySelector('.relation-page-canvas')._cyreg.cy.getElementById('fixture-1').emit('tap')`);
+  assert.ok(await evaluate(`document.querySelector('.relation-page-canvas')._cyreg.cy.edges().map(edge=>edge.id()).length===new Set(document.querySelector('.relation-page-canvas')._cyreg.cy.edges().map(edge=>edge.id())).size`));
+  console.log('PASS: force layout defaults, clicking a neighbor adds knowledge without moving existing nodes or duplicating edges.');
   await evaluate(`const control=document.querySelector('#knowledgeRelationPage [data-layout]');control.value='concentric';control.dispatchEvent(new Event('change'));`);
   await sleep(600);
   await evaluate(`window.setViewMode('app_explore')`);
@@ -68,7 +85,16 @@ try {
   console.log('PASS: entering graph hides explore cards; returning restores explore.');
   await cdp('Page.captureScreenshot',{format:'png'}).then(result=>writeFile('relation-graph-preview.png',Buffer.from(result.data,'base64')));
   assert.deepEqual(errors.filter(error=>/knowledge-relation-page/.test(error)),[]);
-  console.log('PASS: actual app opens and refreshes knowledge_graph with node preserved; Cytoscape renders 12 fixture nodes, auth reload and layout switching work.');
+  await evaluate(`window.setViewMode('big_bang')`);
+  await until(()=>evaluate(`document.querySelector('.big-bang-status')?.textContent.includes('12')`));
+  await sleep(1200);
+  const before=await evaluate(`({background:getComputedStyle(document.querySelector('.knowledge-big-bang')).backgroundImage,canvas:document.querySelector('.knowledge-big-bang canvas').toDataURL()})`);
+  await click('[data-home-action="theme"]');await sleep(200);
+  const after=await evaluate(`({background:getComputedStyle(document.querySelector('.knowledge-big-bang')).backgroundImage,canvas:document.querySelector('.knowledge-big-bang canvas').toDataURL()})`);
+  assert.notEqual(before.background,after.background);assert.notEqual(before.canvas,after.canvas);
+  assert.deepEqual(errors.filter(error=>/knowledge-big-bang/.test(error)),[]);
+  console.log('PASS: theme switch updates both universe background and canvas knowledge cards without navigation.');
+  console.log('PASS: actual app opens and refreshes knowledge_graph with node preserved; Cytoscape restores unrestricted bidirectional relationships and a mobile media inspector, auth reload and layout switching work.');
 } finally {
   socket?.close(); browser?.kill(); 
   await sleep(500);

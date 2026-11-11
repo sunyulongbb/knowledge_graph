@@ -63,7 +63,7 @@
       <span class="explore-category-icon" ${color ? `style="--category-color:${color}"` : ''}>${image ? `<img src="${escape(image)}" alt="" loading="lazy">` : '<i class="fa-solid fa-shapes" aria-hidden="true"></i>'}</span>
       <span class="explore-category-info"><strong>${escape(name(row))}</strong><small>${Math.max(0, Number(row.instance_count) || 0)} 条直属知识 · ${childrenOf(row.id).length} 个子分类</small></span>
       <span class="explore-category-open">探索 <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></span>
-      <span class="explore-category-description">${escape(row.description || '沿着分类发现知识之间的联系，探索更多内容。')}</span>
+      <span class="explore-category-description">${escape(row.description || '查看该分类的知识和子分类。')}</span>
     </button>`;
   }
   function group(title, rows, key, parentId = '') {
@@ -113,7 +113,7 @@
       content = recommended.length ? group('从这些分类开始', recommended, 'recommended') : '';
       for (const root of tree.roots) content += group(name(root), childrenOf(root.id).length ? childrenOf(root.id) : [root], root.id, root.id);
     }
-    panel.innerHTML = `<div class="explore-content"><header class="explore-heading"><p>EXPLORE KNOWLEDGE</p><h1>${escape(selectedTag ? '#' + selectedTag : tree.byId.has(selected)?name(tree.byId.get(selected)):'探索知识')}</h1><span>从分类出发，发现值得深入的知识。</span><button class="btn" type="button" data-explore-big-bang><i class="fa-solid fa-atom" aria-hidden="true"></i> Big Bang \u77e5\u8bc6\u5b87\u5b99</button></header>
+    panel.innerHTML = `<div class="explore-content"><header class="explore-heading"><h1>${escape(selectedTag ? '#' + selectedTag : tree.byId.has(selected)?name(tree.byId.get(selected)):'探索知识')}</h1><span>按分类或标签浏览知识。</span><button class="btn" type="button" data-explore-big-bang title="Big Bang \u77e5\u8bc6\u5b87\u5b99" aria-label="Big Bang \u77e5\u8bc6\u5b87\u5b99"><i class="fa-solid fa-atom" aria-hidden="true"></i></button></header>
       <nav class="explore-topic-tabs" aria-label="一级分类"><button type="button" data-explore-category="" ${!selected ? 'aria-current="page"' : ''}>全部</button>${tree.roots.map(row => `<button type="button" data-explore-category="${escape(row.id)}" ${row.id === activeRoot ? 'aria-current="page"' : ''}>${escape(name(row))}</button>`).join('')}</nav>${content}</div>`;
     panel.scrollTop = scrollTop;
   }

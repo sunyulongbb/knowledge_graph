@@ -41,11 +41,21 @@
     const canvas=dialog.querySelector('canvas'),ctx=canvas.getContext('2d'),status=dialog.querySelector('[role=status]'),selection=dialog.querySelector('section');
 
     const controller=new AbortController(),images=new Map();
+    let palette={cards:['#263d42','#39334b','#3e3830','#283b35'],text:'#fff',accent:'#baf3d0'};
+    function updatePalette(){
+      if(typeof getComputedStyle==='function'){
+        const style=getComputedStyle(dialog);
+        palette={cards:[1,2,3,4].map(index=>style.getPropertyValue('--universe-card-'+index).trim()),text:style.getPropertyValue('--fg').trim()||'#fff',accent:style.getPropertyValue('--accent').trim()||'#baf3d0'};
+      }
+      schedule();
+    }
+    const themeObserver=typeof MutationObserver==='function'&&document.documentElement?new MutationObserver(updatePalette):null;
+
     let nodes=[],points=[],hits=[],chosen=null,yaw=0,pitch=0,zoom=1,frame=0,start=performance.now(),closed=false,drag=null,w=0,h=0;
     let camera={x:0,y:0,z:0},flight=null;
     let momentum=null,lastFrame=0;
     const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    function close(){if(closed)return;closed=true;controller.abort();cancelAnimationFrame(frame);observer.disconnect();window.removeEventListener('popstate',close);window.removeEventListener('hashchange',close);dialog.remove();if(active===close)active=null;}
+    function close(){if(closed)return;closed=true;controller.abort();cancelAnimationFrame(frame);observer.disconnect();themeObserver?.disconnect();window.removeEventListener('popstate',close);window.removeEventListener('hashchange',close);dialog.remove();if(active===close)active=null;}
     active=close;
     function schedule(){if(!frame&&!closed)frame=requestAnimationFrame(draw);}
     function draw(now){
@@ -76,19 +86,22 @@
         if(x+size<0||x-size>w||y+height<0||y-height>h)continue;
         ctx.save();ctx.globalAlpha=1;ctx.translate(x-size/2,y-height/2);
         ctx.beginPath();ctx.roundRect(0,0,size,height,2);ctx.clip();
-        ctx.fillStyle=['#263d42','#39334b','#3e3830','#283b35'][i%4];ctx.fillRect(0,0,size,height);
+        ctx.fillStyle=palette.cards[i%4];ctx.fillRect(0,0,size,height);
         if(image?.complete&&image.naturalWidth){const ratio=Math.max(size/image.naturalWidth,height/image.naturalHeight);ctx.drawImage(image,(size-image.naturalWidth*ratio)/2,(height-image.naturalHeight*ratio)/2,image.naturalWidth*ratio,image.naturalHeight*ratio);if(chosen===i){ctx.fillStyle='#0009';ctx.fillRect(0,height*.62,size,height*.38);}}
         if(!image?.naturalWidth||chosen===i){
-        ctx.fillStyle='#fff';ctx.font=`500 ${Math.max(9,size*.1)}px sans-serif`;
+        ctx.fillStyle=image?.naturalWidth?'#fff':palette.text;ctx.font=`500 ${Math.max(9,size*.1)}px sans-serif`;
         const chars=Array.from(node.name||node.label||node.id||'知识');let line='',row=0;
         for(const char of chars){if(ctx.measureText(line+char).width>size-12){ctx.fillText(line,6,height*.75+row*size*.14);row++;line='';if(row===2)break;}line+=char;}if(row<2)ctx.fillText(line,6,height*.75+row*size*.14);
         }
         ctx.restore();
-        if(chosen===i){ctx.strokeStyle='#baf3d0';ctx.lineWidth=2;ctx.strokeRect(x-size/2-3,y-height/2-3,size+6,height+6);}
+        if(chosen===i){ctx.strokeStyle=palette.accent;ctx.lineWidth=2;ctx.strokeRect(x-size/2-3,y-height/2-3,size+6,height+6);}
       }
       if(progress<1||flight||momentum)schedule();
     }
     const observer=new ResizeObserver(()=>{const rect=canvas.getBoundingClientRect();w=rect.width;h=rect.height;points=bigBangPoints(nodes.length,w,h);if(chosen!==null){camera=bigBangFocusTarget(points[chosen],yaw,pitch,Math.min(w,h)/1100*zoom);flight=null;}const dpr=Math.min(2,window.devicePixelRatio||1);canvas.width=w*dpr;canvas.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);schedule();});observer.observe(canvas);
+    themeObserver?.observe(document.documentElement,{attributes:true,attributeFilter:['data-theme','class','style']});
+    if(document.body)themeObserver?.observe(document.body,{attributes:true,attributeFilter:['data-theme','class','style']});
+    updatePalette();
     dialog.querySelector('[data-close]').onclick=()=>window.setViewMode('app_explore');dialog.addEventListener('cancel',event=>{event.preventDefault();close();});
 
     function unfocus(){momentum=null;chosen=null;selection.hidden=true;flight={from:{...camera},to:{x:0,y:0,z:0},start:performance.now()};schedule();}

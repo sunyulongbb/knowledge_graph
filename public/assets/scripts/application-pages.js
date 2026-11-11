@@ -191,7 +191,7 @@
       homeDetailDrawer.id = 'homeKnowledgeDrawer';
       homeDetailDrawer.className = 'home-knowledge-drawer';
       homeDetailDrawer.setAttribute('aria-label', '知识详情');
-      homeDetailDrawer.innerHTML = '<div class="home-knowledge-drawer-header"><div class="home-drawer-brand"><span class="home-drawer-mark" aria-hidden="true"><i class="fa-solid fa-bolt"></i></span><div><strong>知识 · 发现</strong><small>探索每一条知识背后的故事</small></div></div><button type="button" class="btn" data-close-home-detail aria-label="关闭知识详情"><span aria-hidden="true">×</span></button></div>';
+      homeDetailDrawer.innerHTML = '<div class="home-knowledge-drawer-header"><div class="home-drawer-brand"><span class="home-drawer-mark" aria-hidden="true"><i class="fa-solid fa-bolt"></i></span><div><strong>知识 · 发现</strong><small>知识详情</small></div></div><button type="button" class="btn" data-close-home-detail aria-label="关闭知识详情"><span aria-hidden="true">×</span></button></div>';
       document.body.appendChild(homeDetailDrawer);
       homeDetailDrawer.addEventListener('close', () => { if (!homeDetailDrawer.open) restoreHomeDetailPanel(); document.body.style.overflow = ''; });
       homeDetailDrawer.addEventListener('click', (event) => {
@@ -379,7 +379,7 @@
       ${media ? `<div class="app-inspiration-media-stage">${media}<span><i class="fa-solid ${video ? 'fa-video' : 'fa-image'}" aria-hidden="true"></i> ${video ? '视频' : '图片'}</span></div>` : ''}
       <div class="app-inspiration-identity">${media ? '' : '<div class="app-inspiration-visual is-placeholder"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i></div>'}<div><h2>${escape(node.name || node.label || node.id)}</h2><span>${escape(node.id || node._id || '')}</span></div></div>
       <div class="app-inspiration-meta"><span>${escape(node.typeLabel || node.type || '知识实体')}</span>${video ? '<span>视频</span>' : image ? '<span>图片</span>' : ''}</div>
-      <p>${escape(node.description || node.desc_zh || '从知识库里重新发现一条值得关注的信息。')}</p>
+      <p>${escape(node.description || node.desc_zh || '暂无描述')}</p>
       ${showJev ? `<section class="app-jev-rating is-loading" data-jev-rating data-node-id="${escape(node.id || node._id || '')}" aria-live="polite">
         <div class="app-jev-rating-head"><span><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> JEV 知识评分</span><small data-jev-status>正在评分…</small></div>
         <div class="app-jev-stars" data-jev-stars aria-label="JEV 正在评分">${Array.from({ length: 5 }, (_, index) => `<i class="fa-solid fa-star" style="--star-index:${index}" aria-hidden="true"></i>`).join('')}</div>
@@ -740,12 +740,12 @@
     const activeCategory = homeCategories.find((item) => item.id === homeSelectedCategory);
     const feedTitle = homeFeed === 'popular' ? 'Popular · 热门知识' : homeFeed === 'news' ? 'News · 最新发布' : 'For You · 为你推荐';
     if(homeFeed==='news'){
-      content.innerHTML=`<section class="home-news-board"><header class="home-news-heading"><span>LATEST KNOWLEDGE</span><h1>最新知识</h1><p>沿着时间，发现每一条新知识 · 共 ${homeTotal} 条</p></header><div class="home-news-timeline">${homeNewsTimeline(nodes)||(!homeBusy&&!homeError?'<p class="home-news-empty">暂无最新知识</p>':'')}</div>${homePagination()}</section>`;
+      content.innerHTML=`<section class="home-news-board"><header class="home-news-heading"><h1>最新知识</h1><p>按更新时间排列 · 共 ${homeTotal} 条</p></header><div class="home-news-timeline">${homeNewsTimeline(nodes)||(!homeBusy&&!homeError?'<p class="home-news-empty">暂无最新知识</p>':'')}</div>${homePagination()}</section>`;
       if(scrollPanel)scrollPanel.scrollTop=scrollTop;
       return;
     }
     if(homeFeed==='popular') {
-      content.innerHTML=`<section class="home-popular-board" aria-label="热门知识排行榜"><header class="home-popular-heading"><div><span>POPULAR KNOWLEDGE</span><h1>热门知识 <b>TOP 30</b></h1><p>按点赞、评论和分享热度排序，展示前 30 名。</p></div><i class="fa-solid fa-fire" aria-hidden="true"></i></header><div class="home-popular-list">${nodes.slice(0,30).map(homePopularRow).join('')||(!homeBusy&&!homeError?'<p class="home-popular-status">暂无热门知识</p>':'')}</div>${homePagination()}</section>`;
+      content.innerHTML=`<section class="home-popular-board" aria-label="热门知识排行榜"><header class="home-popular-heading"><div><h1>热门知识 <b>TOP 30</b></h1><p>按点赞、评论和分享热度排序，展示前 30 名。</p></div><i class="fa-solid fa-fire" aria-hidden="true"></i></header><div class="home-popular-list">${nodes.slice(0,30).map(homePopularRow).join('')||(!homeBusy&&!homeError?'<p class="home-popular-status">暂无热门知识</p>':'')}</div>${homePagination()}</section>`;
       if(scrollPanel)scrollPanel.scrollTop=scrollTop;
       return;
     }
@@ -887,8 +887,8 @@
       total = Number(data.total) || 0;
       const lastPage = Math.max(1, Math.ceil(total / pageSize));
       if (page > lastPage) { page = lastPage; return search(); }
-      const mode = { fuzzy: '智能模糊匹配', phrase: '完整短语匹配', all: '包含全部词语', any: '包含任意词语' }[params.match_mode] || '智能模糊匹配';
-      byId('appSearchResults').innerHTML = `<p class="muted" role="status">${mode} · 找到 ${total} 条知识</p>${(data.nodes || []).map(card).join('') || '<p class="app-search-empty">没有找到匹配的知识，请尝试智能模糊匹配、缩短关键词或减少筛选条件。</p>'}`;
+      const mode = { fuzzy: '模糊匹配', phrase: '完整短语匹配', all: '包含全部词语', any: '包含任意词语' }[params.match_mode] || '模糊匹配';
+      byId('appSearchResults').innerHTML = `<p class="muted" role="status">${mode} · 找到 ${total} 条知识</p>${(data.nodes || []).map(card).join('') || '<p class="app-search-empty">没有找到匹配的知识，请尝试模糊匹配、缩短关键词或减少筛选条件。</p>'}`;
       byId('appSearchPaging').hidden = total === 0;
       byId('appSearchPageLabel').textContent = `第 ${page} / ${lastPage} 页`;
       byId('appSearchPrev').disabled = page <= 1;
