@@ -21,8 +21,32 @@
   function homeFeedOrder() {
     return homeFeed === 'popular' ? 'popular' : homeFeed === 'news' ? 'created_desc' : 'richness';
   }
-  function homeRequestSize() { return homeFeed === 'popular' ? 30 : homePageSize; }
+  function homeRequestSize() { return homeFeed === 'popular' ? 30 : homeFeed === 'news' ? 200 : homePageSize; }
+  async function loadRemainingNews(version) {
+    if (homeFeed !== 'news' || homeError) return;
+    const collected = [...homeNodes];
+    const seen = new Set(collected.map(node => String(node.id || node._id)));
+    try {
+      for (let offset = homeRequestSize(); offset < homeTotal; offset += homeRequestSize()) {
+        const data = await api('/api/kb/discover/search', {order:'created_desc',limit:homeRequestSize(),offset,hide_entity:'1',defined_class_only:'1',class_id:homeSelectedCategory});
+        if (version !== homeVersion || homeFeed !== 'news') return;
+        if (!data.nodes?.length) break;
+        for (const node of data.nodes) { const id = String(node.id || node._id); if (!seen.has(id)) {seen.add(id); collected.push(node);} }
+      }
+      if (version !== homeVersion || homeFeed !== 'news') return;
+      if (collected.length !== homeNodes.length) { homeNodes = homeVisibleNodes = collected; renderHome(); }
+    } catch {
+      if (version !== homeVersion || homeFeed !== 'news') return;
+      const notice = document.createElement('p'); notice.setAttribute('role','status'); notice.className = 'news-axis-hint';
+      notice.textContent = '部分知识未加载成功。';
+      const retry = document.createElement('button'); retry.className = 'btn sm'; retry.textContent = '重试'; retry.onclick = () => { notice.remove(); void loadRemainingNews(version); };
+      notice.append(retry); byId('appHomeContent')?.append(notice);
+    }
+  }
   function syncHomeNavigation() {
+    document.body.classList.toggle('home-news-active', window.kbViewMode === 'app_home' && homeFeed === 'news');
+    const homeSearchForm = byId('appHomeSearchForm');
+    if (homeSearchForm) homeSearchForm.style.display = homeFeed === 'news' ? 'none' : '';
     document.body.classList.toggle('home-popular-active', window.kbViewMode === 'app_home' && homeFeed === 'popular');
     document.querySelectorAll('[data-home-feed]').forEach(button => {
       if (window.kbViewMode === 'app_home' && button.dataset.homeFeed === homeFeed) button.setAttribute('aria-current', 'page');
@@ -282,7 +306,9 @@
       if(!groups.has(day))groups.set(day,[]);
       groups.get(day).push({node,time,iso:valid?date.toISOString():''});
     }
-    return [...groups].map(([day,entries])=>`<section class="home-news-day"><h2><span class="home-news-day-dot" aria-hidden="true"></span>${escape(day)}</h2><ol>${entries.map(({node,time,iso})=>{
+    const months = [...new Set([...groups.keys()].map(day => day.slice(0,7)))];
+    const navigation = `<nav class="home-news-months" aria-label="年月时间线">${months.map((month,index)=>`<a href="#news-month-${escape(month)}" data-news-month="${escape(month)}" ${index===0?'aria-current="date"':''}>${/^\d{4}-\d{2}$/.test(month)?`<small>${month.slice(0,4)} 年</small><strong>${Number(month.slice(5))} 月</strong>`:escape(month)}</a>`).join('')}</nav>`;
+    return navigation + [...groups].map(([day,entries],index)=>`<section class="home-news-day" ${index===0||[...groups.keys()][index-1].slice(0,7)!==day.slice(0,7)?`id="news-month-${escape(day.slice(0,7))}"`:''}><h2><span class="home-news-day-dot" aria-hidden="true"></span>${escape(day)}</h2><ol>${entries.map(({node,time,iso})=>{
       const id=node.id||node._id||'',title=node.name||node.label||id,image=firstImage(node)||firstCover(node),video=firstVideo(node);
       return `<li class="home-news-event"><time ${iso?`datetime="${escape(iso)}"`:''}>${escape(time)}</time><span class="home-news-event-dot" aria-hidden="true"></span><article class="home-news-card" data-home-node-id="${escape(id)}"><div class="home-news-card-copy"><span class="home-news-type">${escape(node.typeLabel||node.type||'新知识')}</span><button type="button" class="home-news-title" data-home-node-id="${escape(id)}">${escape(title)}</button>${node.description?`<p>${escape(node.description)}</p>`:''}${knowledgeCardTags(node)}<button type="button" class="home-news-open" data-home-node-id="${escape(id)}">阅读知识 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button></div>${image?`<button type="button" data-home-open="shorts" class="home-news-thumb" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}"><img src="${escape(image)}" alt="" loading="lazy">${video?'<i class="fa-solid fa-play" aria-hidden="true"></i>':''}</button>`:''}</article></li>`;
     }).join('')}</ol></section>`).join('');
@@ -727,7 +753,7 @@
         homeFeedExhausted = !incoming.length;
         homeNodes = homeVisibleNodes = [...homeNodes, ...incoming]; homeBusy = false;
         window.homeWaterfall?.append(incoming.map(homeWaterfallCard).join('')); updateHomeInfiniteStatus();
-      } else { homeNodes = homeVisibleNodes = (data.nodes || []).slice(0,homeRequestSize()); homeBusy = false; renderHome(); }
+      } else { homeNodes = homeVisibleNodes = (data.nodes || []).slice(0,homeRequestSize()); homeBusy = false; renderHome(); void loadRemainingNews(version); }
 
     } catch (error) {
       if (version !== homeVersion) return;
@@ -749,7 +775,7 @@
     const activeCategory = homeCategories.find((item) => item.id === homeSelectedCategory);
     const feedTitle = homeFeed === 'popular' ? 'Popular · 热门知识' : homeFeed === 'news' ? 'News · 最新发布' : 'For You · 为你推荐';
     if(homeFeed==='news'){
-      content.innerHTML=`<section class="home-news-board"><header class="home-news-heading"><h1>最新知识</h1><p>按更新时间排列 · 共 ${homeTotal} 条</p></header><div class="home-news-timeline">${homeNewsTimeline(nodes)||(!homeBusy&&!homeError?'<p class="home-news-empty">暂无最新知识</p>':'')}</div>${homePagination()}</section>`;
+      content.innerHTML=`<section class="home-news-board"><div class="home-news-timeline">${homeNewsTimeline(nodes)}</div>${homeError ? homePagination() : ''}</section>`;
       if(scrollPanel)scrollPanel.scrollTop=scrollTop;
       return;
     }
@@ -841,6 +867,7 @@
     byId('appHomeCount').dataset.total = String(total);
     renderHome();
     void syncHomeMaintenanceAction();
+    void loadRemainingNews(version);
   };
   document.addEventListener('click',event=>{
     const button=event.target.closest('[data-knowledge-tag]');if(!button)return;
@@ -993,6 +1020,13 @@
     homeHoverTimer = setTimeout(() => { homeHoverCategory = ''; const submenu = byId('appHomeContent').querySelector('.home-category-submenu'); if (submenu) submenu.hidden = true; }, 180);
   });
   byId('appHomeContent').addEventListener('click', (event) => {
+    const monthLink = event.target.closest('[data-news-month]');
+    if (monthLink) {
+      event.preventDefault();
+      document.getElementById(`news-month-${monthLink.dataset.newsMonth}`)?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' });
+      monthLink.closest('nav').querySelectorAll('a').forEach(link => { if (link === monthLink) link.setAttribute('aria-current', 'date'); else link.removeAttribute('aria-current'); });
+      return;
+    }
     const paging = event.target.closest('[data-home-page]');
     if (paging) { if (!homeBusy && !paging.disabled) void loadHomePage(Number(paging.dataset.homePage)); return; }
     if (event.target.closest('[data-home-page-retry]')) { void loadHomePage(homeRetry.page, homeRetry.category); return; }
