@@ -1714,6 +1714,10 @@
       void window.refreshShortsPage?.();
       return;
     }
+    if (action === "switch-app") {
+      window.showAppLogoSwitcher?.();
+      return;
+    }
     if (action === "theme") {
       byId("btnTheme")?.click();
       return;
