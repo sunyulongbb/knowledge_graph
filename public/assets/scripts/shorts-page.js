@@ -6,7 +6,7 @@
   panel.append(host);
   panel.classList.add('shorts-knowledge-page');
   document.getElementById('applicationHomePanel').append(panel);
-  let version = 0, activeId = '', controller;
+  let version = 0, activeId = '', controller, initialLoad = true;
   const normalize = value => String(value || '').replace(/^entity\//, '');
   function openNode(id, nodes, category) {
     activeId = normalize(id);
@@ -26,8 +26,16 @@
     version++; controller?.abort(); activeId = '';
     if (window.homeKnowledgeMediaViewer?.isPage()) window.homeKnowledgeMediaViewer.close();
   };
+  window.refreshShortsPage = function () {
+    if (window.kbViewMode !== 'shorts') return;
+    window.kbShortsLaunch = null;
+    window.closeShortsPage();
+    return window.loadShortsPage();
+  };
   window.loadShortsPage = async function (id = '') {
     if (window.kbViewMode !== 'shorts') return;
+    if (initialLoad && !window.kbShortsLaunch && performance.getEntriesByType?.('navigation')[0]?.type === 'reload') id = '';
+    initialLoad = false;
     id = normalize(id);
     if (!id && activeId && window.homeKnowledgeMediaViewer.isPage()) return;
     if (id && id === activeId && window.homeKnowledgeMediaViewer.isPage()) return;
@@ -43,10 +51,10 @@
     }
     if (nodes.length && id) return;
     try {
-      const url = new URL('/api/kb/discover/search', location.origin);
+      const url = new URL('/api/kb/recommendations', location.origin);
       const db = new URLSearchParams(location.search).get('db');
       if (db) url.searchParams.set('db', db);
-      url.searchParams.set('limit', '100'); url.searchParams.set('order', 'richness');
+      url.searchParams.set('limit', '100'); url.searchParams.set('surface', 'shorts'); url.searchParams.set('recommendation_seed', crypto.randomUUID());
       const response = await fetch(url, { signal: controller.signal });
       if (!response.ok) throw new Error(`知识加载失败（${response.status}）`);
       const data = await response.json();

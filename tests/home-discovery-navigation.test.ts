@@ -70,3 +70,30 @@ test('workspace menus open a new tab in the current application without changing
     return new URLSearchParams(url.hash.slice(1)).get('view');
   })).toEqual(['table','vis','applications']);
 });
+
+test('sidebar shows login when signed out and profile plus logout when signed in',()=>{
+  const controls:any=Object.fromEntries(['homeDiscoveryLogin','homeDiscoveryLogout','homeDiscoveryAccountButton'].map(id=>[id,{hidden:false}]));
+  const window:any={authUser:null};
+  const sync=new Function('byId','window',source.slice(source.indexOf('  function syncHomeAuthActions('),source.indexOf('  function syncHomeNavigation('))+';return syncHomeAuthActions;')((id:string)=>controls[id],window);
+  sync();expect(controls.homeDiscoveryLogin.hidden).toBe(false);expect(controls.homeDiscoveryLogout.hidden).toBe(true);expect(controls.homeDiscoveryAccountButton.hidden).toBe(true);
+  window.authUser={username:'admin'};sync();
+  expect(controls.homeDiscoveryLogin.hidden).toBe(true);expect(controls.homeDiscoveryLogout.hidden).toBe(false);expect(controls.homeDiscoveryAccountButton.hidden).toBe(false);
+  window.authUser=null;sync();expect(controls.homeDiscoveryLogin.hidden).toBe(false);expect(controls.homeDiscoveryLogout.hidden).toBe(true);
+});
+
+test('sidebar login and logout use the existing authentication handlers',()=>{
+  let click:Function;const actions:string[]=[];
+  new Function('byId','window',block)((id:string)=>id==='applicationHomePanel'?{addEventListener:(_:string,handler:Function)=>{click=handler;}}:{click:()=>actions.push(id)},{logout:()=>actions.push('logout')});
+  for(const action of ['login','logout'])click!({target:{closest:(selector:string)=>selector==='[data-home-action]'?{dataset:{homeAction:action}}:null}});
+  expect(actions).toEqual(['btnAuth','logout']);
+});
+
+test('clicking the current For You or Shorts menu refreshes its recommended feed',()=>{
+  let click:Function;const refreshed:string[]=[];
+  const window:any={kbViewMode:'app_home',loadApplicationHome:()=>refreshed.push('for-you'),refreshShortsPage:()=>refreshed.push('shorts')};
+  new Function('byId','window',`let homeFeed='for-you';${block}`)(()=>({addEventListener:(_:string,handler:Function)=>{click=handler;}}),window);
+  click!({target:{closest:(selector:string)=>selector==='[data-home-feed]'?{dataset:{homeFeed:'for-you'}}:null}});
+  window.kbViewMode='shorts';
+  click!({target:{closest:(selector:string)=>selector==='[data-home-action]'?{dataset:{homeAction:'shorts'}}:null}});
+  expect(refreshed).toEqual(['for-you','shorts']);
+});

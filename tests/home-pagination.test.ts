@@ -5,7 +5,7 @@ function setup(api: Function, feed = 'for-you') {
   const block = source.slice(source.indexOf('  async function loadHomePage('), source.indexOf('  function renderHome('));
   const order = source.slice(source.indexOf('  function homeFeedOrder()'), source.indexOf('  function syncHomeNavigation()'));
   const appended: string[] = [];
-  return new Function('api', 'homeFeed', 'window', `let homeVersion=0, homePage=1, homeTotal=0, homeBusy=false, homeError='', homeRetry={}, homeSelectedCategory='', homeNodes=[],homeVisibleNodes=[],homeFeedExhausted=false;
+  return new Function('api', 'homeFeed', 'window', `let homeRecommendationSeed='test-seed',homeVersion=0, homePage=1, homeTotal=0, homeBusy=false, homeError='', homeRetry={}, homeSelectedCategory='', homeNodes=[],homeVisibleNodes=[],homeFeedExhausted=false;
     const homePageSize=24; function renderHome() {} const byId=()=>({querySelector:()=>null});
     function updateHomeInfiniteStatus() {} function homeWaterfallCard(node) {return node.id;}
     ${order}

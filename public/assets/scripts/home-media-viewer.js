@@ -171,6 +171,7 @@
   function renderNode(data) {
     favorited=false;
     if(refs.favorite){refs.favorite.setAttribute('aria-pressed','false');refs.favoriteLabel.textContent='收藏';}
+    if(refs.viewCount){refs.viewCount.dataset.knowledgeViews=idOf(data);refs.viewCount.dataset.db=scope||'default';refs.viewCount.textContent=String(Number(data.viewCount)||0);}
     window.recordKnowledgeView?.(idOf(data),scope);
     if(window.authUser) {
       const token=version;
@@ -256,7 +257,7 @@
       if (!others.length) { message('当前分类暂无其他知识'); return; }
       const unseen = others.filter((item) => !recent.includes(idOf(item)));
       const candidates = unseen.length ? unseen : others;
-      target = candidates[Math.floor(Math.random() * candidates.length)];
+      target = page && window.kbViewMode === 'shorts' ? candidates[0] : candidates[Math.floor(Math.random() * candidates.length)];
     }
     busy = true; const token = ++version; message('');
     try {
@@ -346,7 +347,7 @@
       <div class="home-reel-top"><span class="home-reel-brand">知识发现</span><div><button data-ref="fullscreen" aria-label="全屏">⛶</button><button data-ref="close" aria-label="关闭知识详情">×</button></div></div>
       <button class="home-reel-media-nav is-left" data-ref="left" aria-label="上一个媒体">‹</button><button class="home-reel-media-nav is-right" data-ref="right" aria-label="下一个媒体">›</button>
       <div class="home-reel-caption" data-ref="caption"><span data-ref="identity"></span><h2 data-ref="title"></h2><p data-ref="description"></p><button data-action="info" class="home-reel-more">查看完整信息</button></div>
-      <div class="home-reel-bottom" data-ref="bottom"><span data-ref="counter"></span><span>← → 切媒体 · ↑ 历史 · ↓ 随机</span></div>
+      <div class="home-reel-bottom" data-ref="bottom"><span data-ref="counter"></span><span><i class="fa-regular fa-eye" aria-hidden="true"></i> <b data-ref="viewCount" data-knowledge-views=""></b> 次浏览</span><span>← → 切媒体 · ↑ 历史 · ↓ 随机</span></div>
       <button class="home-reel-center-play" data-ref="centerPlay" aria-label="播放视频" hidden>▶</button>
       <div class="home-reel-playback" data-ref="playback" hidden><button data-ref="play" aria-label="播放">▶</button><button data-ref="mute" aria-label="关闭声音">关闭声音</button><span data-ref="time" class="home-reel-time">0:00 / 0:00</span></div>
       <input data-ref="seek" class="home-reel-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="视频进度">
@@ -447,12 +448,12 @@
     dialog.classList.toggle('is-knowledge-journey', !!journey);
     if (journey?.sidebar) dialog.append(journey.sidebar);
     refs.up.setAttribute('aria-label', embedded ? '上一个画布节点' : journey ? '上一站' : '返回上一条浏览历史');
-    refs.down.setAttribute('aria-label', embedded ? '下一个画布节点' : journey ? '下一站，终点继续滑动完成旅程' : '向下随机翻页');
+    refs.down.setAttribute('aria-label', embedded ? '下一个画布节点' : journey ? '下一站，终点继续滑动完成旅程' : page ? '下一条推荐知识' : '向下随机翻页');
     const upLabel = refs.up.querySelector('small'), downLabel = refs.down.querySelector('small');
     if (upLabel) upLabel.textContent = embedded ? '上一条' : journey ? '上一站' : '上一条历史';
-    if (downLabel) downLabel.textContent = embedded ? '下一条' : journey ? '下一站' : '随机下一条';
+    if (downLabel) downLabel.textContent = embedded ? '下一条' : journey ? '下一站' : page ? '下一条推荐' : '随机下一条';
     const hint = dialog.querySelector('.home-reel-bottom > span:last-child');
-    if (hint) hint.textContent = embedded ? '左右切媒体 · 上下切节点' : journey ? '← → 切媒体 · ↑ ↓ 沿线路漫游' : '← → 切媒体 · ↑ 历史 · ↓ 随机';
+    if (hint) hint.textContent = embedded ? '左右切媒体 · 上下切节点' : journey ? '← → 切媒体 · ↑ ↓ 沿线路漫游' : page ? '← → 切媒体 · ↑ 历史 · ↓ 推荐' : '← → 切媒体 · ↑ 历史 · ↓ 随机';
     if (!dialog.open) {
       focusBefore = document.activeElement;
       if (embedded || page) dialog.show();

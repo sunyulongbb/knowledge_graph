@@ -3,6 +3,7 @@
   let pending = null;
   window.recordKnowledgeView = function (id, db) {
     if (!id) return;
+    window.recordKnowledgeViewCount?.(id,db);
     if (!window.authUser?.id) { if(window.authUser===undefined) pending={id,db}; return; }
     id=String(id).replace(/^entity\//,'');
     db=db || new URLSearchParams(location.search).get('db') || 'default';

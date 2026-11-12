@@ -185,3 +185,5 @@ body.home-search-active #applicationHomePanel > #applicationSearchPanel {
 }
 @media(min-width:601px) and (max-width:1000px) { body.home-search-active #applicationHomePanel > #applicationSearchPanel { padding-inline:16px; } }
 @media(max-width:600px) { body.home-search-active #applicationHomePanel > #applicationSearchPanel { padding:24px 8px 40px; } }
+
+.home-discovery-footer button[hidden] { display:none!important; }
