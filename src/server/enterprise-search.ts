@@ -33,6 +33,8 @@ export type EnterpriseSearchOptions = {
   matchMode?: string | null; searchScope?: string | null; excludeQuery?: string | null;
   updatedFrom?: string | null; updatedTo?: string | null;
   includeTypes?: string[] | null;
+  publicationMonths?: boolean; publicationMonth?: string | null;
+  publicationYear?: string | null;
 };
 export function buildEnterpriseSearchQuery(options: EnterpriseSearchOptions, readableKeys: string[]) {
   if (!readableKeys.length || options.classIds?.length === 0 || options.definedClasses?.length === 0 || options.definedTypes?.length === 0) return { match_none: {} };
@@ -45,6 +47,8 @@ export function buildEnterpriseSearchQuery(options: EnterpriseSearchOptions, rea
   if (options.emptyType) filter.push({ bool: { should: [{ bool: { must_not: [{ exists: { field: 'type' } }] } }, { term: { type: '' } }], minimum_should_match: 1 } });
   if (options.hasImage) filter.push({ term: { has_images: true } });
   if (options.hasMedia) filter.push({ term: { has_media: true } });
+  if (options.publicationMonth) filter.push({range:{publication_date:{gte:`${options.publicationMonth}-01`,lt:`${options.publicationMonth}-01||+1M`,time_zone:'Asia/Shanghai'}}});
+  else if (options.publicationYear) filter.push({range:{publication_date:{gte:`${options.publicationYear}-01-01`,lt:`${options.publicationYear}-01-01||+1y`,time_zone:'Asia/Shanghai'}}});
   if (options.updatedFrom || options.updatedTo) filter.push({ range: { updated_at_sort: {
     ...(options.updatedFrom ? { gte: `${options.updatedFrom}T00:00:00.000Z` } : {}),
     ...(options.updatedTo ? { lte: `${options.updatedTo}T23:59:59.999Z` } : {}),
@@ -89,7 +93,7 @@ export class EnterpriseKnowledgeSearch {
     const popularityCounts = options.order === 'popular' ? { ...this.interactionCounts() } : {};
     if(options.order === 'popular')for(const row of access)if(row.engagement)popularityCounts[row.id]=Number(row.engagement.likes||0)+Number(row.engagement.comments||0)+Number(row.engagement.shares||0);
     const permissions = new Map(access.map(row => [row.key, row]));
-    if (!permissions.size) return { nodes: [] as Doc[], total: 0 };
+    if (!permissions.size) return { nodes: [] as Doc[], total: 0, months: [] };
     const query = buildEnterpriseSearchQuery(options, [...permissions.keys()]);
     const ascending = options.order?.endsWith('_asc');
     const field = options.order?.startsWith('created') ? 'created_at_sort' : 'updated_at_sort';
@@ -136,13 +140,27 @@ export class EnterpriseKnowledgeSearch {
       : [{ [field]: { order: ascending ? 'asc' : 'desc', unmapped_type: 'keyword' } }, { sqlite_id: 'asc' }];
     const index = encodeURIComponent(elasticsearchEntityIndexName(database));
     const read = async (body: Doc, path = `/${index}/_search`) => {
+      // Existing indexes deliberately store sort timestamps as keyword. Do not
+      // run date math or date_histogram against that mapping.
+      const publicationRuntime = options.publicationMonths || options.publicationMonth || options.publicationYear ? {
+        publication_date: {type:'date',script:{source:`
+          if (doc.containsKey('created_at_sort') && doc['created_at_sort'].size() > 0) {
+            def value = doc['created_at_sort'].value.toString();
+            try { emit(java.time.Instant.parse(value).toEpochMilli()); }
+            catch (Exception e) { }
+          }`}}
+      } : {};
       const highlight = options.q?.trim() ? { pre_tags: ['\uE000'], post_tags: ['\uE001'], require_field_match: true,
         fields: { 'labels.*.value': { number_of_fragments: 0 }, 'aliases.*.value': { number_of_fragments: 1, fragment_size: 100 },
           ...(options.searchScope === 'name' ? {} : { 'descriptions.*.value': { number_of_fragments: 2, fragment_size: 160 } }) } } : undefined;
-      const { body: result } = await this.client.send(path, { method: 'POST', body: JSON.stringify({ query, sort, ...(runtimeMappings ? { runtime_mappings: runtimeMappings } : {}), track_total_hits: true, ...(highlight ? { highlight } : {}), ...body }) });
+      const { body: result } = await this.client.send(path, { method: 'POST', body: JSON.stringify({ query, sort, ...((runtimeMappings || options.publicationMonths || options.publicationMonth || options.publicationYear) ? { runtime_mappings: {...runtimeMappings,...publicationRuntime} } : {}), track_total_hits: true, ...(highlight ? { highlight } : {}), ...body }) });
       if (result?.timed_out || result?._shards?.failed) throw new Error('Elasticsearch returned incomplete knowledge search results');
       return result;
     };
+    if (options.publicationMonths) {
+      const result = await read({size:0,aggs:{months:{date_histogram:{field:'publication_date',calendar_interval:'month',time_zone:'Asia/Shanghai',format:'yyyy-MM',min_doc_count:1,order:{_key:'desc'}}}}});
+      return {nodes:[] as Doc[],total:Number(result.hits?.total?.value||0),months:(result.aggregations?.months?.buckets||[]).map((bucket:Doc)=>({month:bucket.key_as_string,count:bucket.doc_count}))};
+    }
     let result: Doc;
     if (options.offset + options.limit <= 10_000) {
       result = await read({ from: options.offset, size: options.limit });

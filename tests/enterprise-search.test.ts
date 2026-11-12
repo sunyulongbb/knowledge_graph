@@ -250,3 +250,20 @@ test('home richness sorts existing ES documents before pagination with live inte
   expect(request.runtime_mappings.home_media.script.source).toContain('params._source');
   expect(request.query.bool.filter).toContainEqual({ ids: { values: ['allowed'] } });
 });
+
+test('publication histogram and month filter use a runtime date over keyword timestamps', async () => {
+  const requests: any[] = [];
+  const search = new EnterpriseKnowledgeSearch({searchAccess:async()=>[{key:'allowed'}]} as any,
+    new ElasticsearchClient({url:'http://es'},async(_input,init)=>{
+      requests.push(JSON.parse(String(init?.body)));
+      return reply({hits:{total:{value:2},hits:[]},aggregations:{months:{buckets:[{key_as_string:'2026-10',doc_count:2}]}}});
+    }));
+  const result = await search.search('app',owner,{limit:1,offset:0,publicationMonths:true});
+  expect(result.months).toEqual([{month:'2026-10',count:2}]);
+  expect(requests[0].aggs.months.date_histogram).toMatchObject({field:'publication_date',time_zone:'Asia/Shanghai',calendar_interval:'month'});
+  expect(requests[0].runtime_mappings.publication_date.type).toBe('date');
+  expect(requests[0].query.bool.filter).toContainEqual({ids:{values:['allowed']}});
+  await search.search('app',owner,{limit:200,offset:0,publicationMonth:'2026-12'});
+  expect(requests[1].runtime_mappings.publication_date.type).toBe('date');
+  expect(requests[1].query.bool.filter).toContainEqual({range:{publication_date:{gte:'2026-12-01',lt:'2026-12-01||+1M',time_zone:'Asia/Shanghai'}}});
+});

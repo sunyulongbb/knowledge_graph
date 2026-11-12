@@ -47,7 +47,37 @@
         : "richness";
   }
   function homeRequestSize() {
-    return homeFeed === "popular" ? 30 : homePageSize;
+    return homeFeed === "popular" ? 30 : homeFeed === "news" ? 200 : homePageSize;
+  }
+  let newsMonths = [], newsSelectedMonth = '', newsMonthVersion = 0;
+  async function loadNewsMonth(month) {
+    const request = ++newsMonthVersion, version = homeVersion;
+    newsSelectedMonth = month;
+    const collected = [];
+    try {
+      let total = Infinity;
+      for (let offset=0; offset<total; offset+=200) {
+        const data = await api('/api/kb/discover/search',{order:'created_desc',limit:200,offset,...(month.length===4?{publication_year:month}:{publication_month:month}),hide_entity:'1',defined_class_only:'1'});
+        if (request !== newsMonthVersion || version !== homeVersion || homeFeed !== 'news') return;
+        total = Number(data.total)||0;
+        collected.push(...(data.nodes||[]));
+        if (!data.nodes?.length) break;
+      }
+      homeNodes = homeVisibleNodes = collected; homeError = ''; renderHome();
+    } catch (error) {
+      if(request !== newsMonthVersion || version !== homeVersion) return;
+      homeError = error.message; renderHome();
+    }
+  }
+  async function loadRemainingNews(version) {
+    if(homeFeed !== 'news') return;
+    try {
+      const data = await api('/api/kb/discover/search',{publication_months:'1',limit:1,offset:0,hide_entity:'1',defined_class_only:'1'});
+      if(version !== homeVersion || homeFeed !== 'news') return;
+      newsMonths = data.months || [];
+      if(newsMonths.length) await loadNewsMonth(newsMonths[0].month);
+      else { homeNodes = homeVisibleNodes = []; renderHome(); }
+    } catch(error) { if(version === homeVersion) { homeError=error.message; renderHome(); } }
   }
   function syncHomeAuthActions() {
     const signedIn = Boolean(window.authUser);
@@ -572,10 +602,14 @@
         .get(day)
         .push({ node, time, iso: valid ? date.toISOString() : "" });
     }
-    const months = [
-      ...new Set([...groups.keys()].map((day) => day.slice(0, 7))),
-    ];
-    const navigation = `<nav class="home-news-months" aria-label="年月时间线">${months.map((month, index) => `<a href="#news-month-${escape(month)}" data-news-month="${escape(month)}" ${index === 0 ? 'aria-current="date"' : ""}>${/^\d{4}-\d{2}$/.test(month) ? `<small>${month.slice(0, 4)} 年</small><strong>${Number(month.slice(5))} 月</strong>` : escape(month)}</a>`).join("")}</nav>`;
+    const months = newsMonths.map(bucket => bucket.month);
+    const monthCounts = new Map();
+    for (const [day, entries] of groups) { const month = day.slice(0,7); monthCounts.set(month,(monthCounts.get(month)||0)+entries.length); }
+    for (const bucket of newsMonths) monthCounts.set(bucket.month,bucket.count);
+    const years = [...new Set(months.map(month=>month.slice(0,4)))];
+    const selectedYear = newsSelectedMonth.slice(0,4) || years[0];
+    const yearCount = newsMonths.filter(bucket=>bucket.month.startsWith(selectedYear)).reduce((sum,bucket)=>sum+bucket.count,0);
+    const navigation = `<nav class="home-news-months" aria-label="知识时间筛选"><div class="news-year-row" aria-label="年份">${years.map(year=>`<button type="button" data-news-month="${year}" aria-pressed="${year===selectedYear}">${year} 年</button>`).join('')}</div><div class="news-month-row" aria-label="月份">${newsMonths.filter(bucket=>bucket.month.startsWith(selectedYear)).map(bucket=>`<button type="button" data-news-month="${bucket.month}" aria-pressed="${bucket.month===newsSelectedMonth}">${Number(bucket.month.slice(5))} 月 <small>${bucket.count}</small></button>`).join('')}</div></nav>`;
     return (
       navigation +
       [...groups]
@@ -1996,6 +2030,8 @@
     const monthLink = event.target.closest("[data-news-month]");
     if (monthLink) {
       event.preventDefault();
+      void loadNewsMonth(monthLink.dataset.newsMonth);
+      return;
       document
         .getElementById(`news-month-${monthLink.dataset.newsMonth}`)
         ?.scrollIntoView({

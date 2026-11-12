@@ -301,6 +301,10 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
           const propertyInput = url.searchParams.get('property_id');
           const propertyId = discovery && propertyInput ? schema?.properties.find(property => property.id === propertyInput || String(property.name || '').trim().toLowerCase() === propertyInput.trim().toLowerCase())?.id || propertyInput : propertyInput;
           if (discovery) {
+            const month = url.searchParams.get('publication_month');
+            const year = url.searchParams.get('publication_year');
+            if (year && !/^\d{4}$/.test(year)) throw new KnowledgeStoreError('发布年份格式无效');
+            if (month && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new KnowledgeStoreError('发布月份格式无效');
             const from = url.searchParams.get('updated_from'), to = url.searchParams.get('updated_to');
             if ([from, to].some(date => date && (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date))) throw new KnowledgeStoreError('更新时间格式无效');
             if (from && to && from > to) throw new KnowledgeStoreError('开始日期不能晚于结束日期');
@@ -315,6 +319,7 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
               hasMedia: ['1', 'true'].includes(url.searchParams.get('has_media') || ''),
               propertyId, propertyValue: url.searchParams.get('property_value'),
               ...(discovery ? {
+                publicationMonths: url.searchParams.get('publication_months') === '1', publicationMonth: url.searchParams.get('publication_month'), publicationYear:url.searchParams.get('publication_year'),
                 matchMode: url.searchParams.get('match_mode'), searchScope: url.searchParams.get('search_scope'),
                 excludeQuery: url.searchParams.get('exclude_q'), updatedFrom: url.searchParams.get('updated_from'), updatedTo: url.searchParams.get('updated_to')
               } : {}),
@@ -327,7 +332,7 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
             console.error(`${backend} search failed:`, error);
             throw new KnowledgeStoreError(discovery ? 'Elasticsearch 首页与检索服务暂时不可用，请检查同步器状态' : 'ArangoSearch 知识检索暂时不可用，请检查搜索视图', 503);
           }
-          return Response.json({ nodes: page.nodes.map(resultNode), total: page.total, searchBackend: backend }, { headers: { 'X-Knowledge-Search': backend } });
+          return Response.json({ nodes: page.nodes.map(resultNode), total: page.total, ...('months' in page ? {months:page.months} : {}), searchBackend: backend }, { headers: { 'X-Knowledge-Search': backend } });
         }
         if (path === '/api/kb/tags' && method === 'GET') {
           const parseTags = (raw: any): any[] => {

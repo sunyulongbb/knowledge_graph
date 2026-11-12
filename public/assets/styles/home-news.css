@@ -55,3 +55,13 @@ body.home-news-active #appHomeContent { display:block; flex:1; min-height:0; ove
 .home-news-event::before,.home-news-event:nth-child(even)::before { left:9px; right:auto; top:35px; width:19px; }
 }
 
+
+.home-news-months { display:flex; flex-direction:column; align-items:center; gap:10px; overflow:visible; }
+.news-year-row,.news-month-row { display:flex; justify-content:center; flex-wrap:wrap; gap:6px; width:100%; }
+.home-news-months button { border:1px solid transparent; padding:7px 12px; border-radius:7px; background:transparent; color:var(--muted); font:inherit; font-size:12px; cursor:pointer; }
+.home-news-months button[aria-pressed="true"] { color:var(--accent); border-color:var(--border); background:var(--surface-0); }
+.news-year-row button { font-size:16px; font-weight:600; }
+.home-news-months button small { font-size:10px; opacity:.7; margin-left:4px; }
+.home-news-months button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.home-news-day { scroll-margin-top:160px; }
+
