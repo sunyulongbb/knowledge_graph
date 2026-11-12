@@ -577,9 +577,61 @@
     }
   }
 
+  async function showAppLogoSwitcher() {
+    let dialog = document.getElementById('appLogoSwitcher');
+    if (!dialog) {
+      dialog = document.createElement('dialog');
+      dialog.id = 'appLogoSwitcher';
+      dialog.className = 'app-logo-switcher';
+      dialog.setAttribute('aria-label', '切换应用');
+      document.body.appendChild(dialog);
+      dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
+    }
+    dialog.replaceChildren();
+    const close = document.createElement('button');
+    close.className = 'app-logo-switcher-close'; close.textContent = '×'; close.setAttribute('aria-label', '关闭');
+    close.onclick = () => dialog.close();
+    const heading = document.createElement('h2'); heading.textContent = '选择应用';
+    const grid = document.createElement('div'); grid.className = 'app-logo-switcher-grid';
+    const status = document.createElement('p'); status.setAttribute('role', 'status'); status.textContent = '正在加载…';
+    dialog.append(close, heading, grid, status);
+    if (!dialog.open) dialog.showModal();
+    try {
+      const response = await fetch('/api/kb/list_projects');
+      if (!response.ok) throw new Error('加载失败，请关闭后重试');
+      const data = await response.json();
+      for (const project of data.projects || []) {
+        const db = getProjectDbId(project);
+        if (!db) continue;
+        const name = project.title || project.name || db;
+        const button = document.createElement('button'); button.type = 'button'; button.className = 'app-logo-switcher-item';
+        button.title = name; button.setAttribute('aria-label', name);
+        if (db === getUrlParam('db')) button.setAttribute('aria-current', 'true');
+        const tile = document.createElement('span'); tile.className = 'app-logo-switcher-tile';
+        tile.textContent = Array.from(name).slice(0, 2).join('');
+        const logo = String(project.image || project.logo || project.img || '').trim();
+        if (logo) {
+          try {
+            const url = new URL(logo, location.href);
+            if (['http:', 'https:'].includes(url.protocol) || /^data:image\/(?:png|jpe?g|gif|webp|avif|svg\+xml);/i.test(logo)) {
+              const img = document.createElement('img'); img.src = url.href; img.alt = ''; img.onerror = () => img.remove(); tile.appendChild(img);
+            }
+          } catch {}
+        }
+        button.appendChild(tile);
+        button.onclick = () => { dialog.close(); if (db !== getUrlParam('db')) setUrlParam('db', db); };
+        grid.appendChild(button);
+      }
+      status.textContent = grid.children.length ? '' : '暂无可切换的应用';
+    } catch (error) { status.textContent = error.message; }
+  }
+  window.showAppLogoSwitcher = showAppLogoSwitcher;
+
   function showDbSelectModal() {
     const modal = document.getElementById("dbSelectModal");
     if (!modal) return;
+    // Keep the shared dialog visible when the home view hides the header.
+    if (modal.parentElement !== document.body) document.body.appendChild(modal);
     bindDbSelectActionButtons();
     modal.style.display = "flex";
     modal.style.alignItems = "center";

@@ -872,6 +872,7 @@
     }
     const action = event.target.closest('[data-home-action]')?.dataset.homeAction;
     if (!action) return;
+    if (action === 'switch-app') { window.showAppLogoSwitcher?.(); return; }
     if (action === 'theme') { byId('btnTheme')?.click(); return; }
     if (action === 'account') { if (window.authUser) window.setViewMode?.('profile'); else byId('btnAuth')?.click(); return; }
     if (action === 'create') { window.openQuickKnowledge?.(); return; }
