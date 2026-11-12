@@ -377,8 +377,11 @@
     const headerLogo = document.getElementById("headerProjectAvatar");
     if (!headerLogo) return;
     headerLogo.setAttribute("aria-expanded", String(!collapsed));
-    headerLogo.setAttribute("aria-label", collapsed ? "展开应用栏" : "收起应用栏");
-    headerLogo.title = collapsed ? "展开应用栏" : "收起应用栏";
+    const label = `${collapsed ? "展开" : "收起"}应用栏；双击切换应用`;
+    headerLogo.setAttribute("aria-label", label);
+    headerLogo.setAttribute("aria-controls", "projectSidebar appLogoSwitcher");
+    headerLogo.setAttribute("aria-haspopup", "dialog");
+    headerLogo.title = `单击${label}`;
   }
 
   // Global helper to control sidebar collapsed/expanded state
@@ -1787,21 +1790,28 @@
         } catch (err) {}
       });
     }
-    // The application logo toggles the left rail; its name opens the app home.
+    // The application logo toggles on click and switches apps on double-click; its name opens home.
     try {
       const headerLogo = document.getElementById("headerProjectAvatar");
       const headerName = document.getElementById("headerProjectName");
       if (headerLogo) {
-        headerLogo.addEventListener("click", (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          if (!window.authUser) return;
+        let logoClickTimer = 0;
+        const toggleLogoSidebar = () => {
           const sidebarEl = document.getElementById("projectSidebar");
           if (!sidebarEl) return;
-          (window.setSidebarCollapsed || setSidebarCollapsed)(
-            !sidebarEl.classList.contains("collapsed"),
-            true,
-          );
+          (window.setSidebarCollapsed || setSidebarCollapsed)(!sidebarEl.classList.contains("collapsed"), true);
+        };
+        headerLogo.addEventListener("click", (e) => {
+          e.preventDefault(); e.stopPropagation();
+          clearTimeout(logoClickTimer);
+          if (e.detail > 1) return;
+          if (e.detail === 0) { toggleLogoSidebar(); return; }
+          logoClickTimer = setTimeout(() => { logoClickTimer = 0; toggleLogoSidebar(); }, 450);
+        });
+        headerLogo.addEventListener("dblclick", (e) => {
+          e.preventDefault(); e.stopPropagation();
+          clearTimeout(logoClickTimer); logoClickTimer = 0;
+          void window.showAppLogoSwitcher?.();
         });
       }
       if (headerName) {

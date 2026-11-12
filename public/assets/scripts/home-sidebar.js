@@ -9,7 +9,8 @@
     document.body.dataset.homeSidebar = document.documentElement.dataset.homeSidebar;
     if (brand) {
       brand.setAttribute('aria-expanded', String(!collapsed));
-      brand.title = collapsed ? '\u5c55\u5f00\u83dc\u5355' : '\u6536\u8d77\u83dc\u5355';
+      const label = `${collapsed ? '展开' : '收起'}菜单；双击切换应用`;
+      brand.title = `单击${label}`; brand.setAttribute('aria-label', label);
     }
   }
   function toggle(event) {
@@ -19,7 +20,19 @@
     try { localStorage.setItem('kb:home-sidebar', preference); } catch {}
     apply();
   }
-  brand?.addEventListener('click', toggle);
+  let clickTimer = 0;
+  brand?.addEventListener('click', event => {
+    event.preventDefault(); event.stopPropagation();
+    clearTimeout(clickTimer);
+    if (event.detail > 1) return;
+    if (event.detail === 0) { toggle(); return; }
+    clickTimer = setTimeout(() => { clickTimer = 0; toggle(); }, 450);
+  });
+  brand?.addEventListener('dblclick', event => {
+    event.preventDefault(); event.stopPropagation();
+    clearTimeout(clickTimer); clickTimer = 0;
+    void window.showAppLogoSwitcher?.();
+  });
   media.addEventListener('change', () => { if (!preference) apply(); });
   apply();
 })();

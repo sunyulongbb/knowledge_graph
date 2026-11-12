@@ -2,7 +2,7 @@ import {expect,test} from 'bun:test';
 import {readFileSync} from 'node:fs';
 const source=readFileSync('public/assets/scripts/application-pages.js','utf8');
 const block=source.slice(source.indexOf('  function homeNewsTimeline('),source.indexOf('  function homePopularRow('));
-const render=new Function('escape','firstImage','firstCover','firstVideo',block+';return homeNewsTimeline;')((value:any)=>String(value??''),()=>'',()=>'',()=>'');
+const render=new Function('escape','firstImage','firstCover','firstVideo',"let newsMonths=[],newsSelectedMonth='';function knowledgeCardTags(){return '';} "+block+';return homeNewsTimeline;')((value:any)=>String(value??''),()=>'',()=>'',()=>'');
 test('news timeline groups creation dates and displays Shanghai local time',()=>{
   const html=render([{id:'a',name:'较新',created_at:'2026-11-10T17:30:00Z'},{id:'b',name:'同一天',created_at:'2026-11-10 16:00:00'},{id:'c',name:'较早',created_at:'2026-11-10T03:00:00Z'}]);
   expect((html.match(/class="home-news-day"/g)||[])).toHaveLength(2);

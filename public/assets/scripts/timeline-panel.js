@@ -310,7 +310,7 @@
       showCurrentTime: true,
       zoomMin: 24 * 60 * 60 * 1000,
       zoomMax: 1000 * 365 * 24 * 60 * 60 * 1000,
-      margin: { item: { horizontal: 12, vertical: 10 }, axis: 8 },
+      margin: { item: { horizontal: 12, vertical: 4 }, axis: 4 },
       editable: false,
     });
     timeline.on("select", (event) => {

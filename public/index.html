@@ -88,7 +88,7 @@
   <link rel="stylesheet" href="/assets/styles/quick-knowledge.css?v=20261111-category-selected" />
   <link rel="stylesheet" href="/assets/styles/home-waterfall.css?v=20261111-knowledge-notes" />
   <link rel="stylesheet" href="/assets/styles/home-popular.css?v=20261110-1" />
-  <link rel="stylesheet" href="/assets/styles/home-news.css?v=20261112-year-month" />
+  <link rel="stylesheet" href="/assets/styles/home-news.css?v=20261112-packed-cards" />
   <link rel="stylesheet" href="/assets/styles/knowledge-learning.css?v=20261110-full-width" />
   <link rel="stylesheet" href="/assets/styles/learning-journey.css?v=20261111-celebrate" />
   <link rel="stylesheet" href="/assets/generated/ontology-tree.css" />
@@ -121,7 +121,7 @@
   <script src="/assets/scripts/banner-upload.js?v=20260927-1"></script>
   <script src="/assets/scripts/app-settings.js?v=20261028-knowledge-sync"></script>
   <script src="/assets/scripts/pagination.js?v=20261008-pagination"></script>
-    <script src="/assets/scripts/timeline-panel.js?v=20260906-3"></script>
+    <script src="/assets/scripts/timeline-panel.js?v=20261112-compact-spacing"></script>
   <script type="module">
     import * as pdfjsLib from "/node_modules/pdfjs-dist/build/pdf.min.mjs?v=6.3.289";
 
@@ -1993,7 +1993,7 @@
     <div class="header-bar">
       <div class="header-brand" style="display:flex;align-items:center;gap:10px;">
         <div id="headerProject" style="align-items:center;gap:8px;min-width:0;">
-          <button id="headerProjectAvatar" class="header-project-logo" type="button" aria-label="展开应用栏" aria-controls="projectSidebar" aria-expanded="false"
+          <button id="headerProjectAvatar" class="header-project-logo" type="button" aria-label="展开应用栏；双击切换应用" title="单击收起/展开应用栏，双击切换应用" aria-controls="projectSidebar appLogoSwitcher" aria-haspopup="dialog" aria-expanded="false"
             style="width:28px;height:28px;border-radius:6px;background:#e0e7ef;background-size:cover;background-position:center;border:1px solid var(--border);display:inline-grid;flex-shrink:0;"></button>
           <button id="headerProjectName" class="header-project-name" type="button" title="进入应用首页" aria-label="进入应用首页"
             style="font-weight:600;color:var(--fg);font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;display:inline-block;">&nbsp;</button>
@@ -4842,7 +4842,7 @@
       <section id="applicationHomePanel" class="application-content-page" style="display:none">
         <aside class="home-discovery-sidebar" id="homeDiscoverySidebar" aria-label="首页导航">
           <div class="home-discovery-sidebar-head">
-          <button type="button" class="home-discovery-brand" id="homeSidebarBrandToggle" aria-controls="homeDiscoverySidebar" aria-expanded="true"><span class="home-discovery-mark" id="homeDiscoveryLogo" aria-hidden="true"><i class="fa-solid fa-layer-group"></i></span><span><strong id="homeDiscoveryBrand"></strong><small>发现 · 连接 · 创造</small></span></button>
+          <button type="button" class="home-discovery-brand" id="homeSidebarBrandToggle" title="单击收起/展开菜单，双击切换应用" aria-label="收起菜单；双击切换应用" aria-controls="homeDiscoverySidebar appLogoSwitcher" aria-haspopup="dialog" aria-expanded="true"><span class="home-discovery-mark" id="homeDiscoveryLogo" aria-hidden="true"><i class="fa-solid fa-layer-group"></i></span><span><strong id="homeDiscoveryBrand"></strong></span></button>
           <script>
             try {
               const brandScope = new URLSearchParams(location.search).get('db') || 'default';
@@ -4876,7 +4876,6 @@
             <button id="homeDiscoveryLogin" type="button" data-home-action="login" title="登录" aria-label="登录"><i class="fa-solid fa-arrow-right-to-bracket" aria-hidden="true"></i><span>登录</span></button>
             <button id="homeDiscoveryAccountButton" type="button" data-home-action="account" title="个人信息" aria-label="个人信息" hidden><i id="homeDiscoveryAvatar" class="home-sidebar-avatar fa-regular fa-user" aria-hidden="true"></i><span id="homeDiscoveryAccount">登录</span></button>
             <button id="homeDiscoveryLogout" type="button" data-home-action="logout" title="退出登录" aria-label="退出登录" hidden><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i><span>退出登录</span></button>
-            <button type="button" data-home-action="switch-app" title="切换应用" aria-label="切换应用"><i class="fa-solid fa-right-left" aria-hidden="true"></i><span>切换应用</span></button>
             <button type="button" data-home-action="theme" title="切换主题"><i class="fa-solid fa-circle-half-stroke" aria-hidden="true"></i><span>切换主题</span></button>
           </div>
         </aside>
@@ -17731,14 +17730,15 @@
   <script src="/assets/scripts/knowledge-context-menu.js?v=20260928-3"></script>
   <script src="/assets/scripts/quick-knowledge.js?v=20261111-category-expanded"></script>
   <script src="/assets/scripts/home-waterfall.js?v=20261111-compact-columns"></script>
-  <script src="/assets/scripts/home-sidebar.js?v=20261110-brand-only"></script>
-  <script src="/assets/scripts/application-pages.js?v=20261112-no-all-year"></script>
+  <script src="/assets/scripts/home-sidebar.js?v=20261112-logo-click-double"></script>
+  <script src="/assets/scripts/news-timeline-layout.js?v=20261112-packed-cards"></script>
+  <script src="/assets/scripts/application-pages.js?v=20261112-search-video-covers"></script>
   <script src="/assets/scripts/knowledge-learning.js?v=20261111-copy-cleanup"></script>
   <script src="/assets/scripts/knowledge-relation-page.js?v=20261111-close-collapses"></script>
   <script src="/assets/scripts/knowledge-big-bang.js?v=20261112-view-counts"></script>
   <script src="/assets/scripts/knowledge-explore.js?v=20261112-view-counts"></script>
   <script src="/assets/scripts/user-profile.js?v=20261110-api-errors"></script>
-  <script src="/assets/scripts/sidebar-panel.js?v=20260924-4"></script>
+  <script src="/assets/scripts/sidebar-panel.js?v=20261112-logo-click-double"></script>
   <script src="/assets/scripts/auth-panel.js?v=20261012-user-id"></script>
   <script src="/assets/scripts/db-modal.js?v=20261112-app-logo"></script>
   <script>

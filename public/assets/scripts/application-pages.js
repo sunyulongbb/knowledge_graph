@@ -299,8 +299,8 @@
   window.renderKnowledgeTags = knowledgeCardTags;
   function card(node) {
     let picture = "";
-    const source = node.image || node.images?.[0];
-    if (typeof source === "string" && /^(https?:\/\/|\/(?!\/))/i.test(source))
+    const source = firstVideo(node) ? firstCover(node) || firstImage(node) : firstImage(node) || firstCover(node);
+    if (source)
       picture = `<img src="${escape(source)}" alt="" width="92" height="72" loading="lazy">`;
     const hits = node.searchHighlights || {};
     const title = hits.name?.length
@@ -1496,6 +1496,7 @@
     }
   }
   function renderHome(nodes = homeVisibleNodes) {
+    window.newsTimelineLayout?.destroy();
     window.homeWaterfall?.destroy();
     syncHomeNavigation();
     const content = byId("appHomeContent");
@@ -1525,6 +1526,7 @@
     if (homeFeed === "news") {
       content.innerHTML = `<section class="home-news-board"><div class="home-news-timeline">${homeNewsTimeline(nodes)}</div>${homeError ? homePagination() : ""}</section>`;
       if (scrollPanel) scrollPanel.scrollTop = scrollTop;
+      window.newsTimelineLayout?.mount(content);
       return;
     }
     if (homeFeed === "popular") {

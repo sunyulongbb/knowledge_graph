@@ -2,7 +2,9 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 
 const source = readFileSync('public/assets/scripts/application-pages.js', 'utf8');
-const block = 'function writeHomeFeedRoute() {}\n'+source.slice(source.indexOf("  byId('applicationHomePanel').addEventListener('click'"), source.indexOf('  function writeSearchRoute()'));
+const handlerStart = source.search(/byId\(["']applicationHomePanel["']\)\.addEventListener\(["']click["']/);
+const block = 'function writeHomeFeedRoute() {}\n'+source.slice(handlerStart,source.indexOf('  function writeSearchRoute()'));
+
 
 test('home navigation opens existing views and account/theme controls', () => {
   const views: string[] = [], clicked: string[] = [];
