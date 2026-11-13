@@ -82,7 +82,7 @@
   function syncHomeAuthActions() {
     const signedIn = Boolean(window.authUser);
     const login = byId("homeDiscoveryLogin"),
-      logout = byId("homeDiscoveryLogout"),
+      logout = byId("btnProfileLogout"),
       account = byId("homeDiscoveryAccountButton");
     if (login) login.hidden = signedIn;
     if (logout) logout.hidden = !signedIn;

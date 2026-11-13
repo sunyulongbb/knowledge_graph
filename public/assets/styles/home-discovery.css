@@ -62,7 +62,17 @@ body.home-discovery-active #applicationHomePanel {
 .home-discovery-nav button[aria-current="page"] { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface-0)); }
 .home-discovery-nav button[aria-current="page"] small { color: inherit; opacity: .8; }
 .home-discovery-sidebar .home-discovery-create { justify-content: center; margin: 22px 0; background: var(--accent); color: var(--accent-contrast, #fff); font-weight: 600; }
-.home-discovery-sidebar .home-discovery-create:hover { filter: brightness(.95); }
+.home-discovery-sidebar .home-discovery-create:hover {
+  background: color-mix(in srgb, var(--accent) 90%, #000);
+  color: var(--accent-contrast, #fff);
+  filter: none;
+}
+.home-discovery-sidebar .home-discovery-create:active {
+  background: color-mix(in srgb, var(--accent) 82%, #000);
+  color: var(--accent-contrast, #fff);
+}
+.home-discovery-sidebar .home-discovery-create > i,
+.home-discovery-sidebar .home-discovery-create > span { color: inherit; }
 .home-discovery-tools { display: grid; gap: 2px; padding-top: 18px; border-top: 1px solid var(--border); }
 .home-discovery-section-label { padding: 0 14px 8px; color: var(--muted); font-size: 11px; letter-spacing: .08em; }
 .home-discovery-tools button, .home-discovery-footer button { min-height: 42px; font-size: 13px; color: var(--muted); }

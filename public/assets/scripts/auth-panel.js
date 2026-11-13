@@ -644,6 +644,10 @@
       logout();
     });
   }
+  document.getElementById('btnProfileLogout')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    logout();
+  });
   document.querySelectorAll("[data-emoji-avatar]").forEach((button) => {
     button.addEventListener("click", () => {
       if (!inputProfileAvatar) return;

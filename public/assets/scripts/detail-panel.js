@@ -1537,6 +1537,8 @@
   }
 
   async function loadNodeDetailInline(nodeId, options = {}) {
+    const deleteKnowledgeButton = document.getElementById('btnDetailDeleteKnowledge');
+    if (deleteKnowledgeButton) { deleteKnowledgeButton.hidden = true; deleteKnowledgeButton.onclick = null; }
     if (!nodeId) return;
     const preserveSidebarState =
       options && options.preserveSidebarState === true;
@@ -1607,6 +1609,32 @@
       const data = await resp.json();
       if (!isLatestDetailLoad()) return;
       const doc = data && data.node;
+      if (deleteKnowledgeButton && doc?.can_manage) {
+        deleteKnowledgeButton.hidden = false;
+        deleteKnowledgeButton.disabled = false;
+        deleteKnowledgeButton.onclick = async () => {
+          const name = doc.name || doc.label || nodeId;
+          if (!confirm(`确定删除知识「${name}」及其所有关系？此操作不可恢复。`)) return;
+          deleteKnowledgeButton.disabled = true;
+          try {
+            const url = new URL('/api/kb/nodes', location.origin);
+            const db = new URLSearchParams(location.search).get('db');
+            if (db) url.searchParams.set('db', db);
+            url.searchParams.set('id', nodeId);
+            const response = await fetch(url, {method:'DELETE'});
+            const result = await response.json();
+            if (!response.ok || !result.ok) throw new Error(result.error || result.message || '删除失败');
+            window.kbSelectedRowIds?.delete(nodeId);
+            if (window.kbSelectedRowId === nodeId) window.kbSelectedRowId = '';
+            window.setViewMode?.('app_home');
+            window.dispatchEvent(new CustomEvent('kb:knowledge-deleted', {detail:{id:nodeId}}));
+            await window.loadApplicationHome?.();
+          } catch (error) {
+            alert(error.message || '删除失败，请稍后重试');
+            deleteKnowledgeButton.disabled = false;
+          }
+        };
+      }
       if (doc) {
         const viewCount = document.getElementById('knowledgeViewCount');
         if (viewCount) { viewCount.dataset.knowledgeViews = String(doc.id || doc._id).replace(/^entity\//,''); viewCount.dataset.db = new URLSearchParams(window.location.search).get('db') || 'default'; viewCount.textContent = String(Number(doc.viewCount) || 0); }
