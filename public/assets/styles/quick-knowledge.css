@@ -288,3 +288,18 @@
   #quickKnowledgeDialog .quick-composer-tools > button { width:35px; height:38px; }
   #quickKnowledgeDialog .quick-knowledge-footer [data-quick-save] { padding-inline:16px; }
 }
+
+/* Soft category pills, removable selections and a visible expansion path. */
+#quickKnowledgeDialog .quick-category-sidebar { gap:6px; padding-block:12px; }
+#quickKnowledgeDialog .quick-category-sidebar > .quick-category-summary { display:flex; flex-wrap:wrap; gap:5px; padding-right:38px; }
+#quickKnowledgeDialog .quick-category-chip { border:0; border-radius:5px; padding:4px 8px; background:color-mix(in srgb,var(--accent) 10%,var(--surface-0)); color:var(--accent); font:inherit; font-size:12px; cursor:pointer; }
+#quickKnowledgeDialog .quick-category-chip:hover { background:color-mix(in srgb,var(--accent) 20%,var(--surface-0)); }
+#quickKnowledgeDialog .quick-category-level { gap:6px; padding:5px 0; }
+#quickKnowledgeDialog .quick-category-level + .quick-category-level { padding-left:10px; border-left:2px solid var(--border); }
+#quickKnowledgeDialog .quick-category-option { border:1px solid transparent; border-radius:7px; background:var(--surface-1); min-height:32px; transition:background .15s,border-color .15s; }
+#quickKnowledgeDialog .quick-category-option:hover { border-color:color-mix(in srgb,var(--accent) 30%,var(--border)); }
+#quickKnowledgeDialog .quick-category-option .quick-category-select { padding:5px 10px; }
+#quickKnowledgeDialog .quick-category-option.is-selected { background:color-mix(in srgb,var(--accent) 14%,var(--surface-0)); color:var(--accent); border-color:color-mix(in srgb,var(--accent) 35%,var(--border)); }
+#quickKnowledgeDialog .quick-category-option button[aria-expanded="true"] { transform:rotate(90deg); color:var(--accent); }
+#quickKnowledgeDialog .quick-category-option button:not(.quick-category-select) { min-width:28px; align-self:stretch; cursor:pointer; }
+@media(prefers-reduced-motion:reduce) { #quickKnowledgeDialog .quick-category-option { transition:none; } }

@@ -159,11 +159,24 @@
 
     const category = fields.namedItem("category"),
       type = fields.namedItem("type");
-    get("[data-quick-category-label]").textContent =
-      Array.from(category.selectedOptions)
-        .filter((option) => option.value)
-        .map((option) => option.textContent)
-        .join("、") || "未选择分类";
+    const summary = get('[data-quick-category-label]');
+    summary.replaceChildren();
+    for (const option of Array.from(category.selectedOptions).filter(o => o.value)) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'quick-category-chip';
+      chip.textContent = option.textContent.split(' / ').pop() + ' ×';
+      chip.title = option.textContent;
+      chip.setAttribute('aria-label', '移除分类：' + option.textContent);
+      chip.disabled = saving || saved;
+      chip.onclick = () => {
+        if (saving || saved) return;
+        option.selected = false; updateMeta(); void renderCategoryTree();
+      };
+      summary.append(chip);
+    }
+    summary.hidden = !summary.childElementCount;
+    get('[data-quick-clear="category"]').hidden = !summary.childElementCount;
     get("[data-quick-ontology-label]").textContent = type.selectedOptions[0]
       ?.value
       ? type.selectedOptions[0].textContent
@@ -404,12 +417,15 @@
         label.textContent = node.name || node.label || node.id; row.append(label);
         if (node.children.length) {
           const next = document.createElement('button'); next.type = 'button'; next.textContent = '›';
-          next.setAttribute('aria-label', '展开下级分类');
+          next.disabled = saving || saved;
+          next.setAttribute('aria-label', '展开' + (node.name || node.label || node.id) + '的下级分类');
           next.setAttribute('aria-expanded', String(categoryPath[level] === node.id));
-          next.onclick = () => { categoryPath = categoryPath.slice(0, level); categoryPath[level] = node.id; void renderCategoryTree(); };
+          next.onclick = () => { if (saving || saved) return; const expanded = categoryPath[level] === node.id; categoryPath = categoryPath.slice(0, level); if (!expanded) categoryPath[level] = node.id; void renderCategoryTree(); };
           row.append(next);
         }
-        row.classList.toggle('is-selected', !!option?.selected); column.append(row);
+        row.classList.toggle('is-selected', !!option?.selected);
+        row.classList.toggle('is-expanded', categoryPath[level] === node.id && !!node.children.length);
+        column.append(row);
       }
       if (!column.childElementCount) column.textContent = query ? '无匹配分类' : '暂无分类';
       host.append(column);
