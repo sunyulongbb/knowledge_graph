@@ -85,7 +85,7 @@
   <link rel="stylesheet" href="/assets/styles/knowledge-relation-page.css?v=20261111-collapse-detail" />
   <link rel="stylesheet" href="/assets/styles/knowledge-big-bang.css?v=20261111-keyboard-borderless" />
   <link rel="stylesheet" href="/assets/styles/knowledge-explore.css?v=20261111-icon-entry" />
-  <link rel="stylesheet" href="/assets/styles/quick-knowledge.css?v=20261116-category-pills" />
+  <link rel="stylesheet" href="/assets/styles/quick-knowledge.css?v=20261116-default-ontology" />
   <link rel="stylesheet" href="/assets/styles/home-waterfall.css?v=20261111-knowledge-notes" />
   <link rel="stylesheet" href="/assets/styles/home-popular.css?v=20261110-1" />
   <link rel="stylesheet" href="/assets/styles/home-news.css?v=20261116-full-width" />
@@ -1986,6 +1986,7 @@
       }
     }
   </style>
+  <link rel="stylesheet" href="/assets/styles/ontology-workspace.css?v=20261116-default-menu" />
 </head>
 
 <body>
@@ -2989,18 +2990,19 @@
             <aside class="ontology-card ontology-sidebar">
               <div class="ontology-sidebar__top">
                 <div class="ontology-title-row">
-                  <strong>本体树</strong>
+                  <strong>知识本体</strong>
                   <button id="btnOntologyAddRoot" class="btn sm primary" type="button" title="新增本体">
                     <i class="fa-solid fa-plus"></i> 新增
                   </button>
                 </div>
                 <input id="ontologySearch" type="text" class="app-search-input kb-input sm" placeholder="搜索本体名称..." autocomplete="off" />
-                <div class="ontology-title-row">
+                <details class="ontology-import-details"><summary>导入本体</summary><div>                <div class="ontology-title-row">
                   <button id="btnOntologyImport" class="btn sm" type="button"><i class="fa-solid fa-file-import"></i> 导入 JSON</button>
                   <a class="btn sm" href="/examples/ontology-import.json" download="ontology-import.json">下载示例</a>
                   <input id="ontologyImportFile" type="file" accept=".json,application/json" hidden />
                 </div>
                 <div class="muted" style="font-size:12px">增量导入：同级同名更新，新增追加，未导入的本体保留。<a href="/examples/ontology-import-format.md" target="_blank">格式说明</a></div>
+</div></details>
                 <div id="ontologyImportStatus" class="muted" style="font-size:12px" role="status" aria-live="polite"></div>
               </div>
               <div id="ontologyTree" class="ontology-tree-wrap"></div>
@@ -17704,7 +17706,7 @@
       window.kbOntologyTreeModuleReady = import("/assets/generated/ontology-tree.js?v=20261005-class-scroll");
   </script>
   <script type="module" src="/assets/scripts/vis-ontology-panel.js?v=20261012-classification"></script>
-  <script src="/assets/scripts/property-panel.js?v=20261030-derive"></script>
+  <script src="/assets/scripts/property-panel.js?v=20261116-default-menu"></script>
   <script src="/assets/scripts/knowledge-family.js?v=20261105-family-inline-detail"></script>
   <script src="/assets/scripts/table-panel.js?v=20261110-tag-load-sync"></script>
   <script src="/assets/scripts/table-selection.js?v=20261110-shorts-page"></script>
@@ -17728,7 +17730,7 @@
   <script src="/assets/scripts/shorts-page.js?v=20261112-menu-refresh"></script>
   <script src="/assets/scripts/manual-classify.js?v=20260929-existing-classes"></script>
   <script src="/assets/scripts/knowledge-context-menu.js?v=20260928-3"></script>
-  <script src="/assets/scripts/quick-knowledge.js?v=20261116-category-pills"></script>
+  <script src="/assets/scripts/quick-knowledge.js?v=20261116-default-ontology"></script>
   <script src="/assets/scripts/home-waterfall.js?v=20261111-compact-columns"></script>
   <script src="/assets/scripts/home-sidebar.js?v=20261112-logo-click-double"></script>
   <script src="/assets/scripts/news-timeline-layout.js?v=20261112-packed-cards"></script>

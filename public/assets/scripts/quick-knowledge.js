@@ -550,6 +550,7 @@
     controls.forEach((control) => {
       control.disabled = true;
     });
+    const defaultRequest = fetch(scopedUrl("/api/kb/default-ontology")).then(response => response.ok ? response.json() : null).catch(() => null);
     const results = await Promise.allSettled(
       ["/api/kb/classes", "/api/kb/ontologies"].map(async (path) => {
         const response = await fetch(scopedUrl(path));
@@ -574,6 +575,10 @@
       }
       control.disabled = false;
     });
+    const defaultOntology = await defaultRequest;
+    if (token !== version || !dialog.open) return;
+    const typeControl = fields.namedItem('type');
+    if (!typeControl.value && defaultOntology?.id && Array.from(typeControl.options).some(option => option.value === defaultOntology.id)) typeControl.value = defaultOntology.id;
     updateMeta();
     status.textContent = results.some((result) => result.status === "rejected")
       ? "部分选项加载失败，可重试或先保存内容。"

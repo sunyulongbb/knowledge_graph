@@ -84,14 +84,14 @@ export function buildEnterpriseSearchQuery(options: EnterpriseSearchOptions, rea
 }
 export class EnterpriseKnowledgeSearch {
   constructor(readonly store: EnterpriseKnowledgeStore, readonly client: ElasticsearchClient,
-    readonly interactionCounts: () => Record<string, number> = () => ({})) {}
+    readonly interactionCounts: () => Record<string, number> = () => ({}),
+    readonly viewCounts: (database: string) => Record<string, number> = () => ({})) {}
   async search(database: string, user: KnowledgeUser | null, options: EnterpriseSearchOptions) {
     // Current ACL/identity and requested engagement totals are read from ArangoDB. Text search,
     // content, filters, paging and counts are exclusively served by Elasticsearch.
     // This also excludes deleted entities and blocks stale public ES copies after revocation.
     const access = await this.store.searchAccess(database, user, options.order === 'popular');
-    const popularityCounts = options.order === 'popular' ? { ...this.interactionCounts() } : {};
-    if(options.order === 'popular')for(const row of access)if(row.engagement)popularityCounts[row.id]=Number(row.engagement.likes||0)+Number(row.engagement.comments||0)+Number(row.engagement.shares||0);
+    const popularityCounts = options.order === 'popular' ? this.viewCounts(database) : {};
     const permissions = new Map(access.map(row => [row.key, row]));
     if (!permissions.size) return { nodes: [] as Doc[], total: 0, months: [] };
     const query = buildEnterpriseSearchQuery(options, [...permissions.keys()]);

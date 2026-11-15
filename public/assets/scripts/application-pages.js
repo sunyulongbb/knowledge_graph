@@ -1530,7 +1530,7 @@
       return;
     }
     if (homeFeed === "popular") {
-      content.innerHTML = `<section class="home-popular-board" aria-label="热门知识排行榜"><header class="home-popular-heading"><div><h1>热门知识 <b>TOP 30</b></h1><p>按点赞、评论和分享热度排序，展示前 30 名。</p></div><i class="fa-solid fa-fire" aria-hidden="true"></i></header><div class="home-popular-list">${nodes.slice(0, 30).map(homePopularRow).join("") || (!homeBusy && !homeError ? '<p class="home-popular-status">暂无热门知识</p>' : "")}</div>${homePagination()}</section>`;
+      content.innerHTML = `<section class="home-popular-board" aria-label="热门知识排行榜"><header class="home-popular-heading"><div><h1>热门知识 <b>TOP 30</b></h1><p>按浏览量从高到低排序，展示前 30 名。</p></div><i class="fa-solid fa-fire" aria-hidden="true"></i></header><div class="home-popular-list">${nodes.slice(0, 30).map(homePopularRow).join("") || (!homeBusy && !homeError ? '<p class="home-popular-status">暂无热门知识</p>' : "")}</div>${homePagination()}</section>`;
       if (scrollPanel) scrollPanel.scrollTop = scrollTop;
       return;
     }

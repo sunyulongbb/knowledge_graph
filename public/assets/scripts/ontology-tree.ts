@@ -24,6 +24,7 @@ export type OntologyTreeControllerOptions = {
   enableDrag?: boolean;
   onMove?: (id: string, items: OntologyMove[]) => Promise<unknown>;
   nodeLabel?: string;
+  nodeBadge?: (id: string) => string;
   enableContextMenu?: boolean;
   disableReadonlyItems?: boolean;
   toggleSelection?: boolean;
@@ -164,7 +165,9 @@ export class OntologyTreeController {
         const icon = this.options.nodeIcon === "folder"
           ? `<span class="ontology-node-folder" style="--ontology-node-color:${this.escape(color)}" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path fill="currentColor" d="M3 5.75A1.75 1.75 0 0 1 4.75 4h5.19c.46 0 .9.18 1.23.51L12.66 6h6.59A1.75 1.75 0 0 1 21 7.75v8.5A2.75 2.75 0 0 1 18.25 19H5.75A2.75 2.75 0 0 1 3 16.25V5.75Z"/></svg></span>`
           : `<span class="ontology-node-dot${filled ? " is-filled" : ""}" style="--ontology-node-color:${this.escape(color)}"${this.options.onNodeIconClick ? ` data-ontology-node-icon="${this.escape(String(item.id))}" role="button" tabindex="0" aria-pressed="${filled}" aria-label="${filled ? "取消分类" : "添加分类"}"` : ""}></span>`;
-        const content = `${icon}<span class="ontology-node-label" data-tree-node-id="${this.escape(String(item.id))}">${this.escape(item.value)}</span>`;
+        const badge = this.options.nodeBadge?.(String(item.id));
+        const badgeHtml = badge ? `<span class="ontology-default-badge" title="${this.escape(badge)}" aria-label="${this.escape(badge)}"><i class="fa-solid fa-star" aria-hidden="true"></i></span>` : '';
+        const content = `${icon}<span class="ontology-node-label" data-tree-node-id="${this.escape(String(item.id))}">${this.escape(item.value)}</span>${badgeHtml}`;
         return this.options.onActivate ? `<span class="class-tree-node${filled ? " is-assigned" : ""}" data-class-activate="${this.escape(String(item.id))}" role="button" tabindex="0" aria-pressed="${filled}" title="${filled ? "点击取消分类" : "点击添加分类"}">${content}${filled ? '<small>已分类</small>' : ""}</span>` : content;
       },
     });

@@ -2446,9 +2446,8 @@ export async function handleCoreKbRoutes(
         ((${tags}) * 5 + ${interactions}) DESC,
         datetime(COALESCE(n.updated_at, n.created_at)) DESC, n.rowid DESC`;
     } else if (orderBy === "popular") {
-      const interactions = ['knowledge_likes', 'knowledge_comments', 'knowledge_shares', 'knowledge_favorites']
-        .map((table) => `(SELECT COUNT(*) FROM ${table} h WHERE h.knowledge_id IN (n.id, 'entity/' || n.id))`).join(' + ');
-      orderClause = ` ORDER BY (${interactions}) DESC, datetime(COALESCE(n.updated_at, n.created_at)) DESC, n.rowid DESC`;
+      const views = `COALESCE((SELECT v.view_count FROM knowledge_view_counts v WHERE v.node_id = replace(n.id, 'entity/', '') AND v.project_id = COALESCE(n.project_id, 0)), 0)`;
+      orderClause = ` ORDER BY ${views} DESC, datetime(COALESCE(n.updated_at, n.created_at)) DESC, n.rowid DESC`;
     } else if (orderBy === "modified_desc") {
       orderClause =
         " ORDER BY datetime(COALESCE(n.updated_at, n.created_at)) DESC, n.rowid DESC";

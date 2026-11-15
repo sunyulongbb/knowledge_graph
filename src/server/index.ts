@@ -87,6 +87,11 @@ const handleEnterpriseKnowledge = enterpriseStore ? createEnterpriseKnowledgeHan
       for (const row of rows) counts[row.id] = (counts[row.id] || 0) + row.total;
     }
     return counts;
+  }, (database) => {
+    const project = getProjectByIdentifier(database);
+    if (!project) return {};
+    const rows = adminDb.query('SELECT node_id, view_count FROM knowledge_view_counts WHERE project_id=?').all(project.id) as { node_id: string; view_count: number }[];
+    return Object.fromEntries(rows.map(row => [row.node_id, Number(row.view_count) || 0]));
   }) : undefined,
   getUser: getKnowledgeUser, getProject: getProjectByIdentifier,
   canCreate: (user, project) => user.role === 'admin' || applicationPermissions(adminDb, user, project).member,
@@ -147,6 +152,22 @@ const server = Bun.serve({
       const requestUrl = url;
       const response = await knowledgeContext.run({ user: getKnowledgeUser(req) }, async () => {
       const url = requestUrl;
+      if (url.pathname === '/api/kb/default-ontology') {
+        const project = getProjectByIdentifier(url.searchParams.get('db') || 'default');
+        if (!project) return Response.json({error:'应用不存在'}, {status:404});
+        const user = getKnowledgeUser(req);
+        if (!user || !(user.role === 'admin' || applicationPermissions(adminDb, user, project).member)) return Response.json({error:'无权设置此应用'}, {status:403});
+        const key = 'default_ontology:' + project.id;
+        if (method === 'GET') return Response.json({id:(adminDb.query('SELECT value FROM settings WHERE key=?').get(key) as any)?.value || ''});
+        if (method === 'PUT') {
+          const body = await req.json() as any;
+          const id = String(body.id || '');
+          if (id && !adminDb.query('SELECT id FROM ontologies WHERE id=? AND project_id=?').get(id,project.id)) return Response.json({error:'本体不存在'}, {status:400});
+          adminDb.run('INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)',[key,id]);
+          return Response.json({id});
+        }
+        return new Response('Method not allowed',{status:405});
+      }
       const recommendationResponse = await recommendations.handle(req, url);
       if (recommendationResponse) return recommendationResponse;
       const viewResponse = await knowledgeViews.handle(req, url);

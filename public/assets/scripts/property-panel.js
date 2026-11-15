@@ -28,6 +28,25 @@
   let selectedOntologyId = "";
   let propertyViewMode = "all";
   let ontologyItems = [];
+  let defaultOntologyId = '';
+  let defaultOntologyBusy = false;
+  const defaultUrl = () => appendCurrentDbToUrl(new URL('/api/kb/default-ontology', location.origin));
+  async function refreshDefaultOntology() {
+    const data = await apiJson(defaultUrl());
+    defaultOntologyId = data.id || '';
+    renderOntologyTree(buildLocalTree());
+  }
+  async function setDefaultOntology(id) {
+    if (defaultOntologyBusy) return;
+    defaultOntologyBusy = true;
+    try {
+      const data = await apiJson(defaultUrl(), {method:'PUT', headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});
+      defaultOntologyId = data.id || '';
+      renderOntologyTree(buildLocalTree());
+    } catch (error) { alert('默认本体设置失败：' + error.message); }
+    finally { defaultOntologyBusy = false; }
+  }
+
   let ontologySearchTimer = null;
   let ontologyTreeController = null;
   let pendingOntologyToggleId = "";
@@ -131,6 +150,8 @@
 
   function updateOntologySummary() {
     const current = getSelectedOntology();
+    const heading = document.querySelector('.ontology-toolbar__title strong');
+    if (heading) heading.textContent = current ? current.name + ' · 属性' : '全部属性';
     const summary = byId("ontologyCurrentInfo");
     const hint = byId("propertyOntologyHint");
     const headerSummary = byId("ontologyHeaderSummary");
@@ -436,6 +457,7 @@
             );
       const treeItems = Array.isArray(data?.items) ? data.items : [];
       ontologyItems = flattenOntologyTree(treeItems, []);
+      void refreshDefaultOntology().catch(error => { console.warn('默认本体加载失败', error); });
       window.kbOntologies = ontologyItems.slice();
       try {
         window.dispatchEvent(
@@ -1586,6 +1608,16 @@
     const module = await window.kbOntologyTreeModuleReady;
     ontologyTreeController = new module.OntologyTreeController(ontologyTree, {
       showAllButton: false,
+      nodeBadge: id => id === defaultOntologyId ? '默认本体' : '',
+      menuActions: id => {
+        const item = ontologyItems.find(item => item.id === id);
+        return [
+          {label: id === defaultOntologyId ? '取消默认本体' : '设为默认本体', action: () => void setDefaultOntology(id === defaultOntologyId ? '' : id), disabled: defaultOntologyBusy},
+          {label:'新增子本体', action: () => openOntologyModal('create', {parent:item})},
+          {label:'编辑', action: () => openOntologyModal('edit', {item}), disabled:!!(item?.readonly || item?.system)},
+          {label:'删除', action: () => { selectedOntologyId=id; void deleteOntology(id); }, disabled:!!(item?.readonly || item?.system)},
+        ];
+      },
       onSelect: async (id) => {
         selectedOntologyId = String(id || "").trim();
         propertyViewMode = selectedOntologyId ? "linked" : "all";
