@@ -87,7 +87,7 @@
     <div class="quick-knowledge-layout" data-quick-layout><div class="quick-knowledge-fields">
       <div class="quick-ontology-picker"><button type="button" class="social-ontology-trigger" data-quick-ontology aria-expanded="false" aria-controls="quickOntologyDropdown"><i class="fa-solid fa-tag" aria-hidden="true"></i><span data-quick-ontology-label>添加本体</span></button><select name="type" hidden aria-label="本体类型"><option value="">暂不设置</option></select></div>
       <div id="quickOntologyDropdown" class="ontology-floating-dropdown is-portal quick-ontology-dropdown" hidden><label class="quick-sr-only" for="quickOntologySearch">搜索本体</label><input id="quickOntologySearch" type="search" data-quick-ontology-search placeholder="搜索本体" autocomplete="off"><div class="ontology-dropdown-plugin-host" data-quick-ontology-tree></div></div>
-      <div class="quick-body-editor"><label class="quick-sr-only" for="quickKnowledgeContent">知识内容</label><textarea id="quickKnowledgeContent" name="content" rows="6" required maxlength="14000" aria-describedby="quickKnowledgeHint" placeholder="写下知识标题&#10;&#10;空一行，补充描述…"></textarea><p id="quickKnowledgeHint" class="quick-composer-hint">首段为标题，空行后为描述。支持 #标签、粘贴或拖入附件；括号内可填写别名。</p>
+      <div class="quick-body-editor"><label class="quick-sr-only" for="quickKnowledgeContent">知识内容</label><textarea id="quickKnowledgeContent" name="content" rows="6" required maxlength="14000" placeholder="写下知识标题&#10;&#10;空一行，补充描述…"></textarea>
       <div class="quick-composer-tools" role="toolbar" aria-label="添加内容">
         <button type="button" data-quick-pick="image" title="添加图片或 GIF" aria-label="添加图片或 GIF"><i class="fa-regular fa-image" aria-hidden="true"></i></button>
         <button type="button" data-quick-pick="video" title="添加视频" aria-label="添加视频"><i class="fa-solid fa-video" aria-hidden="true"></i></button>
@@ -100,10 +100,10 @@
       <div class="quick-attachments" data-quick-attachments aria-label="附件预览"></div>
       <div class="quick-composer-panel" data-quick-panel="link" hidden><label>来源链接<input class="kb-input" name="link" type="url" maxlength="2000" placeholder="https://…"></label></div>
       <div class="quick-composer-panel" data-quick-panel="tags" hidden><label>标签<input class="kb-input" name="tags" maxlength="2000" placeholder="用逗号分隔标签"></label></div>
-      <div class="quick-composer-meta"><button type="button" data-quick-toggle="tags" aria-expanded="false"><span data-quick-tag-label># 添加标签</span></button><span class="quick-category-summary" data-quick-category-label>未选择分类</span><small data-quick-count>0 字</small></div>
+      <div class="quick-composer-meta"><span class="quick-category-summary" data-quick-category-label>未选择分类</span></div>
       <input type="file" data-quick-file="image" accept="image/*" multiple hidden><input type="file" data-quick-file="video" accept=".mp4,.webm,.avi,.mkv,.ogg,.mpeg" multiple hidden><input type="file" data-quick-file="pdf" accept="application/pdf,.pdf" hidden>
     </div>
-    <aside class="quick-category-sidebar" aria-labelledby="quickCategoryTitle"><div class="quick-category-heading"><h3 id="quickCategoryTitle">分类</h3><button type="button" data-quick-clear="category">清空</button></div><p>点击分类可多选，再次点击取消。</p><label class="quick-sr-only" for="quickCategorySearch">搜索分类</label><input id="quickCategorySearch" type="search" data-quick-filter="category" placeholder="搜索分类" autocomplete="off" aria-controls="quickCategoryTree"><select name="category" multiple hidden aria-label="已选知识分类"></select><div id="quickCategoryTree" class="ontology-dropdown-plugin-host quick-category-tree" data-quick-category-tree></div><small data-quick-choice-count="category"></small><p class="quick-knowledge-options-status" data-quick-options role="status"></p></aside></div>
+    <aside class="quick-category-sidebar" aria-label="知识分类"><div class="quick-category-heading"><button type="button" data-quick-clear="category">清空</button></div><select name="category" multiple hidden aria-label="已选知识分类"></select><div id="quickCategoryTree" class="ontology-dropdown-plugin-host quick-category-tree" data-quick-category-tree></div><p class="quick-knowledge-options-status" data-quick-options role="status"></p></aside></div>
     <div class="quick-knowledge-success" data-quick-success hidden><i class="fa-regular fa-circle-check" aria-hidden="true"></i><h3>知识已创建</h3><p>已保存到当前应用。</p><button type="button" class="btn" data-quick-another>继续新增</button></div>
     <p class="quick-knowledge-message" data-quick-message role="status" aria-live="polite"></p>
     <div class="quick-knowledge-footer"><button type="button" class="btn" data-quick-close>关闭</button><label class="quick-audience"><i class="fa-solid fa-earth-asia" aria-hidden="true"></i><span class="quick-sr-only">可见性</span><select name="visibility" aria-label="可见性"><option value="public">所有人可见</option><option value="private">仅自己可见</option></select></label><button type="submit" class="btn primary" data-quick-save>立即发布 <i class="fa-solid fa-arrow-up" aria-hidden="true"></i></button><button type="button" class="btn primary" data-quick-done hidden>完成</button></div>
@@ -114,16 +114,14 @@
   const editorBody = dialog.querySelector(".quick-body-editor");
   const editorToolbar = document.createElement("div");
   editorToolbar.className = "quick-editor-topline";
-  editorToolbar.append(dialog.querySelector(".quick-ontology-picker"));
+  dialog.querySelector(".quick-knowledge-header").append(dialog.querySelector(".quick-ontology-picker"));
   const meta = dialog.querySelector(".quick-composer-meta");
   const categorySummary = meta.querySelector(".quick-category-summary");
   dialog.querySelector(".quick-category-heading").after(categorySummary);
-  editorToolbar.append(meta);
-  editorFields.prepend(editorToolbar);
+  // Keep the writing surface first; place the count alongside attachment tools.
+  dialog.querySelector(".quick-composer-tools").append(meta);
   const attachmentTools = dialog.querySelector(".quick-composer-tools");
   editorBody.after(attachmentTools);
-  const hint = dialog.querySelector(".quick-composer-hint");
-  attachmentTools.after(hint);
   const form = dialog.querySelector("form"),
     fields = form.elements;
   const get = (selector) => dialog.querySelector(selector);
@@ -158,10 +156,7 @@
       content.value,
       fields.namedItem("tags").value,
     );
-    const tags = parsed.tags;
-    get("[data-quick-tag-label]").textContent = tags.length
-      ? tags.map((tag) => "#" + tag).join(" ")
-      : "# 添加标签";
+
     const category = fields.namedItem("category"),
       type = fields.namedItem("type");
     get("[data-quick-category-label]").textContent =
@@ -169,13 +164,10 @@
         .filter((option) => option.value)
         .map((option) => option.textContent)
         .join("、") || "未选择分类";
-    get('[data-quick-choice-count="category"]').textContent =
-      `已选 ${category.selectedOptions.length} 个分类`;
     get("[data-quick-ontology-label]").textContent = type.selectedOptions[0]
       ?.value
       ? type.selectedOptions[0].textContent
       : "添加本体";
-    get("[data-quick-count]").textContent = `${content.value.length} 字`;
     get("[data-quick-preview]").hidden = !content.value.trim();
     get("[data-quick-title-preview]").textContent = parsed.name || "请填写标题";
     get("[data-quick-alias-preview]").textContent = parsed.aliases.length
@@ -383,62 +375,46 @@
     );
     if (key === "category") void renderCategoryTree();
   }
+  let categoryPath = [];
   async function renderCategoryTree() {
-    const token = ++categoryVersion,
-      host = get("[data-quick-category-tree]");
-    try {
-      const treeModule = await window.kbOntologyTreeModuleReady;
-      if (token !== categoryVersion || !dialog.open) return;
-      if (!treeModule?.OntologyTreeController)
-        throw Error("分类树加载失败，请重试");
-      if (!categoryController)
-        categoryController = new treeModule.OntologyTreeController(host, {
-          showAllButton: false,
-          enableDrag: false,
-          enableContextMenu: false,
-          disableReadonlyItems: false,
-          toggleSelection: false,
-          nodeIcon: "folder",
-          nodeLabel: "分类",
-          defaultExpandAll: true,
-          expandOnFirstRender: true,
-          storageKey: `kb:ontology-tree-state:quick-categories:${scopedUrl("/").search}`,
-          nodeIconFilled: (id) =>
-            Array.from(fields.namedItem("category").selectedOptions).some(
-              (option) => option.value === id,
-            ),
-          onActivate: (id) => {
-            if (saving || saved) return;
-            const option = Array.from(
-              fields.namedItem("category").options,
-            ).find((option) => option.value === id);
-            if (!option) return;
-            option.selected = !option.selected;
-            updateMeta();
-            void renderCategoryTree();
-          },
-          onSelect() {},
-          onEdit() {},
-          onAddChild() {},
-          onDelete() {},
-          onReload: loadOptions,
-        });
-      categoryController.update(categoryNodes, "");
-      if (!categoryNodes.length)
-        host.textContent = "当前应用暂无分类，可以先发布知识。";
-      categoryController.filter(get('[data-quick-filter="category"]').value);
-    } catch (error) {
-      if (token !== categoryVersion || !dialog.open) return;
-      host.textContent = error.message || "分类树加载失败";
-      const retry = document.createElement("button");
-      retry.type = "button";
-      retry.className = "btn sm";
-      retry.textContent = "重试";
-      retry.onclick = () => {
-        void renderCategoryTree();
-      };
-      host.append(retry);
-    }
+    const host = get('[data-quick-category-tree]');
+    const query = "";
+    host.replaceChildren();
+    let nodes = categoryNodes, depth = 0;
+    const matches = n => String(n.name || n.label || n.id).toLowerCase().includes(query) || n.children.some(matches);
+    do {
+      const column = document.createElement('div');
+      column.className = 'quick-category-level';
+      column.setAttribute('aria-label', '第 ' + (depth + 1) + ' 级分类');
+      const level = depth;
+      for (const node of nodes.filter(matches)) {
+        const row = document.createElement('div'), label = document.createElement('button');
+        row.className = 'quick-category-option';
+        const option = Array.from(fields.namedItem('category').options).find(o => o.value === node.id);
+        label.type = 'button';
+        label.className = 'quick-category-select';
+        label.setAttribute('aria-pressed', String(!!option?.selected));
+        label.disabled = saving || saved;
+        label.onclick = () => {
+          if (!option || saving || saved) return;
+          option.selected = !option.selected;
+          categoryPath = categoryPath.slice(0, level); categoryPath[level] = node.id;
+          updateMeta(); void renderCategoryTree();
+        };
+        label.textContent = node.name || node.label || node.id; row.append(label);
+        if (node.children.length) {
+          const next = document.createElement('button'); next.type = 'button'; next.textContent = '›';
+          next.setAttribute('aria-label', '展开下级分类');
+          next.setAttribute('aria-expanded', String(categoryPath[level] === node.id));
+          next.onclick = () => { categoryPath = categoryPath.slice(0, level); categoryPath[level] = node.id; void renderCategoryTree(); };
+          row.append(next);
+        }
+        row.classList.toggle('is-selected', !!option?.selected); column.append(row);
+      }
+      if (!column.childElementCount) column.textContent = query ? '无匹配分类' : '暂无分类';
+      host.append(column);
+      nodes = nodes.find(n => n.id === categoryPath[depth])?.children || []; depth++;
+    } while (nodes.length);
   }
 
   function closeOntology() {
@@ -577,6 +553,7 @@
         choiceRows[key] = categoryOptions(
           key === "category" ? flatten(categoryNodes) : result.value,
         );
+        if (key === "category") categoryPath = [];
         renderChoices(key);
       }
       control.disabled = false;
@@ -689,7 +666,7 @@
   });
   dialog.querySelectorAll("[data-quick-filter]").forEach((input) =>
     input.addEventListener("input", () => {
-      categoryController?.filter(input.value);
+      void renderCategoryTree();
     }),
   );
   dialog.querySelectorAll("[data-quick-clear]").forEach((button) =>
@@ -699,7 +676,7 @@
       Array.from(fields.namedItem(key).options).forEach((option) => {
         option.selected = false;
       });
-      get(`[data-quick-filter="${key}"]`).value = "";
+
       renderChoices(key);
       updateMeta();
     }),
@@ -707,9 +684,7 @@
   fields.namedItem("category").addEventListener("change", () => {
     void renderCategoryTree();
   });
-  get('[data-quick-filter="category"]').addEventListener("keydown", (event) => {
-    if (event.key === "Enter") event.preventDefault();
-  });
+
   form.addEventListener("input", updateMeta);
   form.addEventListener("change", updateMeta);
   form.addEventListener(
@@ -831,15 +806,7 @@
                 `创建失败（${response.status}）`,
         );
       saved = true;
-      get("[data-quick-layout]").hidden = true;
-      get("[data-quick-success]").hidden = false;
-      submit.hidden = true;
-      get("[data-quick-done]").hidden = false;
-      get("[data-quick-done]").focus();
-      message.textContent =
-        result.sync === "pending"
-          ? "知识已保存，首页搜索索引正在同步，可能稍后显示。"
-          : "";
+      dialog.close();
       window.dispatchEvent(
         new CustomEvent("kb:knowledge-created", {
           detail: { node: result.node },

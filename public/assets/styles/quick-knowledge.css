@@ -135,3 +135,156 @@
 .quick-category-sidebar > .quick-category-summary { display:block; flex:none; margin-top:10px; white-space:normal; overflow-wrap:anywhere; }
 @media(max-width:480px){ .quick-editor-topline { align-items:flex-start; } .quick-editor-topline .quick-composer-meta { min-width:120px; } }
 
+
+/* Bottom cascading category picker. */
+#quickKnowledgeDialog .quick-knowledge-layout { grid-template-columns:minmax(0,1fr); }
+#quickKnowledgeDialog .quick-category-sidebar { border-left:0; border-top:1px solid var(--border); }
+#quickKnowledgeDialog .quick-category-tree { display:flex; flex-direction:column; gap:8px; overflow:auto; flex:auto; height:auto; min-height:80px; max-height:28dvh; }
+.quick-category-level { display:flex; flex-wrap:wrap; align-items:flex-start; gap:6px; flex:0 0 auto; padding:8px 0; border-bottom:1px solid var(--border); font-size:12px; }
+.quick-category-option { display:flex; align-items:center; flex:0 0 auto; max-width:100%; border:1px solid var(--border); border-radius:6px; min-height:34px; }
+.quick-category-option label { display:flex; align-items:center; gap:8px; flex:1; min-width:0; padding:6px; cursor:pointer; overflow-wrap:anywhere; }
+.quick-category-option button { border:0; background:transparent; color:inherit; padding:6px 12px; cursor:pointer; font-size:20px; }
+.quick-category-option.is-active { background:color-mix(in srgb,var(--accent) 12%,var(--surface-0)); color:var(--accent); }
+
+/* Keep both grid rows in the scrollable composer instead of compressing the picker. */
+#quickKnowledgeDialog .quick-knowledge-layout { display:flex; flex-direction:column; flex:1 1 auto; overflow-y:auto; }
+#quickKnowledgeDialog .quick-knowledge-fields { flex:0 0 auto; }
+#quickKnowledgeDialog .quick-category-sidebar { flex:0 0 auto; overflow:visible; }
+#quickKnowledgeDialog .quick-category-tree { flex:0 0 auto; min-height:100px; height:auto; overflow:auto; }
+
+/* Compact horizontal category rows. */
+#quickKnowledgeDialog .quick-category-sidebar { position:relative; padding:8px 16px; gap:4px; }
+#quickKnowledgeDialog .quick-category-heading { position:absolute; right:16px; top:10px; }
+#quickKnowledgeDialog .quick-category-sidebar > .quick-category-summary { margin:0; padding-right:38px; font-size:11px; }
+#quickKnowledgeDialog .quick-category-tree { min-height:0; gap:4px; }
+#quickKnowledgeDialog .quick-category-level { gap:4px; padding:4px 0; }
+#quickKnowledgeDialog .quick-category-level:last-child { border-bottom:0; }
+#quickKnowledgeDialog .quick-category-option { min-height:26px; border-radius:4px; }
+#quickKnowledgeDialog .quick-category-option label { gap:4px; padding:3px 6px; margin:0; font-size:12px; }
+#quickKnowledgeDialog .quick-category-option input { margin:0; }
+#quickKnowledgeDialog .quick-category-option button { padding:0 7px; font-size:17px; }
+#quickKnowledgeDialog .quick-category-sidebar > small { margin:0; }
+#quickKnowledgeDialog .quick-category-sidebar > p:empty { display:none; }
+
+#quickKnowledgeDialog .quick-knowledge-header { gap:12px; flex-wrap:nowrap; }
+#quickKnowledgeDialog .quick-knowledge-header .quick-publisher { flex:1; overflow:hidden; }
+#quickKnowledgeDialog .quick-knowledge-header .quick-publisher > div { min-width:0; }
+#quickKnowledgeDialog .quick-knowledge-header .quick-ontology-picker { flex:0 1 auto; min-width:0; max-width:45%; margin-left:auto; }
+
+#quickKnowledgeDialog .quick-category-option .quick-category-select { flex:1; min-width:0; padding:3px 7px; font:inherit; font-size:12px; text-align:left; overflow-wrap:anywhere; cursor:pointer; }
+#quickKnowledgeDialog .quick-category-option.is-selected { color:var(--accent); background:color-mix(in srgb,var(--accent) 16%,var(--surface-0)); border-color:var(--accent); }
+#quickKnowledgeDialog .quick-category-option button:focus-visible { outline:2px solid var(--accent); outline-offset:1px; border-radius:3px; }
+
+#quickKnowledgeDialog textarea[name="content"]:focus,
+#quickKnowledgeDialog textarea[name="content"]:focus-visible { border:0; outline:none; box-shadow:none; }
+
+/* A quiet, single-column composer with one clear primary action. */
+#quickKnowledgeDialog { width:min(720px,calc(100vw - 28px)); border-radius:10px; box-shadow:0 16px 56px #0003; }
+#quickKnowledgeDialog::backdrop { backdrop-filter:blur(2px); }
+#quickKnowledgeDialog .quick-knowledge-header { min-height:58px; padding:12px 20px; border-bottom:0; }
+#quickKnowledgeDialog .quick-publisher-avatar { width:30px; height:30px; border-radius:50%; font-size:14px; }
+#quickKnowledgeDialog .quick-publisher { gap:8px; }
+#quickKnowledgeDialog .quick-ontology-picker .social-ontology-trigger { padding:5px 8px; background:transparent; color:var(--muted); border-radius:5px; }
+#quickKnowledgeDialog .quick-ontology-picker .social-ontology-trigger:hover { background:var(--surface-1); color:var(--accent); }
+#quickKnowledgeDialog .quick-knowledge-fields { padding:4px 20px 12px; gap:8px; }
+#quickKnowledgeDialog textarea[name="content"] { min-height:170px; font-size:15px; line-height:1.8; }
+#quickKnowledgeDialog .quick-composer-tools { width:100%; align-items:center; gap:3px; }
+#quickKnowledgeDialog .quick-composer-tools > button { width:30px; height:30px; color:var(--muted); font-size:15px; border-radius:5px; }
+#quickKnowledgeDialog .quick-composer-tools > button:hover { color:var(--accent); }
+#quickKnowledgeDialog .quick-composer-tools .quick-composer-meta { flex:1; margin:0; padding:0; justify-content:flex-end; }
+#quickKnowledgeDialog .quick-composer-hint { font-size:11px; line-height:1.6; margin:0; }
+#quickKnowledgeDialog .quick-composer-preview { padding:6px 0; background:transparent; border-radius:0; }
+#quickKnowledgeDialog .quick-composer-panel { padding:8px 10px; border-radius:5px; background:transparent; }
+#quickKnowledgeDialog .quick-category-sidebar { padding:10px 20px; background:transparent; }
+#quickKnowledgeDialog .quick-category-heading { right:20px; top:11px; }
+#quickKnowledgeDialog .quick-category-option { border-color:transparent; background:var(--surface-1); }
+#quickKnowledgeDialog .quick-category-option.is-selected { border-color:transparent; background:color-mix(in srgb,var(--accent) 15%,var(--surface-0)); color:var(--accent); }
+#quickKnowledgeDialog .quick-knowledge-footer { gap:10px; padding:12px 20px; }
+#quickKnowledgeDialog .quick-knowledge-footer .btn { border-radius:6px; padding:7px 14px; }
+#quickKnowledgeDialog .quick-knowledge-footer > [data-quick-close] { background:transparent; color:var(--muted); }
+#quickKnowledgeDialog .quick-audience { border:0; padding:4px 0; border-radius:0; }
+@media(max-width:480px) {
+  #quickKnowledgeDialog .quick-knowledge-header, #quickKnowledgeDialog .quick-knowledge-fields, #quickKnowledgeDialog .quick-category-sidebar, #quickKnowledgeDialog .quick-knowledge-footer { padding-inline:14px; }
+  #quickKnowledgeDialog .quick-category-heading { right:14px; }
+  #quickKnowledgeDialog textarea[name="content"] { min-height:140px; }
+}
+
+/* Smaller, consistent typography and understated controls. */
+#quickKnowledgeDialog { width:min(680px,calc(100vw - 24px)); font-size:13px; }
+#quickKnowledgeDialog .quick-knowledge-header { min-height:52px; padding-block:10px; }
+#quickKnowledgeDialog .quick-publisher-avatar { width:28px; height:28px; font-size:13px; }
+#quickKnowledgeDialog .quick-publisher strong { font-size:12px; font-weight:500; line-height:1.5; }
+#quickKnowledgeDialog .quick-publisher small { font-size:10px; margin-top:0; line-height:1.4; }
+#quickKnowledgeDialog .quick-ontology-picker .social-ontology-trigger { gap:5px; font-size:11px; padding:5px 6px; }
+#quickKnowledgeDialog .quick-ontology-picker .social-ontology-trigger i { font-size:11px; }
+#quickKnowledgeDialog textarea[name="content"] { font-size:14px; line-height:1.8; min-height:160px; }
+#quickKnowledgeDialog textarea[name="content"]::placeholder { color:var(--muted); opacity:.7; }
+#quickKnowledgeDialog .quick-knowledge-fields { gap:6px; }
+#quickKnowledgeDialog .quick-composer-tools { gap:2px; }
+#quickKnowledgeDialog .quick-composer-tools > button { width:28px; height:28px; font-size:13px; }
+#quickKnowledgeDialog .quick-composer-meta > small { font-size:10px; }
+#quickKnowledgeDialog .quick-composer-hint { font-size:10px; line-height:1.6; color:var(--muted); }
+#quickKnowledgeDialog .quick-composer-preview { font-size:11px; padding:3px 0; gap:4px 8px; }
+#quickKnowledgeDialog .quick-category-sidebar { padding-block:8px; gap:3px; }
+#quickKnowledgeDialog .quick-category-sidebar > .quick-category-summary,
+#quickKnowledgeDialog .quick-category-heading button,
+#quickKnowledgeDialog .quick-category-sidebar > small { font-size:10px; }
+#quickKnowledgeDialog .quick-category-level { gap:4px; padding:3px 0; }
+#quickKnowledgeDialog .quick-category-option { min-height:25px; background:transparent; }
+#quickKnowledgeDialog .quick-category-option:hover { background:var(--surface-1); }
+#quickKnowledgeDialog .quick-category-option .quick-category-select { padding:3px 6px; font-size:11px; line-height:1.6; }
+#quickKnowledgeDialog .quick-category-option button:not(.quick-category-select) { font-size:15px; padding:0 6px; }
+#quickKnowledgeDialog .quick-category-option.is-selected { background:color-mix(in srgb,var(--accent) 12%,var(--surface-0)); color:var(--accent); }
+#quickKnowledgeDialog .quick-knowledge-footer { padding-block:10px; }
+#quickKnowledgeDialog .quick-knowledge-footer .btn { min-height:32px; font-size:12px; padding:6px 12px; font-weight:500; }
+#quickKnowledgeDialog .quick-audience { gap:5px; }
+#quickKnowledgeDialog .quick-audience i { font-size:11px; }
+#quickKnowledgeDialog .quick-audience select { font-size:11px; }
+#quickKnowledgeDialog [data-quick-save] i { font-size:11px; margin-left:3px; }
+@media(pointer:coarse) {
+  #quickKnowledgeDialog .quick-composer-tools > button { width:34px; height:34px; }
+  #quickKnowledgeDialog .quick-category-option { min-height:32px; }
+}
+
+/* Readable sizing within the compact composer. */
+#quickKnowledgeDialog { font-size:14px; }
+#quickKnowledgeDialog .quick-publisher strong { font-size:14px; }
+#quickKnowledgeDialog .quick-publisher small { font-size:12px; }
+#quickKnowledgeDialog .quick-publisher-avatar { width:32px; height:32px; font-size:15px; }
+#quickKnowledgeDialog .quick-ontology-picker .social-ontology-trigger { font-size:13px; gap:6px; }
+#quickKnowledgeDialog .quick-ontology-picker .social-ontology-trigger i { font-size:14px; }
+#quickKnowledgeDialog textarea[name="content"] { font-size:16px; line-height:1.75; }
+#quickKnowledgeDialog .quick-composer-tools > button { width:34px; height:34px; font-size:17px; }
+#quickKnowledgeDialog .quick-composer-meta > small,
+#quickKnowledgeDialog .quick-composer-hint { font-size:12px; }
+#quickKnowledgeDialog .quick-composer-preview { font-size:13px; }
+#quickKnowledgeDialog .quick-composer-preview > span,
+#quickKnowledgeDialog .quick-composer-preview small { font-size:12px; }
+#quickKnowledgeDialog .quick-category-sidebar > .quick-category-summary,
+#quickKnowledgeDialog .quick-category-heading button,
+#quickKnowledgeDialog .quick-category-sidebar > small { font-size:12px; }
+#quickKnowledgeDialog .quick-category-option { min-height:30px; }
+#quickKnowledgeDialog .quick-category-option .quick-category-select { font-size:13px; padding:4px 7px; }
+#quickKnowledgeDialog .quick-category-option button:not(.quick-category-select) { font-size:18px; }
+#quickKnowledgeDialog .quick-knowledge-footer .btn { min-height:36px; font-size:14px; }
+#quickKnowledgeDialog .quick-audience select { font-size:13px; }
+#quickKnowledgeDialog .quick-audience i,
+#quickKnowledgeDialog [data-quick-save] i { font-size:13px; }
+
+/* Emphasize writing, publishing and the primary editing actions. */
+#quickKnowledgeDialog textarea[name="content"] { font-size:18px; line-height:1.75; min-height:180px; }
+#quickKnowledgeDialog .quick-publisher strong { font-size:15px; font-weight:600; }
+#quickKnowledgeDialog .quick-ontology-picker .social-ontology-trigger { font-size:14px; font-weight:500; color:var(--fg); padding:7px 10px; }
+#quickKnowledgeDialog .quick-ontology-picker .social-ontology-trigger i { font-size:15px; }
+#quickKnowledgeDialog .quick-composer-tools > button { width:38px; height:38px; font-size:19px; color:var(--fg); }
+#quickKnowledgeDialog .quick-composer-tools > button:hover { background:var(--surface-1); color:var(--accent); }
+#quickKnowledgeDialog .quick-category-option .quick-category-select { font-size:14px; padding:5px 9px; }
+#quickKnowledgeDialog .quick-category-option.is-selected { font-weight:600; background:color-mix(in srgb,var(--accent) 18%,var(--surface-0)); }
+#quickKnowledgeDialog .quick-composer-preview strong { font-size:15px; font-weight:600; }
+#quickKnowledgeDialog .quick-knowledge-footer [data-quick-save] { min-height:42px; padding:9px 22px; font-size:16px; font-weight:600; border-radius:7px; background:var(--accent); color:var(--accent-contrast,#fff); }
+#quickKnowledgeDialog [data-quick-save] i { font-size:15px; margin-left:6px; }
+@media(max-width:480px) {
+  #quickKnowledgeDialog textarea[name="content"] { font-size:17px; }
+  #quickKnowledgeDialog .quick-composer-tools > button { width:35px; height:38px; }
+  #quickKnowledgeDialog .quick-knowledge-footer [data-quick-save] { padding-inline:16px; }
+}
