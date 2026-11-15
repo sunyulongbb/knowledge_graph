@@ -2,6 +2,7 @@
   // Inline detail panel helper
   // ----------------------
   const SHOW_DETAIL_ATTR_SECTION = false;
+  let imageTabPasteController = null;
   const shared = window.kbApp || {};
   const state = shared.state || {};
   const appendDetailDb = (url) => {
@@ -380,7 +381,7 @@
     return false;
   }
 
-  function renderWikiMediaGrid(items, extraEntries = []) {
+  function renderWikiMediaGrid(items, extraEntries = [], options = {}) {
     const topMedia = document.getElementById("wikiTopMedia");
     const grid = document.getElementById("wikiMediaGrid");
     if (grid) {
@@ -455,6 +456,8 @@
       return;
     }
 
+    const thumbnails = document.createElement("div");
+    thumbnails.className = "detail-image-thumbnails";
     const carousel = document.createElement("div");
     carousel.className = "detail-carousel-container";
     const slides = document.createElement("div");
@@ -469,6 +472,20 @@
       img.onclick = () => window.open(entry.url, "_blank");
       slide.appendChild(img);
       slides.appendChild(slide);
+      const cell = document.createElement('div'); cell.className = 'detail-image-thumbnail';
+      const button = document.createElement('button'); button.type = 'button';
+      button.className = 'detail-image-thumbnail-select'; button.setAttribute('aria-label', '查看图片 ' + (index + 1));
+      button.setAttribute('aria-pressed', String(index === 0));
+      const thumb = document.createElement('img'); thumb.src = entry.url; thumb.alt = ''; thumb.loading = 'lazy'; button.append(thumb);
+      button.onclick = () => goToSlide(index); cell.append(button);
+      if (options.canDelete?.(entry.url)) {
+        const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'detail-image-thumbnail-delete';
+        remove.innerHTML = '<i class="fa-solid fa-trash-can" aria-hidden="true"></i>';
+        remove.setAttribute('aria-label', '删除图片 ' + (index + 1)); remove.title = '删除图片';
+        remove.onclick = async () => { if (!confirm('确定从当前知识中删除这张图片？')) return; remove.disabled = true; try { await options.onDelete(entry.url); } catch (error) { alert('删除失败：' + (error.message || error)); } finally { remove.disabled = false; } };
+        cell.append(remove);
+      }
+      thumbnails.append(cell);
     });
 
     carousel.appendChild(slides);
@@ -486,6 +503,7 @@
       if (index >= slideCount) index = 0;
       currentIndex = index;
       updateTransform();
+      thumbnails.querySelectorAll('.detail-image-thumbnail-select').forEach((button, i) => button.setAttribute('aria-pressed', String(i === currentIndex)));
       const dots = carousel.querySelectorAll(".detail-carousel-dot");
       dots.forEach((dot, i) =>
         dot.classList.toggle("active", i === currentIndex),
@@ -533,7 +551,7 @@
       });
     }
 
-    topMedia.appendChild(carousel);
+    topMedia.append(carousel, thumbnails);
     topMedia.style.display = "";
     requestAnimationFrame(() => updateTransform());
     syncDetailTopMediaStage();
@@ -1980,6 +1998,32 @@
             return canvas.toDataURL("image/jpeg", 0.82);
           };
 
+          const createUploadedVideoCover = (file) => new Promise((resolve) => {
+            const preview = document.createElement('video');
+            const objectUrl = URL.createObjectURL(file);
+            let finished = false;
+            const finish = (cover = '') => {
+              if (finished) return;
+              finished = true; clearTimeout(timeout);
+              preview.onloadeddata = preview.onseeked = preview.onerror = null;
+              preview.removeAttribute('src'); preview.load(); URL.revokeObjectURL(objectUrl);
+              resolve(cover);
+            };
+            const capture = () => {
+              try { finish(captureDetailVideoCover(preview)); }
+              catch { finish(); }
+            };
+            const timeout = setTimeout(() => finish(), 15000);
+            preview.muted = true; preview.playsInline = true; preview.preload = 'auto';
+            preview.onloadeddata = () => {
+              const time = Math.min(1, Number.isFinite(preview.duration) ? preview.duration / 4 : 0);
+              if (time > 0) { preview.onseeked = capture; preview.currentTime = time; }
+              else capture();
+            };
+            preview.onerror = () => finish();
+            preview.src = objectUrl;
+          });
+
           const updateDetailVideoCover = async (item, playerEl, { manual = false } = {}) => {
             if (!doc?.can_edit && !canEditDefaultApplication()) {
               if (manual) throw new Error('没有修改此知识的权限');
@@ -2271,6 +2315,48 @@
               });
               playlistNav.appendChild(button);
             });
+            if (doc?.can_edit || canEditDefaultApplication()) {
+              const addVideo = document.createElement('button');
+              addVideo.type = 'button'; addVideo.className = 'detail-video-playlist-add';
+              addVideo.innerHTML = '<i class="fa-solid fa-plus" aria-hidden="true"></i><span>新增视频</span>';
+              const input = document.createElement('input');
+              input.type = 'file'; input.accept = '.mp4,.webm,.avi,.mkv,.ogg,.mpeg'; input.hidden = true;
+              const status = document.createElement('span'); status.className = 'detail-video-add-status'; status.setAttribute('role','status');
+              let adding = false;
+              addVideo.onclick = () => { if (!adding) input.click(); };
+              input.onchange = async () => {
+                const file = input.files?.[0]; if (!file || adding) return;
+                adding = true; addVideo.disabled = true; status.textContent = '正在上传视频…';
+                const scoped = path => {
+                  const url = new URL(path, location.origin);
+                  return typeof window.appendCurrentDbParam === 'function' ? window.appendCurrentDbParam(url) || url : url;
+                };
+                try {
+                  if (file.size > 5000 * 1024 * 1024) throw new Error('视频不能超过 5000MB');
+                  const coverPromise = createUploadedVideoCover(file);
+                  const data = new FormData(); data.append('file', file);
+                  const upload = await fetch(scoped('/api/kb/upload-video'), {method:'POST', body:data});
+                  if (!upload.ok) throw new Error(await upload.text() || '上传失败');
+                  const uploaded = await upload.json();
+                  if (!uploaded.url) throw new Error('上传未返回视频地址');
+                  status.textContent = '正在保存…';
+                  await detailCoverSaveQueue.catch(() => null);
+                  const nextCovers = [...coverList];
+                  while (nextCovers.length < videoUrls.length) nextCovers.push('');
+                  nextCovers.length = videoUrls.length; nextCovers.push(await coverPromise);
+                  const response = await fetch(scoped('/api/kb/nodes/update'), {
+                    method:'POST',headers:{'Content-Type':'application/json'},
+                    body:JSON.stringify({id:String(doc?._id || doc?.id || fullId).replace(/^entity\//,''), videos:[...videoUrls,uploaded.url], covers:nextCovers}),
+                  });
+                  if (!response.ok) throw new Error(await response.text() || '保存失败');
+                  const result = await response.json(); if (result?.ok === false) throw new Error(result.error || '保存失败');
+                  await showNodeDetailInline(routeId || fullId, {preserveSidebarState});
+                } catch (error) { status.textContent = '添加失败：' + (error.message || error); }
+                finally { adding = false; addVideo.disabled = false; input.value = ''; }
+              };
+              playlistNav.append(addVideo, input);
+              playerShell.append(status);
+            }
             playlistNav.addEventListener(
               "wheel",
               (event) => {
@@ -2613,7 +2699,22 @@
       }
       // Media types use tabs. Select the first available type in priority
       // order: image, video, then PDF.
-      const hasImageMedia = renderWikiMediaGrid(detailMediaAttrItems, imageEntries);
+      const ownedImages = Array.isArray(doc?.images) ? doc.images : normalizeMediaStringList(doc?.images);
+      const hasImageMedia = renderWikiMediaGrid(detailMediaAttrItems, imageEntries, {
+        canDelete: url => (doc?.can_edit || canEditDefaultApplication()) && ownedImages.some(image => extractImageUrls(image, true).includes(url)),
+        onDelete: async url => {
+          const updateUrl = appendDetailDb(new URL('/api/kb/nodes/update', location.origin));
+          const nextImages = ownedImages.flatMap(image => {
+            const urls = extractImageUrls(image, true);
+            if (!urls.includes(url)) return [image];
+            return urls.filter(value => value !== url);
+          });
+          const response = await fetch(updateUrl, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:String(doc?._id || doc?.id || fullId).replace(/^entity\//,''),images:nextImages})});
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || result.ok === false) throw new Error(result.error || '保存失败');
+          await showNodeDetailInline(routeId || fullId, {preserveSidebarState});
+        },
+      });
       const mediaStage = document.getElementById("detailTopMediaStage");
       if (mediaStage) mediaStage.dataset.activeMedia = hasImageMedia
         ? "image"
@@ -2623,6 +2724,46 @@
             ? "pdf"
             : "";
       syncDetailTopMediaStage();
+      imageTabPasteController?.abort();
+      imageTabPasteController = new AbortController();
+      const pasteController = imageTabPasteController;
+      if (doc?.can_edit || canEditDefaultApplication()) {
+        let uploadingImages = false;
+        const pasteStatus = document.createElement('p');
+        pasteStatus.className = 'detail-image-paste-status'; pasteStatus.setAttribute('role','status');
+        document.getElementById('wikiTopMedia')?.append(pasteStatus);
+        document.addEventListener('paste', async event => {
+          const stage = document.getElementById('detailTopMediaStage');
+          if (!stage || stage.dataset.activeMedia !== 'image' || !stage.getClientRects().length || stage.closest('[inert]')) return;
+          if (document.querySelector('dialog[open]') || event.target?.closest?.('input,textarea,[contenteditable="true"]')) return;
+          if (String(window.kbActiveDetailNodeId || '').replace(/^entity\//,'') !== String(doc?._id || doc?.id || fullId).replace(/^entity\//,'')) return;
+          const files = Array.from(event.clipboardData?.items || []).filter(item => item.type.startsWith('image/')).map(item => item.getAsFile()).filter(Boolean);
+          if (!files.length) return;
+          event.preventDefault();
+          if (uploadingImages) return;
+          uploadingImages = true; pasteStatus.textContent = '正在添加图片…';
+          const scoped = path => {
+            const url = new URL(path, location.origin);
+            return typeof window.appendCurrentDbParam === 'function' ? window.appendCurrentDbParam(url) || url : url;
+          };
+          try {
+            const urls = [];
+            for (const file of files) {
+              const form = new FormData();
+              form.append('file', file, file.name?.includes('.') ? file.name : 'pasted-image.' + (file.type.split('/')[1]?.replace('jpeg','jpg') || 'png'));
+              const response = await fetch(scoped('/api/kb/upload-image'), {method:'POST',body:form});
+              if (!response.ok) throw new Error(await response.text() || '图片上传失败');
+              const data = await response.json(); if (!data.url) throw new Error('未返回图片地址');
+              urls.push(data.url);
+            }
+            const response = await fetch(scoped('/api/kb/nodes/update'), {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:String(doc?._id || doc?.id || fullId).replace(/^entity\//,''),images:[...(Array.isArray(doc.images) ? doc.images : normalizeMediaStringList(doc.images)),...urls]})});
+            if (!response.ok) throw new Error(await response.text() || '保存失败');
+            const result = await response.json(); if (result?.ok === false) throw new Error(result.error || '保存失败');
+            if (!pasteController.signal.aborted && String(window.kbActiveDetailNodeId || '').replace(/^entity\//,'') === String(doc?._id || doc?.id || fullId).replace(/^entity\//,'')) await showNodeDetailInline(routeId || fullId, {preserveSidebarState});
+          } catch (error) { pasteStatus.textContent = '添加失败：' + (error.message || error); }
+          finally { uploadingImages = false; }
+        }, {signal:imageTabPasteController.signal});
+      }
       if (wikiTopDescEl) {
         const stage = document.getElementById("detailTopMediaStage");
         const hasMediaStage =
