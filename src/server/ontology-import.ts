@@ -86,7 +86,13 @@ export function importOntologies(db: Database, input: unknown, projectId: number
     };
     const importNode = (node: OntologyInput, parentId: string | null) => {
       const rows = siblings.all(parentId, projectId) as { id: string; name: string; alias: string | null }[];
-      const existing = rows.find((row) => row.name.trim().toLowerCase() === node.name.toLowerCase());
+      const wanted = new Set(node.alias.map(value => value.toLowerCase()));
+      const matches = rows.filter(row => {
+        let stored; try { stored = JSON.parse(row.alias || '[]'); } catch { stored = (row.alias || '').split(/[,，;；、\n]+/); }
+        return [row.name, ...(Array.isArray(stored) ? stored : [stored])].some(value => wanted.has(String(value || '').trim().toLowerCase()));
+      });
+      if (matches.length > 1) throw new OntologyImportError('本体“' + node.name + '”匹配多个同级本体，无法确定覆盖对象');
+      const existing = matches[0];
       let id = existing?.id;
       if (!id || node.provided.includes('alias')) {
         const aliases = new Set(node.alias.map((value) => value.toLowerCase()));
@@ -101,6 +107,7 @@ export function importOntologies(db: Database, input: unknown, projectId: number
         }
       }
       if (id) {
+        db.run('UPDATE ontologies SET name = ? WHERE id = ? AND project_id IS ?', [existing && existing.name.toLowerCase() === node.name.toLowerCase() ? existing.name : node.name, id, projectId]);
         const fields = ['description', 'alias', 'color', 'display_shape'] as const;
         const supplied = fields.filter((field) => node.provided.includes(field));
         if (supplied.length) {

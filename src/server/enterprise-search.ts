@@ -28,7 +28,7 @@ export function entitySearchProjection(document: Doc) {
 export type EnterpriseSearchOptions = {
   tag?: string | null; q?: string | null; limit: number; offset: number; order?: string | null;
   classIds?: string[] | null; type?: string | null; emptyType?: boolean;
-  hasImage?: boolean; hasMedia?: boolean; propertyId?: string | null; propertyValue?: string | null;
+  hasTags?: boolean; hasCategory?: boolean; hasImage?: boolean; hasMedia?: boolean; propertyId?: string | null; propertyValue?: string | null;
   definedClasses?: string[] | null; definedTypes?: string[] | null; excludeTypes?: string[];
   matchMode?: string | null; searchScope?: string | null; excludeQuery?: string | null;
   updatedFrom?: string | null; updatedTo?: string | null;
@@ -45,6 +45,8 @@ export function buildEnterpriseSearchQuery(options: EnterpriseSearchOptions, rea
   if (options.type) filter.push({ term: { type: options.type } });
   if (options.includeTypes) filter.push({ terms: { type: options.includeTypes } });
   if (options.emptyType) filter.push({ bool: { should: [{ bool: { must_not: [{ exists: { field: 'type' } }] } }, { term: { type: '' } }], minimum_should_match: 1 } });
+  if (options.hasTags !== undefined) filter.push(options.hasTags ? {exists:{field:'tags'}} : {bool:{must_not:[{exists:{field:'tags'}}]}});
+  if (options.hasCategory !== undefined) filter.push(options.hasCategory ? {exists:{field:'class_ids'}} : {bool:{must_not:[{exists:{field:'class_ids'}}]}});
   if (options.hasImage) filter.push({ term: { has_images: true } });
   if (options.hasMedia) filter.push({ term: { has_media: true } });
   if (options.publicationMonth) filter.push({range:{publication_date:{gte:`${options.publicationMonth}-01`,lt:`${options.publicationMonth}-01||+1M`,time_zone:'Asia/Shanghai'}}});

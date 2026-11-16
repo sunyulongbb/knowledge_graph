@@ -221,6 +221,7 @@ export class EnterpriseKnowledgeStore {
       projects: [...(user?.ownedProjectIds || []), ...(user?.memberProjectIds || [])],
       q: String(options.q || '').toLowerCase(), classId: options.classId || '', type: options.type || '',
       limit: options.limit, offset: options.offset,
+      tagPresence: options.hasTags === undefined ? -1 : options.hasTags ? 1 : 0,
       emptyType: Boolean(options.emptyType), hasImage: Boolean(options.hasImage), hasMedia: Boolean(options.hasMedia),
       propertyId: options.propertyId || '', propertyValue: String(options.propertyValue || '').toLowerCase(),
       definedClasses: options.definedClasses ?? null, definedTypes: options.definedTypes ?? null,
@@ -231,6 +232,7 @@ export class EnterpriseKnowledgeStore {
       AND (!@emptyType OR doc.type == null OR doc.type == '')
       AND (@definedClasses == null OR LENGTH(INTERSECTION(NOT_NULL(doc.class_ids, []), NOT_NULL(@definedClasses, []))) > 0)
       AND (@definedTypes == null OR doc.type IN NOT_NULL(@definedTypes, []))
+      AND (@tagPresence == -1 OR (LENGTH(FOR tag IN TO_ARRAY(IS_STRING(doc.tags) ? JSON_PARSE(doc.tags) : doc.tags) FILTER IS_STRING(tag) AND TRIM(tag) != '' RETURN 1) > 0) == (@tagPresence == 1))
       AND (!@hasImage OR LENGTH(TO_ARRAY(IS_STRING(doc.images) ? JSON_PARSE(doc.images) : doc.images)) > 0)
       AND (!@hasMedia OR LENGTH(TO_ARRAY(IS_STRING(doc.images) ? JSON_PARSE(doc.images) : doc.images)) > 0 OR LENGTH(TO_ARRAY(IS_STRING(doc.videos) ? JSON_PARSE(doc.videos) : doc.videos)) > 0)
       AND ((@propertyId == '' AND @propertyValue == '') OR LENGTH(FOR edge IN link

@@ -60,6 +60,10 @@ export class ArangoKnowledgeSearch {
         AND (@type == null OR current.type == @type) AND (!@emptyType OR current.type == null OR current.type == '')
         AND (@definedClasses == null OR LENGTH(INTERSECTION(NOT_NULL(current.class_ids, []), @definedClasses)) > 0)
         AND (@definedTypes == null OR current.type IN @definedTypes) AND current.type NOT IN @excluded
+        AND (@hasTags == null OR (@hasTags AND LENGTH(TO_ARRAY(IS_STRING(current.tags) ? JSON_PARSE(current.tags) : current.tags)) > 0)
+          OR (!@hasTags AND LENGTH(TO_ARRAY(IS_STRING(current.tags) ? JSON_PARSE(current.tags) : current.tags)) == 0))
+        AND (@hasCategory == null OR (@hasCategory AND LENGTH(NOT_NULL(current.class_ids, [])) > 0)
+          OR (!@hasCategory AND LENGTH(NOT_NULL(current.class_ids, [])) == 0))
         AND (!@hasImage OR LENGTH(TO_ARRAY(IS_STRING(current.images) ? JSON_PARSE(current.images) : current.images)) > 0)
         AND (!@hasMedia OR LENGTH(TO_ARRAY(IS_STRING(current.images) ? JSON_PARSE(current.images) : current.images)) > 0
           OR LENGTH(TO_ARRAY(IS_STRING(current.videos) ? JSON_PARSE(current.videos) : current.videos)) > 0)
@@ -70,6 +74,7 @@ export class ArangoKnowledgeSearch {
     const bindVars: Doc = { ...access.bindVars, ...(q ? { q } : {}), tag: String(options.tag || '').trim(), classes: options.classIds ?? null, type: options.type || null,
       emptyType: Boolean(options.emptyType), definedClasses: options.definedClasses ?? null, definedTypes: options.definedTypes ?? null,
       excluded: options.excludeTypes || [], hasImage: Boolean(options.hasImage), hasMedia: Boolean(options.hasMedia),
+      hasTags: options.hasTags ?? null, hasCategory: options.hasCategory ?? null,
       property: options.propertyId || '', value: String(options.propertyValue || '').trim().toLowerCase(), offset: options.offset, limit: options.limit };
     let { body } = await this.store.client.database(database, '/_api/cursor', { method: 'POST',
       body: JSON.stringify({ query, bindVars, batchSize: 500, options: { fullCount: true } }) });

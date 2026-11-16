@@ -45,12 +45,14 @@ test('invalid child rejects whole document before writing', () => {
   } finally { db.close(); }
 });
 
-test('alias conflicts roll back earlier inserts in the same file', () => {
+test('alias matches overwrite existing ontology and retain its identity', () => {
   const db = setup();
   try {
     importOntologies(db, { version: 1, ontologies: [{ name: 'Existing', alias: ['shared'] }] }, 1);
-    expect(() => importOntologies(db, { version: 1, ontologies: [{ name: 'New' }, { name: 'Conflicting', alias: ['shared'] }] }, 1)).toThrow('冲突');
-    expect(db.query('SELECT name FROM ontologies').all()).toEqual([{ name: 'Existing' }]);
+    const before = db.query('SELECT id FROM ontologies').get() as any;
+    const result = importOntologies(db, { version: 1, ontologies: [{ name: 'New' }, { name: 'Conflicting', alias: ['shared'] }] }, 1);
+    expect(result.updated).toBe(1);
+    expect(db.query('SELECT name FROM ontologies WHERE id=?').get(before.id)).toEqual({name:'Conflicting'});
   } finally { db.close(); }
 });
 

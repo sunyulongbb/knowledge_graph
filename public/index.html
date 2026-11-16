@@ -76,7 +76,7 @@
       customElements.whenDefined("media-video-layout"),
     ]).then(() => true);
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20261116-matched-thumbnails" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20261116-presence-checkboxes" />
   <link rel="stylesheet" href="/assets/styles/home-discovery.css?v=20261113-create-hover" />
   <link rel="stylesheet" href="/assets/styles/shorts-page.css?v=20261111-borderless-cards" />
   <link rel="stylesheet" href="/assets/styles/knowledge-card-tags.css?v=20261111-1" />
@@ -2010,6 +2010,9 @@
           <select id="tblTypeFilter" class="kb-select sm table-context-type-filter" aria-label="本体类型筛选" style="display:none;">
             <option value="">本体类型</option>
           </select>
+          <label class="table-presence-filter"><input id="tblPresenceAll" type="checkbox" aria-label="显示全部知识" />全部</label>
+          <label class="table-presence-filter"><input id="tblTagPresence" type="checkbox" aria-label="有标签" />有标签</label>
+          <label class="table-presence-filter"><input id="tblCategoryPresence" type="checkbox" aria-label="有分类" />有分类</label>
           <div id="tblSortControl" class="table-layout-control">
             <button id="btnSortDrawer" class="btn icon" type="button" title="最新" aria-label="最新" aria-controls="tblSortDrawer" aria-expanded="false"><i class="fa-solid fa-clock" aria-hidden="true"></i></button>
             <div id="tblSortDrawer" class="table-layout-drawer" inert aria-hidden="true">
@@ -17711,7 +17714,7 @@
   <script type="module" src="/assets/scripts/vis-ontology-panel.js?v=20261012-classification"></script>
   <script src="/assets/scripts/property-panel.js?v=20261116-default-menu"></script>
   <script src="/assets/scripts/knowledge-family.js?v=20261105-family-inline-detail"></script>
-  <script src="/assets/scripts/table-panel.js?v=20261110-tag-load-sync"></script>
+  <script src="/assets/scripts/table-panel.js?v=20261116-presence-all"></script>
   <script src="/assets/scripts/table-selection.js?v=20261116-utf8-fix"></script>
   <script src="/assets/scripts/entity-manage-table.js?v=20261028-cover-url"></script>
   <script src="/assets/scripts/attr-panel.js?v=20260925-tail-suggestions"></script>

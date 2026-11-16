@@ -2212,6 +2212,11 @@ export async function handleCoreKbRoutes(
 
     let joinClause = "";
     let whereClause = "WHERE 1=1";
+    const tagPresence = url.searchParams.get('has_tags');
+    if (tagPresence === '0' || tagPresence === '1') {
+      const hasTags = "EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(n.tags) THEN n.tags ELSE '[]' END) t WHERE t.type = 'text' AND trim(t.value) <> '')";
+      whereClause += ' AND ' + (tagPresence === '0' ? 'NOT ' : '') + hasTags;
+    }
     let propertyKeyConditions: string[] = [];
     const propertyKeys = new Set<string>();
 
@@ -2486,7 +2491,7 @@ export async function handleCoreKbRoutes(
     }
     const shouldUseElasticsearch = Boolean(elasticsearchProjectName && elasticsearchEnabled);
     const needsSqlCandidateIds = Boolean(
-      propertyId || propertyValue || hasImage || hasMedia || typeFilterRaw !== null,
+      propertyId || propertyValue || hasImage || hasMedia || tagPresence === '0' || tagPresence === '1' || typeFilterRaw !== null,
     );
     const elasticsearchWhereClause = hasProjectScope
       ? whereClause

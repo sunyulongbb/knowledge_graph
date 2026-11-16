@@ -29,7 +29,7 @@ function fixture() {
 test('native search prepares a Chinese/English search view and joins current ACL and graph attribute values', async () => {
   const f = fixture(), search = new ArangoKnowledgeSearch(f.store);
   const result = await search.search('app', { id: 42, username: 'member', memberProjectIds: [7] }, {
-    q: '科学家', limit: 20, offset: 40, classIds: ['parent', 'child'], propertyId: 'P1', propertyValue: '中国', hasImage: true, excludeTypes: ['reference'] });
+    q: '科学家', limit: 20, offset: 40, classIds: ['parent', 'child'], propertyId: 'P1', propertyValue: '中国', hasImage: true, hasTags: true, hasCategory: true, excludeTypes: ['reference'] });
   expect(result.total).toBe(7); expect(result.nodes[0]!.labels.zh.value).toBe('中国科学家');
   const configured = f.calls.find(call => call.path === '/_api/view')!.body;
   expect(configured.links.entity.fields.search_text.analyzers).toEqual(['text_zh', 'text_en']);
@@ -37,13 +37,16 @@ test('native search prepares a Chinese/English search view and joins current ACL
   expect(request.query).toContain("PHRASE(doc.search_text, @q, 'text_zh')"); expect(request.query).toContain('BM25(doc) DESC');
   expect(request.query).toContain('LET current = DOCUMENT(doc._id)'); expect(request.query).toContain('current.visibility');
   expect(request.query).toContain('FOR edge IN link'); expect(request.query).toContain('edge.property_id == @property');
+  expect(request.query).toContain('@hasTags == null');
   expect(request.query).not.toContain('waitForSync');
-  expect(request.bindVars).toMatchObject({ q: '科学家', classes: ['parent', 'child'], property: 'P1', value: '中国', excluded: ['reference'], offset: 40, projects: [7] });
+  expect(request.bindVars).toMatchObject({ q: '科学家', classes: ['parent', 'child'], property: 'P1', value: '中国', hasTags: true, hasCategory: true, excluded: ['reference'], offset: 40, projects: [7] });
   expect(request.options.fullCount).toBe(true);
-  await search.search('app', null, { limit: 5, offset: 0, order: 'modified_desc' });
+  await search.search('app', null, { limit: 5, offset: 0, order: 'modified_desc', hasTags: false, hasCategory: false });
   expect(f.calls.filter(call => call.path === '/_api/view')).toHaveLength(1);
   const last = f.calls.at(-1)!.body;
-  expect(last.query).toContain('SEARCH true'); expect(last.bindVars).not.toHaveProperty('q');
+  expect(last.query).toContain('SEARCH true'); expect(last.bindVars).not.toHaveProperty('q'); expect(last.bindVars.hasTags).toBe(false); expect(last.bindVars.hasCategory).toBe(false);
+  await search.search('app', null, { limit: 5, offset: 0, order: 'modified_desc' });
+  expect(f.calls.at(-1)!.body.bindVars.hasTags).toBeNull(); expect(f.calls.at(-1)!.body.bindVars.hasCategory).toBeNull();
 });
 
 test('entity projections include searchable text for imported and edited multilingual knowledge', () => {
@@ -60,12 +63,14 @@ test('knowledge queries run without ES and keep subtree and hidden-type filterin
     const f = fixture(); let esCalls = 0;
     const handler = createEnterpriseKnowledgeHandler({ store: f.store, search: { search: () => { esCalls++; throw new Error('ES must not be used'); } } as any,
       getUser: () => null, getProject: () => ({ id: 7, name: 'app' }), canCreate: () => false });
-    const url = new URL('http://local/api/kb/entity_search?db=app&q=科学家&class_id=parent&hide_entity=1');
+    const url = new URL('http://local/api/kb/entity_search?db=app&q=科学家&class_id=parent&hide_entity=1&has_tags=1&has_category=0');
     const response = (await handler(new Request(url), url, 'GET'))!;
     expect(response.status).toBe(200); expect(response.headers.get('X-Knowledge-Search')).toBe('arangosearch');
     expect((await response.json()).searchBackend).toBe('arangosearch'); expect(esCalls).toBe(0);
     const request = f.calls.find(call => call.body.query?.includes('FOR doc IN knowledge_search'))!.body;
     expect(request.bindVars.classes).toEqual(['parent', 'child']); expect(request.bindVars.excluded).toContain('reference');
+    expect(request.bindVars.hasTags).toBe(true);
+    expect(request.bindVars.hasCategory).toBe(false);
     f.fail(); const log = spyOn(console, 'error').mockImplementation(() => {});
     try { expect((await handler(new Request(url), url, 'GET'))!.status).toBe(503); expect(esCalls).toBe(0); }
     finally { log.mockRestore(); }

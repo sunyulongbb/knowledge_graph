@@ -47,6 +47,13 @@ test('discovery supports bounded fuzzy matching, phrase/all/any modes and advanc
   }
 });
 
+test('enterprise search supports filtering by category presence', () => {
+  const withCategory = buildEnterpriseSearchQuery({ limit: 20, offset: 0, hasCategory: true }, ['allowed']);
+  const withoutCategory = buildEnterpriseSearchQuery({ limit: 20, offset: 0, hasCategory: false }, ['allowed']);
+  expect(withCategory.bool.filter).toContainEqual({ exists: { field: 'class_ids' } });
+  expect(withoutCategory.bool.filter).toContainEqual({ bool: { must_not: [{ exists: { field: 'class_ids' } }] } });
+});
+
 test('ES match fragments are requested with neutral markers and returned separately from source content', async () => {
   let request: any;
   const search = new EnterpriseKnowledgeSearch({ searchAccess: async () => [{ key: 'allowed', can_edit: false, can_manage: false }] } as any,

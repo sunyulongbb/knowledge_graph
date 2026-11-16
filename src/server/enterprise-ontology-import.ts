@@ -24,13 +24,17 @@ export async function importEnterpriseOntologies(
     let created = 0, updated = 0;
     const visit = (node: typeof roots[number], parentId: string | null) => {
       const siblings = schema.ontologies.filter(row => (row.parent_id || null) === parentId);
-      let row = siblings.find(row => key(row.name) === key(node.name));
+      const wantedNames = new Set(node.alias.map(key));
+      const matches = siblings.filter(other => [other.name, ...aliases(other.alias)].some(value => wantedNames.has(key(value))));
+      if (matches.length > 1) throw new OntologyImportError('本体“' + node.name + '”匹配多个同级本体，无法确定覆盖对象');
+      let row = matches[0];
       if (!row || node.provided.includes('alias')) {
         const wanted = new Set(node.alias.map(key));
         const conflict = siblings.find(other => other !== row && [other.name, ...aliases(other.alias)].some(value => wanted.has(key(value))));
         if (conflict) throw new OntologyImportError(`本体“${node.name}”的名称或别名与同级本体“${conflict.name}”冲突`);
       }
       if (row) {
+        if (key(row.name) !== key(node.name)) row.name = node.name;
         for (const field of ['description', 'alias', 'color', 'display_shape'] as const) {
           if (node.provided.includes(field)) row[field] = node[field];
         }

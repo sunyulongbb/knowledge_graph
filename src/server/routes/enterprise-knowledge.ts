@@ -394,6 +394,8 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
               offset: integer(url.searchParams.get('offset'), 0, 1_000_000),
               classIds, type: discoveryTypes ? null : selectedType, ...(discoveryTypes ? { includeTypes: [...discoveryTypes] } : {}), order: url.searchParams.get('order'),
               emptyType: url.searchParams.has('type') && url.searchParams.get('type') === '',
+              hasTags: ['0','1'].includes(url.searchParams.get('has_tags') || '') ? url.searchParams.get('has_tags') === '1' : undefined,
+              hasCategory: ['0','1'].includes(url.searchParams.get('has_category') || '') ? url.searchParams.get('has_category') === '1' : undefined,
               hasImage: ['1', 'true'].includes(url.searchParams.get('has_image') || ''),
               hasMedia: ['1', 'true'].includes(url.searchParams.get('has_media') || ''),
               propertyId, propertyValue: url.searchParams.get('property_value'),

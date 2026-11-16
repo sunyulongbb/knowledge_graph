@@ -56,7 +56,6 @@ test('invalid JSON data, alias conflicts and Arango write errors preserve the pr
   const f = fixture(); await importEnterpriseOntologies(f.store, 'app', 7, document);
   const before = structuredClone(f.saved());
   await expect(importEnterpriseOntologies(f.store, 'app', 7, { version: 1, ontologies: [{ name: '新节点' }, { name: '冲突', children: [{ name: '' }] }] })).rejects.toThrow();
-  await expect(importEnterpriseOntologies(f.store, 'app', 7, { version: 1, ontologies: [{ name: '新节点' }, { name: '冲突', alias: ['天体'] }] })).rejects.toThrow('冲突');
   expect(f.writes()).toBe(1);
   f.fail(); await expect(importEnterpriseOntologies(f.store, 'app', 7, { version: 1, ontologies: [{ name: '新节点' }] })).rejects.toThrow('写入失败');
   expect(f.saved()).toEqual(before);
@@ -91,4 +90,12 @@ test('downloadable ontology template is compatible with the Arango importer', as
   const f = fixture();
   const example = JSON.parse(readFileSync('public/examples/ontology-import.json', 'utf8'));
   expect((await importEnterpriseOntologies(f.store, 'app', 7, example)).created).toBe(8);
+});
+
+test('alias matching overwrites the Arango ontology in place', async () => {
+  const f = fixture(); await importEnterpriseOntologies(f.store, 'app', 7, document);
+  const before = f.saved().ontologies.find(row => (Array.isArray(row.alias) ? row.alias : []).includes('天体') || row.name === '天体');
+  expect(before).toBeDefined();
+  await importEnterpriseOntologies(f.store, 'app', 7, {version:1,ontologies:[{name:'覆盖天体',alias:['天体']}]});
+  expect(f.saved().ontologies.find(row => row.id === before.id).name).toBe('覆盖天体');
 });

@@ -702,6 +702,23 @@ header .header-table-actions {
   pointer-events: none;
 }
 
+.table-context-tools .table-presence-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.table-context-tools .table-presence-filter input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
 .header-table-actions .header-table-search {
   height: 28px;
   min-width: 168px;
