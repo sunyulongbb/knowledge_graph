@@ -3,6 +3,7 @@ import type { KnowledgeUser } from './knowledge-access.ts';
 import { hasApplicationPermission } from './application-role-permissions.ts';
 import { cloneApplicationData, removeClonedApplicationFiles } from './application-clone.ts';
 import { importOntologies } from './ontology-import.ts';
+import defaultCoreOntology from '../../data/default-core-ontology.json';
 
 export function isValidApplicationName(name: string, reserved: string[] = [], requireArangoCompatibility = false) {
   return /^[a-zA-Z0-9_-]{1,64}$/.test(name)
@@ -57,7 +58,7 @@ export function applicationPermissions(db: Database, user: KnowledgeUser | null,
   };
 }
 
-export function createApplicationHandler(db: Database, getUser: (req: Request) => KnowledgeUser | null, cloneOptions: { uploadsRoot?: string; provisionKnowledge?: (name: string) => Promise<unknown> } = {}) {
+export function createApplicationHandler(db: Database, getUser: (req: Request) => KnowledgeUser | null, cloneOptions: { uploadsRoot?: string; provisionKnowledge?: (name: string) => Promise<unknown>; initializeOntology?: (name: string, projectId: number, input: unknown) => Promise<unknown> } = {}) {
   const error = (message: string, status = 400) => Response.json({ error: message, message, success: false }, { status });
   const projectBy = (key: unknown, byId = false) => byId
     ? db.query('SELECT * FROM projects WHERE id=?').get(Number(key) || -1) as any
@@ -183,7 +184,7 @@ export function createApplicationHandler(db: Database, getUser: (req: Request) =
     if ((path === '/api/applications' || path === '/api/kb/create_project') && method === 'POST') {
       if (!user) return error('请先登录', 401);
       if (!hasApplicationPermission(user, 'application:create')) return error('未获授权创建应用，请联系管理员配置角色权限', 403);
-      const name = String(body.name || '').trim();
+      const name = String(body.name || '').trim() || `app-${crypto.randomUUID()}`;
       const title = String(body.title || name).trim();
       const description = String(body.description || '').trim();
       if (!isValidApplicationName(name, ['app', 'shared'], Boolean(process.env.ARANGO_URL))) return error(process.env.ARANGO_URL ? 'Enterprise 应用短名须以字母开头，且只能包含 1–64 位字母、数字、下划线或短横线' : '应用短名须为 1–64 位字母、数字、下划线或短横线，不能为纯数字、app 或 shared');
@@ -195,7 +196,20 @@ export function createApplicationHandler(db: Database, getUser: (req: Request) =
         return error(`创建知识数据库失败：${cause instanceof Error ? cause.message : String(cause)}`, 503);
       }
       db.run("INSERT INTO projects(name,title,description,file,image,theme_color,tags,link,owner_user_id,banner_image) VALUES(?,?,?,'app.sqlite',?,'#ff7a2b','[]',?,?,?)", [name, title, description, String(body.image || ''), String(body.link || ''), user.id, String(body.banner_image || '').trim()]);
-      return Response.json({ success: true, project: record(projectBy(name), user) }, { status: 201 });
+      const created = projectBy(name);
+      try {
+        importOntologies(db, defaultCoreOntology, Number(created.id));
+        await cloneOptions.initializeOntology?.(name, Number(created.id), defaultCoreOntology);
+      } catch (cause) {
+        db.transaction(() => {
+          db.run('DELETE FROM ontology_properties WHERE ontology_id IN (SELECT id FROM ontologies WHERE project_id = ?)', [created.id]);
+          db.run('DELETE FROM properties WHERE project_id = ?', [created.id]);
+          db.run('DELETE FROM ontologies WHERE project_id = ?', [created.id]);
+          db.run('DELETE FROM projects WHERE id = ?', [created.id]);
+        })();
+        return error(`初始化默认本体失败：${cause instanceof Error ? cause.message : String(cause)}`, 503);
+      }
+      return Response.json({ success: true, project: record(created, user) }, { status: 201 });
     }
     const match = path.match(/^\/api\/applications\/([^/]+)(?:\/(details|access|request|review|member|clone|copy-ontology))?$/);
     const projectKey = legacy ? String(body.name || '') : match ? decodeURIComponent(match[1]!) : '';

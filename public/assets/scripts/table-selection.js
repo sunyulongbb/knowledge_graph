@@ -1,3 +1,9 @@
+function knowledgeCategoryLabel(node) {
+    const labels = Array.isArray(node?.categoryLabels) ? node.categoryLabels : [];
+    const names = labels.filter(Boolean);
+    if (!names.length && Array.isArray(node?.classes)) names.push(...node.classes.map(item => item.name).filter(Boolean));
+    return [...new Set(names)].join('、') || node?.classLabel || '未分类';
+}
 function __kbInitTableSelection() {
   const shared = window.kbApp || {};
   const state = shared.state || {};
@@ -353,7 +359,7 @@ function __kbInitTableSelection() {
       const id = item?.id || item?._id || "";
       const _id = item?._id || item?.id || "";
       const link = item?.link || "";
-      const classLabel = item?.classLabel || item?.type || item?.class || "";
+      const classLabel = knowledgeCategoryLabel(item);
       const image = item?.image || item?.avatar || "";
       return videoList.map((video, index) => {
         const poster =
@@ -3745,7 +3751,7 @@ function __kbInitTableSelection() {
       .map((item) => ({
         id: item._id || item.id || "",
         label: item.label_zh || item.label || "",
-        classLabel: item.classLabel || item.type || "",
+        classLabel: knowledgeCategoryLabel(item),
         video: item.video || "",
         cover: String(item.cover || "").trim(),
         image: item.image || "",
@@ -3899,6 +3905,8 @@ function __kbInitTableSelection() {
       videoEl.style.cursor = "pointer";
       videoEl.preload = "metadata";
       const resolvedUrl = (function () {
+
+
         try {
           return new URL(item.video, window.location.origin).toString();
         } catch {
@@ -4424,7 +4432,7 @@ function __kbInitTableSelection() {
           id: item._id || item.id || "",
           label: item.label || item.label_zh || "",
           label_zh: item.label_zh || item.label || "",
-          classLabel: item.classLabel || item.type || "",
+          classLabel: knowledgeCategoryLabel(item),
           video: item.video || "",
           cover: String(item.cover || "").trim(),
           image: item.image || "",
@@ -4517,7 +4525,7 @@ function __kbInitTableSelection() {
       .map((item) => ({
         id: item._id || item.id || "",
         label: item.label_zh || item.label || "",
-        classLabel: item.classLabel || item.type || "",
+        classLabel: knowledgeCategoryLabel(item),
         video: item.video || "",
         cover: String(item.cover || "").trim(),
         image: item.image || "",
@@ -5603,7 +5611,7 @@ function __kbInitTableSelection() {
         .map((item) => ({
           id: item?.id || item?._id || "",
           label_zh: item?.label_zh || item?.label || "",
-          classLabel: item?.classLabel || item?.type || "",
+          classLabel: knowledgeCategoryLabel(item),
           image: item?.image || item?.avatar || "",
         }));
       let snapshot = slicedItems;
@@ -5702,7 +5710,7 @@ function __kbInitTableSelection() {
         label: item.label || item.label_zh || item.name || "",
         label_zh: item.label_zh || item.label || item.name || "",
         id: item.id || item._id || "",
-        classLabel: item.classLabel || item.type || "",
+        classLabel: knowledgeCategoryLabel(item),
         image:
           item.image || item.avatar || item.icon || item.img || item.logo || "",
       }));
@@ -5796,7 +5804,7 @@ function __kbInitTableSelection() {
       .map((item) => ({
         id: item._id || item.id || "",
         label: item.label_zh || item.label || "",
-        classLabel: item.classLabel || item.type || "",
+        classLabel: knowledgeCategoryLabel(item),
         image: item.image || "",
         replayKey: item.__galleryReplayKey || "",
       }))

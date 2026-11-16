@@ -1,4 +1,11 @@
 (function () {
+  const knowledgeCategoryLabel = node => {
+    const labels = Array.isArray(node?.categoryLabels) ? node.categoryLabels : [];
+    const names = labels.filter(Boolean);
+    if (!names.length && Array.isArray(node?.classes)) names.push(...node.classes.map(item => item.name).filter(Boolean));
+    return [...new Set(names)].join('、') || node?.classLabel || '未分类';
+  };
+
   const byId = (id) => document.getElementById(id);
   const escape = (value) =>
     String(value ?? "").replace(
@@ -309,7 +316,7 @@
     const description = hits.description?.length
       ? hits.description.map(highlighted).join(" … ")
       : escape(node.description || node.desc_zh || "暂无描述");
-    return `<article class="app-knowledge-item" data-knowledge-id="${escape(node.id || node._id)}">${picture}<div><a href="${escape(nodeUrl(node))}">${title}</a><p>${description}</p>${hits.aliases?.length ? `<p class="app-search-alias-match">别名匹配：${highlighted(hits.aliases[0])}</p>` : ""}<small class="muted">${escape(node.typeLabel || node.type || "未设置本体")} · ${escape((node.updated_at || node.created_at || "").slice(0, 10))}</small>${knowledgeCardTags(node)}</div></article>`;
+    return `<article class="app-knowledge-item" data-knowledge-id="${escape(node.id || node._id)}">${picture}<div><a href="${escape(nodeUrl(node))}">${title}</a><p>${description}</p>${hits.aliases?.length ? `<p class="app-search-alias-match">别名匹配：${highlighted(hits.aliases[0])}</p>` : ""}<small class="muted"> · ${escape((node.updated_at || node.created_at || "").slice(0, 10))}</small>${knowledgeCardTags(node)}</div></article>`;
   }
   function imageCandidates(value) {
     if (Array.isArray(value)) return value.flatMap(imageCandidates);
@@ -621,7 +628,7 @@
                   title = node.name || node.label || id,
                   image = firstImage(node) || firstCover(node),
                   video = firstVideo(node);
-                return `<li class="home-news-event"><time ${iso ? `datetime="${escape(iso)}"` : ""}>${escape(time)}</time><span class="home-news-event-dot" aria-hidden="true"></span><article class="home-news-card" data-home-node-id="${escape(id)}"><div class="home-news-card-copy"><span class="home-news-type">${escape(node.typeLabel || node.type || "新知识")}</span><button type="button" class="home-news-title" data-home-node-id="${escape(id)}">${escape(title)}</button>${node.description ? `<p>${escape(node.description)}</p>` : ""}${knowledgeCardTags(node)}<button type="button" class="home-news-open" data-home-node-id="${escape(id)}">阅读知识 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button></div>${image ? `<button type="button" data-home-open="shorts" class="home-news-thumb" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}"><img src="${escape(image)}" alt="" loading="lazy">${video ? '<i class="fa-solid fa-play" aria-hidden="true"></i>' : ""}</button>` : ""}</article></li>`;
+                return `<li class="home-news-event"><time ${iso ? `datetime="${escape(iso)}"` : ""}>${escape(time)}</time><span class="home-news-event-dot" aria-hidden="true"></span><article class="home-news-card" data-home-node-id="${escape(id)}"><div class="home-news-card-copy"><span class="home-news-type">${escape(knowledgeCategoryLabel(node))}</span><button type="button" class="home-news-title" data-home-node-id="${escape(id)}">${escape(title)}</button>${node.description ? `<p>${escape(node.description)}</p>` : ""}${knowledgeCardTags(node)}<button type="button" class="home-news-open" data-home-node-id="${escape(id)}">阅读知识 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button></div>${image ? `<button type="button" data-home-open="shorts" class="home-news-thumb" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}"><img src="${escape(image)}" alt="" loading="lazy">${video ? '<i class="fa-solid fa-play" aria-hidden="true"></i>' : ""}</button>` : ""}</article></li>`;
               })
               .join("")}</ol></section>`,
         )
@@ -634,7 +641,7 @@
     const image = firstImage(node) || firstCover(node),
       video = firstVideo(node),
       stats = node.engagement;
-    return `<article class="home-popular-row" data-home-node-id="${escape(id)}"><span class="home-popular-rank ${index < 3 ? "is-top-" + (index + 1) : ""}">${String(index + 1).padStart(2, "0")}</span><button type="button" data-home-open="shorts" class="home-popular-thumb" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}">${image ? `<img src="${escape(image)}" alt="" loading="lazy">` : video ? `<video src="${escape(video)}" muted playsinline preload="metadata"></video>` : '<i class="fa-regular fa-lightbulb" aria-hidden="true"></i>'}${video ? '<span><i class="fa-solid fa-play" aria-hidden="true"></i> 视频</span>' : ""}</button><div class="home-popular-copy"><div class="home-popular-meta"><span>${escape(node.typeLabel || node.type || "知识")}</span><time>${escape(shortDate(node.updated_at || node.created_at))}</time></div><button class="home-popular-title" type="button" data-home-node-id="${escape(id)}">${escape(title)}</button>${node.description ? `<p>${escape(node.description)}</p>` : ""}${knowledgeCardTags(node)}<div class="home-popular-actions"><span title="浏览量"><i class="fa-regular fa-eye" aria-hidden="true"></i> <b data-knowledge-views="${escape(id)}">${Number(node.viewCount) || 0}</b></span>${stats ? `<span><i class="fa-regular fa-heart" aria-hidden="true"></i> ${Number(stats.likes) || 0}</span><span><i class="fa-regular fa-comment" aria-hidden="true"></i> ${Number(stats.comments) || 0}</span><span><i class="fa-solid fa-share" aria-hidden="true"></i> ${Number(stats.shares) || 0}</span>` : ""}<button type="button" data-home-node-id="${escape(id)}">查看详情 <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></button></div></div></article>`;
+    return `<article class="home-popular-row" data-home-node-id="${escape(id)}"><span class="home-popular-rank ${index < 3 ? "is-top-" + (index + 1) : ""}">${String(index + 1).padStart(2, "0")}</span><button type="button" data-home-open="shorts" class="home-popular-thumb" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}">${image ? `<img src="${escape(image)}" alt="" loading="lazy">` : video ? `<video src="${escape(video)}" muted playsinline preload="metadata"></video>` : '<i class="fa-regular fa-lightbulb" aria-hidden="true"></i>'}${video ? '<span><i class="fa-solid fa-play" aria-hidden="true"></i> 视频</span>' : ""}</button><div class="home-popular-copy"><div class="home-popular-meta"><time>${escape(shortDate(node.updated_at || node.created_at))}</time></div><button class="home-popular-title" type="button" data-home-node-id="${escape(id)}">${escape(title)}</button>${node.description ? `<p>${escape(node.description)}</p>` : ""}${knowledgeCardTags(node)}<div class="home-popular-actions"><span title="浏览量"><i class="fa-regular fa-eye" aria-hidden="true"></i> <b data-knowledge-views="${escape(id)}">${Number(node.viewCount) || 0}</b></span>${stats ? `<span><i class="fa-regular fa-heart" aria-hidden="true"></i> ${Number(stats.likes) || 0}</span><span><i class="fa-regular fa-comment" aria-hidden="true"></i> ${Number(stats.comments) || 0}</span><span><i class="fa-solid fa-share" aria-hidden="true"></i> ${Number(stats.shares) || 0}</span>` : ""}<button type="button" data-home-node-id="${escape(id)}">查看详情 <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></button></div></div></article>`;
   }
   function homeWaterfallCard(node) {
     const id = node.id || node._id || "";
@@ -648,8 +655,7 @@
     const author =
       node.owner_name ||
       node.created_by_name ||
-      node.typeLabel ||
-      node.type ||
+      knowledgeCategoryLabel(node) ||
       "知识分享";
     const description = String(node.description || node.desc_zh || "").trim();
     const picture =
@@ -666,7 +672,7 @@
       ) % 6;
     const titleSize = Array.from(title).length > 28 ? " is-long-title" : "";
     return `<article class="for-you-card" data-home-node-id="${escape(id)}">
-      ${picture ? `<button data-home-open="shorts" class="for-you-card-media" type="button" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}的媒体">${picture}${video ? '<span class="for-you-video-badge"><i class="fa-solid fa-play" aria-hidden="true"></i></span>' : ""}</button>` : `<button type="button" class="for-you-card-quote palette-${palette}${titleSize}" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}"><span class="for-you-note-label"><i class="fa-solid fa-book-open" aria-hidden="true"></i> ${escape(node.typeLabel || "\u77e5\u8bc6\u624b\u8bb0")}</span><strong class="for-you-card-text-title">${escape(title)}</strong>${description ? `<p>${escape(description.slice(0, 360))}</p>` : ""}</button>`}
+      ${picture ? `<button data-home-open="shorts" class="for-you-card-media" type="button" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}的媒体">${picture}${video ? '<span class="for-you-video-badge"><i class="fa-solid fa-play" aria-hidden="true"></i></span>' : ""}</button>` : `<button type="button" class="for-you-card-quote palette-${palette}${titleSize}" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}"><span class="for-you-note-label"><i class="fa-solid fa-book-open" aria-hidden="true"></i> ${escape(knowledgeCategoryLabel(node))}</span><strong class="for-you-card-text-title">${escape(title)}</strong>${description ? `<p>${escape(description.slice(0, 360))}</p>` : ""}</button>`}
       <div class="for-you-card-content">${picture ? `<button type="button" class="for-you-card-title" data-home-node-id="${escape(id)}">${escape(title)}</button>` : ""}
       ${knowledgeCardTags(node)}<div class="for-you-card-meta"><span class="for-you-avatar" aria-hidden="true">${escape(Array.from(String(author))[0] || "")}</span><span class="for-you-card-author">${escape(author)}</span><span class="for-you-card-stat" title="浏览量"><i class="fa-regular fa-eye" aria-hidden="true"></i> <b data-knowledge-views="${escape(id)}">${Number(node.viewCount) || 0}</b></span>${likes !== undefined ? `<span class="for-you-card-stat"><i class="fa-regular fa-heart" aria-hidden="true"></i> ${Number(likes) || 0}</span>` : `<time>${escape(shortDate(node.updated_at || node.created_at))}</time>`}</div></div>
     </article>`;
@@ -682,7 +688,7 @@
     const id = node.id || node._id || "";
     return `<article class="app-home-knowledge-card" data-home-node-id="${escape(id)}">
       <button type="button" data-home-open="shorts" class="app-home-card-media${cover || video ? "" : " is-placeholder"}" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}">${cover ? `<img src="${escape(cover)}" alt="" loading="lazy">` : video ? `<video src="${escape(video)}" muted playsinline preload="metadata"></video><span class="app-media-type"><i class="fa-solid fa-play" aria-hidden="true"></i> 视频</span>` : '<i class="fa-solid fa-lightbulb" aria-hidden="true"></i>'}</button>
-      <div class="app-home-card-body"><div class="app-home-card-meta"><span>${escape(node.typeLabel || node.type || "知识实体")}</span><time>${escape(shortDate(node.updated_at || node.created_at))}</time></div><button type="button" class="app-home-card-title" title="${escape(title)}" data-home-node-id="${escape(id)}">${escape(title)}</button>${knowledgeCardTags(node)}<div class="app-home-card-footer"><span title="浏览量"><i class="fa-regular fa-eye" aria-hidden="true"></i> <b data-knowledge-views="${escape(node.id || node._id || "")}">${Number(node.viewCount) || 0}</b></span><span class="app-home-card-id">${escape(id)}</span><span>查看详情 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span></div></div>
+      <div class="app-home-card-body"><div class="app-home-card-meta"><span>${escape(knowledgeCategoryLabel(node))}</span><time>${escape(shortDate(node.updated_at || node.created_at))}</time></div><button type="button" class="app-home-card-title" title="${escape(title)}" data-home-node-id="${escape(id)}">${escape(title)}</button>${knowledgeCardTags(node)}<div class="app-home-card-footer"><span title="浏览量"><i class="fa-regular fa-eye" aria-hidden="true"></i> <b data-knowledge-views="${escape(node.id || node._id || "")}">${Number(node.viewCount) || 0}</b></span><span class="app-home-card-id">${escape(id)}</span><span>查看详情 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span></div></div>
     </article>`;
   }
   function applicationBanner() {
@@ -830,7 +836,7 @@
       <div class="app-inspiration-card-top"><span><i class="fa-regular fa-star" aria-hidden="true"></i> 潜力知识</span><small>${escape(shortDate(node.updated_at || node.created_at))}</small></div>
       ${media ? `<div class="app-inspiration-media-stage">${media}<span><i class="fa-solid ${video ? "fa-video" : "fa-image"}" aria-hidden="true"></i> ${video ? "视频" : "图片"}</span></div>` : ""}
       <div class="app-inspiration-identity">${media ? "" : '<div class="app-inspiration-visual is-placeholder"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i></div>'}<div><h2>${escape(node.name || node.label || node.id)}</h2><span>${escape(node.id || node._id || "")}</span></div></div>
-      <div class="app-inspiration-meta"><span>${escape(node.typeLabel || node.type || "知识实体")}</span>${video ? "<span>视频</span>" : image ? "<span>图片</span>" : ""}</div>
+      <div class="app-inspiration-meta"><span>${escape(knowledgeCategoryLabel(node))}</span>${video ? "<span>视频</span>" : image ? "<span>图片</span>" : ""}</div>
       <p>${escape(node.description || node.desc_zh || "暂无描述")}</p>
       ${
         showJev
@@ -1883,7 +1889,7 @@
                       0,
                     )
                   : null;
-                return `<li><button type="button" data-trend-query="${escape(title)}"><span class="search-trend-rank${index < 3 ? " is-top" : ""}">${index + 1}</span><span class="search-trend-copy"><small>${escape(node.typeLabel || node.type || "\u77e5\u8bc6")}</small><strong>${escape(title)}</strong><span>${count === null ? "\u67e5\u770b\u76f8\u5173\u77e5\u8bc6" : count + " \u6b21\u4e92\u52a8"}</span></span><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></button></li>`;
+                return `<li><button type="button" data-trend-query="${escape(title)}"><span class="search-trend-rank${index < 3 ? " is-top" : ""}">${index + 1}</span><span class="search-trend-copy"><small></small><strong>${escape(title)}</strong><span>${count === null ? "\u67e5\u770b\u76f8\u5173\u77e5\u8bc6" : count + " \u6b21\u4e92\u52a8"}</span></span><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></button></li>`;
               })
               .join("") +
             "</ol>"

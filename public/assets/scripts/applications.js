@@ -117,21 +117,49 @@
   }
   byId('applicationCreateForm').elements.banner_image.addEventListener('input', previewBanner);
   const bannerUpload = window.bindBannerUpload(byId('applicationCreateForm').elements.banner_image, byId('applicationBannerPreview'));
+  const logoInput = byId('applicationCreateForm').elements.image;
+  const logoPreview = document.createElement('img');
+  logoPreview.alt = '应用 Logo 预览'; logoPreview.hidden = true;
+  logoPreview.style.cssText = 'width:72px;height:72px;object-fit:cover;border-radius:12px';
+  logoInput.parentElement.append(logoPreview);
+  const logoUpload = window.bindBannerUpload(logoInput, logoPreview);
+  logoInput.nextElementSibling.setAttribute('aria-label', '应用 Logo，可上传或粘贴图片');
+  logoInput.nextElementSibling.querySelector('[data-clear]').textContent = '移除 Logo';
   function openEditor(project = null) {
     if (project ? !project.editSettings : !canCreate) return;
     editingProject = project;
     const form = byId('applicationCreateForm'); form.reset();
+    for (const key of ['name', 'description', 'link', 'banner_image']) {
+      form.elements[key].closest('label').hidden = !project;
+      form.elements[key].disabled = !project || key === 'name';
+    }
+    form.elements.image.required = !project;
     for (const key of ['title', 'description', 'image', 'link', 'banner_image']) form.elements[key].value = project?.[key] || '';
     bannerUpload.reset();
+    logoUpload.reset();
+    const logoSource = safeUrl(form.elements.image.value, true);
+    logoPreview.hidden = !logoSource;
+    if (logoSource) logoPreview.src = logoSource;
     previewBanner();
     form.elements.name.value = project?.slug || '';
-    form.elements.name.disabled = !!project;
+    form.elements.name.disabled = true;
     byId('applicationEditorTitle').textContent = project ? '编辑应用' : '创建应用';
     byId('btnApplicationSave').textContent = project ? '保存修改' : '创建应用';
     byId('applicationEditorStatus').textContent = project ? '应用短名用于访问地址，创建后不可修改。' : '创建后，你将成为应用创建者。';
-    byId('applicationEditorDialog').showModal(); form.elements.title.focus();
+    const editor = byId('applicationEditorDialog');
+    if (editor.parentElement !== document.body) document.body.append(editor);
+    if (!editor.open) editor.showModal();
+    form.elements.title.focus();
   }
   byId('btnApplicationCreate').addEventListener('click', () => openEditor());
+  window.openApplicationCreate = async () => {
+    await loadApplications();
+    if (!canCreate) {
+      alert(window.authUser ? '请联系管理员授予创建应用权限' : '请先登录');
+      return;
+    }
+    openEditor();
+  };
   byId('btnApplicationCreateCancel').addEventListener('click', () => byId('applicationEditorDialog').close());
   byId('applicationCreateForm').addEventListener('submit', async (event) => {
     event.preventDefault();

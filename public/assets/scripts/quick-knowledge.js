@@ -114,7 +114,8 @@
   const editorBody = dialog.querySelector(".quick-body-editor");
   const editorToolbar = document.createElement("div");
   editorToolbar.className = "quick-editor-topline";
-  dialog.querySelector(".quick-knowledge-header").append(dialog.querySelector(".quick-ontology-picker"));
+  dialog.querySelector(".quick-ontology-picker").hidden = true;
+  dialog.querySelector(".quick-knowledge-header").append(dialog.querySelector(".quick-audience"));
   const meta = dialog.querySelector(".quick-composer-meta");
   const categorySummary = meta.querySelector(".quick-category-summary");
   dialog.querySelector(".quick-category-heading").after(categorySummary);
@@ -134,6 +135,52 @@
     categoryNodes = [],
     categoryVersion = 0;
   const choiceRows = { category: [], type: [] };
+  const addCategory = document.createElement('button');
+  addCategory.type = 'button'; addCategory.textContent = '＋ 新建分类';
+  addCategory.className = 'quick-category-add';
+  get('.quick-category-heading').append(addCategory);
+  const categoryEditor = document.createElement('div'); categoryEditor.hidden = true;
+  categoryEditor.className = 'quick-category-inline';
+  categoryEditor.innerHTML = '<small data-parent></small><div><input maxlength="100" placeholder="输入分类名称，回车添加" aria-label="新分类名称"><button type="button" data-create aria-label="添加分类">添加</button><button type="button" data-cancel aria-label="取消新建">×</button></div>';
+  get('.quick-category-heading').after(categoryEditor);
+  addCategory.onclick = () => {
+    if (saving || saved) return;
+    categoryEditor.dataset.parent = categoryPath[categoryPath.length - 1] || '';
+    const parentName = Array.from(fields.namedItem('category').options).find(option => option.value === categoryEditor.dataset.parent)?.textContent;
+    categoryEditor.querySelector('[data-parent]').textContent = parentName ? `添加到「${parentName.trim()}」下` : '添加根级分类';
+    categoryEditor.hidden = false; categoryEditor.querySelector('input').focus();
+  };
+  categoryEditor.querySelector('[data-cancel]').onclick = () => { categoryEditor.hidden = true; };
+  categoryEditor.querySelector('input').addEventListener('keydown', event => {
+    if (event.isComposing) return;
+    if (event.key === 'Enter') { event.preventDefault(); categoryEditor.querySelector('[data-create]').click(); }
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); categoryEditor.hidden = true; addCategory.focus(); }
+  });
+  categoryEditor.querySelector('[data-create]').onclick = async () => {
+    const input = categoryEditor.querySelector('input'), button = categoryEditor.querySelector('[data-create]');
+    const name = input.value.trim(); if (!name || saving || saved) return;
+    button.disabled = true;
+    const scope = scopedUrl('/api/kb/classes').href;
+    try {
+      const response = await fetch(scope, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, parent_id: categoryEditor.dataset.parent || null }) });
+      if (!response.ok) throw new Error(await response.text());
+      const created = await response.json();
+      const refreshed = await fetch(scope); if (!refreshed.ok) throw new Error('分类刷新失败');
+      const data = await refreshed.json();
+      if (!dialog.open || scope !== scopedUrl('/api/kb/classes').href) return;
+      categoryNodes = buildCategoryTree(Array.isArray(data) ? data : data.items || []);
+      const flatten = rows => rows.flatMap(row => [row, ...flatten(row.children || [])]);
+      choiceRows.category = categoryOptions(flatten(categoryNodes));
+      renderChoices('category');
+      const option = Array.from(fields.namedItem('category').options).find(item => item.value === created.id);
+      if (option) option.selected = true;
+      updateMeta(); void renderCategoryTree();
+      input.value = ''; categoryEditor.hidden = true;
+      get('[data-quick-options]').textContent = '分类已添加并选中';
+      window.dispatchEvent(new CustomEvent('kb:classes-updated'));
+    } catch (error) { get('[data-quick-options]').textContent = `创建分类失败：${error.message}`; }
+    finally { button.disabled = false; }
+  };
   let ontologyController = null,
     ontologyItems = null,
     ontologyVersion = 0,
@@ -788,7 +835,7 @@
         fields.namedItem("category").selectedOptions,
         (option) => option.value,
       ).filter(Boolean),
-      typeId: value("type") || null,
+      mapCategoryToOntology: true,
       tags: parsed.tags,
       link: value("link"),
       visibility: value("visibility"),

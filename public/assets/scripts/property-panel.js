@@ -1012,6 +1012,7 @@
       url.searchParams.set("id", id);
       await apiJson(url.toString(), { method: "DELETE" });
       selectedOntologyId = "";
+      if (byId("ontologySearch")) byId("ontologySearch").value = "";
       await Promise.all([loadOntologyTree(), loadPropertyList()]);
     } catch (err) {
       alert("删除本体失败: " + (err?.message || err));
@@ -1395,7 +1396,48 @@
           )
         )
           return;
-        await clearAllOntologies();
+        btnOntologyClearAll.disabled = true;
+        try {
+          await clearAllOntologies();
+        } finally {
+          btnOntologyClearAll.disabled = false;
+        }
+      });
+    }
+
+    const exportButton = byId("btnOntologyExport");
+    if (exportButton && !exportButton.dataset.bound) {
+      exportButton.dataset.bound = "1";
+      exportButton.addEventListener("click", async () => {
+        exportButton.disabled = true;
+        const status = byId("ontologyImportStatus");
+        let downloadUrl;
+        try {
+          const url = appendCurrentDbToUrl(new URL("/api/kb/ontology/tree", window.location.origin));
+          const data = await apiJson(url.toString());
+          const serialize = (item) => ({
+            name: item.name,
+            description: item.description || "",
+            alias: item.alias || [],
+            color: item.color || null,
+            display_shape: item.display_shape || "rectangle",
+            children: (item.children || []).map(serialize),
+          });
+          const payload = { version: 1, ontologies: (data.items || []).map(serialize) };
+          downloadUrl = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" }));
+          const anchor = document.createElement("a");
+          anchor.href = downloadUrl;
+          anchor.download = `ontology-${new Date().toISOString().slice(0, 10)}.json`;
+          document.body.appendChild(anchor);
+          anchor.click();
+          anchor.remove();
+          if (status) status.textContent = "本体树导出完成";
+        } catch (error) {
+          alert("导出失败：" + (error?.message || error));
+        } finally {
+          if (downloadUrl) setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+          exportButton.disabled = false;
+        }
       });
     }
 

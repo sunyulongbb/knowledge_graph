@@ -1,0 +1,585 @@
+{
+  "version": 1,
+  "ontologies": [
+    {
+      "name": "人物",
+      "description": "现实或虚构世界中具有独立身份的人物",
+      "alias": [
+        "Person"
+      ],
+      "color": "#3B82F6",
+      "display_shape": "circle",
+      "properties": [
+        {
+          "name": "出生日期",
+          "datatype": "time",
+          "description": "人物的出生日期",
+          "types": [
+            "基础信息"
+          ]
+        },
+        {
+          "name": "出生地点",
+          "datatype": "wikibase-item",
+          "description": "人物出生的地点",
+          "types": [
+            "关联信息"
+          ],
+          "tail_ontology_id": "ontology/location"
+        },
+        {
+          "name": "国籍",
+          "datatype": "wikibase-item",
+          "description": "人物所属的国家或地区",
+          "types": [
+            "关联信息"
+          ],
+          "tail_ontology_id": "ontology/location"
+        },
+        {
+          "name": "所属组织",
+          "datatype": "wikibase-item",
+          "description": "人物所属或任职的组织",
+          "types": [
+            "关联信息"
+          ],
+          "tail_ontology_id": "ontology/organization"
+        },
+        {
+          "name": "逝世日期",
+          "datatype": "time",
+          "description": "人物的逝世日期",
+          "types": [
+            "基础信息"
+          ]
+        }
+      ],
+      "children": []
+    },
+    {
+      "name": "地点",
+      "description": "自然地理位置、行政区域及具有空间位置的场所",
+      "alias": [
+        "Location"
+      ],
+      "color": "#10B981",
+      "display_shape": "rounded",
+      "properties": [
+        {
+          "name": "上级地点",
+          "datatype": "wikibase-item",
+          "description": "所属的上级地理区域",
+          "types": [
+            "关联信息"
+          ],
+          "tail_ontology_id": "ontology/location"
+        },
+        {
+          "name": "地理坐标",
+          "datatype": "globe-coordinate",
+          "description": "地点的经纬度坐标",
+          "types": [
+            "基础信息"
+          ]
+        },
+        {
+          "name": "所属组织",
+          "datatype": "wikibase-item",
+          "description": "负责管理或使用该地点的组织",
+          "types": [
+            "关联信息"
+          ],
+          "tail_ontology_id": "ontology/organization"
+        }
+      ],
+      "children": []
+    },
+    {
+      "name": "组织",
+      "description": "具有共同目标、职责或组织结构的群体与机构",
+      "alias": [
+        "Organization"
+      ],
+      "color": "#8B5CF6",
+      "display_shape": "rounded",
+      "properties": [
+        {
+          "name": "成立日期",
+          "datatype": "time",
+          "description": "组织成立的日期",
+          "types": [
+            "基础信息"
+          ]
+        },
+        {
+          "name": "总部地点",
+          "datatype": "wikibase-item",
+          "description": "组织总部所在地点",
+          "types": [
+            "关联信息"
+          ],
+          "tail_ontology_id": "ontology/location"
+        },
+        {
+          "name": "上级组织",
+          "datatype": "wikibase-item",
+          "description": "组织隶属的上级机构",
+          "types": [
+            "关联信息"
+          ],
+          "tail_ontology_id": "ontology/organization"
+        },
+        {
+          "name": "负责人",
+          "datatype": "wikibase-item",
+          "description": "组织的负责人",
+          "types": [
+            "关联信息"
+          ],
+          "tail_ontology_id": "ontology/person"
+        }
+      ],
+      "children": []
+    },
+    {
+      "name": "物体",
+      "description": "具有物理形态的自然物或人造物，包括设备与设施",
+      "alias": [
+        "Object"
+      ],
+      "color": "#F59E0B",
+      "display_shape": "rounded",
+      "properties": [
+        {
+          "name": "制造商",
+          "datatype": "wikibase-item",
+          "description": "物体的生产或制造组织",
+          "types": [
+            "关联信息"
+          ],
+          "tail_ontology_id": "ontology/organization"
+        },
+        {
+          "name": "制造日期",
+          "datatype": "time",
+          "description": "物体的制造日期",
+          "types": [
+            "基础信息"
+          ]
+        },
+        {
+          "name": "所在地",
+          "datatype": "wikibase-item",
+          "description": "物体所在地点",
+          "types": [
+            "关联信息"
+          ],
+          "tail_ontology_id": "ontology/location"
+        },
+        {
+          "name": "材料",
+          "datatype": "string",
+          "description": "物体的主要材料",
+          "types": [
+            "基础信息"
+          ]
+        }
+      ],
+      "children": []
+    },
+    {
+      "name": "生物",
+      "description": "除人物类别之外的动物、植物、微生物及其他生物",
+      "alias": [
+        "Creature"
+      ],
+      "color": "#22C55E",
+      "display_shape": "circle",
+      "properties": [
+        {
+          "name": "学名",
+          "datatype": "string",
+          "description": "生物的科学名称",
+          "types": [
+            "基础信息"
+          ]
+        },
+        {
+          "name": "栖息地",
+          "datatype": "wikibase-item",
+          "description": "生物生活或分布的地点",
+          "types": [
+            "关联信息"
+          ],
+          "tail_ontology_id": "ontology/location"
+        },
+        {
+          "name": "保护状态",
+          "datatype": "string",
+          "description": "生物的保护状况",
+          "types": [
+            "基础信息"
+          ]
+        }
+      ],
+      "children": []
+    },
+    {
+      "name": "事件",
+      "description": "在特定时间或情境下发生的事情或活动实例",
+      "alias": [
+        "Event"
+      ],
+      "color": "#EF4444",
+      "display_shape": "rounded",
+      "properties": [
+        {
+          "name": "开始时间",
+          "datatype": "time",
+          "description": "事件开始的时间",
+          "types": [
+            "基础信息"
+          ]
+        },
+        {
+          "name": "结束时间",
+          "datatype": "time",
+          "description": "事件结束的时间",
+          "types": [
+            "基础信息"
+          ]
+        },
+        {
+          "name": "发生地点",
+          "datatype": "wikibase-item",
+          "description": "事件发生的地点",
+          "types": [
+            "关联信息"
+          ],
+          "tail_ontology_id": "ontology/location"
+        },
+        {
+          "name": "参与人物",
+          "datatype": "wikibase-item",
+          "description": "参与事件的人物",
+          "types": [
+            "关联信息"
+          ],
+          "tail_ontology_id": "ontology/person"
+        },
+        {
+          "name": "参与组织",
+          "datatype": "wikibase-item",
+          "description": "参与事件的组织",
+          "types": [
+            "关联信息"
+          ],
+          "tail_ontology_id": "ontology/organization"
+        }
+      ],
+      "children": []
+    },
+    {
+      "name": "行动",
+      "description": "主体实施的行为、活动或过程类型",
+      "alias": [
+        "Action"
+      ],
+      "color": "#F97316",
+      "display_shape": "rounded",
+      "properties": [
+        {
+          "name": "执行者",
+          "datatype": "wikibase-item",
+          "description": "实施该行动的主体人物",
+          "types": [
+            "关联信息"
+          ],
+          "tail_ontology_id": "ontology/person"
+        },
+        {
+          "name": "执行组织",
+          "datatype": "wikibase-item",
+          "description": "实施该行动的组织",
+          "types": [
+            "关联信息"
+          ],
+          "tail_ontology_id": "ontology/organization"
+        },
+        {
+          "name": "发生地点",
+          "datatype": "wikibase-item",
+          "description": "行动实施的地点",
+          "types": [
+            "关联信息"
+          ],
+          "tail_ontology_id": "ontology/location"
+        },
+        {
+          "name": "开始时间",
+          "datatype": "time",
+          "description": "行动开始的时间",
+          "types": [
+            "基础信息"
+          ]
+        }
+      ],
+      "children": []
+    },
+    {
+      "name": "概念",
+      "description": "理论、思想、技术、学科等抽象知识概念",
+      "alias": [
+        "Concept"
+      ],
+      "color": "#06B6D4",
+      "display_shape": "rounded",
+      "properties": [
+        {
+          "name": "所属学科",
+          "datatype": "wikibase-item",
+          "description": "概念所属的知识或学科领域",
+          "types": [
+            "关联信息"
+          ],
+          "tail_ontology_id": "ontology/concept"
+        },
+        {
+          "name": "相关概念",
+          "datatype": "wikibase-item",
+          "description": "与此概念相关的其他概念",
+          "types": [
+            "关联信息"
+          ],
+          "tail_ontology_id": "ontology/concept"
+        },
+        {
+          "name": "提出者",
+          "datatype": "wikibase-item",
+          "description": "提出该概念的人物",
+          "types": [
+            "关联信息"
+          ],
+          "tail_ontology_id": "ontology/person"
+        }
+      ],
+      "children": []
+    },
+    {
+      "name": "规则",
+      "description": "法律、制度、标准、规范等约束性知识",
+      "alias": [
+        "Rule"
+      ],
+      "color": "#64748B",
+      "display_shape": "rounded",
+      "properties": [
+        {
+          "name": "发布组织",
+          "datatype": "wikibase-item",
+          "description": "发布或制定规则的组织",
+          "types": [
+            "关联信息"
+          ],
+          "tail_ontology_id": "ontology/organization"
+        },
+        {
+          "name": "发布日期",
+          "datatype": "time",
+          "description": "规则发布的日期",
+          "types": [
+            "基础信息"
+          ]
+        },
+        {
+          "name": "生效日期",
+          "datatype": "time",
+          "description": "规则生效的日期",
+          "types": [
+            "基础信息"
+          ]
+        },
+        {
+          "name": "适用范围",
+          "datatype": "string",
+          "description": "规则适用的对象或范围",
+          "types": [
+            "基础信息"
+          ]
+        }
+      ],
+      "children": []
+    },
+    {
+      "name": "时间",
+      "description": "具有独立知识意义的时期、时代和时间区间",
+      "alias": [
+        "Time"
+      ],
+      "color": "#A855F7",
+      "display_shape": "rounded",
+      "properties": [
+        {
+          "name": "起始时间",
+          "datatype": "time",
+          "description": "时期的起始时间",
+          "types": [
+            "基础信息"
+          ]
+        },
+        {
+          "name": "终止时间",
+          "datatype": "time",
+          "description": "时期的终止时间",
+          "types": [
+            "基础信息"
+          ]
+        },
+        {
+          "name": "相关事件",
+          "datatype": "wikibase-item",
+          "description": "与该时期相关的事件",
+          "types": [
+            "关联信息"
+          ],
+          "tail_ontology_id": "ontology/event"
+        }
+      ],
+      "children": []
+    },
+    {
+      "name": "关系",
+      "description": "可作为知识对象描述的关系类型或关系实例",
+      "alias": [
+        "Relation"
+      ],
+      "color": "#EC4899",
+      "display_shape": "rounded",
+      "properties": [
+        {
+          "name": "关系主体",
+          "datatype": "wikibase-item",
+          "description": "关系所涉及的主体知识对象",
+          "types": [
+            "关联信息"
+          ]
+        },
+        {
+          "name": "关系客体",
+          "datatype": "wikibase-item",
+          "description": "关系所涉及的目标知识对象",
+          "types": [
+            "关联信息"
+          ]
+        },
+        {
+          "name": "开始时间",
+          "datatype": "time",
+          "description": "关系开始的时间",
+          "types": [
+            "基础信息"
+          ]
+        },
+        {
+          "name": "结束时间",
+          "datatype": "time",
+          "description": "关系结束的时间",
+          "types": [
+            "基础信息"
+          ]
+        }
+      ],
+      "children": []
+    },
+    {
+      "name": "状态",
+      "description": "事物在某一阶段所处的状况或状态类型",
+      "alias": [
+        "State"
+      ],
+      "color": "#14B8A6",
+      "display_shape": "rounded",
+      "properties": [
+        {
+          "name": "适用对象",
+          "datatype": "wikibase-item",
+          "description": "处于该状态的知识对象",
+          "types": [
+            "关联信息"
+          ]
+        },
+        {
+          "name": "开始时间",
+          "datatype": "time",
+          "description": "状态开始的时间",
+          "types": [
+            "基础信息"
+          ]
+        },
+        {
+          "name": "结束时间",
+          "datatype": "time",
+          "description": "状态结束的时间",
+          "types": [
+            "基础信息"
+          ]
+        }
+      ],
+      "children": []
+    },
+    {
+      "name": "表达",
+      "description": "文章、作品、言论及其他信息表达内容",
+      "alias": [
+        "Expression"
+      ],
+      "color": "#6366F1",
+      "display_shape": "rounded",
+      "properties": [
+        {
+          "name": "作者",
+          "datatype": "wikibase-item",
+          "description": "表达内容的创作者",
+          "types": [
+            "关联信息"
+          ],
+          "tail_ontology_id": "ontology/person"
+        },
+        {
+          "name": "发布组织",
+          "datatype": "wikibase-item",
+          "description": "发布表达内容的组织",
+          "types": [
+            "关联信息"
+          ],
+          "tail_ontology_id": "ontology/organization"
+        },
+        {
+          "name": "创作日期",
+          "datatype": "time",
+          "description": "内容创作的日期",
+          "types": [
+            "基础信息"
+          ]
+        },
+        {
+          "name": "发布日期",
+          "datatype": "time",
+          "description": "内容发布的日期",
+          "types": [
+            "基础信息"
+          ]
+        },
+        {
+          "name": "语言",
+          "datatype": "string",
+          "description": "内容使用的语言",
+          "types": [
+            "基础信息"
+          ]
+        }
+      ],
+      "children": []
+    }
+  ]
+}

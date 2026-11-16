@@ -6,6 +6,86 @@
   menu.setAttribute('role', 'menu'); menu.setAttribute('aria-label', '知识操作'); menu.hidden = true;
   const summary = document.createElement('div'); summary.className = 'knowledge-context-summary';
   menu.append(summary);
+  const setTypeButton = document.createElement('button');
+  setTypeButton.type = 'button'; setTypeButton.className = 'knowledge-menu-item';
+  setTypeButton.setAttribute('role', 'menuitem');
+  setTypeButton.innerHTML = '<i class="fa-solid fa-sitemap" aria-hidden="true"></i><span>批量设置本体类型</span>';
+  menu.append(setTypeButton);
+  setTypeButton.dataset.submenu = 'true';
+  setTypeButton.setAttribute('aria-haspopup', 'menu');
+  setTypeButton.setAttribute('aria-expanded', 'false');
+  setTypeButton.insertAdjacentHTML('beforeend', '<span style="margin-left:auto">?</span>');
+  const submenu = document.createElement('div');
+  submenu.className = 'knowledge-context-menu'; submenu.hidden = true;
+  submenu.setAttribute('role', 'menu'); submenu.setAttribute('aria-label', '选择本体类型');
+  submenu.style.cssText = 'position:fixed;max-height:60vh;overflow:auto;min-width:210px;max-width:320px';
+  menu.append(submenu);
+  let loadingTypes = false, settingType = false;
+  const scopedUrl = path => {
+    const url = new URL(path, location.origin);
+    const db = window.getCurrentDbParam?.() || new URLSearchParams(location.search).get('db');
+    if (db) url.searchParams.set('db', db);
+    return url;
+  };
+  const request = async (url, options) => {
+    const response = await fetch(url, options);
+    if (!response.ok) throw new Error((await response.text()) || `HTTP ${response.status}`);
+    return response.json();
+  };
+  async function showTypes() {
+    if (setTypeButton.disabled || loadingTypes || settingType) return;
+    submenu.hidden = false; setTypeButton.setAttribute('aria-expanded', 'true');
+    const rect = setTypeButton.getBoundingClientRect();
+    submenu.style.left = `${Math.max(8, rect.right + 220 > innerWidth ? rect.left - 220 : rect.right)}px`;
+    submenu.style.top = `${Math.max(8, Math.min(rect.top, innerHeight - Math.min(innerHeight * .6, 400) - 8))}px`;
+    submenu.textContent = '正在加载本体…'; loadingTypes = true;
+    try {
+      const data = await request(scopedUrl('/api/kb/ontology/tree'));
+      submenu.replaceChildren();
+      const add = (items, depth = 0) => {
+        for (const item of items) {
+          const button = document.createElement('button');
+          button.type = 'button'; button.className = 'knowledge-menu-item'; button.setAttribute('role', 'menuitem');
+          button.textContent = `${'　'.repeat(depth)}${item.name}`;
+          button.addEventListener('click', async () => {
+            if (settingType) return;
+            const ids = [...(window.kbSelectedRowIds || [])];
+            if (!ids.length) return;
+            settingType = true; setTypeButton.disabled = true;
+            close();
+            const notice = document.createElement('div');
+            notice.className = 'knowledge-context-menu'; notice.setAttribute('role', 'status');
+            notice.style.cssText = 'position:fixed;bottom:20px;right:20px;top:auto;left:auto;max-width:420px;white-space:pre-wrap';
+            document.body.append(notice);
+            const failures = []; let completed = 0;
+            for (const id of ids) {
+              notice.textContent = `正在设置本体类型 ${++completed}/${ids.length}…`;
+              try {
+                await request(scopedUrl('/api/kb/nodes/update'), {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, type: item.id }),
+                });
+              } catch (error) { failures.push(`${id}?${error.message}`); }
+            }
+            notice.textContent = `设置完成：成功 ${ids.length - failures.length} 条，失败 ${failures.length} 条。`;
+            if (failures.length) notice.append(document.createTextNode('\n' + failures.join('\n')));
+            const dismiss = document.createElement('button'); dismiss.textContent = '关闭'; dismiss.addEventListener('click', () => notice.remove()); notice.append(dismiss);
+            if (!failures.length) setTimeout(() => notice.remove(), 6000);
+            settingType = false; setTypeButton.disabled = false;
+            try { await window.loadTablePage?.(); } catch (error) { console.error(error); }
+          });
+          submenu.append(button); add(item.children || [], depth + 1);
+        }
+      };
+      add(data.items || []);
+      if (!submenu.children.length) submenu.textContent = '当前应用暂无可用本体';
+    } catch (error) { submenu.textContent = `加载失败：${error.message}`; }
+    finally { loadingTypes = false; }
+  }
+  setTypeButton.addEventListener('click', showTypes);
+  setTypeButton.addEventListener('mouseenter', () => { if (submenu.hidden) void showTypes(); });
+  setTypeButton.addEventListener('keydown', async event => {
+    if (event.key === 'ArrowRight') { event.preventDefault(); await showTypes(); submenu.querySelector('button')?.focus(); }
+  });
   for (const [id, label, icon, danger] of [
     ['btnManualClassify', '人工快速分类', 'fa-tags'],
     ['btnJevClassify', 'JEV 自动分类', 'fa-wand-magic-sparkles'],
@@ -23,6 +103,7 @@
   let returnFocus = trigger;
   function close(restore = false) {
     if (menu.hidden) return;
+    submenu.hidden = true; setTypeButton.setAttribute('aria-expanded', 'false');
     menu.hidden = true; trigger.setAttribute('aria-expanded', 'false');
     if (restore) returnFocus?.focus({ preventScroll: true });
   }
@@ -30,6 +111,7 @@
     returnFocus = origin;
     window.ensureTableSelectedButtonsState?.();
     const count = window.kbSelectedRowIds?.size || 0;
+    setTypeButton.disabled = !count || settingType;
     summary.textContent = count ? `已选 ${count} 条知识` : '未选择知识 · 人工分类处理当前页';
     menu.hidden = false; trigger.setAttribute('aria-expanded', 'true');
     menu.style.left = `${Math.max(8, Math.min(x, innerWidth - menu.offsetWidth - 8))}px`;
@@ -57,7 +139,7 @@
     }, true);
   }
   // Close before the existing action handler can open a modal and move focus.
-  menu.addEventListener('click', (event) => { if (event.target.closest('button:not(:disabled)')) close(true); }, true);
+  menu.addEventListener('click', (event) => { if (event.target.closest('button:not(:disabled)') && !event.target.closest('[data-submenu]')) close(true); }, true);
   menu.addEventListener('keydown', (event) => {
     const items = [...menu.querySelectorAll('button:not(:disabled)')];
     const index = items.indexOf(document.activeElement);

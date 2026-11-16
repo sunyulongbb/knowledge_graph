@@ -52,6 +52,7 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
   return async (req: Request, url: URL, method: string): Promise<Response | null> => {
     if (!enterpriseKnowledgeEnabled() || (!enterpriseKnowledgePath(url.pathname) && !(method === 'GET' && schemaReadPaths.has(url.pathname))
       && !(method === 'POST' && ['/api/kb/ontologies/import', '/api/kb/properties/from-knowledge'].includes(url.pathname))
+      && !(method === 'DELETE' && ['/api/kb/ontologies/clear', '/api/kb/ontologies'].includes(url.pathname))
       && !(['POST', 'DELETE'].includes(method) && propertyWritePaths.has(url.pathname)))) return null;
     try {
       if (enterpriseMediaPath(url.pathname)) {
@@ -72,7 +73,6 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
         if (backendError) throw backendError;
         return new Response('Not Found', { status: 404 });
       }
-      if (url.pathname === '/api/kb/classes' && method === 'POST') return null;
       const project = deps.getProject(url.searchParams.get('db') || 'default');
       if (!project) throw new KnowledgeStoreError('应用不存在', 404);
       const database = project.name;
@@ -94,6 +94,74 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
         try { await deps.sync.afterWrite(database); return 'synced'; }
         catch (error) { console.error('Knowledge saved to ArangoDB; Elasticsearch synchronization will retry:', error); return 'pending'; }
       };
+      if (path === '/api/kb/classes' && method === 'POST') {
+        const current = loggedIn();
+        if (!deps.canCreate(current, project)) throw new KnowledgeStoreError('需要应用成员权限才能创建分类', 403);
+        const input = await req.json() as Doc;
+        const name = typeof input.name === 'string' ? input.name.trim() : '';
+        if (!name || name.length > 100) throw new KnowledgeStoreError('分类名称不能为空且最多 100 字');
+        const parent = input.parent_id || null;
+        await store.ensureImportSchema(database);
+        const result = await store.transaction(database, async trx => {
+          const seed = await store.importSchema(database, trx) || deps.getSchema?.(project);
+          const schema = structuredClone({ classes: seed?.classes || [], ontologies: seed?.ontologies || [], properties: seed?.properties || [], ontology_properties: seed?.ontology_properties || [] });
+          if (parent && !schema.classes.some(row => row.id === parent)) throw new KnowledgeStoreError('父分类不存在');
+          const existing = schema.classes.find(row => (row.parent_id || null) === parent && row.name === name);
+          if (existing) return existing;
+          const row = { id: `class/${crypto.randomUUID()}`, name, parent_id: parent, project_id: Number(project.id), description: '', sort_order: schema.classes.length + 1 };
+          schema.classes.push(row);
+          const { body } = await store.client.database(database, '/_api/document/knowledge_schema?overwriteMode=replace', {
+            method: 'POST', headers: { 'x-arango-trx-id': trx }, body: JSON.stringify([{ _key: 'definitions', ...schema }]),
+          });
+          if (!Array.isArray(body) || body.some(item => item.error)) throw new Error('分类保存失败');
+          return row;
+        }, ['knowledge_schema']);
+        return Response.json({ ...result, parent: result.parent_id, label: result.name });
+      }
+      if (path === '/api/kb/ontologies' && method === 'DELETE') {
+        const current = loggedIn();
+        if (!deps.canCreate(current, project)) throw new KnowledgeStoreError('需要应用成员权限才能删除本体', 403);
+        const id = (url.searchParams.get('id') || '').trim();
+        if (!id) throw new KnowledgeStoreError('缺少本体 ID');
+        await store.ensureImportSchema(database);
+        const deprecated = await store.transaction(database, async trx => {
+          const seed = await store.importSchema(database, trx) || deps.getSchema?.(project);
+          const schema = structuredClone({ classes: seed?.classes || [], ontologies: seed?.ontologies || [],
+            properties: seed?.properties || [], ontology_properties: seed?.ontology_properties || [] });
+          if (!schema.ontologies.some(row => row.id === id)) throw new KnowledgeStoreError('本体不存在', 404);
+          const ids = new Set([id]);
+          let added = true;
+          while (added) {
+            added = false;
+            for (const row of schema.ontologies) {
+              if (ids.has(row.parent_id) && !ids.has(row.id)) { ids.add(row.id); added = true; }
+            }
+          }
+          for (const row of schema.ontologies) if (ids.has(row.id)) row.status = 'deprecated';
+          const { body } = await store.client.database(database, '/_api/document/knowledge_schema?overwriteMode=replace', {
+            method: 'POST', headers: { 'x-arango-trx-id': trx },
+            body: JSON.stringify([{ _key: 'definitions', ...schema }]),
+          });
+          if (!Array.isArray(body) || body.some(row => row.error)) throw new Error('ArangoDB 本体删除失败');
+          return ids.size;
+        }, ['knowledge_schema']);
+        return Response.json({ ok: true, deprecated });
+      }
+      if (path === '/api/kb/ontologies/clear' && method === 'DELETE') {
+        const current = loggedIn();
+        if (!deps.canCreate(current, project)) throw new KnowledgeStoreError('需要应用成员权限才能清空本体', 403);
+        await store.ensureImportSchema(database);
+        await store.transaction(database, async trx => {
+          const saved = await store.importSchema(database, trx);
+          const seed = saved || deps.getSchema?.(project);
+          const { body } = await store.client.database(database, '/_api/document/knowledge_schema?overwriteMode=replace', {
+            method: 'POST', headers: { 'x-arango-trx-id': trx },
+            body: JSON.stringify([{ _key: 'definitions', classes: seed?.classes || [], ontologies: [], properties: [], ontology_properties: [] }]),
+          });
+          if (!Array.isArray(body) || body.some(row => row.error)) throw new Error('ArangoDB 本体清空失败');
+        }, ['knowledge_schema']);
+        return Response.json({ ok: true });
+      }
       if (['POST', 'DELETE'].includes(method) && propertyWritePaths.has(path)) {
         const current = loggedIn();
         if (!deps.canCreate(current, project)) throw new KnowledgeStoreError('需要应用成员权限才能管理属性', 403);
@@ -196,10 +264,21 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
         const result = arangoNodeResponse(node, user);
         if (!schema) return result;
         const classes = schema.classes.filter(cls => result.categoryIds.includes(cls.id));
+        const ancestors = new Set<string>();
+        const classById = new Map(schema.classes.map(cls => [cls.id, cls]));
+        for (const cls of classes) {
+          const visited = new Set<string>([cls.id]);
+          let parent = cls.parent_id;
+          while (parent && !visited.has(parent)) {
+            visited.add(parent); ancestors.add(parent);
+            parent = classById.get(parent)?.parent_id;
+          }
+        }
+        const displayClasses = classes.filter(cls => !ancestors.has(cls.id));
         const ontology = schema.ontologies.find(type => type.id === node.type || type.name === node.type);
         return {
-          ...result, classes, categoryLabels: classes.map(cls => cls.name),
-          classLabel: classes[0]?.name || result.classLabel, color: ontology?.color || classes[0]?.color || null,
+          ...result, classes, categoryLabels: displayClasses.map(cls => cls.name),
+          classLabel: displayClasses.map(cls => cls.name).join('、') || null, color: ontology?.color || classes[0]?.color || null,
           ontology: ontology || null, typeLabel: ontology?.name || result.typeLabel
         };
       };
@@ -398,6 +477,27 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
         if (path === '/api/kb/nodes' && method === 'POST') {
           const current = loggedIn();
           if (!deps.canCreate(current, project)) throw new KnowledgeStoreError('需要应用成员权限才能创建知识', 403);
+          if (body.mapCategoryToOntology === true) {
+            const categoryIds = body.categoryIds;
+            if (!Array.isArray(categoryIds) || categoryIds.some((id: unknown) => typeof id !== 'string')) throw new KnowledgeStoreError('分类列表无效');
+            delete body.type;
+            body.typeId = null;
+            if (categoryIds.length) {
+              const definitions = await store.importSchema(database) || deps.getSchema?.(project);
+              const category = definitions?.classes.find(row => row.id === categoryIds[0]);
+              if (!category) throw new KnowledgeStoreError('所选分类不存在');
+              let ontology = definitions?.ontologies.find(row => row.status !== 'deprecated' &&
+                (row.id === category.ontology_id || String(row.name).trim().toLowerCase() === String(category.name).trim().toLowerCase()));
+              if (!ontology) {
+                await importEnterpriseOntologies(store, database, Number(project.id), {
+                  version: 1, ontologies: [{ name: category.name }],
+                }, () => deps.getSchema?.(project));
+                ontology = (await store.importSchema(database))?.ontologies.find(row => row.status !== 'deprecated' && String(row.name).trim().toLowerCase() === String(category.name).trim().toLowerCase());
+              }
+              if (!ontology) throw new KnowledgeStoreError('分类对应的本体创建失败');
+              body.typeId = ontology.id;
+            }
+          }
           const prepared = await prepareEntityImageValues(body, Number(project.id));
           const node = await store.create(database, Number(project.id), prepared, current);
           return Response.json({ ok: true, node: resultNode(node), sync: await synchronizeWrite() });

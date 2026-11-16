@@ -290,6 +290,16 @@
 }
 
 /* Soft category pills, removable selections and a visible expansion path. */
+#quickKnowledgeDialog .quick-category-add { border:0; background:transparent; color:var(--accent); font:inherit; font-size:12px; padding:5px 8px; border-radius:6px; cursor:pointer; }
+#quickKnowledgeDialog .quick-category-add:hover { background:var(--surface-1); }
+#quickKnowledgeDialog .quick-category-inline { padding:8px 10px; border:1px solid var(--border); border-radius:10px; background:var(--surface-0); }
+#quickKnowledgeDialog .quick-category-inline[hidden] { display:none; }
+#quickKnowledgeDialog .quick-category-inline small { display:block; color:var(--muted); font-size:11px; margin-bottom:6px; }
+#quickKnowledgeDialog .quick-category-inline > div { display:flex; align-items:center; gap:6px; }
+#quickKnowledgeDialog .quick-category-inline input { flex:1; min-width:0; width:0; border:0; outline:none; background:transparent; color:var(--fg); font:inherit; font-size:12px; padding:6px 0; }
+#quickKnowledgeDialog .quick-category-inline:focus-within { border-color:var(--accent); }
+#quickKnowledgeDialog .quick-category-inline button { flex-shrink:0; border:0; border-radius:6px; padding:5px 9px; background:var(--surface-1); color:var(--accent); font:inherit; font-size:12px; cursor:pointer; }
+#quickKnowledgeDialog .quick-category-inline button:disabled { opacity:.5; cursor:wait; }
 #quickKnowledgeDialog .quick-category-sidebar { gap:6px; padding-block:12px; }
 #quickKnowledgeDialog .quick-category-sidebar > .quick-category-summary { display:flex; flex-wrap:wrap; gap:5px; padding-right:38px; }
 #quickKnowledgeDialog .quick-category-chip { border:0; border-radius:5px; padding:4px 8px; background:color-mix(in srgb,var(--accent) 10%,var(--surface-0)); color:var(--accent); font:inherit; font-size:12px; cursor:pointer; }

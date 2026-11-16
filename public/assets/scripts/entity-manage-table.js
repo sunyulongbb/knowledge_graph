@@ -111,6 +111,73 @@
     }
   };
 
+  // Hold the left mouse button briefly before dragging to select visible rows.
+  const selectionHost = byId('entityManageRows');
+  if (selectionHost) {
+    let gesture = null;
+    let suppressClick = false;
+    const finish = () => {
+      if (!gesture) return;
+      clearTimeout(gesture.timer);
+      if (gesture.active) {
+        suppressClick = true;
+        setTimeout(() => { suppressClick = false; }, 0);
+        syncGlobalSelection([...selected][0] || '');
+        updateCount();
+      }
+      gesture.box?.remove();
+      document.body.style.userSelect = gesture.userSelect;
+      gesture = null;
+    };
+    selectionHost.addEventListener('pointerdown', event => {
+      if (event.button !== 0 || event.pointerType !== 'mouse' || event.target.closest('button,input,select,textarea,a,video,[contenteditable="true"],.dhx_grid-header')) return;
+      finish();
+      const state = { x: event.clientX, y: event.clientY, active: false,
+        base: new Set(event.ctrlKey || event.metaKey ? selected : []), userSelect: document.body.style.userSelect };
+      gesture = state;
+      state.timer = setTimeout(() => {
+        if (gesture !== state) return;
+        state.active = true;
+        document.body.style.userSelect = 'none';
+        window.getSelection()?.removeAllRanges();
+        state.box = document.createElement('div');
+        state.box.style.cssText = 'position:fixed;pointer-events:none;z-index:10000;border:1px solid #3b82f6;background:rgba(59,130,246,.15)';
+        document.body.append(state.box);
+      }, 300);
+    }, true);
+    document.addEventListener('pointermove', event => {
+      const state = gesture;
+      if (!state) return;
+      if (!state.active) {
+        if (Math.hypot(event.clientX - state.x, event.clientY - state.y) > 6) finish();
+        return;
+      }
+      event.preventDefault();
+      const left = Math.min(state.x, event.clientX), top = Math.min(state.y, event.clientY);
+      const right = Math.max(state.x, event.clientX), bottom = Math.max(state.y, event.clientY);
+      Object.assign(state.box.style, { left: `${left}px`, top: `${top}px`, width: `${right-left}px`, height: `${bottom-top}px` });
+      const bounds = selectionHost.getBoundingClientRect();
+      selected.clear();
+      for (const id of state.base) selected.add(id);
+      for (const row of selectionHost.querySelectorAll('.dhx_grid-row[data-dhx-id], [data-id]')) {
+        const rect = row.getBoundingClientRect();
+        if (rect.width && rect.height && rect.bottom > Math.max(top, bounds.top) && rect.top < Math.min(bottom, bounds.bottom)
+          && rect.right > Math.max(left, bounds.left) && rect.left < Math.min(right, bounds.right)) {
+          selected.add(normalizeId({ id: row.dataset.dhxId || row.dataset.id }));
+        }
+      }
+      entityGrid?.setSelectedRows(selected);
+      updateCount();
+    }, { capture: true, passive: false });
+    document.addEventListener('pointerup', finish, true);
+    document.addEventListener('pointercancel', finish, true);
+    window.addEventListener('blur', finish);
+    selectionHost.addEventListener('click', event => {
+      if (suppressClick) { event.preventDefault(); event.stopImmediatePropagation(); }
+    }, true);
+    selectionHost.addEventListener('dragstart', event => { if (gesture) event.preventDefault(); }, true);
+  }
+
   function filteredNodes() {
     const keyword = String(byId("entityManageSearch")?.value || "")
       .trim()

@@ -11,6 +11,7 @@ import { enterpriseKnowledgeEnabled } from './knowledge-mode.ts';
 import { EnterpriseKnowledgeStore, ArangoElasticsearchSync } from './enterprise-knowledge.ts';
 import { ElasticsearchClient, ensureApplicationDatabase } from './arangodb.ts';
 import { createEnterpriseKnowledgeHandler } from './routes/enterprise-knowledge.ts';
+import { importEnterpriseOntologies } from './enterprise-ontology-import.ts';
 import { applicationPermissions } from './application-access.ts';
 import { networkInterfaces } from "node:os";
 import { switchDatabase, adminDb, hashPassword, getProjectByIdentifier } from "./db.ts";
@@ -73,6 +74,7 @@ const enterpriseBackup = enterpriseStore ? EnterpriseSqliteBackup.open(enterpris
 enterpriseBackup?.start(async () => (adminDb.query('SELECT name FROM projects ORDER BY id').all() as { name: string }[]).map(project => project.name));
 const handleApplications = createApplicationHandler(adminDb, getCurrentUser, {
   provisionKnowledge: enterpriseStore ? name => ensureApplicationDatabase(enterpriseStore.client, name) : undefined,
+  initializeOntology: enterpriseStore ? (name, projectId, input) => importEnterpriseOntologies(enterpriseStore, name, projectId, input) : undefined,
 });
 const enterpriseSync = enterpriseStore && process.env.ELASTICSEARCH_URL?.trim()
   ? new ArangoElasticsearchSync(enterpriseStore, new ElasticsearchClient({ url: process.env.ELASTICSEARCH_URL.trim().replace(/\/+$/, '') }))

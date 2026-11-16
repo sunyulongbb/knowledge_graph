@@ -600,6 +600,14 @@
       const response = await fetch('/api/kb/list_projects');
       if (!response.ok) throw new Error('加载失败，请关闭后重试');
       const data = await response.json();
+      const saveProject = async (project, changes) => {
+        const response = await fetch('/api/kb/update_project', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...project, name: getProjectDbId(project), title: project.title || project.name, ...changes }) });
+        if (!response.ok) throw new Error(await response.text());
+        Object.assign(project, changes);
+        window.dispatchEvent(new CustomEvent('kb-application-updated', { detail: project }));
+        void window.loadProjectsToSidebar?.();
+      };
       for (const project of data.projects || []) {
         const db = getProjectDbId(project);
         if (!db) continue;
@@ -620,9 +628,110 @@
         }
         button.appendChild(tile);
         button.onclick = () => { dialog.close(); if (db !== getUrlParam('db')) setUrlParam('db', db); };
-        grid.appendChild(button);
+        const card = document.createElement('div');
+        card.style.cssText = 'position:relative;display:flex;flex-direction:column;align-items:center;gap:14px';
+        card.append(button);
+        const label = document.createElement('button'); label.type = 'button'; label.textContent = name;
+        label.style.cssText = 'background:none;border:0;color:inherit;max-width:150px;overflow-wrap:anywhere;cursor:pointer';
+        label.disabled = !project.editSettings;
+        label.title = project.editSettings ? '点击重命名' : name;
+        label.onclick = () => {
+          const input = document.createElement('input'); input.value = project.title || name; input.maxLength = 100;
+          input.style.cssText = 'width:140px;padding:6px'; label.replaceWith(input); input.focus(); input.select();
+          let done = false;
+          const finish = async (cancel = false) => {
+            if (done) return; done = true;
+            const title = input.value.trim(); input.disabled = true;
+            try {
+              if (!cancel && title && title !== project.title) await saveProject(project, { title });
+              label.textContent = project.title || name; status.textContent = '';
+            } catch (error) { status.textContent = `重命名失败：${error.message}`; }
+            input.replaceWith(label);
+          };
+          input.onblur = () => void finish();
+          input.onkeydown = event => {
+            if (event.key === 'Enter' || event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); void finish(event.key === 'Escape'); }
+          };
+        };
+        card.append(label);
+        if (project.editSettings) {
+          const upload = document.createElement('button'); upload.type = 'button'; upload.textContent = '↑';
+          upload.title = '上传 Logo'; upload.setAttribute('aria-label', `上传 ${name} 的 Logo`);
+          upload.style.cssText = 'position:absolute;right:-10px;top:-10px;border:1px solid #777;border-radius:50%;width:30px;height:30px;background:#30303d;color:white;cursor:pointer';
+          const file = document.createElement('input'); file.type = 'file'; file.accept = 'image/*'; file.hidden = true;
+          upload.onclick = () => file.click();
+          file.onchange = async () => {
+            const image = file.files?.[0]; if (!image) return;
+            if (!image.type.startsWith('image/') || image.size > 20 * 1024 * 1024) { status.textContent = '请选择不超过 20MB 的图片'; return; }
+            upload.disabled = true; status.textContent = '正在上传 Logo…';
+            try {
+              const form = new FormData(); form.append('file', image);
+              const response = await fetch(`/api/kb/upload-image?db=${encodeURIComponent(db)}`, { method: 'POST', body: form });
+              if (!response.ok) throw new Error(await response.text());
+              const result = await response.json(); if (!result.url) throw new Error('未返回图片地址');
+              await saveProject(project, { image: result.url });
+              tile.querySelector('img')?.remove();
+              const img = document.createElement('img'); img.src = result.url; img.alt = ''; tile.append(img);
+              status.textContent = 'Logo 已更新';
+            } catch (error) { status.textContent = `上传失败：${error.message}`; }
+            finally { upload.disabled = false; file.value = ''; }
+          };
+          card.append(upload, file);
+        }
+        if (project.deleteApplication) {
+          const remove = document.createElement('button');
+          remove.type = 'button'; remove.textContent = '移除应用';
+          remove.setAttribute('aria-label', `移除 ${name}`);
+          remove.style.cssText = 'background:none;border:0;color:#ff8585;font-size:12px;cursor:pointer';
+          remove.onclick = async () => {
+            const title = project.title || project.name || db;
+            const confirmation = window.prompt(`移除将删除应用“${title}”及其数据，无法恢复。请输入应用名称确认：`);
+            if (confirmation === null) return;
+            if (confirmation.trim() !== title && confirmation.trim() !== db) {
+              status.textContent = '名称不匹配，未移除应用'; return;
+            }
+            remove.disabled = true; status.textContent = '正在移除应用…';
+            try {
+              const response = await fetch('/api/kb/delete_project', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: db, confirmName: confirmation.trim() }),
+              });
+              const result = await response.json();
+              if (!response.ok || result.success === false) throw new Error(result.error || result.message || '移除失败');
+              if (db === getUrlParam('db')) {
+                const next = new URL(location.href); next.searchParams.delete('db'); next.searchParams.delete('node');
+                next.hash = 'view=applications'; location.href = next.href; return;
+              }
+              void window.loadProjectsToSidebar?.();
+              await showAppLogoSwitcher();
+            } catch (error) { status.textContent = `移除失败：${error.message}`; }
+            finally { remove.disabled = false; }
+          };
+          card.append(remove);
+        }
+        grid.appendChild(card);
       }
       status.textContent = grid.children.length ? '' : '暂无可切换的应用';
+      const create = document.createElement('button');
+      create.type = 'button'; create.className = 'app-logo-switcher-item';
+      create.title = '创建应用'; create.setAttribute('aria-label', '创建应用');
+      const plus = document.createElement('span'); plus.className = 'app-logo-switcher-tile';
+      plus.textContent = '＋'; plus.style.fontSize = '36px';
+      const label = document.createElement('span'); label.textContent = '创建应用';
+      create.append(plus, label);
+      create.onclick = async () => {
+        create.disabled = true; status.textContent = '正在创建应用…';
+        try {
+          const response = await fetch('/api/applications', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: '新应用' }) });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || '创建失败');
+          window.dispatchEvent(new CustomEvent('kb-application-updated', { detail: result.project }));
+          void window.loadProjectsToSidebar?.();
+          await showAppLogoSwitcher();
+        } catch (error) { status.textContent = `创建失败：${error.message}`; }
+        finally { create.disabled = false; }
+      };
+      grid.append(create);
     } catch (error) { status.textContent = error.message; }
   }
   window.showAppLogoSwitcher = showAppLogoSwitcher;
