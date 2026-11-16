@@ -1928,7 +1928,7 @@
     });
     byId("appSearchImage").checked = params.get("search_image") === "1";
     byId("appSearchAdvanced").open =
-      [
+      window.matchMedia("(min-width: 681px)").matches || [
         "type",
         "property_id",
         "property_value",
@@ -1979,10 +1979,16 @@
     page = 1;
     search();
   });
+  byId("appSearchOrder").addEventListener("change", () => {
+    page = 1;
+    search();
+  });
   byId("appSearchReset").addEventListener("click", () => {
+    const query = byId("appSearchQuery").value;
     Object.entries(fields).forEach(([key, id]) => {
       byId(id).value = searchDefault(key);
     });
+    byId("appSearchQuery").value = query;
     byId("appSearchImage").checked = false;
     page = 1;
     search();

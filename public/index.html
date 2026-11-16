@@ -80,7 +80,7 @@
   <link rel="stylesheet" href="/assets/styles/home-discovery.css?v=20261113-create-hover" />
   <link rel="stylesheet" href="/assets/styles/shorts-page.css?v=20261111-borderless-cards" />
   <link rel="stylesheet" href="/assets/styles/knowledge-card-tags.css?v=20261111-1" />
-  <link rel="stylesheet" href="/assets/styles/search-trends.css?v=20261111-1" />
+  <link rel="stylesheet" href="/assets/styles/search-trends.css?v=20261116-search-polish" />
   <link rel="stylesheet" href="/assets/styles/user-profile.css?v=20261111-layout" />
   <link rel="stylesheet" href="/assets/styles/knowledge-relation-page.css?v=20261111-collapse-detail" />
   <link rel="stylesheet" href="/assets/styles/knowledge-big-bang.css?v=20261111-keyboard-borderless" />
@@ -4892,10 +4892,9 @@
         </div>
       </section>
       <section id="applicationSearchPanel" class="panel application-content-page" style="display:none">
-        <div class="app-page-heading"><h1>搜索</h1><span class="muted">搜索当前应用中你有权访问的知识</span></div>
         <form id="appSearchForm" class="app-search-form">
           <div class="app-search-query"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input id="appSearchQuery" type="search" class="kb-input" placeholder="搜索名称、别名、描述或实体编号" aria-label="搜索关键词"><button class="btn primary" type="submit">搜索</button></div>
-          <details id="appSearchAdvanced" class="app-search-advanced"><summary><span class="app-search-advanced-title"><i class="fa-solid fa-sliders" aria-hidden="true"></i> 高级搜索</span><span class="app-search-advanced-caption">精细筛选，找到更相关的知识</span><i class="fa-solid fa-chevron-down app-search-advanced-arrow" aria-hidden="true"></i></summary><div class="app-search-fields">
+          <details id="appSearchAdvanced" class="app-search-advanced" open><summary><span class="app-search-advanced-title"><i class="fa-solid fa-sliders" aria-hidden="true"></i> 高级搜索</span><span class="app-search-advanced-caption">精细筛选，找到更相关的知识</span><i class="fa-solid fa-chevron-down app-search-advanced-arrow" aria-hidden="true"></i></summary><div class="app-search-fields">
             <fieldset class="app-search-field-group"><legend>匹配设置</legend><div class="app-search-field-grid">
             <label>匹配方式<select id="appSearchMatchMode" class="kb-select"><option value="fuzzy">模糊匹配</option><option value="phrase">完整短语</option><option value="all">包含全部词语</option><option value="any">包含任意词语</option></select><small class="muted">支持拼写容错和名称前缀，优先展示精确匹配</small></label>
             <label>检索范围<select id="appSearchScope" class="kb-select"><option value="all">名称、别名和描述</option><option value="name">仅名称和别名</option></select></label>
@@ -4909,11 +4908,11 @@
             <fieldset class="app-search-field-group"><legend>时间与展示</legend><div class="app-search-field-grid">
             <label>更新开始日期<input id="appSearchFrom" class="kb-input" type="date"></label>
             <label>更新结束日期<input id="appSearchTo" class="kb-input" type="date"></label>
-            <label class="app-search-field-wide">结果排序<select id="appSearchOrder" class="kb-select"><option value="relevance">相关度优先</option><option value="modified_desc">最新更新优先</option><option value="created_desc">最新创建优先</option></select></label>
+
             </div></fieldset>
           </div><div class="app-search-filter-actions"><label class="app-search-checkbox"><input id="appSearchImage" type="checkbox"><span>仅显示有图片的知识</span></label><div><button id="appSearchReset" type="button" class="btn">重置条件</button><button type="submit" class="btn primary"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> 应用筛选</button></div></div></details>
         </form>
-        <div class="app-search-layout"><div class="app-search-main">        <div id="appSearchResults" class="app-search-results"></div>
+        <div class="app-search-layout"><div class="app-search-main"><div class="app-search-toolbar"><h2>知识结果</h2><label class="app-search-sort">结果排序<select id="appSearchOrder" form="appSearchForm" class="kb-select"><option value="relevance">相关度优先</option><option value="modified_desc">最新更新优先</option><option value="created_desc">最新创建优先</option></select></label></div>        <div id="appSearchResults" class="app-search-results"></div>
         <div id="appSearchPaging" class="app-search-paging" hidden><button id="appSearchPrev" type="button" class="btn">上一页</button><span id="appSearchPageLabel" class="muted"></span><button id="appSearchNext" type="button" class="btn">下一页</button></div>
 </div><aside id="appSearchTrends" class="app-search-trends" aria-label="热搜"></aside></div>
       </section>
@@ -12027,7 +12026,7 @@
               }
 
               edgePropertyList.innerHTML = filtered.map(p => `
-                  <div class="edge-property-item" data-id="${p.id}" data-name="${p.label || p.name || ''}" 
+                  <div class="edge-property-item" data-id="${p.id}" data-name="${p.label || p.name || ''}"
                        style="padding: 10px 12px; cursor: pointer; border-bottom: 1px solid var(--border); transition: background 0.15s;"
                        onmouseover="this.style.background='var(--hover, #f3f4f6)'"
                        onmouseout="this.style.background=''">
@@ -17738,7 +17737,7 @@
   <script src="/assets/scripts/home-waterfall.js?v=20261111-compact-columns"></script>
   <script src="/assets/scripts/home-sidebar.js?v=20261112-logo-click-double"></script>
   <script src="/assets/scripts/news-timeline-layout.js?v=20261112-packed-cards"></script>
-  <script src="/assets/scripts/application-pages.js?v=20261116-utf8-fix"></script>
+  <script src="/assets/scripts/application-pages.js?v=20261116-results-2"></script>
   <script src="/assets/scripts/knowledge-learning.js?v=20261111-copy-cleanup"></script>
   <script src="/assets/scripts/knowledge-relation-page.js?v=20261111-close-collapses"></script>
   <script src="/assets/scripts/knowledge-big-bang.js?v=20261112-view-counts"></script>
