@@ -27,6 +27,16 @@
   function readPins() { try { const value = JSON.parse(localStorage.getItem(pinKey()) || '[]'); return Array.isArray(value) ? value.filter(item => item && typeof item.id === 'string' && typeof item.name === 'string') : []; } catch { return []; } }
   const pinNav = document.createElement('nav'); pinNav.className = 'home-discovery-nav home-pinned-types'; pinNav.setAttribute('aria-label', '\u5df2\u52a0\u5165\u7684\u7c7b\u578b');
   document.querySelector('.home-discovery-footer')?.before(pinNav);
+  let draggedPin = null, suppressPinClickUntil = 0;
+  const pinStatus=document.createElement('span');pinStatus.className='pin-sort-status';pinStatus.setAttribute('role','status');pinStatus.setAttribute('aria-live','polite');pinNav.after(pinStatus);
+  function movePin(id, targetId, after=false) {
+    const pins=readPins();const index=pins.findIndex(item=>item.id===id);
+    if(index<0 || id===targetId)return;
+    const [item]=pins.splice(index,1);const target=pins.findIndex(item=>item.id===targetId);
+    if(target<0)return;pins.splice(target+(after?1:0),0,item);
+    try { localStorage.setItem(pinKey(),JSON.stringify(pins));renderPins();pinStatus.textContent='\u987a\u5e8f\u5df2\u4fdd\u5b58'; }
+    catch { pinStatus.textContent='\u987a\u5e8f\u4fdd\u5b58\u5931\u8d25'; }
+  }
   function renderPins() {
     pinNav.replaceChildren();
     for (const item of readPins()) {
@@ -34,7 +44,36 @@
       const icon = document.createElement('i'); icon.className = 'fa-solid fa-tag'; icon.setAttribute('aria-hidden','true');
       const label = document.createElement('span'); label.textContent = item.name; button.append(icon, label);
       if (window.kbViewMode === 'joined_type' && selected === item.id) button.setAttribute('aria-current','page');
+      button.draggable=true;button.dataset.pinId=item.id;
+      button.title=item.name+' \u00b7 \u62d6\u52a8\u6392\u5e8f';
+      button.setAttribute('aria-keyshortcuts','Alt+ArrowUp Alt+ArrowDown');
+      button.addEventListener('dragstart',event=>{
+        draggedPin={id:item.id,key:pinKey()};event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',item.id);button.classList.add('is-dragging');
+      });
+      button.addEventListener('dragover',event=>{
+        if(!draggedPin || draggedPin.key!==pinKey() || draggedPin.id===item.id)return;
+        event.preventDefault();event.dataTransfer.dropEffect='move';
+        const after=event.clientY>button.getBoundingClientRect().top+button.offsetHeight/2;
+        button.classList.toggle('pin-drop-after',after);button.classList.toggle('pin-drop-before',!after);
+      });
+      button.addEventListener('dragleave',()=>button.classList.remove('pin-drop-before','pin-drop-after'));
+      button.addEventListener('drop',event=>{
+        if(!draggedPin || draggedPin.key!==pinKey())return;
+        event.preventDefault();event.stopPropagation();suppressPinClickUntil=Date.now()+300;
+        movePin(draggedPin.id,item.id,event.clientY>button.getBoundingClientRect().top+button.offsetHeight/2);draggedPin=null;
+      });
+      button.addEventListener('dragend',()=>{
+        draggedPin=null;suppressPinClickUntil=Date.now()+300;
+        pinNav.querySelectorAll('button').forEach(node=>node.classList.remove('is-dragging','pin-drop-before','pin-drop-after'));
+      });
+      button.addEventListener('keydown',event=>{
+        if(!event.altKey || !['ArrowUp','ArrowDown'].includes(event.key))return;
+        event.preventDefault();const pins=readPins(),index=pins.findIndex(pin=>pin.id===item.id),down=event.key==='ArrowDown',target=pins[index+(down?1:-1)];
+        if(!target)return;movePin(item.id,target.id,down);
+        Array.from(pinNav.querySelectorAll('button')).find(node=>node.dataset.pinId===item.id)?.focus();
+      });
       button.onclick = () => {
+        if(Date.now()<suppressPinClickUntil)return;
         const url = window.projectViewUrl('joined_type'); url.searchParams.set('type_id', item.id); url.searchParams.delete('explore_category'); url.searchParams.delete('explore_tag'); url.searchParams.delete('explore_page');
         history.pushState(null, '', url); window.setViewMode('joined_type');
       };

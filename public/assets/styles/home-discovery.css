@@ -280,3 +280,10 @@ html body .home-settings-menu .home-workspace-chevron { display:block; }
 .recommendation-filter-bar > .recommendation-filter-next { position:absolute; right:0; top:50%; transform:translateY(-50%); z-index:1; background:var(--enterprise-canvas,var(--surface-1)); box-shadow:-6px 0 8px var(--enterprise-canvas,var(--surface-1)); }
 .recommendation-filter-bar > .recommendation-filter-prev { right:auto; left:0; box-shadow:6px 0 8px var(--enterprise-canvas,var(--surface-1)); }
 .recommendation-filter-bar > .recommendation-filter-next[hidden] { display:none; }
+
+.home-pinned-types button[draggable="true"] { position:relative; cursor:grab; }
+.home-pinned-types button.is-dragging { opacity:.4; cursor:grabbing; }
+.home-pinned-types button.pin-drop-before::before,.home-pinned-types button.pin-drop-after::after { content:''; position:absolute; left:8px; right:8px; height:2px; border-radius:2px; background:var(--accent); }
+.home-pinned-types button.pin-drop-before::before { top:0; }
+.home-pinned-types button.pin-drop-after::after { bottom:0; }
+.pin-sort-status { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }

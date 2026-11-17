@@ -7446,6 +7446,10 @@
         }
       };
       if (kbViewModeInitialized && previousMode === normalized) {
+        if (normalized === 'joined_type' || normalized === 'app_explore') {
+          window.loadKnowledgeExplore?.();
+          return;
+        }
         if (normalized === 'knowledge_graph') { window.loadKnowledgeRelation?.(targetNodeIdRaw); if (!skipRouteUpdate) syncHashForView(normalized, {nodeId:targetNodeIdRaw,includeNode:Boolean(targetNodeIdRaw),replace:replaceRoute}); return; }
         if (normalized === 'big_bang') { window.loadKnowledgeBigBang?.(); return; }
         if (normalized === 'learning') { window.loadKnowledgeLearning?.(); return; }
@@ -14603,6 +14607,8 @@
 
       document.addEventListener('paste', (ev) => {
         if (!ev || ev.defaultPrevented) return;
+        const detail = document.getElementById('detailPanel');
+        if (detail?.getClientRects().length && !detail.closest('[inert]')) return;
         const selectedId = getSelectedNodeId();
         if (!selectedId) return;
         if (shouldIgnoreGlobalPaste(ev.target)) return;
@@ -17735,7 +17741,7 @@
   <script src="/assets/scripts/wiki-clipboard.js?v=20261105-html-paste"></script>
   <script src="/assets/scripts/knowledge-views.js?v=20261112-1"></script>
   <script src="/assets/scripts/account-history.js?v=20261112-view-counts"></script>
-  <script src="/assets/scripts/detail-panel.js?v=20261116-matched-thumbnails"></script>
+  <script src="/assets/scripts/detail-panel.js?v=20261117-detail-paste-capture"></script>
   <script src="/assets/scripts/graph-classification.js?v=20261012"></script>
   <script src="/assets/scripts/graph-details.js?v=20261012-classification"></script>
   <script src="/assets/scripts/knowledge-interactions.js?v=20260904-1"></script>

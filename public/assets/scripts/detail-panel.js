@@ -2345,7 +2345,8 @@
                   const nextCovers = [...coverList];
                   while (nextCovers.length < videoUrls.length) nextCovers.push('');
                   nextCovers.length = videoUrls.length; nextCovers.push(await coverPromise);
-                  const response = await fetch(scoped('/api/kb/nodes/update'), {
+                  if (pasteController.signal.aborted) return;
+            const response = await fetch(scoped('/api/kb/nodes/update'), {
                     method:'POST',headers:{'Content-Type':'application/json'},
                     body:JSON.stringify({id:String(doc?._id || doc?.id || fullId).replace(/^entity\//,''), videos:[...videoUrls,uploaded.url], covers:nextCovers}),
                   });
@@ -2734,13 +2735,11 @@
         const pasteStatus = document.createElement('p');
         pasteStatus.className = 'detail-image-paste-status'; pasteStatus.setAttribute('role','status');
         if (!hasImageMedia) pasteStatus.textContent = '\u6682\u65e0\u56fe\u7247\uff0c\u53ef\u76f4\u63a5\u7c98\u8d34\u56fe\u7247\u4e0a\u4f20';
-        (hasImageMedia ? document.getElementById('wikiTopMedia') : document.getElementById('detailInner'))?.append(pasteStatus);
+        document.getElementById('detailInner')?.prepend(pasteStatus);
+        const pasteDatabase = window.getCurrentDbParam?.() || 'default';
         document.addEventListener('paste', async event => {
-          const stage = document.getElementById('detailTopMediaStage');
           const panel = document.getElementById('detailPanel');
           if (!panel || !panel.getClientRects().length || panel.closest('[inert]')) return;
-          // Empty image sections are hidden; allow pasting from the visible detail page.
-          if (hasImageMedia && (!stage || stage.dataset.activeMedia !== 'image' || !stage.getClientRects().length || stage.closest('[inert]'))) return;
           if (event.defaultPrevented || document.querySelector('dialog[open]') || event.target?.closest?.('input,textarea,[contenteditable]:not([contenteditable="false"]),.CodeMirror')) return;
           if (String(window.kbActiveDetailNodeId || '').replace(/^entity\//,'') !== String(doc?._id || doc?.id || fullId).replace(/^entity\//,'')) return;
           const files = Array.from(event.clipboardData?.items || []).filter(item => item.type.startsWith('image/')).map(item => item.getAsFile()).filter(Boolean);
@@ -2751,7 +2750,8 @@
           uploadingImages = true; pasteStatus.textContent = '正在添加图片…';
           const scoped = path => {
             const url = new URL(path, location.origin);
-            return typeof window.appendCurrentDbParam === 'function' ? window.appendCurrentDbParam(url) || url : url;
+            url.searchParams.set('db', pasteDatabase);
+            return url;
           };
           try {
             const urls = [];
@@ -2769,7 +2769,7 @@
             if (!pasteController.signal.aborted && String(window.kbActiveDetailNodeId || '').replace(/^entity\//,'') === String(doc?._id || doc?.id || fullId).replace(/^entity\//,'')) await showNodeDetailInline(routeId || fullId, {preserveSidebarState});
           } catch (error) { pasteStatus.textContent = '添加失败：' + (error.message || error); }
           finally { uploadingImages = false; }
-        }, {signal:imageTabPasteController.signal});
+        }, {capture:true, signal:imageTabPasteController.signal});
       }
       if (wikiTopDescEl) {
         const stage = document.getElementById("detailTopMediaStage");
