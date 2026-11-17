@@ -20,18 +20,41 @@ test('invalid cyclic parent data does not hide categories or recurse forever', (
 function setup(fetcher: Function, search='?db=demo') {
   let click: Function;
   const listeners: Record<string, Function> = {};
-  const panel: any = {setAttribute() {},innerHTML:'',scrollTop:0,addEventListener: (type: string, handler: Function) => { listeners[type] = handler; if(type === 'click') click = handler; }};
+  const element = (tagName='div'): any => {
+    const handlers:Record<string,Function>={};
+    const children:any[]=[];
+    return {
+      tagName,children,dataset:{},style:{},hidden:false,innerHTML:'',textContent:'',scrollTop:0,
+      classList:{add(){},remove(){},toggle(){},contains(){return false;}},
+      setAttribute(){},append(...items:any[]){children.push(...items);},appendChild(item:any){children.push(item);},
+      before(){},after(){},replaceChildren(...items:any[]){children.splice(0,children.length,...items);},
+      addEventListener(type:string,handler:Function){handlers[type]=handler;},
+      querySelectorAll(selector:string){return selector==='button'?children.filter(item=>item.tagName==='button'):[];},
+      get childElementCount(){return children.length;},
+      get handlers(){return handlers;},
+    };
+  };
+  const panel: any = element('section');
+  panel.addEventListener = (type: string, handler: Function) => { listeners[type] = handler; if(type === 'click') click = handler; };
   const views: any[] = [], requests: URL[] = [];
+  const requestOptions: any[] = [], localValues = new Map<string,string>();
+  const localStorage = {getItem:(key:string)=>localValues.get(key)||null,setItem:(key:string,value:string)=>localValues.set(key,value),removeItem:(key:string)=>localValues.delete(key)};
   const location:any={origin:'http://localhost',search,href:'http://localhost/kb'+search+'#app_explore'};
   const windowEvents: Record<string, Function> = {};
-  const window: any = {kbViewMode:'app_home',history:{state:{},replaceState:(_a:any,_b:any,url:URL)=>{location.href=url.href;location.search=url.search;}},addEventListener:(type: string, fn: Function)=>{ windowEvents[type] = fn; },setViewMode:(...args: any[])=>views.push(args)};
-  const document = {createElement:()=>panel,getElementById:()=>({append() {}})};
-  new Function('window','document','location','fetch',source)(window,document,location,async (url: URL)=>{
+  const window: any = {kbViewMode:'app_home',authUser:null,getCurrentDbParam:()=>new URLSearchParams(location.search).get('db')||'default',history:{state:{},replaceState:(_a:any,_b:any,url:URL)=>{location.href=url.href;location.search=url.search;}},addEventListener:(type: string, fn: Function)=>{ windowEvents[type] = fn; },setViewMode:(...args: any[])=>views.push(args)};
+  let firstElement=true;
+  const document = {
+    createElement:(tag:string)=>{if(firstElement){firstElement=false;return panel;}return element(tag);},
+    getElementById:()=>element(),
+    querySelector:()=>element(),
+  };
+  new Function('window','document','location','fetch','localStorage',source)(window,document,location,async (url: URL, options:any)=>{
     requests.push(url);
-    return {ok:true,json:async()=>fetcher(url)};
-  });
+    requestOptions.push(options);
+    return {ok:true,json:async()=>fetcher(url,options)};
+  },localStorage);
   window.kbViewMode = 'app_explore';
-  return {window,panel,views,requests,location,emit:(type:string)=>windowEvents[type]?.(),scroll:()=>listeners.scroll!(),click:(selector: string,dataset: any)=>click!({target:{closest:(query: string)=>query===selector?{dataset}:null}})};
+  return {window,panel,views,requests,requestOptions,localValues,location,emit:(type:string)=>windowEvents[type]?.(),scroll:()=>listeners.scroll!(),click:(selector: string,dataset: any)=>click!({target:{closest:(query: string)=>query===selector?{dataset}:null}})};
 }
 const rows = [{id:'science',name:'科学',instance_count:5},{id:'space',name:'天文学',parent_id:'science',instance_count:2,description:'认识宇宙'}];
 const tick = () => new Promise(resolve=>setTimeout(resolve,0));
@@ -49,6 +72,40 @@ test('explore renders real category cards and opens scoped knowledge without the
   h.click('[data-explore-node]',{exploreNode:'Q1'});
   expect(h.views).toEqual([['shorts',{targetNodeId:'Q1'}]]);
   expect(h.window.kbShortsLaunch.category).toBe('天文学');
+});
+
+test('category short-video entry launches recommendations scoped to the selected category', async () => {
+  const h = setup((url: URL) => url.pathname.endsWith('/classes') ? rows : { nodes: [], total: 0 });
+  await h.window.loadKnowledgeExplore();
+  h.click('[data-explore-category]', { exploreCategory: 'space' }); await tick();
+  expect(h.panel.innerHTML).toContain('data-explore-short-video');
+  h.click('[data-explore-short-video]', {});
+  expect(h.views).toEqual([['shorts']]);
+  expect(h.window.kbShortsLaunch).toEqual({ classId: 'space', category: '天文学' });
+});
+
+test('joined types sync with the account and remain scoped to the selected application',async()=>{
+  const serverTypes:string[]=[];
+  const h=setup((url:URL,options:any)=>{
+    if(url.pathname.endsWith('/classes'))return rows;
+    if(url.pathname==='/api/account/joined-types'){
+      if(options.method==='PUT'){
+        serverTypes.splice(0,serverTypes.length,...JSON.parse(options.body).typeIds);
+      }
+      return {types:serverTypes.map(id=>({id,name:rows.find(row=>row.id===id)?.name||id}))};
+    }
+    return {nodes:[],total:0};
+  });
+  h.window.authUser={id:23};
+  await h.window.loadKnowledgeExplore();await tick();
+  h.click('[data-explore-category]',{exploreCategory:'space'});await tick();
+  h.click('[data-explore-join]',{});await tick();await tick();
+  expect(serverTypes).toEqual(['space']);
+  const savedRequest=h.requests.findIndex(url=>url.pathname==='/api/account/joined-types'&&h.requestOptions[h.requests.indexOf(url)]?.method==='PUT');
+  expect(h.requests[savedRequest]?.searchParams.get('db')).toBe('demo');
+  expect(JSON.parse(h.localValues.get('kb:pinned-types:23:demo')||'[]')).toEqual([{id:'space',name:'天文学'}]);
+  h.click('[data-explore-join]',{});await tick();
+  expect(serverTypes).toEqual([]);
 });
 
 test('an older category request cannot replace a newer selection', async () => {

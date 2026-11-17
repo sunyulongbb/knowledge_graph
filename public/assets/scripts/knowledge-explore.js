@@ -29,13 +29,67 @@
   document.querySelector('.home-discovery-footer')?.before(pinNav);
   let draggedPin = null, suppressPinClickUntil = 0;
   const pinStatus=document.createElement('span');pinStatus.className='pin-sort-status';pinStatus.setAttribute('role','status');pinStatus.setAttribute('aria-live','polite');pinNav.after(pinStatus);
-  function movePin(id, targetId, after=false) {
+  let pinsLoadedKey = '', pinSaveQueue = Promise.resolve();
+  function writePins(pins) {
+    try { localStorage.setItem(pinKey(),JSON.stringify(pins)); }
+    catch { throw Error('类型列表无法保存在此浏览器'); }
+  }
+  async function joinedTypesRequest(method='GET', typeIds) {
+    const url = new URL('/api/account/joined-types', location.origin);
+    const db = window.getCurrentDbParam();
+    if (db) url.searchParams.set('db',db);
+    const response = await fetch(url,{method,credentials:'include',headers:typeIds?{'Content-Type':'application/json'}:undefined,body:typeIds?JSON.stringify({typeIds}):undefined});
+    const data = await response.json().catch(()=>({}));
+    if (!response.ok) throw Error(data.error || `类型同步失败（${response.status}）`);
+    return data.types;
+  }
+  async function loadJoinedTypes() {
+    const key=pinKey();
+    if (!window.authUser?.id || pinsLoadedKey===key) return;
+    try {
+      let types=await joinedTypesRequest();
+      if(key!==pinKey())return;
+      const cached=readPins();
+      if(!types.length && cached.length) types=await joinedTypesRequest('PUT',cached.map(item=>item.id));
+      if(key!==pinKey())return;
+      writePins(types);
+      pinsLoadedKey=key;
+      render();
+    } catch(error) {
+      if(key!==pinKey())return;
+      pinStatus.textContent=`类型同步失败，保留本机列表：${error.message}`;
+      renderPins();
+    }
+  }
+  function savePins(pins, successMessage) {
+    const key=pinKey();
+    if(!window.authUser?.id) {
+      try { writePins(pins); render(); pinStatus.textContent='已保存在此浏览器，登录后可同步到其他设备'; }
+      catch(error) { pinStatus.textContent=error.message; }
+      return;
+    }
+    pinStatus.textContent='正在保存已加入的类型…';
+    pinSaveQueue=pinSaveQueue.catch(()=>{}).then(async()=>{
+      if(key!==pinKey())return;
+      await loadJoinedTypes();
+      if(key!==pinKey())return;
+      const types=await joinedTypesRequest('PUT',pins.map(item=>item.id));
+      if(key!==pinKey())return;
+      writePins(types);
+      pinsLoadedKey=key;
+      render();
+      pinStatus.textContent=successMessage;
+    }).catch(error=>{
+      if(key===pinKey())pinStatus.textContent=`保存失败：${error.message}`;
+    });
+  }
+  async function movePin(id, targetId, after=false) {
+    await loadJoinedTypes();
     const pins=readPins();const index=pins.findIndex(item=>item.id===id);
     if(index<0 || id===targetId)return;
     const [item]=pins.splice(index,1);const target=pins.findIndex(item=>item.id===targetId);
     if(target<0)return;pins.splice(target+(after?1:0),0,item);
-    try { localStorage.setItem(pinKey(),JSON.stringify(pins));renderPins();pinStatus.textContent='\u987a\u5e8f\u5df2\u4fdd\u5b58'; }
-    catch { pinStatus.textContent='\u987a\u5e8f\u4fdd\u5b58\u5931\u8d25'; }
+    savePins(pins,'\u987a\u5e8f\u5df2\u4fdd\u5b58');
   }
   function renderPins() {
     pinNav.replaceChildren();
@@ -69,7 +123,7 @@
       button.addEventListener('keydown',event=>{
         if(!event.altKey || !['ArrowUp','ArrowDown'].includes(event.key))return;
         event.preventDefault();const pins=readPins(),index=pins.findIndex(pin=>pin.id===item.id),down=event.key==='ArrowDown',target=pins[index+(down?1:-1)];
-        if(!target)return;movePin(item.id,target.id,down);
+        if(!target)return;void movePin(item.id,target.id,down);
         Array.from(pinNav.querySelectorAll('button')).find(node=>node.dataset.pinId===item.id)?.focus();
       });
       button.onclick = () => {
@@ -173,7 +227,7 @@
       for (const root of tree.roots) content += group(name(root), childrenOf(root.id).length ? childrenOf(root.id) : [root], root.id, root.id);
     }
     renderPins();
-    panel.innerHTML = `<div class="explore-content"><header class="explore-heading" ${!selected && !selectedTag ? 'hidden' : ''}>${tree.byId.has(selected) ? `<h1>${escape(name(tree.byId.get(selected)))}</h1><div class="explore-type-actions"><button type="button" class="btn" data-explore-join>${readPins().some(item => item.id === selected) ? '\u5df2\u52a0\u5165' : 'Join'}</button><button type="button" class="btn primary" data-explore-create><i class="fa-solid fa-plus" aria-hidden="true"></i> \u65b0\u589e\u77e5\u8bc6</button></div>` : ''}<button class="btn" type="button" data-explore-big-bang title="Big Bang \u77e5\u8bc6\u5b87\u5b99" aria-label="Big Bang \u77e5\u8bc6\u5b87\u5b99"><i class="fa-solid fa-atom" aria-hidden="true"></i></button></header>
+    panel.innerHTML = `<div class="explore-content"><header class="explore-heading" ${!selected && !selectedTag ? 'hidden' : ''}>${tree.byId.has(selected) ? `<h1>${escape(name(tree.byId.get(selected)))}</h1><div class="explore-type-actions"><button type="button" class="btn" data-explore-join>${readPins().some(item => item.id === selected) ? '\u5df2\u52a0\u5165' : 'Join'}</button><button type="button" class="btn primary" data-explore-create><i class="fa-solid fa-plus" aria-hidden="true"></i> \u65b0\u589e\u77e5\u8bc6</button></div><button class="btn" type="button" data-explore-short-video title="\u5728\u77ed\u89c6\u9891\u4e2d\u63a2\u7d22\u6b64\u5206\u7c7b" aria-label="\u5728\u77ed\u89c6\u9891\u4e2d\u63a2\u7d22\u6b64\u5206\u7c7b"><i class="fa-solid fa-clapperboard" aria-hidden="true"></i></button>` : ''}<button class="btn" type="button" data-explore-big-bang title="Big Bang \u77e5\u8bc6\u5b87\u5b99" aria-label="Big Bang \u77e5\u8bc6\u5b87\u5b99"><i class="fa-solid fa-atom" aria-hidden="true"></i></button></header>
       <nav class="explore-topic-tabs" ${!selected && !selectedTag ? 'hidden' : ''} aria-label="一级分类"><button type="button" data-explore-category="" ${!selected ? 'aria-current="page"' : ''}>全部</button>${tree.roots.map(row => `<button type="button" data-explore-category="${escape(row.id)}" ${row.id === activeRoot ? 'aria-current="page"' : ''}>${escape(name(row))}</button>`).join('')}</nav>${content}</div>`;
     panel.scrollTop = scrollTop;
   }
@@ -228,6 +282,7 @@
   window.loadKnowledgeExplore = async function ({ force = false } = {}) {
     const params = new URLSearchParams(location.search);
     const database = window.getCurrentDbParam() || 'default';
+    void loadJoinedTypes();
     const requestedTag = (params.get('explore_tag') || '').trim();
     const requestedCategory = requestedTag ? '' : params.get(window.kbViewMode === 'joined_type' ? 'type_id' : 'explore_category') || '';
     const requestedPage = Number(params.get('explore_page') || 1);
@@ -268,13 +323,23 @@
   };
   panel.addEventListener('click', event => {
     if (event.target.closest('[data-explore-join]') && tree.byId.has(selected)) {
-      const pins = readPins(); const existing = pins.some(item => item.id === selected);
-      try { localStorage.setItem(pinKey(), JSON.stringify(existing ? pins.filter(item => item.id !== selected) : [...pins, {id:selected, name:name(tree.byId.get(selected))}])); render(); }
-      catch { event.target.textContent = '\u4fdd\u5b58\u5931\u8d25'; }
+      const typeId=selected, typeName=name(tree.byId.get(selected));
+      void (async()=>{
+        await loadJoinedTypes();
+        if(!tree.byId.has(typeId))return;
+        const pins = readPins(), existing = pins.some(item => item.id === typeId);
+        const next = existing ? pins.filter(item => item.id !== typeId) : [...pins, {id:typeId, name:typeName}];
+        savePins(next,existing?'已从已加入列表移除':'已加入类型');
+      })();
       return;
     }
     if (event.target.closest('[data-explore-create]') && tree.byId.has(selected)) { window.openQuickKnowledge?.({categoryId:selected}); return; }
 
+    if (event.target.closest('[data-explore-short-video]') && tree.byId.has(selected)) {
+      savedScrollTop = panel.scrollTop; clearTimeout(scrollTimer);
+      window.kbShortsLaunch = { classId: selected, category: name(tree.byId.get(selected)) };
+      window.setViewMode('shorts'); return;
+    }
     if(event.target.closest('[data-explore-big-bang]')) { savedScrollTop=panel.scrollTop; clearTimeout(scrollTimer); window.setViewMode('big_bang'); return; }
     const category = event.target.closest('[data-explore-category]');
     if (category) { selectCategory(category.dataset.exploreCategory); return; }
@@ -295,7 +360,9 @@
   });
   renderPins();
   window.addEventListener('kb-auth-change', () => {
+    pinsLoadedKey='';
     renderPins();
+    void loadJoinedTypes();
     treeReady = false; loadedDatabase = null;
     treeVersion++; itemsVersion++; tree = buildExploreTree([]); items = []; selected = '';
     if (['app_explore','joined_type'].includes(window.kbViewMode)) void window.loadKnowledgeExplore();

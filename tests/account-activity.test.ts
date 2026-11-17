@@ -9,6 +9,8 @@ function setup(){
   db.run("INSERT INTO projects VALUES(1,'a','应用一',2),(2,'b','应用二',2)");
   db.run('CREATE TABLE application_members(project_id INTEGER,user_id INTEGER)');
   db.run('CREATE TABLE nodes(id TEXT PRIMARY KEY,project_id INTEGER,name TEXT)');
+  db.run('CREATE TABLE classes(id TEXT PRIMARY KEY,name TEXT,project_id INTEGER)');
+  db.run("INSERT INTO classes VALUES('space','天文学',1),('shared','共享分类',NULL),('other-app','其他应用类型',2)");
   db.run('CREATE TABLE knowledge_favorites(user_id INTEGER,knowledge_id TEXT,created_at TEXT)');
   const docs=new Map(['a','b'].map(name=>[name,{id:'Q1',sqlite_id:'Q1',name:`知识${name}`,visibility:'public',owner_user_id:2,project_id:name==='a'?1:2,interactions:{likes:[1]}}]));
   let user:any={id:1,username:'one'};
@@ -19,7 +21,12 @@ function setup(){
     const response=(await service.handle(new Request(url,{method}),url))!;
     return{status:response.status,data:await response.json()};
   }
-  return{db,service,docs,call,user,setUser:(next:any)=>{user=next;}};
+  async function joinedTypes(method='GET',typeIds?:string[],project='a'){
+    const url=new URL(`http://localhost/api/account/joined-types?db=${project}`);
+    const response=(await service.handle(new Request(url,{method,...(typeIds?{headers:{'Content-Type':'application/json'},body:JSON.stringify({typeIds})}:{})}),url))!;
+    return{status:response.status,data:await response.json()};
+  }
+  return{db,service,docs,call,joinedTypes,user,setUser:(next:any)=>{user=next;}};
 }
 test('history is per user/application, deduplicated, and only accepts readable knowledge',async()=>{
   const h=setup();try{
@@ -34,14 +41,40 @@ test('history is per user/application, deduplicated, and only accepts readable k
 });
 test('favorites persist and cancel independently for identical entity IDs in different apps',async()=>{
   const h=setup();try{
-    await h.call('favorites');expect((await h.call('favorites','GET')).data.favorited).toBe(true);
-    expect((await h.call('favorites','GET','b')).data.favorited).toBe(false);
+    h.db.run("INSERT INTO nodes VALUES('Q1',1,'知识a')");
+    const added=await h.call('favorites');expect(added.data.favoriteCount).toBe(1);
+    expect((await h.call('favorites','GET')).data.favorited).toBe(true);
+    expect((await h.call('favorites','GET','b')).data).toMatchObject({favorited:false,favoriteCount:0});
+    h.db.run("INSERT INTO account_knowledge_activity VALUES(2,1,'Q1','favorite','2026-01-01')");
+    h.db.run("INSERT INTO knowledge_favorites VALUES(2,'entity/Q1','2026-01-01')");
+    expect((await h.call('favorites','GET')).data.favoriteCount).toBe(2);
     const favorites=await h.service.records(h.user,'favorites');expect(favorites[0]?.name).toBe('知识a');expect(favorites[0]?.project_slug).toBe('a');
+    expect((await h.call('favorites','DELETE')).data.favoriteCount).toBe(1);
+    await h.call('favorites');
     h.docs.get('a')!.visibility='private';
     expect((await h.service.records(h.user,'favorites'))[0]?.id).toBeNull();
     expect(JSON.stringify(await h.service.records(h.user,'favorites'))).not.toContain('知识a');
     expect((await h.call('favorites','DELETE')).data.favorited).toBe(false);
     expect(await h.service.records(h.user,'favorites')).toEqual([]);
+  }finally{h.db.close();}
+});
+test('joined knowledge types persist per account and application in the chosen order',async()=>{
+  const h=setup();try{
+    expect((await h.joinedTypes()).data.types).toEqual([]);
+    expect((await h.joinedTypes('PUT',['space','shared','space'])).data.types).toEqual([
+      {id:'space',name:'天文学'},{id:'shared',name:'共享分类'},
+    ]);
+    expect((await h.joinedTypes()).data.types).toEqual([
+      {id:'space',name:'天文学'},{id:'shared',name:'共享分类'},
+    ]);
+    expect((await h.joinedTypes('GET',undefined,'b')).data.types).toEqual([]);
+    h.setUser({id:2,username:'two'});
+    expect((await h.joinedTypes()).data.types).toEqual([]);
+    h.setUser(h.user);
+    expect((await h.joinedTypes('PUT',['other-app'])).status).toBe(400);
+    expect((await h.joinedTypes()).data.types).toEqual([
+      {id:'space',name:'天文学'},{id:'shared',name:'共享分类'},
+    ]);
   }finally{h.db.close();}
 });
 test('enterprise profile reads authoritative Arango likes and honors cancellation and access changes',async()=>{

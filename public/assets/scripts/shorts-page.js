@@ -7,18 +7,28 @@
   panel.classList.add('shorts-knowledge-page');
   document.getElementById('applicationHomePanel').append(panel);
   let version = 0, activeId = '', controller, initialLoad = true;
+  let activeCategoryId = '', activeCategoryName = '';
   const normalize = value => String(value || '').replace(/^entity\//, '');
+  function writeShortsRoute(nodeId = '') {
+    const params = new URLSearchParams({ view: 'shorts' });
+    if (nodeId) params.set('node', nodeId);
+    if (activeCategoryId) {
+      params.set('class_id', activeCategoryId);
+      if (activeCategoryName) params.set('category', activeCategoryName);
+    }
+    const url = new URL(location.href);
+    url.hash = params;
+    window.history.replaceState(window.history.state, '', url);
+  }
   function openNode(id, nodes, category) {
     activeId = normalize(id);
     host.replaceChildren();
     window.homeKnowledgeMediaViewer.open(activeId, {
-      nodes, category: category || '知识发现',
+      nodes, category: category || activeCategoryName || '知识发现',
       page: { host, onNodeChange(nodeId) {
         if (window.kbViewMode !== 'shorts') return;
         activeId = nodeId;
-        const url = new URL(location.href);
-        url.hash = new URLSearchParams({ view: 'shorts', node: nodeId });
-        window.history.replaceState(window.history.state, '', url);
+        writeShortsRoute(nodeId);
       } },
     });
   }
@@ -41,9 +51,20 @@
     if (id && id === activeId && window.homeKnowledgeMediaViewer.isPage()) return;
     const token = ++version;
     controller?.abort(); controller = new AbortController();
+    const route = new URLSearchParams(location.hash.replace(/^#/, ''));
     const launch = window.kbShortsLaunch || {};
+    if (window.kbShortsLaunch) {
+      activeCategoryId = String(launch.classId || '').trim();
+      activeCategoryName = String(launch.category || '').trim();
+    } else {
+      activeCategoryId = String(route.get('class_id') || '').trim();
+      activeCategoryName = String(route.get('category') || '').trim();
+    }
     window.kbShortsLaunch = null;
     const nodes = Array.isArray(launch.nodes) ? launch.nodes : [];
+    if (activeCategoryId) setTimeout(() => {
+      if (token === version && window.kbViewMode === 'shorts') writeShortsRoute(id || activeId);
+    }, 0);
     if (id) openNode(id, nodes, launch.category);
     else {
       if (window.homeKnowledgeMediaViewer.isPage()) window.homeKnowledgeMediaViewer.close();
@@ -54,6 +75,7 @@
       const url = new URL('/api/kb/recommendations', location.origin);
       const db = window.getCurrentDbParam();
       if (db) url.searchParams.set('db', db);
+      if (activeCategoryId) url.searchParams.set('class_id', activeCategoryId);
       url.searchParams.set('limit', '100'); url.searchParams.set('surface', 'shorts'); url.searchParams.set('recommendation_seed', crypto.randomUUID());
       const response = await fetch(url, { signal: controller.signal });
       if (!response.ok) throw new Error(`知识加载失败（${response.status}）`);
@@ -61,7 +83,10 @@
       if (token !== version || window.kbViewMode !== 'shorts') return;
       const feed = data.nodes || [];
       if (id) window.homeKnowledgeMediaViewer.updateFeed(feed);
-      else if (feed.length) openNode(normalize(feed[0].id || feed[0]._id), feed);
+      else if (feed.length) {
+        openNode(normalize(feed[0].id || feed[0]._id), feed);
+        if (activeCategoryId) writeShortsRoute(activeId);
+      }
       else host.textContent = '暂无可浏览的知识';
     } catch (error) {
       if (token !== version || error.name === 'AbortError') return;

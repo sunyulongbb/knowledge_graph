@@ -6,11 +6,19 @@
   };
   function collectMedia(node) {
     const result = [], seen = new Set();
+    let data = node.data;
+    if (typeof data === 'string') { try { data = JSON.parse(data); } catch { data = {}; } }
+    data = data && typeof data === 'object' ? data : {};
+    const covers = list(node.covers).length ? list(node.covers) : list(data.covers).length ? list(data.covers) : list(node.cover || data.cover);
     for (const [kind, values] of [['image', [...list(node.images), ...list(node._attr_images), node.image]], ['video', [...list(node.videos), ...list(node._attr_videos), node.video]]]) {
+      let videoIndex = 0;
       for (const value of values) {
         const url = typeof value === 'string' ? value : value?.url || value?.src || '';
+        const cover = kind === 'video' ? covers[videoIndex++] : '';
+        const poster = typeof cover === 'string' ? cover : cover?.url || cover?.src || '';
         if (!/^(https?:\/\/|\/(?!\/))/i.test(url) || seen.has(kind + url)) continue;
-        seen.add(kind + url); result.push({ kind, url });
+        seen.add(kind + url);
+        result.push({ kind, url, ...(kind === 'video' && /^(https?:\/\/|\/(?!\/)|data:image\/)/i.test(poster) ? { poster } : {}) });
       }
     }
     return result;
@@ -49,7 +57,8 @@
   function updateVideoControls() {
     const video = refs.stage.querySelector('video');
     const playing = !!video && !video.paused;
-    const image = refs.stage.querySelector('img');
+    const imageCandidate = refs.stage.querySelector('img');
+    const image = imageCandidate?.dataset.videoBackdrop ? null : imageCandidate;
     const detailsHidden = playing || (!!image && !imageDetailsVisible);
     refs.main.classList.toggle('is-video-playing', playing);
     refs.main.classList.toggle('is-details-hidden', detailsHidden);
@@ -102,12 +111,37 @@
     const item = media[mediaIndex];
     refs.counter.textContent = media.length ? `${mediaIndex + 1} / ${media.length}` : '图文知识';
     refs.left.hidden = refs.right.hidden = media.length < 2;
+    const showIndicators = !!page && page.mode !== 'relation' && media.length > 1;
+    refs.mediaIndicators.hidden = !showIndicators;
+    refs.mediaIndicators.replaceChildren();
+    if (showIndicators) {
+      media.forEach((_, index) => {
+        const indicator = document.createElement('button');
+        indicator.type = 'button';
+        indicator.className = 'home-reel-media-indicator';
+        indicator.setAttribute('aria-label', `第 ${index + 1} 个媒体`);
+        indicator.setAttribute('aria-current', String(index === mediaIndex));
+        indicator.classList.toggle('is-active', index === mediaIndex);
+        indicator.onclick = () => moveMedia(index - mediaIndex);
+        refs.mediaIndicators.append(indicator);
+      });
+    }
     if (!item) {
       const empty = document.createElement('div'); empty.className = 'home-reel-empty';
       const title = document.createElement('strong'); title.textContent = node.name || node.label || '知识';
       const description = document.createElement('p'); description.textContent = node.description || node.desc_zh || '这条知识暂无图片或视频';
       empty.append(title, description); refs.stage.append(empty);
     } else {
+      if (item.kind === 'video' && item.poster) {
+        const backdrop = document.createElement('img');
+        backdrop.src = item.poster;
+        backdrop.alt = '';
+        backdrop.draggable = false;
+        backdrop.dataset.videoBackdrop = 'true';
+        backdrop.setAttribute('aria-hidden', 'true');
+        backdrop.className = 'home-reel-video-backdrop';
+        refs.stage.append(backdrop);
+      }
       const element = document.createElement(item.kind === 'video' ? 'video' : 'img');
       element.src = item.url;
       if (item.kind === 'video') {
@@ -159,6 +193,25 @@
     refs.likeCount.textContent = String(data.likeCount || 0);
     refs.commentCount.textContent = String(data.commentCount || 0);
     refs.shareCount.textContent = String(data.shareCount || 0);
+    setFavoriteCount(data.favoriteCount);
+  }
+  function setFavoriteCount(value) {
+    refs.favoriteCount.textContent = String(Number(value) || 0);
+  }
+  function setCreatorAvatar(data) {
+    const avatar = String(data.creator_avatar || '').trim();
+    const label = String(data.creator_username || data.name || data.label || '').trim();
+    refs.creatorAvatar.replaceChildren();
+    refs.creatorAvatar.setAttribute('aria-label', label ? `${label}的头像` : '知识上传者头像');
+    if (/^(https?:\/\/|\/(?!\/)|data:image\/)/i.test(avatar)) {
+      const image = document.createElement('img');
+      image.src = avatar;
+      image.alt = '';
+      image.addEventListener('error', () => image.remove(), { once: true });
+      refs.creatorAvatar.append(image);
+    } else {
+      refs.creatorAvatar.textContent = avatar || Array.from(label.replace(/^@/, ''))[0] || '知';
+    }
   }
   async function loadInteractions(token) {
     try {
@@ -170,19 +223,20 @@
   }
   function renderNode(data) {
     favorited=false;
-    if(refs.favorite){refs.favorite.setAttribute('aria-pressed','false');refs.favoriteLabel.textContent='收藏';}
+    if(refs.favorite){refs.favorite.setAttribute('aria-pressed','false');refs.favoriteLabel.textContent='收藏';setFavoriteCount(0);}
     if(refs.viewCount){refs.viewCount.dataset.knowledgeViews=idOf(data);refs.viewCount.dataset.db=scope||'default';refs.viewCount.textContent=String(Number(data.viewCount)||0);}
     window.recordKnowledgeView?.(idOf(data),scope);
     if(window.authUser) {
       const token=version;
       api('/api/account/knowledge/favorites',{id:idOf(data)}).then(state=>{
-        if(token!==version)return;favorited=Boolean(state.favorited);refs.favorite.setAttribute('aria-pressed',String(favorited));refs.favoriteLabel.textContent=favorited?'已收藏':'收藏';
+        if(token!==version)return;favorited=Boolean(state.favorited);refs.favorite.setAttribute('aria-pressed',String(favorited));refs.favoriteLabel.textContent=favorited?'已收藏':'收藏';setFavoriteCount(state.favoriteCount);
       }).catch(()=>{});
     }
     node = data; media = collectMedia(node); mediaIndex = 0; overlayMode = ''; refs.overlay.hidden = true;
     refs.title.textContent = node.name || node.label || idOf(node);
     refs.description.textContent = node.description || node.desc_zh || '';
     refs.identity.textContent = category + (node.creator_username ? ' · @' + node.creator_username : '');
+    setCreatorAvatar(node);
     comments = []; counts({}); refs.commentInput.value = '';
     renderMedia();
     if (!embedded) void loadInteractions(version);
@@ -299,7 +353,7 @@
     if (busy || actionBusy || !node) return;
     if(kind==='favorite'){
       const token=version;actionBusy=true;
-      try{const state=await api('/api/account/knowledge/favorites',{id:idOf(node)},{method:favorited?'DELETE':'POST'});if(token===version){favorited=Boolean(state.favorited);refs.favorite.setAttribute('aria-pressed',String(favorited));refs.favoriteLabel.textContent=favorited?'已收藏':'收藏';message(favorited?'已添加到个人收藏':'已取消收藏');}}
+      try{const state=await api('/api/account/knowledge/favorites',{id:idOf(node)},{method:favorited?'DELETE':'POST'});if(token===version){favorited=Boolean(state.favorited);refs.favorite.setAttribute('aria-pressed',String(favorited));refs.favoriteLabel.textContent=favorited?'已收藏':'收藏';setFavoriteCount(state.favoriteCount);message(favorited?'已添加到个人收藏':'已取消收藏');}}
       catch(error){if(token===version)message(error.message);}finally{actionBusy=false;}
       return;
     }
@@ -337,13 +391,16 @@
     if (endedEmbedded) document.body.append(dialog);
     endedEmbedded?.onClose?.();
     const endedPage = page; page = null;
+    if (refs?.rail && refs.rail.parentNode !== dialog) dialog.append(refs.rail);
     dialog?.classList.toggle('is-shorts-page', false);
+    dialog?.classList.toggle('is-shorts-feed', false);
     if (endedPage) document.body.append(dialog);
   }
   function create() {
     dialog = document.createElement('dialog'); dialog.id = 'homeMediaViewer'; dialog.setAttribute('aria-label', '知识媒体详情');
     dialog.innerHTML = `<div class="home-reel-viewport" data-ref="viewport"><div class="home-reel-main" data-ref="main">
       <div class="home-reel-stage" data-ref="stage"></div>
+      <div class="home-reel-media-indicators" data-ref="mediaIndicators" role="group" aria-label="媒体轮播"></div>
       <div class="home-reel-top"><span class="home-reel-brand">知识发现</span><div><button data-ref="fullscreen" aria-label="全屏">⛶</button><button data-ref="close" aria-label="关闭知识详情">×</button></div></div>
       <button class="home-reel-media-nav is-left" data-ref="left" aria-label="上一个媒体">‹</button><button class="home-reel-media-nav is-right" data-ref="right" aria-label="下一个媒体">›</button>
       <div class="home-reel-caption" data-ref="caption"><span data-ref="identity"></span><h2 data-ref="title"></h2><p data-ref="description"></p><button data-action="info" class="home-reel-more">查看完整信息</button></div>
@@ -352,8 +409,11 @@
       <div class="home-reel-playback" data-ref="playback" hidden><button data-ref="play" aria-label="播放">▶</button><button data-ref="mute" aria-label="关闭声音">关闭声音</button><span data-ref="time" class="home-reel-time">0:00 / 0:00</span></div>
       <input data-ref="seek" class="home-reel-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="视频进度">
       <section class="home-reel-overlay" data-ref="overlay" hidden><header><strong data-ref="overlayTitle"></strong><button data-ref="overlayClose" aria-label="关闭信息">×</button></header><p data-ref="overlayText"></p><div class="home-reel-pages"><button data-ref="overlayPrev">上一页</button><span data-ref="overlayCount"></span><button data-ref="overlayNext">下一页</button></div><form data-ref="commentForm"><textarea data-ref="commentInput" maxlength="2000" rows="2" placeholder="写下评论…" aria-label="评论内容"></textarea><button type="submit">发送评论</button></form></section>
-    </div></div><aside class="home-reel-rail"><button data-ref="relationGraph" class="home-reel-graph" aria-label="\u67e5\u770b\u77e5\u8bc6\u5173\u8054\u5173\u7cfb\u56fe"><i class="fa-solid fa-diagram-project" aria-hidden="true"></i><small>\u5173\u7cfb\u56fe</small></button><button data-ref="uploadVideo" class="home-reel-upload" aria-label="上传视频"><i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i><small>上传视频</small></button><input data-ref="videoFile" type="file" accept=".mp4,.webm,.avi,.mkv,.ogg,.mpeg" hidden><button data-action="favorite" data-ref="favorite" aria-label="收藏知识" aria-pressed="false"><i class="fa-regular fa-bookmark" aria-hidden="true"></i><small data-ref="favoriteLabel">收藏</small></button><button data-action="like" data-ref="like" aria-label="点赞"><i class="fa-regular fa-heart" aria-hidden="true"></i><b data-ref="likeCount">0</b></button><button data-action="comment" aria-label="评论"><i class="fa-regular fa-comment" aria-hidden="true"></i><b data-ref="commentCount">0</b></button><button data-action="share" aria-label="分享"><i class="fa-solid fa-share" aria-hidden="true"></i><b data-ref="shareCount">0</b></button><button data-ref="up" aria-label="返回上一条浏览历史"><i class="fa-solid fa-chevron-up" aria-hidden="true"></i><small>上一条历史</small></button><button data-ref="down" aria-label="向下随机翻页"><i class="fa-solid fa-chevron-down" aria-hidden="true"></i><small>随机下一条</small></button></aside><div class="home-reel-status" data-ref="status" role="status" aria-live="polite"></div>`;
+      <aside class="home-reel-rail"><div data-ref="creatorAvatar" class="home-reel-creator-avatar"></div><button data-ref="relationGraph" class="home-reel-graph" aria-label="\u67e5\u770b\u77e5\u8bc6\u5173\u8054\u5173\u7cfb\u56fe"><i class="fa-solid fa-diagram-project" aria-hidden="true"></i><small>\u5173\u7cfb\u56fe</small></button><button data-ref="uploadVideo" class="home-reel-upload" aria-label="上传视频"><i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i><small>上传视频</small></button><input data-ref="videoFile" type="file" accept=".mp4,.webm,.avi,.mkv,.ogg,.mpeg" hidden><button data-action="favorite" data-ref="favorite" aria-label="收藏知识" aria-pressed="false"><i class="fa-regular fa-bookmark" aria-hidden="true"></i><small data-ref="favoriteLabel">收藏</small><b data-ref="favoriteCount">0</b></button><button data-action="like" data-ref="like" aria-label="点赞"><i class="fa-regular fa-heart" aria-hidden="true"></i><b data-ref="likeCount">0</b></button><button data-action="comment" aria-label="评论"><i class="fa-regular fa-comment" aria-hidden="true"></i><b data-ref="commentCount">0</b></button><button data-action="share" aria-label="转发"><i class="fa-solid fa-share" aria-hidden="true"></i><b data-ref="shareCount">0</b></button><button data-ref="up" aria-label="返回上一条浏览历史"><i class="fa-solid fa-chevron-up" aria-hidden="true"></i><small>上一条历史</small></button><button data-ref="down" aria-label="向下随机翻页"><i class="fa-solid fa-chevron-down" aria-hidden="true"></i><small>随机下一条</small></button></aside>
+    </div></div><div class="home-reel-status" data-ref="status" role="status" aria-live="polite"></div>`;
     refs = Object.fromEntries(Array.from(dialog.querySelectorAll('[data-ref]')).map((el) => [el.dataset.ref, el]));
+    refs.rail = dialog.querySelector('.home-reel-rail');
+    dialog.append(refs.rail);
     dialog.querySelectorAll('button').forEach((button) => { if (button.type !== 'submit' || !button.closest('form')) button.type = 'button'; });
     document.body.append(dialog);
     refs.close.onclick = () => page?.mode==='relation' && page.onCollapse ? page.onCollapse() : page?.mode==='relation' ? close() : page ? window.setViewMode?.('app_home') : close(); dialog.addEventListener('close', () => { if (!dialog.open) cleanup(); });
@@ -371,7 +431,8 @@
     refs.play.onclick = refs.centerPlay.onclick = () => { message(''); const video = refs.stage.querySelector('video'); if (video) video.paused ? void playVideo(video) : video.pause(); };
     refs.stage.onclick = () => {
       if (busy || overlayMode) return;
-      if (refs.stage.querySelector('img')) imageDetailsVisible = !imageDetailsVisible;
+      const image = refs.stage.querySelector('img');
+      if (image && !image.dataset.videoBackdrop) imageDetailsVisible = !imageDetailsVisible;
       else refs.play.onclick();
       updateVideoControls();
     };
@@ -437,6 +498,8 @@
     embedded = options.embedded || null;
     page = options.page || null;
     dialog.classList.toggle('is-shorts-page', !!page);
+    dialog.classList.toggle('is-shorts-feed', !!page && page.mode !== 'relation');
+    if (page && page.mode !== 'relation') refs.main.append(refs.rail);
     if (page?.host) page.host.appendChild(dialog);
     dialog.classList.toggle('is-canvas-preview', !!embedded);
     if (embedded?.host) embedded.host.appendChild(dialog);
@@ -453,7 +516,7 @@
     if (upLabel) upLabel.textContent = embedded ? '上一条' : journey ? '上一站' : '上一条历史';
     if (downLabel) downLabel.textContent = embedded ? '下一条' : journey ? '下一站' : page ? '下一条推荐' : '随机下一条';
     const hint = dialog.querySelector('.home-reel-bottom > span:last-child');
-    if (hint) hint.textContent = embedded ? '左右切媒体 · 上下切节点' : journey ? '← → 切媒体 · ↑ ↓ 沿线路漫游' : page ? '← → 切媒体 · ↑ 历史 · ↓ 推荐' : '← → 切媒体 · ↑ 历史 · ↓ 随机';
+    if (hint) hint.textContent = embedded ? '左右切媒体 · 上下切节点' : journey ? '← → 切媒体 · ↑ ↓ 沿线路漫游' : page ? '滑动或点选切换媒体 · ↑ 历史 · ↓ 推荐' : '← → 切媒体 · ↑ 历史 · ↓ 随机';
     if (!dialog.open) {
       focusBefore = document.activeElement;
       if (embedded || page) dialog.show();
@@ -481,8 +544,8 @@
   }, {once:true});
   window.addEventListener('kb-auth-change',()=>{
     if(!dialog?.open||!node||!refs.favorite)return;
-    favorited=false;refs.favorite.setAttribute('aria-pressed','false');refs.favoriteLabel.textContent='收藏';
-    if(window.authUser){const token=version;api('/api/account/knowledge/favorites',{id:idOf(node)}).then(state=>{if(token!==version)return;favorited=Boolean(state.favorited);refs.favorite.setAttribute('aria-pressed',String(favorited));refs.favoriteLabel.textContent=favorited?'已收藏':'收藏';}).catch(()=>{});}
+    favorited=false;refs.favorite.setAttribute('aria-pressed','false');refs.favoriteLabel.textContent='收藏';setFavoriteCount(0);
+    if(window.authUser){const token=version;api('/api/account/knowledge/favorites',{id:idOf(node)}).then(state=>{if(token!==version)return;favorited=Boolean(state.favorited);refs.favorite.setAttribute('aria-pressed',String(favorited));refs.favoriteLabel.textContent=favorited?'已收藏':'收藏';setFavoriteCount(state.favoriteCount);}).catch(()=>{});}
   });
   window.homeKnowledgeMediaViewer = { open, close, goTo, collectMedia, textPages,
     isEmbedded: () => !!embedded,

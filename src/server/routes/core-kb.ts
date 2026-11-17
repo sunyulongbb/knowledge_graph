@@ -106,6 +106,16 @@ function arangoEntityNode(document: Record<string, any>) {
   return entityId ? elasticsearchEntityNode({ ...document, sqlite_id: entityId }) : null;
 }
 
+function withCreatorAvatar(node: Record<string, any> | null) {
+  if (!node) return node;
+  const creator = node.owner_user_id
+    ? db.query("SELECT avatar FROM users WHERE id = ?").get(node.owner_user_id) as any
+    : node.creator_username
+      ? db.query("SELECT avatar FROM users WHERE username = ?").get(node.creator_username) as any
+      : null;
+  return { ...node, creator_avatar: String(creator?.avatar || "") };
+}
+
 function arangoEntityEdge(edge: Record<string, any>) {
   const source = String(edge.source_id || "").replace(/^entity\//, "");
   const target = String(edge.target_id || "").replace(/^entity\//, "");
@@ -5265,7 +5275,7 @@ export async function handleCoreKbRoutes(
   if (url.pathname === '/api/kb/node/random' && method === 'GET') {
     const recent = (url.searchParams.get('recent') || '').split(',').filter(Boolean).slice(0, 50);
     const node = randomKnowledge(db, hasProjectScope ? scopedProjectId : null, url.searchParams.get('current_id') || '', recent);
-    return Response.json({ node: node ? formatNode(node) : null });
+    return Response.json({ node: node ? withCreatorAvatar(formatNode(node)) : null });
   }
 
   if (url.pathname === "/api/kb/node" && method === "GET") {
@@ -5281,7 +5291,7 @@ export async function handleCoreKbRoutes(
         if (!canAccessKnowledge(db, requestUser, nodeId)) {
           return new Response("Not found", { status: 404 });
         }
-        const node = arangoEntityNode(document);
+        const node = withCreatorAvatar(arangoEntityNode(document));
         const outgoing = await queryArangoNodeGraph(project.name, nodeId, "OUTBOUND");
         const neighbors: any[] = [];
         for (const result of outgoing?.neighbors || []) {
@@ -5562,7 +5572,7 @@ export async function handleCoreKbRoutes(
       }
     }
 
-    return Response.json({ node: formatNode(node), neighbors, incomingRelations });
+    return Response.json({ node: withCreatorAvatar(formatNode(node)), neighbors, incomingRelations });
   }
 
   if (url.pathname === '/api/kb/node/relation-order' && method === 'POST') {

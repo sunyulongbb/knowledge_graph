@@ -1,17 +1,17 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 const source = readFileSync('public/assets/scripts/shorts-page.js', 'utf8');
-function setup(fetcher: Function) {
+function setup(fetcher: Function, hash = '#shorts') {
   const opened: any[] = [], routes: URL[] = [];
   let isPage = false, feed: any[] = [];
   const viewer = { open: (id: string, options: any) => { isPage = true; opened.push({ id, options }); },
     isPage: () => isPage, close: () => { isPage = false; }, updateFeed: (nodes: any[]) => { feed = nodes; } };
-  const window: any = { kbViewMode: 'app_home', homeKnowledgeMediaViewer: viewer, history: { state: {}, replaceState: (_a: any, _b: any, url: URL) => routes.push(url) } };
+  const window: any = { kbViewMode: 'app_home', getCurrentDbParam: () => 'demo', homeKnowledgeMediaViewer: viewer, history: { state: {}, replaceState: (_a: any, _b: any, url: URL) => routes.push(url) } };
   const mounts: string[] = [];
   const element = () => ({ append() {}, setAttribute() {}, replaceChildren() {}, classList: { add() {} }, textContent: '' });
   const document = { getElementById: (id: string) => ({ ...element(), append: () => mounts.push(id) }), createElement: element };
   new Function('window', 'document', 'location', 'fetch', source)(window, document,
-    { origin: 'http://localhost', href: 'http://localhost/kb?db=demo#shorts', search: '?db=demo', hash: '#shorts' }, fetcher);
+    { origin: 'http://localhost', href: `http://localhost/kb?db=demo${hash}`, search: '?db=demo', hash }, fetcher);
   window.kbViewMode = 'shorts';
   return { window, viewer, opened, routes, mounts, feed: () => feed };
 }
@@ -40,6 +40,33 @@ test('direct shorts navigation loads a scoped feed and leaving prevents a late r
   await loading;
   expect(h.opened).toHaveLength(0);
 });
+
+test('category shorts launch requests and retains a category-scoped feed', async () => {
+  const requests: URL[] = [];
+  const h = setup(async (url: URL) => {
+    requests.push(url);
+    return { ok: true, json: async () => ({ nodes: [{ id: 'space-knowledge' }] }) };
+  });
+  h.window.kbShortsLaunch = { classId: 'space', category: '天文学' };
+  await h.window.loadShortsPage();
+  expect(requests[0]?.searchParams.get('class_id')).toBe('space');
+  expect(h.opened[0]?.id).toBe('space-knowledge');
+  expect(h.opened[0]?.options.category).toBe('天文学');
+  h.opened[0].options.page.onNodeChange('next-knowledge');
+  expect(h.routes.at(-1)?.hash).toContain('class_id=space');
+});
+
+test('reloading a category-scoped shorts route restores the category filter', async () => {
+  const requests: URL[] = [];
+  const h = setup(async (url: URL) => {
+    requests.push(url);
+    return { ok: true, json: async () => ({ nodes: [{ id: 'space-knowledge' }] }) };
+  }, '#view=shorts&class_id=space&category=%E5%A4%A9%E6%96%87%E5%AD%A6');
+  await h.window.loadShortsPage();
+  expect(requests[0]?.searchParams.get('class_id')).toBe('space');
+  expect(h.opened[0]?.options.category).toBe('天文学');
+});
+
 test('refresh with a node opens that detail before waiting for the full feed', async () => {
   const h = setup(async () => ({ ok: true, json: async () => ({ nodes: [{ id: 'one' }, { id: 'two' }] }) }));
   await h.window.loadShortsPage('two');

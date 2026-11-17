@@ -26,13 +26,18 @@ function setup(){
   const rec=createKnowledgeRecommendations({db,store,now:()=>time,getProject:slug=>({id:slug==='default'?1:2,name:slug}),getUser:req=>req.headers.get('test-user')?{id:Number(req.headers.get('test-user')),role:'user'} as any:null,
     search:async(req,url)=>{calls.push(url);const user=req.headers.get('test-user')?{id:Number(req.headers.get('test-user')),role:'user'} as any:null;const nodes=rows.filter(row=>canUseArangoKnowledge(row,user));return Response.json({nodes:nodes.slice(Number(url.searchParams.get('offset')),Number(url.searchParams.get('offset'))+Number(url.searchParams.get('limit'))),total:nodes.length});},
   });
-  const call=async(seed:string,offset=0,user=1,scope='default')=>{
+  const call=async(seed:string,offset=0,user=1,scope='default',classId='')=>{
     const url=new URL(`http://localhost/api/kb/recommendations?db=${scope}&limit=5&offset=${offset}&recommendation_seed=${seed}&hide_entity=1&defined_class_only=1`);
+    if(classId)url.searchParams.set('class_id',classId);
     const response=(await rec.handle(new Request(url,{headers:user?{'test-user':String(user)}:{cookie:'kb_viewer=anonymous-visitor-id'}}),url))!;
     expect(response.status).toBe(200);return response.json();
   };
   return {db,rows,calls,call,advance:()=>{time+=1000;}};
 }
+test('category-scoped shorts recommendations constrain candidate searches to the selected category',async()=>{
+  const h=setup();await h.call('category-feed',0,1,'default','astronomy');
+  expect(h.calls.filter(url=>url.searchParams.has('order')).every(url=>url.searchParams.get('class_id')==='astronomy')).toBe(true);
+});
 test('per-user likes influence ranking and every refresh changes the first recommendation',async()=>{
   const h=setup();const first=await h.call('first');
   expect(first.nodes.every((node:any)=>node.tags.includes('astronomy'))).toBe(true);
@@ -63,7 +68,7 @@ test('anonymous users get varied recommendations and behavior stays within its a
 test('shorts refresh gets a new recommended feed instead of replaying the URL node',async()=>{
   const requests:URL[]=[],opened:string[]=[];
   const host:any={replaceChildren(){},setAttribute(){},append(){},classList:{add(){}}};
-  const window:any={kbViewMode:'shorts',history:{state:{},replaceState(){}},homeKnowledgeMediaViewer:{isPage:()=>false,open:(id:string)=>opened.push(id),updateFeed(){}}};
+  const window:any={kbViewMode:'shorts',getCurrentDbParam:()=> 'default',history:{state:{},replaceState(){}},homeKnowledgeMediaViewer:{isPage:()=>false,open:(id:string)=>opened.push(id),updateFeed(){}}};
   const source=readFileSync('public/assets/scripts/shorts-page.js','utf8');
   new Function('window','document','location','fetch','performance',source)(window,{getElementById:()=>host,createElement:()=>host},{origin:'http://localhost',search:'?db=default',hash:'#view=shorts&node=old'},async(url:URL)=>{requests.push(url);return {ok:true,json:async()=>({nodes:[{id:'new-recommended'}]})};},{getEntriesByType:()=>[{type:'reload'}]});
   await new Promise(resolve=>setTimeout(resolve,0));
@@ -74,7 +79,7 @@ test('shorts refresh gets a new recommended feed instead of replaying the URL no
 test('Shorts menu refresh stops the old player and requests a fresh recommendation seed',async()=>{
   const requests:URL[]=[],opened:string[]=[];let playing=false,closed=0;
   const host:any={replaceChildren(){},setAttribute(){},append(){},classList:{add(){}}};
-  const window:any={kbViewMode:'app_home',homeKnowledgeMediaViewer:{isPage:()=>playing,close:()=>{playing=false;closed++;},open:(id:string)=>{playing=true;opened.push(id);}}};
+  const window:any={kbViewMode:'app_home',getCurrentDbParam:()=> 'demo',homeKnowledgeMediaViewer:{isPage:()=>playing,close:()=>{playing=false;closed++;},open:(id:string)=>{playing=true;opened.push(id);}}};
   new Function('window','document','location','fetch',readFileSync('public/assets/scripts/shorts-page.js','utf8'))(window,{getElementById:()=>host,createElement:()=>host},{origin:'http://localhost',search:'?db=demo',hash:''},async(url:URL)=>{requests.push(url);return {ok:true,json:async()=>({nodes:[{id:`pick-${requests.length}`}]})};});
   window.kbViewMode='shorts';await window.loadShortsPage();
   await window.refreshShortsPage();

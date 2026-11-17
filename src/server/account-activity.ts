@@ -11,6 +11,11 @@ export function ensureAccountActivitySchema(db: Database) {
     kind TEXT NOT NULL CHECK(kind IN ('history','favorite')), created_at TEXT NOT NULL,
     PRIMARY KEY(user_id, project_id, node_id, kind))`);
   db.run('CREATE INDEX IF NOT EXISTS account_activity_recent ON account_knowledge_activity(user_id,kind,created_at)');
+  db.run(`CREATE TABLE IF NOT EXISTS account_joined_types (
+    user_id INTEGER NOT NULL, project_id INTEGER NOT NULL, type_id TEXT NOT NULL, type_name TEXT NOT NULL,
+    sort_order INTEGER NOT NULL, updated_at TEXT NOT NULL,
+    PRIMARY KEY(user_id, project_id, type_id))`);
+  db.run('CREATE INDEX IF NOT EXISTS account_joined_types_order ON account_joined_types(user_id,project_id,sort_order)');
 }
 export function createAccountActivity(deps: { db: Database; store: EnterpriseKnowledgeStore | null; getUser: (req: Request) => any; getProject: (slug: string) => any }) {
   const { db, store } = deps; ensureAccountActivitySchema(db);
@@ -24,6 +29,13 @@ export function createAccountActivity(deps: { db: Database; store: EnterpriseKno
     }
     const node = db.query('SELECT * FROM nodes WHERE id=? AND project_id=?').get(id, project.id) as Row | null;
     return node && canAccessKnowledge(db, user as any, id) ? node : null;
+  }
+  function favoriteCount(projectId: number, id: string) {
+    return Number((db.query(`SELECT COUNT(*) AS total FROM (
+      SELECT user_id FROM account_knowledge_activity WHERE project_id=? AND node_id=? AND kind='favorite'
+      UNION
+      SELECT h.user_id FROM knowledge_favorites h JOIN nodes n ON n.id=REPLACE(h.knowledge_id,'entity/','') WHERE n.id=? AND n.project_id=?
+    )`).get(projectId, id, id, projectId) as Row).total);
   }
   const unavailable = (created_at: string) => ({ id: null, name: null, project_slug: null, project_title: null, created_at });
   async function records(user: Row, section: string): Promise<Row[]> {
@@ -76,31 +88,61 @@ export function createAccountActivity(deps: { db: Database; store: EnterpriseKno
     return { likes, favorites, history };
   }
   async function handle(req: Request, url: URL): Promise<Response | null> {
-    if (!url.pathname.startsWith('/api/account/knowledge/')) return null;
+    const joinedTypesRoute = url.pathname === '/api/account/joined-types';
+    if (!joinedTypesRoute && !url.pathname.startsWith('/api/account/knowledge/')) return null;
     try {
       const kind = url.pathname === '/api/account/knowledge/history' ? 'history' : url.pathname === '/api/account/knowledge/favorites' ? 'favorite' : '';
-      if (!kind) throw new KnowledgeStoreError('记录接口不存在',404);
+      if (!joinedTypesRoute && !kind) throw new KnowledgeStoreError('记录接口不存在',404);
       const user = deps.getUser(req); if (!user || user.id <= 0 || user.status === 'disabled') throw new KnowledgeStoreError('请先登录',401);
       const project = deps.getProject(url.searchParams.get('db') || 'default'); if (!project) throw new KnowledgeStoreError('应用不存在',404);
+      if (joinedTypesRoute) {
+        if (req.method === 'GET') {
+          const types = db.query(`SELECT saved.type_id AS id, COALESCE(c.name,saved.type_name) AS name
+            FROM account_joined_types saved
+            JOIN classes c ON c.id=saved.type_id AND (c.project_id=? OR c.project_id IS NULL)
+            WHERE saved.user_id=? AND saved.project_id=? ORDER BY saved.sort_order,saved.type_id`).all(project.id,user.id,project.id) as Row[];
+          return privateJson({ types });
+        }
+        if (req.method !== 'PUT') throw new KnowledgeStoreError('不支持的操作',405);
+        const body: any = await req.json().catch(() => null);
+        if (!body || !Array.isArray(body.typeIds) || body.typeIds.length > 200) throw new KnowledgeStoreError('类型列表无效');
+        const typeIds: string[] = Array.from(new Set<string>((body.typeIds as unknown[]).map(value => String(value || '').trim())));
+        if (typeIds.some((id: string) => !id || id.length > 256)) throw new KnowledgeStoreError('类型 ID 无效');
+        const classes: Row[] = typeIds.length
+          ? db.query(`SELECT id,name FROM classes WHERE id IN (${typeIds.map(() => '?').join(',')}) AND (project_id=? OR project_id IS NULL)`).all(...typeIds,project.id) as Row[]
+          : [];
+        if (classes.length !== typeIds.length) throw new KnowledgeStoreError('类型不存在或不属于当前应用',400);
+        const byId = new Map(classes.map(row => [String(row.id),String(row.name || row.id)]));
+        db.transaction(() => {
+          db.run('DELETE FROM account_joined_types WHERE user_id=? AND project_id=?',[user.id,project.id]);
+          const now = new Date().toISOString();
+          typeIds.forEach((typeId: string, sortOrder: number) => {
+            db.run('INSERT INTO account_joined_types(user_id,project_id,type_id,type_name,sort_order,updated_at) VALUES(?,?,?,?,?,?)',
+              [user.id,project.id,typeId,byId.get(typeId),sortOrder,now]);
+          });
+        })();
+        return privateJson({ types: typeIds.map((id: string) => ({ id, name: byId.get(id) })) });
+      }
       const id = cleanKnowledgeId(url.searchParams.get('id')); if (!id || id.length > 512) throw new KnowledgeStoreError('知识 ID 无效');
       if (req.method === 'DELETE' && kind === 'favorite') {
         db.run("DELETE FROM account_knowledge_activity WHERE user_id=? AND project_id=? AND node_id=? AND kind='favorite'",[user.id,project.id,id]);
         // Remove legacy entries only when their application is known to match.
         db.run('DELETE FROM knowledge_favorites WHERE user_id=? AND knowledge_id IN (?,?) AND EXISTS(SELECT 1 FROM nodes WHERE id=? AND project_id=?)',[user.id,id,`entity/${id}`,id,project.id]);
-        return privateJson({ favorited: false });
+        const node = await readable(user,project,id);
+        return privateJson({ favorited: false, ...(node ? { favoriteCount: favoriteCount(project.id,id) } : {}) });
       }
       if (!['POST','GET'].includes(req.method) || (kind === 'history' && req.method !== 'POST')) throw new KnowledgeStoreError('不支持的操作',405);
       if (!await readable(user,project,id)) throw new KnowledgeStoreError('知识不存在或无权访问',404);
       if (req.method === 'GET') {
         const found = db.query("SELECT 1 FROM account_knowledge_activity WHERE user_id=? AND project_id=? AND node_id=? AND kind='favorite'").get(user.id,project.id,id);
         const legacy = db.query('SELECT 1 FROM knowledge_favorites h JOIN nodes n ON n.id=REPLACE(h.knowledge_id,\'entity/\',\'\') WHERE h.user_id=? AND n.id=? AND n.project_id=?').get(user.id,id,project.id);
-        return privateJson({ favorited: Boolean(found || legacy) });
+        return privateJson({ favorited: Boolean(found || legacy), favoriteCount: favoriteCount(project.id,id) });
       }
       db.transaction(() => {
         db.run('INSERT INTO account_knowledge_activity(user_id,project_id,node_id,kind,created_at) VALUES(?,?,?,?,?) ON CONFLICT(user_id,project_id,node_id,kind) DO UPDATE SET created_at=excluded.created_at', [user.id,project.id,id,kind,new Date().toISOString()]);
         if (kind === 'history') db.run("DELETE FROM account_knowledge_activity WHERE user_id=? AND kind='history' AND rowid NOT IN (SELECT rowid FROM account_knowledge_activity WHERE user_id=? AND kind='history' ORDER BY created_at DESC,rowid DESC LIMIT 500)",[user.id,user.id]);
       })();
-      return privateJson(kind === 'favorite' ? { favorited: true } : { ok: true });
+      return privateJson(kind === 'favorite' ? { favorited: true, favoriteCount: favoriteCount(project.id,id) } : { ok: true });
     } catch (error) {
       if (error instanceof KnowledgeStoreError) return privateJson({error:error.message},{status:error.status});
       console.error('Account activity failed',error); return privateJson({error:'个人记录服务暂不可用'},{status:503});

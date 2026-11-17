@@ -6,24 +6,28 @@ function setup(play?: (video: any) => Promise<void>, videosOnly = false) {
   const elements: any[] = [];
   class Element {
     tag: string; children: any[] = []; handlers: Record<string, Function[]> = {}; dataset: any = {}; style: any = {}; open = false; textContent = ''; value = ''; hidden = false; paused = true; duration = 60; currentTime = 0; isConnected = true;
-    classList = { toggle() {} };
+    classes = new Set<string>();
+    classList = { toggle: (name: string, force?: boolean) => { if (force ?? !this.classes.has(name)) this.classes.add(name); else this.classes.delete(name); }, contains: (name: string) => this.classes.has(name) };
     constructor(tag: string) { this.tag = tag; }
     set innerHTML(value: string) { for (const match of value.matchAll(/data-ref="([^"]+)"/g)) { const el = new Element(match[1] === 'seek' ? 'input' : 'div'); el.dataset.ref = match[1]; refs[match[1]] = el; } }
     append(...items: any[]) { this.children.push(...items); items.forEach((item) => item.parentNode = this); }
-    replaceChildren() { this.children = []; }
+    replaceChildren(...items: any[]) { this.children = []; if (items.length) this.append(...items); }
     querySelectorAll(selector: string) { if (selector === '[data-ref]') return Object.values(refs); if (selector === 'button') return []; return this.children.filter((el) => el.tag === selector); }
-    querySelector(selector: string) { return this.querySelectorAll(selector)[0] || null; }
+    querySelector(selector: string) {
+      if (selector === '.home-reel-rail') { const rail = new Element('aside'); rail.dataset.ref = 'rail'; refs.rail = rail; this.append(rail); return rail; }
+      return this.querySelectorAll(selector)[0] || null;
+    }
     addEventListener(name: string, fn: Function) { (this.handlers[name] ||= []).push(fn); }
     setAttribute() {} removeAttribute() {} load() {} pause() { this.paused = true; } play() { if (play) return play(this); this.paused = false; return Promise.resolve(); }
     show() { this.open = true; } showModal() { this.open = true; } close() { this.open = false; this.handlers.close?.forEach((fn) => fn()); } focus() {}
   }
   const listeners: Record<string,Function> = {};
   const graphRequests:string[]=[];
-  const window: any = { openKnowledgeRelation:(id:string)=>graphRequests.push(id), kbViewMode:'shorts', authUser:{id:1}, addEventListener(name:string,fn:Function) { listeners[name]=fn; } };
+  const window: any = { openKnowledgeRelation:(id:string)=>graphRequests.push(id), getCurrentDbParam:()=> 'mine', kbViewMode:'shorts', authUser:{id:1}, addEventListener(name:string,fn:Function) { listeners[name]=fn; } };
   const body = new Element('body'); body.style.overflow = 'auto';
   const requests: string[] = [];
   const saves:any[]=[];
-  const first = { id: 'one', name: '一', images: ['/a.jpg', '/b.jpg'], videos: ['/c.mp4'] };
+  const first = { id: 'one', name: '一', images: ['/a.jpg', '/b.jpg'], videos: ['/c.mp4'], covers: ['/c-cover.jpg'] };
   const second = { id: 'two', name: '二', images: ['/d.jpg'], videos: ['/e.mp4'] };
   if (videosOnly) { first.images = []; second.images = []; }
   const document = { body, activeElement: new Element('button'), createElement: (tag: string) => { const el = new Element(tag); elements.push(el); return el; } };
@@ -51,6 +55,51 @@ test('shorts page mounts nonmodal details, retains interactions and cleans up pl
   expect(h.viewer.isPage()).toBe(false);
   h.viewer.open('one'); await tick();
   expect(h.body.style.overflow).toBe('hidden');
+});
+
+test('shorts feed removes the top toolbar and overlays its action rail inside the video', async () => {
+  const h = setup();
+  const host: any = { appendChild: (dialog: any) => { dialog.parentNode = host; } };
+  h.viewer.open('one', { nodes: [{ id: 'one' }], page: { host } });
+  const dialog = h.elements.find(element => element.tag === 'dialog');
+  expect(dialog.classList.contains('is-shorts-feed')).toBe(true);
+  expect(h.refs.rail.parentNode).toBe(h.refs.main);
+  const styles = readFileSync(new URL('../public/assets/styles/shorts-page.css', import.meta.url), 'utf8');
+  expect(styles).toContain('#homeMediaViewer.is-shorts-feed .home-reel-top { display: none; }');
+  expect(styles).toContain('#homeMediaViewer.is-shorts-feed .home-reel-rail {');
+  expect(styles).toContain('#homeMediaViewer.is-shorts-feed .home-reel-creator-avatar {');
+  expect(styles).toContain('bottom: clamp(72px, 10vh, 112px);');
+  expect(source).toContain('data-ref="creatorAvatar"');
+  expect(source).toContain('setCreatorAvatar(node);');
+  expect(styles).toContain('#homeMediaViewer.is-shorts-feed .home-reel-rail small { display: none; }');
+  expect(styles).toContain('background: transparent;');
+  expect(styles).toContain('font-size: 23px;');
+  expect(source).toContain('data-ref="favoriteCount"');
+  expect(styles).toContain('#homeMediaViewer.is-shorts-feed .home-reel-rail b {');
+  expect(styles).toContain('[data-ref="up"],');
+  expect(styles).toContain('[data-ref="down"] { display: none; }');
+  h.viewer.close();
+  expect(dialog.classList.contains('is-shorts-feed')).toBe(false);
+  expect(h.refs.rail.parentNode).toBe(dialog);
+  h.viewer.open('one', { nodes: [{ id: 'one' }], page: { host, mode: 'relation' } });
+  expect(dialog.classList.contains('is-shorts-feed')).toBe(false);
+});
+
+test('shorts use clickable carousel indicators for mixed media and blur a video cover behind playback', async () => {
+  const h = setup();
+  const host: any = { appendChild: (dialog: any) => { dialog.parentNode = host; } };
+  h.viewer.open('one', { nodes: [{ id: 'one' }], page: { host } });
+  await tick();
+  expect(h.refs.mediaIndicators.hidden).toBe(false);
+  expect(h.refs.mediaIndicators.children).toHaveLength(3);
+  h.refs.mediaIndicators.children[2].onclick();
+  const backdrop = h.refs.stage.children.find((element: any) => element.dataset.videoBackdrop);
+  expect(backdrop.src).toBe('/c-cover.jpg');
+  expect(h.refs.stage.querySelector('video')).toBeTruthy();
+  expect(h.refs.mediaIndicators.children[2].classes.has('is-active')).toBe(true);
+  const styles = readFileSync(new URL('../public/assets/styles/shorts-page.css', import.meta.url), 'utf8');
+  expect(styles).toContain('#homeMediaViewer.is-shorts-feed .home-reel-media-nav { display: none !important; }');
+  expect(styles).toContain('filter: blur(22px);');
 });
 
 test('portrait reuses media navigation and receives loaded knowledge on each page', async () => {
