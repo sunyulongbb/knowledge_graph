@@ -43,6 +43,13 @@ export async function serveStaticRoute(req: Request, pathname: string) {
     };
     const contentType = contentTypes[ext] || "application/octet-stream";
     headers.set("Content-Type", contentType);
+    if (pathname.startsWith('/assets/') || pathname.startsWith('/css/') || pathname.startsWith('/js/')) {
+      const etag='"'+file.size+'-'+file.lastModified+'"';
+      headers.set('ETag',etag);
+      headers.set('Cache-Control','public, max-age=0, must-revalidate');
+      if(req.headers.get('if-none-match') === etag)return new Response(null,{status:304,headers});
+    }
+
     if (contentType === "application/pdf") {
       headers.set("Content-Disposition", "inline");
     }
@@ -69,7 +76,14 @@ export async function serveStaticRoute(req: Request, pathname: string) {
       return Response.redirect(url.toString(), 302);
     }
     if (!url.searchParams.has("db")) {
-      url.searchParams.set("db", "default");
+      url.pathname = "/default";
+      return Response.redirect(url.toString(), 302);
+    }
+    if (url.searchParams.has("db")) {
+      const project = url.searchParams.get("db") || "default";
+      if (!/^[A-Za-z0-9_-]+$/.test(project)) return new Response('Invalid project ID', { status:400 });
+      url.pathname = '/' + project + pathname.split('/').slice(2).filter(Boolean).map(part => '/' + part).join('');
+      url.searchParams.delete('db');
       return Response.redirect(url.toString(), 302);
     }
     return new Response(PUBLIC_INDEX_FILE, { headers: { "Content-Type": "text/html; charset=utf-8" } });
@@ -118,7 +132,7 @@ export async function serveStaticRoute(req: Request, pathname: string) {
   if (pathname.startsWith("/assets/")) {
     const file = Bun.file(`public${pathname}`);
     if (await file.exists()) {
-      return new Response(file);
+      return makeResponse(file);
     }
     return null;
   }
@@ -135,7 +149,7 @@ export async function serveStaticRoute(req: Request, pathname: string) {
   if (pathname.startsWith("/js/")) {
     const file = Bun.file(`public${pathname}`);
     if (await file.exists()) {
-      return new Response(file);
+      return makeResponse(file);
     }
     return null;
   }
@@ -143,10 +157,21 @@ export async function serveStaticRoute(req: Request, pathname: string) {
   if (pathname.startsWith("/css/")) {
     const file = Bun.file(`public${pathname}`);
     if (await file.exists()) {
-      return new Response(file);
+      return makeResponse(file);
     }
     return null;
   }
 
+  if (!['api','assets','static','js','css','node_modules','demo'].includes(pathname.split('/')[1] || '') && /^\/[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+){0,2}\/?$/.test(pathname)) {
+    const url = new URL(req.url);
+    if (url.searchParams.has('db') || pathname.endsWith('/')) {
+      const project = url.searchParams.get('db') || pathname.split('/')[1] || 'default';
+      if (!/^[A-Za-z0-9_-]+$/.test(project)) return new Response('Invalid project ID', { status:400 });
+      url.pathname = '/' + project + pathname.split('/').slice(2).filter(Boolean).map(part => '/' + part).join('');
+      url.searchParams.delete('db');
+      return Response.redirect(url.toString(), 302);
+    }
+    return new Response(PUBLIC_INDEX_FILE, { headers: { 'Content-Type':'text/html; charset=utf-8' } });
+  }
   return null;
 }

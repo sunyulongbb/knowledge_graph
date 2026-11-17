@@ -52,7 +52,7 @@
     if (nodes.length && id) return;
     try {
       const url = new URL('/api/kb/recommendations', location.origin);
-      const db = new URLSearchParams(location.search).get('db');
+      const db = window.getCurrentDbParam();
       if (db) url.searchParams.set('db', db);
       url.searchParams.set('limit', '100'); url.searchParams.set('surface', 'shorts'); url.searchParams.set('recommendation_seed', crypto.randomUUID());
       const response = await fetch(url, { signal: controller.signal });

@@ -299,7 +299,7 @@ function downloadJson(name, payload) {
 async function api(path, body) {
   let url = new URL('/api/kb/pipeline/' + path, location.origin);
   if (window.appendCurrentDbParam) url = window.appendCurrentDbParam(url) || url;
-  else { const db = new URLSearchParams(location.search).get('db'); if (db) url.searchParams.set('db', db); }
+  else { const db = window.getCurrentDbParam(); if (db) url.searchParams.set('db', db); }
   const response = await fetch(url, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || `请求失败 ${response.status}`);

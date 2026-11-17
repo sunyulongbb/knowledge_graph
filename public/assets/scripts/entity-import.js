@@ -57,7 +57,7 @@
       let payload;
       try { payload = JSON.parse(text); } catch { throw new Error('文件不是有效的 JSON'); }
       const url = new URL('/api/kb/entity/import', window.location.origin);
-      const db = new URLSearchParams(window.location.search).get('db');
+      const db = window.getCurrentDbParam();
       if (db) url.searchParams.set('db', db);
       const response = await fetch(url, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),

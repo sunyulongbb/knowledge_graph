@@ -115,7 +115,7 @@ async function load() {
   get('status').textContent = '正在加载知识网络…';
   try {
     const url = new URL('/api/kb/graph', location.origin);
-    const scope = new URLSearchParams(location.search).get('db');
+    const scope = window.getCurrentDbParam();
     if (scope) url.searchParams.set('db', scope);
     if (selectedClass) url.searchParams.set('class_id', selectedClass);
     const response = await fetch(url, { signal: requestController.signal, cache: 'no-store' });

@@ -90,3 +90,23 @@ test('only database-not-found races are skipped; other failures remain visible',
     expect(backup.status('ok')).not.toBeNull();
   } finally { log.mockRestore(); db.close(); }
 });
+
+test('paged backups bound Arango queries and preserve the last complete generation on failure',async()=>{
+ const db=new Database(':memory:');let fail=false;const calls:any[]=[];
+ const store:any={client:{database:async (_:string,path:string,init:any)=>{
+   if(path.includes('/collection/'))throw Object.assign(new Error('missing'),{status:404,body:{errorNum:1203}});
+   return {body:{result:{id:'trx'}}};
+ }},query:async (_:string,query:string,vars:any,trx:string)=>{
+   calls.push({query,vars,trx});if(fail)throw Error('timeout');
+   return vars.after ? [] : [{_key:'one',data:'original'}];
+ }};
+ try{
+  const backup=new EnterpriseSqliteBackup(db,store);await backup.flush('default');
+  const first=backup.status('default');expect((first as any).entities).toBe(1);expect((first as any).links).toBe(1);
+  expect(calls.every(call=>call.query.includes('LIMIT 200') && call.trx==='trx')).toBe(true);
+  expect((db.query('SELECT COUNT(*) AS count FROM enterprise_knowledge_backup_documents').get() as any).count).toBe(2);
+  fail=true;await expect(backup.flush('default')).rejects.toThrow('timeout');
+  expect(backup.status('default')).toEqual(first);
+  expect((db.query('SELECT COUNT(*) AS count FROM enterprise_knowledge_backup_documents').get() as any).count).toBe(2);
+ }finally{db.close();}
+});

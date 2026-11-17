@@ -23,6 +23,25 @@
   panel.id = 'knowledgeExplorePage';
   panel.setAttribute('aria-label', '探索知识分类');
   document.getElementById('applicationHomePanel').append(panel);
+  const pinKey = () => 'kb:pinned-types:' + (window.authUser?.id || 'anonymous') + ':' + (window.getCurrentDbParam() || 'default');
+  function readPins() { try { const value = JSON.parse(localStorage.getItem(pinKey()) || '[]'); return Array.isArray(value) ? value.filter(item => item && typeof item.id === 'string' && typeof item.name === 'string') : []; } catch { return []; } }
+  const pinNav = document.createElement('nav'); pinNav.className = 'home-discovery-nav home-pinned-types'; pinNav.setAttribute('aria-label', '\u5df2\u52a0\u5165\u7684\u7c7b\u578b');
+  document.querySelector('.home-discovery-footer')?.before(pinNav);
+  function renderPins() {
+    pinNav.replaceChildren();
+    for (const item of readPins()) {
+      const button = document.createElement('button'); button.type = 'button'; button.title = item.name;
+      const icon = document.createElement('i'); icon.className = 'fa-solid fa-tag'; icon.setAttribute('aria-hidden','true');
+      const label = document.createElement('span'); label.textContent = item.name; button.append(icon, label);
+      if (window.kbViewMode === 'joined_type' && selected === item.id) button.setAttribute('aria-current','page');
+      button.onclick = () => {
+        const url = window.projectViewUrl('joined_type'); url.searchParams.set('type_id', item.id); url.searchParams.delete('explore_category'); url.searchParams.delete('explore_tag'); url.searchParams.delete('explore_page');
+        history.pushState(null, '', url); window.setViewMode('joined_type');
+      };
+      pinNav.append(button);
+    }
+    pinNav.hidden = !pinNav.childElementCount;
+  }
   let selectedTag = '';
   let tree = buildExploreTree([]), selected = '', items = [], total = 0, page = 1;
   let loadingTree = false, loadingItems = false, treeError = '', itemsError = '', treeVersion = 0, itemsVersion = 0;
@@ -31,9 +50,10 @@
   let treeReady = false, loadedDatabase = null, savedScrollTop = 0;
   let exhausted = false, scrollTimer = 0, retryPage = 1, retryAppend = false;
   function writeExploreRoute() {
-    if(window.kbViewMode!=='app_explore')return;
+    if(!['app_explore','joined_type'].includes(window.kbViewMode))return;
     const url=new URL(location.href);
-    if(selected)url.searchParams.set('explore_category',selected);else url.searchParams.delete('explore_category');
+    const categoryKey = window.kbViewMode === 'joined_type' ? 'type_id' : 'explore_category';
+    if(selected)url.searchParams.set(categoryKey,selected);else url.searchParams.delete(categoryKey);
     if(selectedTag)url.searchParams.set('explore_tag',selectedTag);else url.searchParams.delete('explore_tag');
     if((selected||selectedTag)&&page>1)url.searchParams.set('explore_page',String(page));else url.searchParams.delete('explore_page');
     window.history.replaceState(window.history.state,'',url);
@@ -43,7 +63,7 @@
   const imageUrl = value => typeof value === 'string' && /^(https?:\/\/|\/(?!\/))/i.test(value.trim()) ? value.trim() : '';
   async function api(path, params = {}) {
     const url = new URL(path, location.origin);
-    const db = new URLSearchParams(location.search).get('db');
+    const db = window.getCurrentDbParam();
     if (db) url.searchParams.set('db', db);
     Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, String(value)));
     const response = await fetch(url, { cache: 'no-store' });
@@ -95,7 +115,7 @@
   }
 
   function render() {
-    const scrollTop = window.kbViewMode === 'app_explore' ? panel.scrollTop : savedScrollTop;
+    const scrollTop = ['app_explore','joined_type'].includes(window.kbViewMode) ? panel.scrollTop : savedScrollTop;
     savedScrollTop = scrollTop;
     const crumbs = ancestry(selected), activeRoot = crumbs[0]?.id || '';
     let content;
@@ -113,8 +133,9 @@
       content = recommended.length ? group('从这些分类开始', recommended, 'recommended') : '';
       for (const root of tree.roots) content += group(name(root), childrenOf(root.id).length ? childrenOf(root.id) : [root], root.id, root.id);
     }
-    panel.innerHTML = `<div class="explore-content"><header class="explore-heading"><h1>${escape(selectedTag ? '#' + selectedTag : tree.byId.has(selected)?name(tree.byId.get(selected)):'探索知识')}</h1><span>按分类或标签浏览知识。</span><button class="btn" type="button" data-explore-big-bang title="Big Bang \u77e5\u8bc6\u5b87\u5b99" aria-label="Big Bang \u77e5\u8bc6\u5b87\u5b99"><i class="fa-solid fa-atom" aria-hidden="true"></i></button></header>
-      <nav class="explore-topic-tabs" aria-label="一级分类"><button type="button" data-explore-category="" ${!selected ? 'aria-current="page"' : ''}>全部</button>${tree.roots.map(row => `<button type="button" data-explore-category="${escape(row.id)}" ${row.id === activeRoot ? 'aria-current="page"' : ''}>${escape(name(row))}</button>`).join('')}</nav>${content}</div>`;
+    renderPins();
+    panel.innerHTML = `<div class="explore-content"><header class="explore-heading" ${!selected && !selectedTag ? 'hidden' : ''}>${tree.byId.has(selected) ? `<h1>${escape(name(tree.byId.get(selected)))}</h1><div class="explore-type-actions"><button type="button" class="btn" data-explore-join>${readPins().some(item => item.id === selected) ? '\u5df2\u52a0\u5165' : 'Join'}</button><button type="button" class="btn primary" data-explore-create><i class="fa-solid fa-plus" aria-hidden="true"></i> \u65b0\u589e\u77e5\u8bc6</button></div>` : ''}<button class="btn" type="button" data-explore-big-bang title="Big Bang \u77e5\u8bc6\u5b87\u5b99" aria-label="Big Bang \u77e5\u8bc6\u5b87\u5b99"><i class="fa-solid fa-atom" aria-hidden="true"></i></button></header>
+      <nav class="explore-topic-tabs" ${!selected && !selectedTag ? 'hidden' : ''} aria-label="一级分类"><button type="button" data-explore-category="" ${!selected ? 'aria-current="page"' : ''}>全部</button>${tree.roots.map(row => `<button type="button" data-explore-category="${escape(row.id)}" ${row.id === activeRoot ? 'aria-current="page"' : ''}>${escape(name(row))}</button>`).join('')}</nav>${content}</div>`;
     panel.scrollTop = scrollTop;
   }
   async function loadItems(nextPage = 1, append = false) {
@@ -145,11 +166,11 @@
     finally { if (version === itemsVersion) { loadingItems = false; render(); } }
   }
   function loadMoreItems() {
-    if (window.kbViewMode !== 'app_explore' || (!selected && !selectedTag) || loadingTree || loadingItems || itemsError || exhausted || page * pageSize >= total) return;
+    if (!['app_explore','joined_type'].includes(window.kbViewMode) || (!selected && !selectedTag) || loadingTree || loadingItems || itemsError || exhausted || page * pageSize >= total) return;
     void loadItems(page + 1, true);
   }
   panel.addEventListener('scroll', () => {
-    if (window.kbViewMode !== 'app_explore') return;
+    if (!['app_explore','joined_type'].includes(window.kbViewMode)) return;
     savedScrollTop = panel.scrollTop;
     clearTimeout(scrollTimer);
     scrollTimer = setTimeout(() => {
@@ -167,9 +188,9 @@
   }
   window.loadKnowledgeExplore = async function ({ force = false } = {}) {
     const params = new URLSearchParams(location.search);
-    const database = params.get('db') || 'default';
+    const database = window.getCurrentDbParam() || 'default';
     const requestedTag = (params.get('explore_tag') || '').trim();
-    const requestedCategory = requestedTag ? '' : params.get('explore_category') || '';
+    const requestedCategory = requestedTag ? '' : params.get(window.kbViewMode === 'joined_type' ? 'type_id' : 'explore_category') || '';
     const requestedPage = Number(params.get('explore_page') || 1);
     const targetPage = (requestedCategory || requestedTag) && Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
     // Returning from the viewer/details must retain the accumulated cards and DOM scroll state.
@@ -186,7 +207,7 @@
     selectedTag = requestedTag;
     loadingTree = true; treeError = ''; render();
     try {
-      const data = await api('/api/kb/classes');
+      const data = await api('/api/kb/classes?counts=0');
       if (version !== treeVersion) return;
       tree = buildExploreTree(Array.isArray(data) ? data : data.items || []);
       selected=tree.byId.has(requestedCategory)?requestedCategory:'';
@@ -207,6 +228,14 @@
     }
   };
   panel.addEventListener('click', event => {
+    if (event.target.closest('[data-explore-join]') && tree.byId.has(selected)) {
+      const pins = readPins(); const existing = pins.some(item => item.id === selected);
+      try { localStorage.setItem(pinKey(), JSON.stringify(existing ? pins.filter(item => item.id !== selected) : [...pins, {id:selected, name:name(tree.byId.get(selected))}])); render(); }
+      catch { event.target.textContent = '\u4fdd\u5b58\u5931\u8d25'; }
+      return;
+    }
+    if (event.target.closest('[data-explore-create]') && tree.byId.has(selected)) { window.openQuickKnowledge?.({categoryId:selected}); return; }
+
     if(event.target.closest('[data-explore-big-bang]')) { savedScrollTop=panel.scrollTop; clearTimeout(scrollTimer); window.setViewMode('big_bang'); return; }
     const category = event.target.closest('[data-explore-category]');
     if (category) { selectCategory(category.dataset.exploreCategory); return; }
@@ -225,10 +254,12 @@
     if (event.target.closest('[data-explore-retry-items]')) void loadItems(retryPage, retryAppend);
     if (event.target.closest('[data-explore-workspace]')) window.setViewMode('table');
   });
+  renderPins();
   window.addEventListener('kb-auth-change', () => {
+    renderPins();
     treeReady = false; loadedDatabase = null;
     treeVersion++; itemsVersion++; tree = buildExploreTree([]); items = []; selected = '';
-    if (window.kbViewMode === 'app_explore') void window.loadKnowledgeExplore();
+    if (['app_explore','joined_type'].includes(window.kbViewMode)) void window.loadKnowledgeExplore();
   });
-  if (window.kbViewMode === 'app_explore') void window.loadKnowledgeExplore();
+  if (['app_explore','joined_type'].includes(window.kbViewMode)) void window.loadKnowledgeExplore();
 })();

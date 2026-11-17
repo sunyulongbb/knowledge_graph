@@ -23,7 +23,7 @@
   let loadingTypes = false, settingType = false;
   const scopedUrl = path => {
     const url = new URL(path, location.origin);
-    const db = window.getCurrentDbParam?.() || new URLSearchParams(location.search).get('db');
+    const db = window.getCurrentDbParam?.() || window.getCurrentDbParam();
     if (db) url.searchParams.set('db', db);
     return url;
   };

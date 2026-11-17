@@ -27,7 +27,7 @@
 .for-you-note-label i { color:var(--note-color); font-size:11px; }
 .for-you-card-text-title { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; color:var(--fg); font-family:"Noto Serif SC","Source Han Serif SC","Songti SC",SimSun,serif; font-size:23px; font-weight:700; line-height:1.5; letter-spacing:.015em; overflow-wrap:anywhere; }
 .for-you-card-quote.is-long-title .for-you-card-text-title { font-size:19px; line-height:1.55; }
-.for-you-card-quote p { display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; overflow:hidden; margin:12px 0 0; color:color-mix(in srgb,var(--fg) 72%,var(--surface-0)); font-size:12px; font-weight:400; line-height:1.85; white-space:pre-line; overflow-wrap:anywhere; }
+.for-you-card-quote p { display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; overflow:hidden; margin:12px 0 0; color:color-mix(in srgb,var(--fg) 86%,var(--surface-0)); font-family:inherit; font-size:14px; font-weight:400; line-height:1.8; letter-spacing:normal; white-space:pre-line; overflow-wrap:anywhere; }
 .for-you-card .for-you-card-quote:hover { background:color-mix(in srgb,var(--note-color) 19%,var(--surface-0)); }
 @media(prefers-reduced-motion:reduce) { .for-you-card .for-you-card-quote { transition:none; } }
 .for-you-card button:hover { color:var(--accent); }
@@ -36,3 +36,21 @@
 .for-you-feed-tail [data-home-infinite-status] { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; min-height: 36px; }
 [data-home-feed-sentinel] { height: 1px; }
 @media(max-width:600px) { .for-you-card-media,.for-you-card .for-you-card-quote { border-radius:10px; } }
+
+/* Reserve media space before lazy images arrive, avoiding collapsed-card cascades. */
+.for-you-card-media img { aspect-ratio:auto 4 / 3; }
+.for-you-card-media video { aspect-ratio:auto 16 / 9; }
+
+.for-you-card-heading { display:flex; align-items:center; gap:8px; min-width:0; }
+.for-you-card .for-you-card-heading .for-you-card-title { display:block; flex:1; min-width:0; width:auto; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.for-you-card-heading > .for-you-card-stat { flex-shrink:0; color:var(--muted); font-size:11px; }
+.for-you-card .for-you-card-graph { display:grid; place-items:center; flex:0 0 26px; width:26px; height:26px; padding:0; border:0; border-radius:6px; background:transparent; color:var(--muted); font-size:13px; }
+.for-you-card .for-you-card-graph:hover { background:var(--surface-1); color:var(--fg); }
+
+.for-you-text-card { box-sizing:border-box; }
+.for-you-text-card::after { display:none; }
+.for-you-text-card .for-you-card-content { padding:0; }
+.for-you-card .for-you-card-description { display:block; width:100%; padding:0; border:0; background:transparent; text-align:left; }
+.for-you-text-card .for-you-card-description p { margin:0 0 14px; }
+
+@media(max-width:600px) { .for-you-text-card .for-you-card-description p { font-size:14px; line-height:1.8; } }

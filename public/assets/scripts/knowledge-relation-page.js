@@ -75,7 +75,7 @@
     try{
       let data=relationCache.get(id);
       if(!data){
-        const url=new URL('/api/kb/node/graph',location.origin),db=new URLSearchParams(location.search).get('db');if(db)url.searchParams.set('db',db);url.searchParams.set('id',id);url.searchParams.set('direction','both');
+        const url=new URL('/api/kb/node/graph',location.origin),db=window.getCurrentDbParam();if(db)url.searchParams.set('db',db);url.searchParams.set('id',id);url.searchParams.set('direction','both');
         const response=await fetch(url,{signal:controller.signal});data=await response.json().catch(()=>({}));if(!response.ok)throw Error(data.error||`\u52a0\u8f7d\u5931\u8d25 (${response.status})`);
       }
       if(token!==version||graph!==cy)return;
@@ -111,7 +111,7 @@ panel.querySelector('.relation-legend').replaceChildren();panel.querySelector('[
     if(!id){status.textContent='请从知识卡片的关系图按钮进入。';return;}
     status.textContent='正在加载关联知识…';controller=new AbortController();
     try{
-      const url=new URL('/api/kb/node/graph',location.origin),db=new URLSearchParams(location.search).get('db');if(db)url.searchParams.set('db',db);url.searchParams.set('id',id);url.searchParams.set('direction','both');
+      const url=new URL('/api/kb/node/graph',location.origin),db=window.getCurrentDbParam();if(db)url.searchParams.set('db',db);url.searchParams.set('id',id);url.searchParams.set('direction','both');
       const response=await fetch(url,{signal:controller.signal});const data=await response.json().catch(()=>({}));if(!response.ok)throw Error(data.error||`加载失败（${response.status}）`);if(token!==version)return;
       relationCache.set(id,data);
       const elements=relationElements(data,id),nodes=elements.filter(item=>!item.data.source);
@@ -168,11 +168,11 @@ panel.querySelector('.relation-legend').replaceChildren();panel.querySelector('[
   // Shared entry across the different knowledge card renderers, including appended cards.
   function addEntries(){
     document.querySelectorAll('.for-you-card,.app-home-knowledge-card,.explore-knowledge-card,.home-popular-row,.home-news-card,.app-knowledge-item').forEach(card=>{
-      if(card.querySelector('[data-knowledge-graph]'))return;
+      if(card.querySelector('[data-knowledge-graph],[data-home-card-graph]'))return;
       const id=card.dataset.knowledgeId||card.dataset.homeNodeId||card.querySelector('[data-explore-node]')?.dataset.exploreNode||card.querySelector('[data-search-node-id]')?.dataset.searchNodeId;
       if(!id)return;
       const button=document.createElement('button');button.type='button';button.className='knowledge-graph-entry';button.dataset.knowledgeGraph=id;button.title='查看知识关联关系图';button.setAttribute('aria-label','查看知识关联关系图');button.innerHTML='<i class="fa-solid fa-diagram-project" aria-hidden="true"></i><span>关系图</span>';
-      const placement=card.querySelector('.for-you-card-meta,.app-home-card-footer,.home-popular-actions,.home-news-card-copy') || (card.classList.contains('app-knowledge-item')?card.querySelector('div'):null) || card;
+      const placement=card.querySelector('.for-you-card-heading,.for-you-card-meta,.app-home-card-footer,.home-popular-actions,.home-news-card-copy') || (card.classList.contains('app-knowledge-item')?card.querySelector('div'):null) || card;
       placement.append(button);
     });
   }

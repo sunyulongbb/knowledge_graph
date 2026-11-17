@@ -262,7 +262,7 @@
           try {
             const url = new URL('/api/kb/classes', window.location.origin);
             url.searchParams.set('id', selectedId);
-            const db = new URLSearchParams(window.location.search).get('db');
+            const db = window.getCurrentDbParam();
             if (db) url.searchParams.set('db', db);
             const resp = await fetch(url, { method: 'DELETE' });
             if (!resp.ok) throw new Error("HTTP " + resp.status);

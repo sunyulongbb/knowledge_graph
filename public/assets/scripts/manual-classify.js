@@ -171,7 +171,7 @@
     const selected = Array.from(window.kbSelectedRowIds || []);
     queue = [...new Set((selected.length ? selected : window.kbTableNodes || []).map(idOf).filter(Boolean))];
     if (!queue.length) { window.alert('当前没有可分类的知识，请先加载表格或勾选知识。'); return; }
-    scope = new URLSearchParams(location.search).get('db') || ''; index = assigned = skipped = 0; changed = loaded = false; loading = true; picks = new Map(); outcomes = new Map(); existingClasses = new Map();
+    scope = window.getCurrentDbParam() || ''; index = assigned = skipped = 0; changed = loaded = false; loading = true; picks = new Map(); outcomes = new Map(); existingClasses = new Map();
     stopMedia(); refs.detail.replaceChildren(); refs.footer.hidden = false; refs.retry.hidden = true; dialog.classList.remove('is-complete');
     refs.search.value = ''; classes = []; renderChoices(); dialog.showModal(); refs.status.textContent = '正在加载分类…';
     const token = ++version;

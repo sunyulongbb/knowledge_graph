@@ -1,6 +1,6 @@
 (() => {
   let entityId = '', scope = '', ids = new Set(), seq = 0, ready = false, pending = false, loading = false;
-  const currentScope = () => new URLSearchParams(location.search).get('db') || '';
+  const currentScope = () => window.getCurrentDbParam() || '';
   const normalize = (id) => String(id || '').replace(/^entity\//, '');
   function publish(message = '', error = false) {
     window.dispatchEvent(new CustomEvent('kb:graph-classification', {

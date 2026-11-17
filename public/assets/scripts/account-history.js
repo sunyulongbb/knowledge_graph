@@ -6,7 +6,7 @@
     window.recordKnowledgeViewCount?.(id,db);
     if (!window.authUser?.id) { if(window.authUser===undefined) pending={id,db}; return; }
     id=String(id).replace(/^entity\//,'');
-    db=db || new URLSearchParams(location.search).get('db') || 'default';
+    db=db || window.getCurrentDbParam() || 'default';
     const key=`${window.authUser.id}:${db}:${id}`,now=Date.now();
     if(now-(recent.get(key)||0)<2000)return;
     recent.set(key,now);

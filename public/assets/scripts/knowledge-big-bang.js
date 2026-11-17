@@ -222,7 +222,7 @@
     dialog.querySelector('[data-detail]').onclick=()=>{if(chosen===null)return;const id=nodes[chosen].id||nodes[chosen]._id;close();window.setViewMode('knowledge_detail',{targetNodeId:id});};
     status.textContent='正在汇聚知识…';
     try{
-      const url=new URL('/api/kb/discover/search',location.origin);const db=new URLSearchParams(location.search).get('db');if(db)url.searchParams.set('db',db);url.searchParams.set('limit','120');url.searchParams.set('order','richness');if(category)url.searchParams.set('class_id',category);if(tag)url.searchParams.set('tag',tag);
+      const url=new URL('/api/kb/discover/search',location.origin);const db=window.getCurrentDbParam();if(db)url.searchParams.set('db',db);url.searchParams.set('limit','120');url.searchParams.set('order','richness');if(category)url.searchParams.set('class_id',category);if(tag)url.searchParams.set('tag',tag);
       const response=await fetch(url,{signal:controller.signal});if(!response.ok)throw Error('知识加载失败，请关闭后重试');const data=await response.json();if(closed)return;
       nodes=data.nodes||[];points=bigBangPoints(nodes.length,w||1200,h||800);start=performance.now();status.textContent=nodes.length?`${nodes.length} 个知识星点 · Enter 键依次选择`:'当前范围暂无知识';
       nodes.forEach((node,i)=>{

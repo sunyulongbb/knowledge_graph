@@ -29,7 +29,7 @@
   const headers = {'Content-Type':'application/json'};
   async function api(path, body, method) {
     const url = new URL(path.startsWith('/api/') ? path : '/api/kb/learning'+path,location.origin);
-    const db = new URLSearchParams(location.search).get('db'); if(db) url.searchParams.set('db',db);
+    const db = window.getCurrentDbParam(); if(db) url.searchParams.set('db',db);
     const response=await fetch(url,{method:method || (body === undefined ? 'GET':'POST'),cache:'no-store',...(body===undefined?{}:{headers,body:JSON.stringify(body)})});
     const data=await response.json().catch(()=>({}));
     if(!response.ok) { const failure=new Error(data.error || `加载失败（${response.status}）`); failure.status=response.status; throw failure; }
@@ -47,7 +47,8 @@
   }
   function notice() { return error ? `<div class="learning-notice" role="alert">${escape(error)} <button type="button" data-learning-retry>重试</button>${!window.authUser?'<button type="button" data-learning-login>登录</button>':''}</div>`:''; }
   function top(title,subtitle,actions='') {
-    return `<header class="learning-heading"><div><h1>${escape(title)}</h1><span>${escape(subtitle)}</span></div><div class="learning-heading-actions">${actions}</div></header>`;
+    const introduction = screen === 'home' ? '' : `<div><h1>${escape(title)}</h1><span>${escape(subtitle)}</span></div>`;
+    return `<header class="learning-heading">${introduction}<div class="learning-heading-actions">${actions}</div></header>`;
   }
   function routeCard(item) {
     return `<article class="learning-journey-portal"><button class="learning-portal-scene" type="button" data-learning-open="${escape(item.id)}" aria-label="打开${escape(item.name)}地图"><svg viewBox="0 0 440 200" aria-hidden="true"><path class="portal-land" d="M-20 130 Q90 45 175 115 T470 90 L470 240H-20Z"/><path class="portal-land-back" d="M-20 165 Q90 90 210 155 T470 130 L470 240H-20Z"/><path class="portal-trail" d="M55 163 Q90 110 150 140 T250 108 T365 50"/>${[[55,163],[150,140],[250,108],[365,50]].map(([x,y],index)=>`<circle cx="${x}" cy="${y}" r="${index===3?15:9}" class="${item.progress>0&&item.progress>=index*33?'is-visited':''}"/>`).join('')}<path class="portal-flag" d="M365 46V17L392 27L365 36"/></svg><span class="learning-portal-badge"><i class="fa-solid fa-compass" aria-hidden="true"></i> ${item.levelCount} 个节点</span><span class="learning-portal-title">${escape(item.name)}</span><span class="learning-portal-enter">查看路线 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span></button><div class="learning-portal-meta"><span>${item.completedCount} / ${item.levelCount} 项已完成</span><strong>${item.progress}%</strong></div><progress max="100" value="${item.progress}" aria-label="学习进度"></progress><footer><button type="button" data-learning-edit="${escape(item.id)}">编辑路线</button><button type="button" data-learning-delete="${escape(item.id)}">删除</button></footer></article>`;

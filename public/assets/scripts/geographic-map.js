@@ -12,7 +12,7 @@
   }
   const status = () => document.getElementById('geographicStatus');
   const active = () => window.kbTableLayoutMode === 'geographic';
-  const scoped = path => { const url = new URL(path, location.origin); const db = new URLSearchParams(location.search).get('db'); if (db) url.searchParams.set('db', db); return url; };
+  const scoped = path => { const url = new URL(path, location.origin); const db = window.getCurrentDbParam(); if (db) url.searchParams.set('db', db); return url; };
   function paintPlaces() {
     if (!map || !labels) return;
     labels.clearLayers(); const bounds = map.getBounds(), zoom = map.getZoom(), occupied = new Set();

@@ -1,3 +1,4 @@
+import {documentKey} from '../src/server/arangodb';
 import {Database} from 'bun:sqlite';
 import {afterEach,expect,test} from 'bun:test';
 import {createKnowledgeRecommendations,rankRecommendations} from '../src/server/knowledge-recommendations.ts';
@@ -20,7 +21,7 @@ function setup(){
   const calls:URL[]=[];let time=Date.now();
   const store={get:async(_db:string,id:string)=>rows.find(row=>row.id===id)||null,
     searchAccess:async(_db:string,user:any)=>rows.filter(row=>canUseArangoKnowledge(row,user)).map(row=>({id:row.id})),
-    query:async(_db:string,_aql:string,vars:any)=>vars.uid===1?[{id:'n0',weight:5}]:vars.uid===2?[{id:'n20',weight:5}]:[],
+    query:async(_db:string,_aql:string,vars:any)=>vars.keys ? rows.filter(row=>vars.keys.includes(documentKey(row.id)) && canUseArangoKnowledge(row,vars.uid>0?{id:vars.uid,role:vars.admin?'admin':'user'} as any:null)).map(row=>({id:row.id})) : vars.uid===1?[{id:'n0',weight:5}]:vars.uid===2?[{id:'n20',weight:5}]:[],
   };
   const rec=createKnowledgeRecommendations({db,store,now:()=>time,getProject:slug=>({id:slug==='default'?1:2,name:slug}),getUser:req=>req.headers.get('test-user')?{id:Number(req.headers.get('test-user')),role:'user'} as any:null,
     search:async(req,url)=>{calls.push(url);const user=req.headers.get('test-user')?{id:Number(req.headers.get('test-user')),role:'user'} as any:null;const nodes=rows.filter(row=>canUseArangoKnowledge(row,user));return Response.json({nodes:nodes.slice(Number(url.searchParams.get('offset')),Number(url.searchParams.get('offset'))+Number(url.searchParams.get('limit'))),total:nodes.length});},

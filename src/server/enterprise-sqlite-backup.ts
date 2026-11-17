@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Database } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -5,6 +6,7 @@ import type { EnterpriseKnowledgeStore } from './enterprise-knowledge.ts';
 
 /** Keep raw graph documents so statements, permissions and future fields survive. */
 export class EnterpriseSqliteBackup {
+  private errors = new Map<string,string>();
   private running = new Map<string, Promise<void>>();
   /** Backups must not share the application's potentially damaged SQLite file. */
   static open(store: EnterpriseKnowledgeStore, applicationFilename: string, filename = process.env.ENTERPRISE_SQLITE_BACKUP_PATH) {
@@ -28,18 +30,25 @@ export class EnterpriseSqliteBackup {
       entities INTEGER NOT NULL, links INTEGER NOT NULL, completed_at TEXT NOT NULL)`);
   }
   status(database: string) {
-    return this.db.query('SELECT database_name,entities,links,completed_at FROM enterprise_knowledge_backups WHERE database_name=?').get(database);
+    const saved=this.db.query('SELECT database_name,entities,links,completed_at FROM enterprise_knowledge_backups WHERE database_name=?').get(database);
+    return saved;
+  }
+  progress(database:string) {
+    return {backup:this.status(database),running:this.running.has(database),error:this.errors.get(database) || null};
   }
   flush(database: string): Promise<void> {
     const current = this.running.get(database);
     if (current) return current;
+    this.errors.delete(database);
     const task = this.capture(database);
     this.running.set(database, task);
     const finish = () => { if (this.running.get(database) === task) this.running.delete(database); };
-    task.then(finish, finish);
+    task.then(finish, error=>{this.errors.set(database,error.message || String(error));finish();});
     return task;
   }
   private async capture(database: string) {
+    if (this.store.client?.database) return this.capturePaged(database);
+
     // One read transaction captures entity/link together. Replace the last good
     // snapshot only after the whole graph was successfully received.
     const schema = await this.store.importSchema?.(database);
@@ -57,6 +66,50 @@ export class EnterpriseSqliteBackup {
       VALUES(?,?,?,?,?) ON CONFLICT(database_name) DO UPDATE SET snapshot_json=excluded.snapshot_json,
       entities=excluded.entities,links=excluded.links,completed_at=excluded.completed_at`,
       [database, JSON.stringify(snapshot), snapshot.entity.length, snapshot.link.length, new Date().toISOString()]);
+  }
+  private async capturePaged(database:string) {
+    const generation=randomUUID();
+    this.db.run(`CREATE TABLE IF NOT EXISTS enterprise_knowledge_backup_documents (
+      database_name TEXT NOT NULL, generation TEXT NOT NULL, collection TEXT NOT NULL,
+      document_key TEXT NOT NULL, document_json TEXT NOT NULL,
+      PRIMARY KEY(database_name,generation,collection,document_key))`);
+    const collections=['entity','link'];
+    for(const name of ['knowledge_schema','knowledge_reports']) {
+      try { await this.store.client.database(database,'/_api/collection/'+name);collections.push(name); }
+      catch(error:any){if(error.status!==404 || error.body?.errorNum!==1203)throw error;}
+    }
+    const {body}=await this.store.client.database(database,'/_api/transaction/begin',{
+      method:'POST',body:JSON.stringify({collections:{read:collections},lockTimeout:5}),
+    });
+    const trx=body?.result?.id;if(!trx)throw Error('Backup transaction did not return an ID');
+    const counts:Record<string,number>={};
+    const insert=this.db.query('INSERT INTO enterprise_knowledge_backup_documents VALUES(?,?,?,?,?)');
+    try {
+      for(const collection of collections){
+        let after='';counts[collection]=0;
+        while(true){
+          const rows=await this.store.query(database,`FOR doc IN @@collection FILTER doc._key > @after SORT doc._key LIMIT 200 RETURN doc`,{'@collection':collection,after},trx);
+          if(!rows.length)break;
+          const last=String(rows[rows.length-1]?._key || '');
+          if(!last || last<=after)throw Error('Invalid backup page ordering');
+          this.db.transaction(()=>{for(const doc of rows)insert.run(database,generation,collection,doc._key,JSON.stringify(doc));})();
+          counts[collection]+=rows.length;after=last;
+          // Yield to foreground requests instead of monopolizing the event loop.
+          await new Promise(resolve=>setTimeout(resolve,10));
+        }
+      }
+      await this.store.client.database(database,'/_api/transaction/'+trx,{method:'PUT'});
+      this.db.transaction(()=>{
+        this.db.run(`INSERT INTO enterprise_knowledge_backups VALUES(?,?,?,?,?) ON CONFLICT(database_name) DO UPDATE SET
+          snapshot_json=excluded.snapshot_json,entities=excluded.entities,links=excluded.links,completed_at=excluded.completed_at`,
+          [database,JSON.stringify({format:'paged-v1',generation,collections:counts}),counts.entity || 0,counts.link || 0,new Date().toISOString()]);
+        this.db.run('DELETE FROM enterprise_knowledge_backup_documents WHERE database_name=? AND generation<>?',[database,generation]);
+      })();
+    }catch(error){
+      await this.store.client.database(database,'/_api/transaction/'+trx,{method:'DELETE'}).catch(()=>{});
+      this.db.run('DELETE FROM enterprise_knowledge_backup_documents WHERE database_name=? AND generation=?',[database,generation]);
+      throw error;
+    }
   }
   async reconcile(databases: string[]) {
     const { body } = await this.store.client.system('/_api/database');
@@ -85,8 +138,8 @@ export class EnterpriseSqliteBackup {
       } catch (error) { console.error('SQLite knowledge backup failed:', error); }
       finally { active = false; }
     };
-    const configured = Number(process.env.ENTERPRISE_SQLITE_BACKUP_INTERVAL_MS || 60_000);
-    const timer = setInterval(tick, Number.isFinite(configured) ? Math.max(1000, configured) : 60_000);
+    const configured = Number(process.env.ENTERPRISE_SQLITE_BACKUP_INTERVAL_MS || 3_600_000);
+    const timer = setInterval(tick, Number.isFinite(configured) ? Math.max(1000, configured) : 3_600_000);
     timer.unref();
     void tick();
     return () => clearInterval(timer);

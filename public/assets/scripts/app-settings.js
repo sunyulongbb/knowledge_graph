@@ -87,17 +87,8 @@
     applyAppThemeColor(modal?.dataset.initialThemeColor || DEFAULT_THEME_COLOR);
   }
 
-  function getUrlParam(name) {
-    try {
-      const url = new URL(window.location.href);
-      return url.searchParams.get(name);
-    } catch (e) {
-      return null;
-    }
-  }
-
   function getCurrentDbSlug() {
-    return (getUrlParam('db') || '').trim();
+    return String(window.getCurrentDbParam?.() || '').trim();
   }
 
   async function fetchCurrentProjectInfo() {
@@ -155,7 +146,7 @@
             <img id="appBannerPreview" alt="Banner 背景预览" hidden style="width:100%;height:120px;object-fit:cover;border-radius:8px" />
           </div>
           <div class="form-actions">
-            <button type="button" class="btn" id="openKnowledgeSync">知识同步</button>
+            <button type="button" class="btn" onclick="window.openKnowledgeBackup()">\u77e5\u8bc6\u5907\u4efd</button><button type="button" class="btn" id="openKnowledgeSync">知识同步</button>
             <button type="submit" class="btn primary">保存</button>
             <button type="button" class="btn" id="closeAppSettingsModal">取消</button>
           </div>
@@ -231,6 +222,30 @@
     return modal;
   }
 
+  window.openKnowledgeBackup = function () {
+    const database=getCurrentDbSlug();if(!database)return;
+    let panel=document.getElementById('knowledgeBackupDialog');
+    if(panel){if(!panel.open)panel.showModal();return;}
+    panel=document.createElement('dialog');panel.id='knowledgeBackupDialog';panel.className='modal-content';
+    panel.setAttribute('aria-label','\u77e5\u8bc6\u5907\u4efd');
+    panel.innerHTML='<h3>\u77e5\u8bc6\u5907\u4efd</h3><p>\u624b\u52a8\u5907\u4efd\u5f53\u524d\u5e94\u7528\u7684\u77e5\u8bc6\u3001\u5173\u7cfb\u548c\u5b9a\u4e49\u3002</p><p role="status" data-backup-status></p><div class="form-actions"><button type="button" class="btn primary" data-backup-start>\u7acb\u5373\u5907\u4efd</button><button type="button" class="btn" data-backup-close>\u5173\u95ed</button></div>';
+    document.body.append(panel);panel.showModal();
+    const status=panel.querySelector('[data-backup-status]'),button=panel.querySelector('[data-backup-start]');
+    let timer;
+    const refresh=async(method='GET')=>{
+      clearTimeout(timer);button.disabled=true;
+      try{
+        const response=await fetch('/api/kb/knowledge-sync/backup?db='+encodeURIComponent(database),{method});
+        const data=await response.json();if(!response.ok)throw Error(data.error || 'Backup failed');
+        button.disabled=data.running;
+        status.textContent=data.running?'\u6b63\u5728\u5907\u4efd\uff0c\u5173\u95ed\u7a97\u53e3\u540e\u4ecd\u4f1a\u7ee7\u7eed\u2026':data.error ? '\u5907\u4efd\u5931\u8d25\uff1a'+data.error : data.backup ? '\u6700\u8fd1\u5907\u4efd\uff1a'+new Date(data.backup.completed_at).toLocaleString()+' ('+data.backup.entities+' \u6761\u77e5\u8bc6)' : '\u5c1a\u65e0\u5907\u4efd';
+        if(data.running && panel.open)timer=setTimeout(()=>refresh(),2000);
+      }catch(error){status.textContent=error.message;button.disabled=false;}
+    };
+    button.onclick=()=>refresh('POST');panel.querySelector('[data-backup-close]').onclick=()=>panel.close();
+    panel.addEventListener('close',()=>{clearTimeout(timer);panel.remove();});
+    void refresh();
+  };
   async function openKnowledgeSync() {
     const database = getCurrentDbSlug();
     if (!database) return;

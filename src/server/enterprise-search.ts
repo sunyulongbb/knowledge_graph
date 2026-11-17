@@ -7,6 +7,13 @@ import type { KnowledgeUser } from './knowledge-access.ts';
 type Doc = Record<string, any>;
 export const ENTITY_SEARCH_SCHEMA = 2;
 export async function ensureEntitySearchMapping(client: ElasticsearchClient, index: string) {
+  // Each Wikidata language adds label/description/alias mapping fields.
+  // Keep the limit bounded, but large enough for multilingual dump imports.
+  const { body: settings } = await client.send(`/${encodeURIComponent(index)}/_settings?flat_settings=true`);
+  const existing = Number(settings?.[index]?.settings?.['index.mapping.total_fields.limit'] || 1000);
+  if (existing < 20000) await client.send(`/${encodeURIComponent(index)}/_settings`, {
+    method:'PUT', body:JSON.stringify({ 'index.mapping.total_fields.limit':20000 }),
+  });
   await client.send(`/${encodeURIComponent(index)}/_mapping`, { method: 'PUT', body: JSON.stringify({ properties: {
     has_images: { type: 'boolean' }, has_media: { type: 'boolean' },
     search_attributes: { type: 'nested', properties: {
@@ -26,6 +33,7 @@ export function entitySearchProjection(document: Doc) {
   };
 }
 export type EnterpriseSearchOptions = {
+  esOnly?:boolean; ids?:string[];
   tag?: string | null; q?: string | null; limit: number; offset: number; order?: string | null;
   classIds?: string[] | null; type?: string | null; emptyType?: boolean;
   hasTags?: boolean; hasCategory?: boolean; hasImage?: boolean; hasMedia?: boolean; propertyId?: string | null; propertyValue?: string | null;
@@ -92,23 +100,28 @@ export class EnterpriseKnowledgeSearch {
     // Current ACL/identity and requested engagement totals are read from ArangoDB. Text search,
     // content, filters, paging and counts are exclusively served by Elasticsearch.
     // This also excludes deleted entities and blocks stale public ES copies after revocation.
-    const access = await this.store.searchAccess(database, user, options.order === 'popular');
+    const access = options.esOnly ? [] : await this.store.searchAccess(database, user, options.order === 'popular');
     const popularityCounts = options.order === 'popular' ? this.viewCounts(database) : {};
     const permissions = new Map(access.map(row => [row.key, row]));
-    if (!permissions.size) return { nodes: [] as Doc[], total: 0, months: [] };
-    const query = buildEnterpriseSearchQuery(options, [...permissions.keys()]);
+    if (!options.esOnly && !permissions.size) return { nodes: [] as Doc[], total: 0, months: [] };
+    const query = buildEnterpriseSearchQuery(options, options.esOnly ? ['__es_only__'] : [...permissions.keys()]);
+    if(options.esOnly && query.bool){
+      query.bool.filter.shift();
+      query.bool.filter.push({term:{recommendation_readable:true}});
+      if(options.ids)query.bool.filter.push({terms:{sqlite_id:options.ids}});
+    }
     const ascending = options.order?.endsWith('_asc');
     const field = options.order?.startsWith('created') ? 'created_at_sort' : 'updated_at_sort';
     const relevance = Boolean(options.q?.trim()) && (!options.order || ['relevance', 'hot'].includes(options.order));
     const richness = options.order === 'richness';
     // Runtime fields use the existing ES source, so already indexed knowledge is
     // ranked immediately without waiting for an index rebuild or background sync.
-    const runtimeMappings = options.order === 'popular' ? {
+    let runtimeMappings:Doc | undefined = options.order === 'popular' ? {
       home_popularity: { type: 'long', script: { source: `
         def id = params._source.sqlite_id;
         emit(id != null && params.counts.containsKey(id) ? (long)params.counts[id] : 0L);`,
         params: { counts: popularityCounts } } },
-    } : richness ? {
+    } : richness && !options.esOnly ? {
       home_media: { type: 'long', script: { source: `
         def s = params._source;
         boolean media = s.has_media == true;
@@ -137,7 +150,14 @@ export class EnterpriseKnowledgeSearch {
         long interactions = id != null && params.counts.containsKey(id) ? (long)params.counts[id] : 0L;
         emit(unique.size() * 5L + interactions);`, params: { counts: this.interactionCounts() } } },
     } : undefined;
-    const sort = options.order === 'popular' ? [{ home_popularity: 'desc' }, { updated_at_sort: { order: 'desc', unmapped_type: 'keyword' } }, { sqlite_id: 'asc' }] : richness ? [{ home_media: 'desc' }, { home_richness: 'desc' }, { updated_at_sort: { order: 'desc', unmapped_type: 'keyword' } }, { sqlite_id: 'asc' }] : options.order === 'id' ? [{ sqlite_id: 'asc' }] : relevance
+    if(options.esOnly) runtimeMappings={...runtimeMappings,recommendation_readable:{type:'boolean',script:{
+      source:`def s=params._source; boolean member=s.project_id!=null && params.projects.contains(s.project_id);
+        boolean own=params.uid>0 && s.owner_user_id!=null && s.owner_user_id==params.uid;
+        boolean maintained=params.uid>0 && s.maintainer_ids!=null && s.maintainer_ids.contains(params.uid);
+        emit(params.full || member || (params.admin && s.owner_user_id==null) || s.visibility==null || s.visibility=='public' || own || maintained);`,
+      params:{full:Boolean(user?.fullAccess),admin:user?.role==='admin',uid:user?.id || -1,projects:[...(user?.ownedProjectIds||[]),...(user?.memberProjectIds||[])]},
+    }}};
+    const sort = options.esOnly && richness ? [{has_media:{order:'desc',unmapped_type:'boolean'}},{updated_at_sort:{order:'desc',unmapped_type:'keyword'}},{sqlite_id:'asc'}] : options.order === 'popular' ? [{ home_popularity: 'desc' }, { updated_at_sort: { order: 'desc', unmapped_type: 'keyword' } }, { sqlite_id: 'asc' }] : richness ? [{ home_media: 'desc' }, { home_richness: 'desc' }, { updated_at_sort: { order: 'desc', unmapped_type: 'keyword' } }, { sqlite_id: 'asc' }] : options.order === 'id' ? [{ sqlite_id: 'asc' }] : relevance
       ? [{ _score: 'desc' }, { sqlite_id: 'asc' }]
       : [{ [field]: { order: ascending ? 'asc' : 'desc', unmapped_type: 'keyword' } }, { sqlite_id: 'asc' }];
     const index = encodeURIComponent(elasticsearchEntityIndexName(database));
@@ -155,7 +175,7 @@ export class EnterpriseKnowledgeSearch {
       const highlight = options.q?.trim() ? { pre_tags: ['\uE000'], post_tags: ['\uE001'], require_field_match: true,
         fields: { 'labels.*.value': { number_of_fragments: 0 }, 'aliases.*.value': { number_of_fragments: 1, fragment_size: 100 },
           ...(options.searchScope === 'name' ? {} : { 'descriptions.*.value': { number_of_fragments: 2, fragment_size: 160 } }) } } : undefined;
-      const { body: result } = await this.client.send(path, { method: 'POST', body: JSON.stringify({ query, sort, ...((runtimeMappings || options.publicationMonths || options.publicationMonth || options.publicationYear) ? { runtime_mappings: {...runtimeMappings,...publicationRuntime} } : {}), track_total_hits: true, ...(highlight ? { highlight } : {}), ...body }) });
+      const { body: result } = await this.client.send(path, { method: 'POST', body: JSON.stringify({ query, sort, ...(options.esOnly ? {_source:{excludes:['data','search_attributes','_search_attributes','interactions','claims','sitelinks']}} : {}), ...((runtimeMappings || options.publicationMonths || options.publicationMonth || options.publicationYear) ? { runtime_mappings: {...runtimeMappings,...publicationRuntime} } : {}), track_total_hits: true, ...(highlight ? { highlight } : {}), ...body }) });
       if (result?.timed_out || result?._shards?.failed) throw new Error('Elasticsearch returned incomplete knowledge search results');
       return result;
     };
@@ -191,13 +211,13 @@ export class EnterpriseKnowledgeSearch {
     const nodes: Doc[] = [];
     for (const hit of result!.hits?.hits || []) {
       const permission = permissions.get(hit._id);
-      if (permission && hit._source) {
+      if ((permission || options.esOnly) && hit._source) {
         const highlights: Doc = { name: [], description: [], aliases: [] };
         for (const [field, fragments] of Object.entries(hit.highlight || {})) {
           const key = field.startsWith('labels.') ? 'name' : field.startsWith('descriptions.') ? 'description' : field.startsWith('aliases.') ? 'aliases' : '';
           if (key && Array.isArray(fragments)) highlights[key].push(...fragments.filter(value => typeof value === 'string'));
         }
-        nodes.push({ ...hit._source, ...(options.order==='popular'&&permission.engagement?{engagement:permission.engagement}:{}), searchHighlights: highlights, _current_permissions: { can_edit: permission.can_edit, can_manage: permission.can_manage } });
+        nodes.push({ ...hit._source, ...(options.order==='popular'&&permission?.engagement?{engagement:permission?.engagement}:{}), searchHighlights: highlights, _current_permissions: { can_edit: permission?.can_edit, can_manage: permission?.can_manage } });
       }
     }
     return { total: Number(result!.hits?.total?.value ?? result!.hits?.total ?? 0), nodes };

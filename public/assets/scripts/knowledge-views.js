@@ -5,13 +5,13 @@
     if(!Number.isFinite(count))return;
     document.querySelectorAll('[data-knowledge-views]').forEach(element=>{
       if(normalize(element.dataset.knowledgeViews)!==id)return;
-      const scope=element.dataset.db||new URLSearchParams(location.search).get('db')||'default';
+      const scope=element.dataset.db||window.getCurrentDbParam()||'default';
       if(scope===db)element.textContent=String(count);
     });
     window.dispatchEvent(new CustomEvent('kb:knowledge-view-count',{detail:{id,db,viewCount:count}}));
   }
   window.recordKnowledgeViewCount=function(rawId,scope) {
-    const id=normalize(rawId),db=scope||new URLSearchParams(location.search).get('db')||'default';
+    const id=normalize(rawId),db=scope||window.getCurrentDbParam()||'default';
     if(!id)return;
     const key=JSON.stringify([db,id]),previous=recent.get(key),now=Date.now();
     if(previous&&now-previous.time<30000){display(id,db,previous.count);return;}

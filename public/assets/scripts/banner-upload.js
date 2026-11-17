@@ -19,7 +19,7 @@
       try {
         const form = new FormData(); form.append('file', file);
         const url = new URL('/api/kb/upload-image', location.origin);
-        url.searchParams.set('db', new URLSearchParams(location.search).get('db') || 'default');
+        url.searchParams.set('db', window.getCurrentDbParam() || 'default');
         const response = await fetch(url, { method: 'POST', body: form, signal: controller.signal });
         if (!response.ok) throw Error('图片上传失败，请重试');
         const data = await response.json(); if (!data.url) throw Error('上传未返回图片地址');

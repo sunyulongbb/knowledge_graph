@@ -123,7 +123,7 @@
     const host = document.getElementById('knowledgeFamilyView'); if (!host) return;
     const requestVersion = ++version;
     host.replaceChildren(element('p', 'knowledge-family-empty', '正在整理实体关系…'));
-    const db = new URLSearchParams(location.search).get('db');
+    const db = window.getCurrentDbParam();
     try {
       let ontologies = [];
       const records = new Map((Array.isArray(nodes) ? nodes : []).map(node => [String(node.id || node._id), node]));

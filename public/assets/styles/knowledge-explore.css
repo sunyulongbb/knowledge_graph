@@ -90,3 +90,11 @@ body.home-explore-active:not(.home-big-bang-active):not(.home-relation-active) #
 
 #knowledgeExplorePage .explore-heading { position:relative; padding-right:56px; }
 #knowledgeExplorePage .explore-heading [data-explore-big-bang] { position:absolute; top:0; right:0; display:grid; place-items:center; width:40px; height:40px; margin:0; padding:0; border-radius:12px; font-size:17px; }
+
+.explore-type-actions { display:flex; align-items:center; gap:8px; margin-left:auto; }
+.home-pinned-types { margin-block:10px; }
+.home-pinned-types[hidden] { display:none; }
+.home-pinned-types button > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+#knowledgeExplorePage .explore-heading[hidden],
+#knowledgeExplorePage .explore-topic-tabs[hidden] { display:none; }

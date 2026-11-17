@@ -2091,7 +2091,7 @@ if (btnAttrReset) {
   window.kbFetchAttributeData = fetchAttributeData;
   let activeAttributeLoad = null;
   function loadAttributes(nodeId, options = {}) {
-    const key = `${window.authUser?.id || 'anonymous'}:${new URLSearchParams(location.search).get('db') || ''}:${String(nodeId || '').replace(/^entity\//, '')}`;
+    const key = `${window.authUser?.id || 'anonymous'}:${window.getCurrentDbParam() || ''}:${String(nodeId || '').replace(/^entity\//, '')}`;
     if (!options.force && activeAttributeLoad?.key === key && activeAttributeLoad.sequence === window.kbAttrLoadRequestSeq) return activeAttributeLoad.promise;
     const state = { key, sequence: 0, promise: null };
     state.promise = performLoadAttributes(nodeId, options).catch((error) => {
@@ -2135,7 +2135,7 @@ if (btnAttrReset) {
       return;
     }
     const fullId = nodeId.startsWith("entity/") ? nodeId : "entity/" + nodeId;
-    const entityKey = `${window.authUser?.id || 'anonymous'}:${new URLSearchParams(location.search).get('db') || ''}:${fullId}`;
+    const entityKey = `${window.authUser?.id || 'anonymous'}:${window.getCurrentDbParam() || ''}:${fullId}`;
     if (attrList.dataset.entityKey !== entityKey) {
       try { resetAttrForm(); window.kbSelectedAttrIds?.clear(); } catch {}
       attrList.innerHTML = '<div class="muted">加载属性中…</div>';

@@ -11,7 +11,7 @@
   let items = [], active = null, defaultView = 'browse', scope = '', identity = '', busy = false, applying = false, dirty = false;
   let explore = null, timer = 0, generation = 0, viewGeneration = 0, version = 0, saving = null, bound = null;
   let cleanSignature = '', idleScheduled = false;
-  const currentScope = () => new URLSearchParams(location.search).get('db') || 'default';
+  const currentScope = () => window.getCurrentDbParam() || 'default';
   const key = () => `kb-canvas-draft:${identity}:${scope}:${active?.id}`;
   function snapshot() {
     const cy = window.kbCy;

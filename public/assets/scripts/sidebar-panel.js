@@ -42,8 +42,8 @@
     const right = document.getElementById('userSidebar')?.classList.contains('is-collapsed');
     if (left === undefined || right === undefined) return;
     const url = new URL(window.location.href);
-    url.searchParams.set('leftSidebar', left ? 'closed' : 'open');
-    url.searchParams.set('rightSidebar', right ? 'closed' : 'open');
+    url.searchParams.delete('leftSidebar');
+    url.searchParams.delete('rightSidebar');
     if (url.href !== window.location.href) history.replaceState(history.state, '', url);
     try {
       localStorage.setItem('kbProjectSidebarCollapsed', left ? '1' : '0');
@@ -1795,23 +1795,11 @@
       const headerLogo = document.getElementById("headerProjectAvatar");
       const headerName = document.getElementById("headerProjectName");
       if (headerLogo) {
-        let logoClickTimer = 0;
-        const toggleLogoSidebar = () => {
+        headerLogo.addEventListener("click", event => {
+          event.preventDefault(); event.stopPropagation();
+          if (event.detail > 1) return;
           const sidebarEl = document.getElementById("projectSidebar");
-          if (!sidebarEl) return;
-          (window.setSidebarCollapsed || setSidebarCollapsed)(!sidebarEl.classList.contains("collapsed"), true);
-        };
-        headerLogo.addEventListener("click", (e) => {
-          e.preventDefault(); e.stopPropagation();
-          clearTimeout(logoClickTimer);
-          if (e.detail > 1) return;
-          if (e.detail === 0) { toggleLogoSidebar(); return; }
-          logoClickTimer = setTimeout(() => { logoClickTimer = 0; toggleLogoSidebar(); }, 450);
-        });
-        headerLogo.addEventListener("dblclick", (e) => {
-          e.preventDefault(); e.stopPropagation();
-          clearTimeout(logoClickTimer); logoClickTimer = 0;
-          void window.showAppLogoSwitcher?.();
+          if (sidebarEl) (window.setSidebarCollapsed || setSidebarCollapsed)(!sidebarEl.classList.contains("collapsed"), true);
         });
       }
       if (headerName) {

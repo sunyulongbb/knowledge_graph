@@ -94,6 +94,12 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
         try { await deps.sync.afterWrite(database); return 'synced'; }
         catch (error) { console.error('Knowledge saved to ArangoDB; Elasticsearch synchronization will retry:', error); return 'pending'; }
       };
+      if (path === '/api/kb/knowledge-sync/backup' && ['GET','POST'].includes(method)) {
+        if(loggedIn().role !== 'admin') throw new KnowledgeStoreError('\u9700\u8981\u7ba1\u7406\u5458\u6743\u9650',403);
+        if(!deps.backup)throw new KnowledgeStoreError('\u672a\u914d\u7f6e\u5907\u4efd',503);
+        if(method==='POST') void deps.backup.flush(database).catch(error=>console.error('Manual knowledge backup failed:',error));
+        return Response.json(deps.backup.progress(database),{status:method==='POST'?202:200});
+      }
       if (path === '/api/kb/classes' && method === 'POST') {
         const current = loggedIn();
         if (!deps.canCreate(current, project)) throw new KnowledgeStoreError('需要应用成员权限才能创建分类', 403);
@@ -117,6 +123,27 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
           return row;
         }, ['knowledge_schema']);
         return Response.json({ ...result, parent: result.parent_id, label: result.name });
+      }
+      if (path === '/api/kb/classes' && method === 'DELETE') {
+        const current = loggedIn();
+        if (!deps.canCreate(current, project)) throw new KnowledgeStoreError('\u9700\u8981\u5e94\u7528\u6210\u5458\u6743\u9650\u624d\u80fd\u5220\u9664\u7c7b\u578b', 403);
+        const id = (url.searchParams.get('id') || '').trim();
+        if (!id) throw new KnowledgeStoreError('Missing type ID');
+        await store.ensureImportSchema(database);
+        await store.transaction(database, async trx => {
+          const seed = await store.importSchema(database, trx) || deps.getSchema?.(project);
+          const schema = structuredClone({ classes: seed?.classes || [], ontologies: seed?.ontologies || [], properties: seed?.properties || [], ontology_properties: seed?.ontology_properties || [] });
+          if (!schema.classes.some(row => row.id === id)) throw new KnowledgeStoreError('\u7c7b\u578b\u4e0d\u5b58\u5728', 404);
+          if (schema.classes.some(row => (row.parent_id || row.parent) === id)) throw new KnowledgeStoreError('\u8bf7\u5148\u5220\u9664\u4e0b\u7ea7\u7c7b\u578b', 409);
+          schema.classes = schema.classes.filter(row => row.id !== id);
+          await store.query(database, `FOR doc IN entity FILTER @id IN NOT_NULL(doc.class_ids, []) UPDATE doc WITH { class_ids: REMOVE_VALUE(doc.class_ids, @id), updated_at: @now, updated_at_sort: @now, updated_by_user_id: @uid } IN entity`, { id, now:new Date().toISOString(), uid:current.id }, trx);
+          const { body } = await store.client.database(database, '/_api/document/knowledge_schema?overwriteMode=replace', {
+            method:'POST', headers:{ 'x-arango-trx-id':trx }, body:JSON.stringify([{ _key:'definitions', ...schema }]),
+          });
+          if (!Array.isArray(body) || body.some(row => row.error)) throw new Error('Type deletion failed');
+        }, ['knowledge_schema']);
+        const sync = await synchronizeWrite();
+        return Response.json({ ok:true, sync });
       }
       if (path === '/api/kb/ontologies' && method === 'DELETE') {
         const current = loggedIn();
@@ -428,6 +455,13 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
           ]) });
         }
         if (path === '/api/kb/classes' && method === 'GET') {
+          if(url.searchParams.get('counts') === '0') {
+            const q=(url.searchParams.get('q') || '').toLowerCase();
+            return Response.json((schema?.classes || []).filter(cls=>String(cls.name || '').toLowerCase().includes(q)).map(cls=>({
+              id:cls.id,name:cls.name,label:cls.name,parent_id:cls.parent_id || cls.parent || null,parent:cls.parent_id || cls.parent || null,
+              color:cls.color,image:cls.image,sort_order:cls.sort_order,
+            })));
+          }
           const summary = await store.summary(database, user);
           const counts = new Map(summary.categories.map((row: Doc) => [row.id, row.count]));
           const q = (url.searchParams.get('q') || '').toLowerCase();

@@ -3,7 +3,7 @@
   const normalizeId = (id) => String(id || '').replace(/^entity\//, '');
   const activeId = () => normalizeId(byId('detailPanel')?.dataset.entityId || window.kbActiveDetailNodeId);
   const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-  const hasDefaultApplicationAccess = () => new URLSearchParams(window.location.search).get('db') === 'default';
+  const hasDefaultApplicationAccess = () => window.getCurrentDbParam() === 'default';
   const hasAnonymousDefaultAccess = () => !window.authUser && hasDefaultApplicationAccess();
   const hasKnowledgeAccess = () => !!window.authUser || hasDefaultApplicationAccess();
   const hasKnowledgeAdminAccess = () => window.authUser?.role === 'admin' || hasDefaultApplicationAccess() || (window.kbApplicationProjects || []).some((project) => project.slug === window.kbApplicationScope && project.member);
@@ -88,7 +88,7 @@
   }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['disabled', 'contenteditable'] });
   async function request(path, body) {
     const url = new URL(path, location.origin);
-    const scope = new URLSearchParams(location.search).get('db');
+    const scope = window.getCurrentDbParam();
     if (scope) url.searchParams.set('db', scope);
     const response = await fetch(url, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : { cache: 'no-store' });
     const data = await response.json().catch(() => ({}));

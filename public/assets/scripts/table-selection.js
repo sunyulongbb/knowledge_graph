@@ -272,7 +272,7 @@ function __kbInitTableSelection() {
     if (!db) {
       try {
         const currentUrl = new URL(window.location.href);
-        db = String(currentUrl.searchParams.get("db") || "").trim();
+        db = String(window.getCurrentDbParam() || "").trim();
       } catch {}
     }
     if (db) {
@@ -875,7 +875,7 @@ function __kbInitTableSelection() {
         const db =
           typeof window.getCurrentDbParam === "function"
             ? window.getCurrentDbParam()
-            : new URL(window.location.href).searchParams.get("db") || "";
+            : window.getCurrentDbParam() || "";
         return db ? `_${db}` : "";
       } catch {
         return "";
@@ -3582,7 +3582,7 @@ function __kbInitTableSelection() {
         const db =
           typeof window.getCurrentDbParam === "function"
             ? window.getCurrentDbParam()
-            : new URL(window.location.href).searchParams.get("db") || "";
+            : window.getCurrentDbParam() || "";
         return db ? `_${db}` : "";
       } catch {
         return "";
@@ -3629,7 +3629,7 @@ function __kbInitTableSelection() {
           const db =
             typeof window.getCurrentDbParam === "function"
               ? window.getCurrentDbParam()
-              : new URL(window.location.href).searchParams.get("db") || "";
+              : window.getCurrentDbParam() || "";
           return db ? `_${db}` : "";
         } catch {
           return "";
@@ -3856,7 +3856,7 @@ function __kbInitTableSelection() {
               const db =
                 typeof window.getCurrentDbParam === "function"
                   ? window.getCurrentDbParam()
-                  : new URL(window.location.href).searchParams.get("db") || "";
+                  : window.getCurrentDbParam() || "";
               return db ? `_${db}` : "";
             } catch {
               return "";
@@ -4203,7 +4203,7 @@ function __kbInitTableSelection() {
             const db =
               typeof window.getCurrentDbParam === "function"
                 ? window.getCurrentDbParam()
-                : new URL(window.location.href).searchParams.get("db") || "";
+                : window.getCurrentDbParam() || "";
             return db ? `_${db}` : "";
           } catch {
             return "";
@@ -4328,7 +4328,7 @@ function __kbInitTableSelection() {
         const db =
           typeof window.getCurrentDbParam === "function"
             ? window.getCurrentDbParam()
-            : new URL(window.location.href).searchParams.get("db") || "";
+            : window.getCurrentDbParam() || "";
         return db ? `_${db}` : "";
       } catch {
         return "";
@@ -4919,7 +4919,7 @@ function __kbInitTableSelection() {
               const db =
                 typeof window.getCurrentDbParam === "function"
                   ? window.getCurrentDbParam()
-                  : new URL(window.location.href).searchParams.get("db") || "";
+                  : window.getCurrentDbParam() || "";
               return db ? `_${db}` : "";
             } catch {
               return "";
@@ -5439,7 +5439,7 @@ function __kbInitTableSelection() {
             const db =
               typeof window.getCurrentDbParam === "function"
                 ? window.getCurrentDbParam()
-                : new URL(window.location.href).searchParams.get("db") || "";
+                : window.getCurrentDbParam() || "";
             return db ? `_${db}` : "";
           } catch {
             return "";
@@ -5563,7 +5563,7 @@ function __kbInitTableSelection() {
         const db =
           typeof window.getCurrentDbParam === "function"
             ? window.getCurrentDbParam()
-            : new URL(window.location.href).searchParams.get("db") || "";
+            : window.getCurrentDbParam() || "";
         return db ? `_${db}` : "";
       } catch {
         return "";
@@ -5671,7 +5671,7 @@ function __kbInitTableSelection() {
           const db =
             typeof window.getCurrentDbParam === "function"
               ? window.getCurrentDbParam()
-              : new URL(window.location.href).searchParams.get("db") || "";
+              : window.getCurrentDbParam() || "";
           return db ? `_${db}` : "";
         } catch {
           return "";
@@ -5921,7 +5921,7 @@ function __kbInitTableSelection() {
               const db =
                 typeof window.getCurrentDbParam === "function"
                   ? window.getCurrentDbParam()
-                  : new URL(window.location.href).searchParams.get("db") || "";
+                  : window.getCurrentDbParam() || "";
               return db ? `_${db}` : "";
             } catch {
               return "";
@@ -6281,7 +6281,7 @@ function __kbInitTableSelection() {
             const db =
               typeof window.getCurrentDbParam === "function"
                 ? window.getCurrentDbParam()
-                : new URL(window.location.href).searchParams.get("db") || "";
+                : window.getCurrentDbParam() || "";
             return db ? `_${db}` : "";
           } catch {
             return "";

@@ -2,7 +2,7 @@
   const byId = (id) => document.getElementById(id);
   const apiUrl = (path) => {
     const url = new URL(path, window.location.origin);
-    const db = new URLSearchParams(window.location.search).get("db");
+    const db = window.getCurrentDbParam();
     if (db) url.searchParams.set("db", db);
     return url.toString();
   };

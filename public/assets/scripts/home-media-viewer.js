@@ -34,7 +34,7 @@
   let scope = '', recent = [], busy = false, wheelAt = 0, wheelSum = 0, touchStart, muted = false;
   let focusBefore, oldOverflow, overlayMode = '', overlayPage = 0, comments = [], liked = false, actionBusy = false;
   const idOf = (item) => String(item?.id || item?._id || '').replace(/^entity\//, '');
-  const currentScope = () => new URLSearchParams(location.search).get('db') || '';
+  const currentScope = () => window.getCurrentDbParam() || '';
   async function api(path, params = {}, options = {}) {
     const url = new URL(path, location.origin);
     if (scope) url.searchParams.set('db', scope);

@@ -395,7 +395,7 @@
       const scopedUrl = window.appendCurrentDbParam(url);
       if (scopedUrl instanceof URL) return scopedUrl;
     }
-    const db = new URL(window.location.href).searchParams.get("db");
+    const db = window.getCurrentDbParam();
     if (db) url.searchParams.set("db", db);
     return url;
   }
@@ -3227,7 +3227,7 @@
   }
 
   function getCustomTagStorageKey() {
-    const db = new URLSearchParams(window.location.search).get("db") || "default";
+    const db = window.getCurrentDbParam() || "default";
     return `kb:custom-tags:${db}`;
   }
 

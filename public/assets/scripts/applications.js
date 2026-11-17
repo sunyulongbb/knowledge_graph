@@ -3,7 +3,7 @@
   const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
   let scope = 'market', projects = [], activeProject = null, listVersion = 0, detailVersion = 0, infoVersion = 0;
   let canCreate = false, editingProject = null, deletingProject = null, currentDetail = null;
-  const updateScope = () => { const value = new URLSearchParams(location.search).get('db'); window.kbApplicationScope = value && value !== 'app' ? value : ''; window.dispatchEvent(new CustomEvent('kb-application-access-change')); };
+  const updateScope = () => { const value = window.getCurrentDbParam(); window.kbApplicationScope = value && value !== 'app' ? value : ''; window.dispatchEvent(new CustomEvent('kb-application-access-change')); };
   updateScope();
   window.addEventListener('kb:url-param-changed', updateScope);
   window.addEventListener('popstate', updateScope);
@@ -190,8 +190,8 @@
       byId('applicationDetail').hidden = true; byId('applicationCatalog').hidden = false;
       await Promise.all([loadApplications(), window.loadProjectsToSidebar?.(), loadNotifications()]);
       status('应用已删除');
-      if (new URLSearchParams(location.search).get('db') === project.slug) {
-        const url = new URL(location.href); url.searchParams.delete('db'); url.searchParams.delete('node'); url.hash = 'view=applications'; location.href = url;
+      if (window.getCurrentDbParam() === project.slug) {
+        const url = new URL(location.href); url.pathname = '/default'; url.searchParams.delete('db'); url.searchParams.delete('node'); url.hash = 'view=applications'; location.href = url;
       }
     } catch (error) { byId('applicationDeleteStatus').textContent = error.message; } finally { button.disabled = false; }
   });
@@ -208,7 +208,7 @@
     if (button.dataset.appDetail) { await loadDetails(button.dataset.appDetail); return; }
     if (button.dataset.appMaintenance) { await loadDetails(button.dataset.appMaintenance); byId('applicationAccess').scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
     if (button.hasAttribute('data-app-detail-back')) { infoVersion++; detailVersion++; activeProject = null; byId('applicationAccess').hidden = true; byId('applicationDetail').hidden = true; byId('applicationCatalog').hidden = false; return; }
-    if (button.dataset.appOpen) { const url = new URL(location.href); url.searchParams.set('db', button.dataset.appOpen); url.searchParams.delete('node'); url.searchParams.delete('view'); url.hash = 'view=app_home'; location.href = url; return; }
+    if (button.dataset.appOpen) { const url = new URL(location.href); url.pathname = '/' + encodeURIComponent(button.dataset.appOpen); url.searchParams.delete('db'); url.searchParams.delete('node'); url.searchParams.delete('view'); url.hash = 'view=app_home'; location.href = url; return; }
     if (button.dataset.appAccess) { byId('applicationAccess').scrollIntoView({ behavior: 'smooth', block: 'start' }); byId('applicationAccess').focus({ preventScroll: true }); return; }
     if (button.hasAttribute('data-access-retry')) { await loadAccess(activeProject); return; }
     if (!button.dataset.appReview && !button.dataset.memberRemove) return;

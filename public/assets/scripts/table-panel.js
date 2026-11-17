@@ -1255,7 +1255,7 @@
     // 不需要在此处 fetch（跳转后页面自行初始化），直接跳过避免 Failed to fetch。
     try {
       const currentDbInUrl =
-        new URL(window.location.href).searchParams.get("db") || "";
+        window.getCurrentDbParam() || "";
       if (currentDbInUrl !== (detail.value || "")) return;
     } catch {
       return;

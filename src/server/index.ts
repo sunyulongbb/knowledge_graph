@@ -8,7 +8,7 @@ import { createSqliteKnowledgeSync } from './sqlite-knowledge-sync.ts';
 import { EnterpriseSqliteBackup } from './enterprise-sqlite-backup.ts';
 import { createGraphCanvasHandler } from './graph-canvases.ts';
 import { enterpriseKnowledgeEnabled } from './knowledge-mode.ts';
-import { EnterpriseKnowledgeStore, ArangoElasticsearchSync } from './enterprise-knowledge.ts';
+import { EnterpriseKnowledgeStore, ArangoElasticsearchSync, arangoNodeResponse } from './enterprise-knowledge.ts';
 import { ElasticsearchClient, ensureApplicationDatabase } from './arangodb.ts';
 import { createEnterpriseKnowledgeHandler } from './routes/enterprise-knowledge.ts';
 import { importEnterpriseOntologies } from './enterprise-ontology-import.ts';
@@ -71,7 +71,6 @@ const accountActivity = createAccountActivity({ db: adminDb, store: enterpriseSt
 const handleUserProfile = createUserProfileHandler(adminDb, getCurrentUser, accountActivity);
 const handleLearning = createLearningHandler({ db: adminDb, store: enterpriseStore, getUser: getCurrentUser, getKnowledgeUser, getProject: getProjectByIdentifier });
 const enterpriseBackup = enterpriseStore ? EnterpriseSqliteBackup.open(enterpriseStore, adminDb.filename) : undefined;
-enterpriseBackup?.start(async () => (adminDb.query('SELECT name FROM projects ORDER BY id').all() as { name: string }[]).map(project => project.name));
 const handleApplications = createApplicationHandler(adminDb, getCurrentUser, {
   provisionKnowledge: enterpriseStore ? name => ensureApplicationDatabase(enterpriseStore.client, name) : undefined,
   initializeOntology: enterpriseStore ? (name, projectId, input) => importEnterpriseOntologies(enterpriseStore, name, projectId, input) : undefined,
@@ -108,7 +107,16 @@ const handleEnterpriseKnowledge = enterpriseStore ? createEnterpriseKnowledgeHan
 }) : null;
 const recommendations = createKnowledgeRecommendations({
   db: adminDb, store: enterpriseStore, getUser: getKnowledgeUser, getProject: getProjectByIdentifier,
-  search: async (req, url) => (await handleEnterpriseKnowledge?.(req, url, 'GET')) || await handleCoreKbRoutes(req, url, 'GET'),
+  search: async (req, url, contextUser) => {
+    if(!enterpriseSync || !enterpriseStore) return Response.json({error:'Elasticsearch recommendations are not configured'},{status:503});
+    const database=url.searchParams.get('db') || 'default';
+    const user=contextUser === undefined ? getKnowledgeUser(req) : contextUser;
+    const search=new EnterpriseKnowledgeSearch(enterpriseStore,enterpriseSync.elasticsearch);
+    const result=await search.search(database,user,{esOnly:true,limit:Number(url.searchParams.get('limit')||200),offset:Number(url.searchParams.get('offset')||0),
+      order:url.searchParams.get('order'),classIds:url.searchParams.get('class_id')?[url.searchParams.get('class_id')!]:null,
+      ids:url.searchParams.has('ids')?JSON.parse(url.searchParams.get('ids')!):undefined});
+    return Response.json({...result,nodes:result.nodes.map(node=>arangoNodeResponse(node,user))});
+  },
 });
 const handleSqliteKnowledgeSync = createSqliteKnowledgeSync({
   db: adminDb, getUser: getCurrentUser, getProject: getProjectByIdentifier,

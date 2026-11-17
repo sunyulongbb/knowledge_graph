@@ -106,7 +106,7 @@
     try {
       const requestUrl = new URL(requestPath, window.location.origin);
       const currentUrl = new URL(window.location.href);
-      const db = (currentUrl.searchParams.get("db") || "").trim();
+      const db = (window.getCurrentDbParam() || "").trim();
       if (db) {
         requestUrl.searchParams.set("db", db);
       }

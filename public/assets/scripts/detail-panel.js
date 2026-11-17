@@ -6,11 +6,11 @@
   const shared = window.kbApp || {};
   const state = shared.state || {};
   const appendDetailDb = (url) => {
-    const db = new URLSearchParams(window.location.search).get("db");
+    const db = window.getCurrentDbParam();
     if (db) url.searchParams.set("db", db);
     return url;
   };
-  const canEditDefaultApplication = () => new URLSearchParams(window.location.search).get("db") === "default";
+  const canEditDefaultApplication = () => window.getCurrentDbParam() === "default";
   if (typeof state.bindAlias === "function") {
     state.bindAlias("kbActiveDetailNodeId", "activeDetailNodeId", "");
     state.bindAlias("kbActiveDetailRouteId", "activeDetailRouteId", "");
@@ -1636,7 +1636,7 @@
           deleteKnowledgeButton.disabled = true;
           try {
             const url = new URL('/api/kb/nodes', location.origin);
-            const db = new URLSearchParams(location.search).get('db');
+            const db = window.getCurrentDbParam();
             if (db) url.searchParams.set('db', db);
             url.searchParams.set('id', nodeId);
             const response = await fetch(url, {method:'DELETE'});
@@ -1644,9 +1644,10 @@
             if (!response.ok || !result.ok) throw new Error(result.error || result.message || '删除失败');
             window.kbSelectedRowIds?.delete(nodeId);
             if (window.kbSelectedRowId === nodeId) window.kbSelectedRowId = '';
-            window.setViewMode?.('app_home');
+            const destination = window.getPageSpace(window.kbViewMode) === 'home' ? 'app_home' : 'table';
+            window.setViewMode?.(destination);
             window.dispatchEvent(new CustomEvent('kb:knowledge-deleted', {detail:{id:nodeId}}));
-            await window.loadApplicationHome?.();
+            if (destination === 'app_home') await window.loadApplicationHome?.();
           } catch (error) {
             alert(error.message || '删除失败，请稍后重试');
             deleteKnowledgeButton.disabled = false;
@@ -1655,7 +1656,7 @@
       }
       if (doc) {
         const viewCount = document.getElementById('knowledgeViewCount');
-        if (viewCount) { viewCount.dataset.knowledgeViews = String(doc.id || doc._id).replace(/^entity\//,''); viewCount.dataset.db = new URLSearchParams(window.location.search).get('db') || 'default'; viewCount.textContent = String(Number(doc.viewCount) || 0); }
+        if (viewCount) { viewCount.dataset.knowledgeViews = String(doc.id || doc._id).replace(/^entity\//,''); viewCount.dataset.db = window.getCurrentDbParam() || 'default'; viewCount.textContent = String(Number(doc.viewCount) || 0); }
         window.recordKnowledgeView?.(doc.id || doc._id);
       }
       const neighbors = data && data.neighbors;
@@ -2727,17 +2728,23 @@
       imageTabPasteController?.abort();
       imageTabPasteController = new AbortController();
       const pasteController = imageTabPasteController;
+      document.querySelectorAll('.detail-image-paste-status').forEach(element => element.remove());
       if (doc?.can_edit || canEditDefaultApplication()) {
         let uploadingImages = false;
         const pasteStatus = document.createElement('p');
         pasteStatus.className = 'detail-image-paste-status'; pasteStatus.setAttribute('role','status');
-        document.getElementById('wikiTopMedia')?.append(pasteStatus);
+        if (!hasImageMedia) pasteStatus.textContent = '\u6682\u65e0\u56fe\u7247\uff0c\u53ef\u76f4\u63a5\u7c98\u8d34\u56fe\u7247\u4e0a\u4f20';
+        (hasImageMedia ? document.getElementById('wikiTopMedia') : document.getElementById('detailInner'))?.append(pasteStatus);
         document.addEventListener('paste', async event => {
           const stage = document.getElementById('detailTopMediaStage');
-          if (!stage || stage.dataset.activeMedia !== 'image' || !stage.getClientRects().length || stage.closest('[inert]')) return;
-          if (document.querySelector('dialog[open]') || event.target?.closest?.('input,textarea,[contenteditable="true"]')) return;
+          const panel = document.getElementById('detailPanel');
+          if (!panel || !panel.getClientRects().length || panel.closest('[inert]')) return;
+          // Empty image sections are hidden; allow pasting from the visible detail page.
+          if (hasImageMedia && (!stage || stage.dataset.activeMedia !== 'image' || !stage.getClientRects().length || stage.closest('[inert]'))) return;
+          if (event.defaultPrevented || document.querySelector('dialog[open]') || event.target?.closest?.('input,textarea,[contenteditable]:not([contenteditable="false"]),.CodeMirror')) return;
           if (String(window.kbActiveDetailNodeId || '').replace(/^entity\//,'') !== String(doc?._id || doc?.id || fullId).replace(/^entity\//,'')) return;
           const files = Array.from(event.clipboardData?.items || []).filter(item => item.type.startsWith('image/')).map(item => item.getAsFile()).filter(Boolean);
+          if (!files.length) files.push(...Array.from(event.clipboardData?.files || []).filter(file => file.type.startsWith('image/')));
           if (!files.length) return;
           event.preventDefault();
           if (uploadingImages) return;
@@ -2864,7 +2871,7 @@
           const extension = file.type.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
           form.append('file', file, file.name?.includes('.') ? file.name : `pasted-image.${extension}`);
           const url = new URL('/api/kb/upload-image', location.origin);
-          url.searchParams.set('db', new URLSearchParams(location.search).get('db') || 'default');
+          url.searchParams.set('db', window.getCurrentDbParam() || 'default');
           const response = await fetch(url, { method: 'POST', body: form });
           const data = await response.json().catch(() => ({}));
           if (!response.ok || !data.url) throw new Error(data.error || '\u56fe\u7247\u4e0a\u4f20\u5931\u8d25\uff0c\u8bf7\u91cd\u65b0\u7c98\u8d34');

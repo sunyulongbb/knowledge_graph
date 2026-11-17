@@ -37,15 +37,57 @@
   let homeFeedExhausted = false;
   let homeFeed = readHomeFeed();
   function readHomeFeed() {
-    const feed = new URLSearchParams(location.search).get("home_feed");
+    const feed = new URLSearchParams(location.search).get("home_feed") || window.getProjectPageRoute().feed;
     return ["popular", "news"].includes(feed) ? feed : "for-you";
   }
   function writeHomeFeedRoute() {
     const url = new URL(location.href);
     if (homeFeed === "for-you") url.searchParams.delete("home_feed");
     else url.searchParams.set("home_feed", homeFeed);
-    window.history.replaceState(window.history.state, "", url);
+    window.history.pushState(window.history.state, "", window.projectViewUrl("app_home", url, homeFeed));
   }
+  let recommendationTypes = [];
+  function shuffleLeafTypes(rows) {
+    const all = rows.flatMap(function flatten(row) { return [row, ...(row.children || []).flatMap(flatten)]; });
+    const parents = new Set(all.map(row => String(row.parent_id || row.parent || '')).filter(Boolean));
+    const unique = new Map(all.filter(row => !(row.children?.length) && !parents.has(String(row.id))).map(row => [String(row.id), row]));
+    const leaves = [...unique.values()];
+    for (let i = leaves.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [leaves[i], leaves[j]] = [leaves[j], leaves[i]]; }
+    return leaves;
+  }
+  function recommendationTypeFilter() {
+    const chip = (id, label) => `<button type="button" data-home-category="${escape(id)}" aria-pressed="${homeSelectedCategory === id}">${escape(label)}</button>`;
+    return `<div class="recommendation-filter-bar"><button type="button" class="recommendation-filter-next recommendation-filter-prev" aria-label="\u5411\u5de6\u6eda\u52a8\u7c7b\u578b" data-recommendation-prev hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></button><nav class="recommendation-type-filter" aria-label="\u63a8\u8350\u7c7b\u578b\u7b5b\u9009">${chip('', '\u5168\u90e8')}${recommendationTypes.map(row => chip(String(row.id), row.name || row.label || row.id)).join('')}</nav><button type="button" class="recommendation-filter-next" aria-label="\u5411\u53f3\u6eda\u52a8\u7c7b\u578b" data-recommendation-next hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button></div>`;
+  }
+  let typeFilterResize = null;
+  function bindTypeFilter(strip, scrollLeft) {
+    typeFilterResize?.disconnect();
+    if (!strip) return;
+    strip.scrollLeft = scrollLeft;
+    const bar = strip.parentElement;
+    const update = () => {
+      const maximum = Math.max(0, strip.scrollWidth - strip.clientWidth);
+      bar.querySelector('[data-recommendation-prev]').hidden = strip.scrollLeft <= 1;
+      bar.querySelector('[data-recommendation-next]').hidden = maximum <= 1 || strip.scrollLeft >= maximum - 1;
+    };
+    strip.addEventListener('scroll', update, {passive:true});
+    strip.addEventListener('wheel', event => {
+      if (event.ctrlKey || Math.abs(event.deltaX) > Math.abs(event.deltaY) || strip.scrollWidth <= strip.clientWidth) return;
+      const before = strip.scrollLeft;
+      strip.scrollLeft += event.deltaY;
+      if (strip.scrollLeft !== before) event.preventDefault();
+    }, {passive:false});
+    typeFilterResize = new ResizeObserver(update);
+    typeFilterResize.observe(strip);
+    update();
+  }
+  byId('appHomeContent').addEventListener('click', event => {
+    const arrow = event.target.closest('[data-recommendation-next],[data-recommendation-prev]');
+    if (!arrow) return;
+    const strip = arrow.parentElement.querySelector('.recommendation-type-filter');
+    const direction = arrow.hasAttribute('data-recommendation-prev') ? -1 : 1;
+    strip.scrollBy({left:direction * strip.clientWidth * .7, behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'});
+  });
   function homeFeedOrder() {
     return homeFeed === "popular"
       ? "popular"
@@ -139,14 +181,14 @@
       brand.textContent = applicationName;
       try {
         localStorage.setItem(
-          `kb:application-name:${new URLSearchParams(location.search).get("db") || "default"}`,
+          `kb:application-name:${window.getCurrentDbParam() || "default"}`,
           applicationName,
         );
       } catch {}
     }
     const logo = byId("homeDiscoveryLogo");
     const logoScope =
-      new URLSearchParams(location.search).get("db") || "default";
+      window.getCurrentDbParam() || "default";
     const headerLogoElement = byId("headerProjectAvatar");
     const background = headerLogoElement?.style?.backgroundImage || "";
     const backgroundMatch = background.match(/^url\(["']?(.*?)["']?\)$/);
@@ -252,7 +294,7 @@
   }
   async function api(path, params = {}) {
     const url = new URL(path, location.origin);
-    const db = new URLSearchParams(location.search).get("db");
+    const db = window.getCurrentDbParam();
     if (db) url.searchParams.set("db", db);
     Object.entries(params).forEach(([key, value]) => {
       if (value !== "") url.searchParams.set(key, value);
@@ -628,7 +670,7 @@
                   title = node.name || node.label || id,
                   image = firstImage(node) || firstCover(node),
                   video = firstVideo(node);
-                return `<li class="home-news-event"><time ${iso ? `datetime="${escape(iso)}"` : ""}>${escape(time)}</time><span class="home-news-event-dot" aria-hidden="true"></span><article class="home-news-card" data-home-node-id="${escape(id)}"><div class="home-news-card-copy"><span class="home-news-type">${escape(knowledgeCategoryLabel(node))}</span><button type="button" class="home-news-title" data-home-node-id="${escape(id)}">${escape(title)}</button>${node.description ? `<p>${escape(node.description)}</p>` : ""}${knowledgeCardTags(node)}<button type="button" class="home-news-open" data-home-node-id="${escape(id)}">阅读知识 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button></div>${image ? `<button type="button" data-home-open="shorts" class="home-news-thumb" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}"><img src="${escape(image)}" alt="" loading="lazy">${video ? '<i class="fa-solid fa-play" aria-hidden="true"></i>' : ""}</button>` : ""}</article></li>`;
+                return `<li class="home-news-event"><time ${iso ? `datetime="${escape(iso)}"` : ""}>${escape(time)}</time><span class="home-news-event-dot" aria-hidden="true"></span><article class="home-news-card" data-home-node-id="${escape(id)}"><div class="home-news-card-copy"><button type="button" class="home-news-title" data-home-node-id="${escape(id)}">${escape(title)}</button>${node.description ? `<p>${escape(node.description)}</p>` : ""}<button type="button" class="home-news-open" data-home-node-id="${escape(id)}">阅读知识 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button></div>${image ? `<button type="button" data-home-open="shorts" class="home-news-thumb" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}"><img src="${escape(image)}" alt="" loading="lazy">${video ? '<i class="fa-solid fa-play" aria-hidden="true"></i>' : ""}</button>` : ""}</article></li>`;
               })
               .join("")}</ol></section>`,
         )
@@ -641,9 +683,15 @@
     const image = firstImage(node) || firstCover(node),
       video = firstVideo(node),
       stats = node.engagement;
-    return `<article class="home-popular-row" data-home-node-id="${escape(id)}"><span class="home-popular-rank ${index < 3 ? "is-top-" + (index + 1) : ""}">${String(index + 1).padStart(2, "0")}</span><button type="button" data-home-open="shorts" class="home-popular-thumb" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}">${image ? `<img src="${escape(image)}" alt="" loading="lazy">` : video ? `<video src="${escape(video)}" muted playsinline preload="metadata"></video>` : '<i class="fa-regular fa-lightbulb" aria-hidden="true"></i>'}${video ? '<span><i class="fa-solid fa-play" aria-hidden="true"></i> 视频</span>' : ""}</button><div class="home-popular-copy"><div class="home-popular-meta"><time>${escape(shortDate(node.updated_at || node.created_at))}</time></div><button class="home-popular-title" type="button" data-home-node-id="${escape(id)}">${escape(title)}</button>${node.description ? `<p>${escape(node.description)}</p>` : ""}${knowledgeCardTags(node)}<div class="home-popular-actions"><span title="浏览量"><i class="fa-regular fa-eye" aria-hidden="true"></i> <b data-knowledge-views="${escape(id)}">${Number(node.viewCount) || 0}</b></span>${stats ? `<span><i class="fa-regular fa-heart" aria-hidden="true"></i> ${Number(stats.likes) || 0}</span><span><i class="fa-regular fa-comment" aria-hidden="true"></i> ${Number(stats.comments) || 0}</span><span><i class="fa-solid fa-share" aria-hidden="true"></i> ${Number(stats.shares) || 0}</span>` : ""}<button type="button" data-home-node-id="${escape(id)}">查看详情 <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></button></div></div></article>`;
+    return `<article class="home-popular-row" data-home-node-id="${escape(id)}"><span class="home-popular-rank ${index < 3 ? "is-top-" + (index + 1) : ""}">${String(index + 1).padStart(2, "0")}</span><button type="button" data-home-open="shorts" class="home-popular-thumb" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}">${image ? `<img src="${escape(image)}" alt="" loading="lazy">` : video ? `<video src="${escape(video)}" muted playsinline preload="metadata"></video>` : '<i class="fa-regular fa-lightbulb" aria-hidden="true"></i>'}${video ? '<span><i class="fa-solid fa-play" aria-hidden="true"></i> 视频</span>' : ""}</button><div class="home-popular-copy"><div class="home-popular-meta"><time>${escape(shortDate(node.updated_at || node.created_at))}</time></div><button class="home-popular-title" type="button" data-home-node-id="${escape(id)}">${escape(title)}</button>${node.description ? `<p>${escape(node.description)}</p>` : ""}<div class="home-popular-actions"><span title="浏览量"><i class="fa-regular fa-eye" aria-hidden="true"></i> <b data-knowledge-views="${escape(id)}">${Number(node.viewCount) || 0}</b></span>${stats ? `<span><i class="fa-regular fa-heart" aria-hidden="true"></i> ${Number(stats.likes) || 0}</span><span><i class="fa-regular fa-comment" aria-hidden="true"></i> ${Number(stats.comments) || 0}</span><span><i class="fa-solid fa-share" aria-hidden="true"></i> ${Number(stats.shares) || 0}</span>` : ""}<button type="button" data-home-node-id="${escape(id)}">查看详情 <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></button></div></div></article>`;
   }
-  function homeWaterfallCard(node) {
+  byId('appHomeContent').addEventListener('click', event => {
+    const button=event.target.closest('[data-home-card-graph]');
+    if(!button)return;
+    event.preventDefault();event.stopPropagation();
+    window.setViewMode('knowledge_graph',{targetNodeId:button.dataset.homeCardGraph});
+  },true);
+  function homeWaterfallCard(node, index = 0) {
     const id = node.id || node._id || "";
     const title =
       [node.name, node.label, node.title].find(
@@ -652,15 +700,12 @@
     const image = firstImage(node),
       video = firstVideo(node),
       cover = firstCover(node);
-    const author =
-      node.owner_name ||
-      node.created_by_name ||
-      knowledgeCategoryLabel(node) ||
-      "知识分享";
+    const author = node.owner_name || node.created_by_name || "";
     const description = String(node.description || node.desc_zh || "").trim();
+    const deferredMedia = (window.getCurrentDbParam() || 'default') === 'default';
     const picture =
       image || cover
-        ? `<img src="${escape(image || cover)}" alt="" loading="lazy" decoding="async">`
+        ? `<img src="${escape(image || cover)}" alt="" fetchpriority="${index < 2 ? 'high' : 'auto'}" loading="${index < 6 ? 'eager' : 'lazy'}" decoding="${deferredMedia ? 'async' : 'auto'}">`
         : video
           ? `<video src="${escape(video)}" muted playsinline preload="metadata"></video>`
           : "";
@@ -672,9 +717,14 @@
       ) % 6;
     const titleSize = Array.from(title).length > 28 ? " is-long-title" : "";
     return `<article class="for-you-card" data-home-node-id="${escape(id)}">
-      ${picture ? `<button data-home-open="shorts" class="for-you-card-media" type="button" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}的媒体">${picture}${video ? '<span class="for-you-video-badge"><i class="fa-solid fa-play" aria-hidden="true"></i></span>' : ""}</button>` : `<button type="button" class="for-you-card-quote palette-${palette}${titleSize}" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}"><span class="for-you-note-label"><i class="fa-solid fa-book-open" aria-hidden="true"></i> ${escape(knowledgeCategoryLabel(node))}</span><strong class="for-you-card-text-title">${escape(title)}</strong>${description ? `<p>${escape(description.slice(0, 360))}</p>` : ""}</button>`}
-      <div class="for-you-card-content">${picture ? `<button type="button" class="for-you-card-title" data-home-node-id="${escape(id)}">${escape(title)}</button>` : ""}
-      ${knowledgeCardTags(node)}<div class="for-you-card-meta"><span class="for-you-avatar" aria-hidden="true">${escape(Array.from(String(author))[0] || "")}</span><span class="for-you-card-author">${escape(author)}</span><span class="for-you-card-stat" title="浏览量"><i class="fa-regular fa-eye" aria-hidden="true"></i> <b data-knowledge-views="${escape(id)}">${Number(node.viewCount) || 0}</b></span>${likes !== undefined ? `<span class="for-you-card-stat"><i class="fa-regular fa-heart" aria-hidden="true"></i> ${Number(likes) || 0}</span>` : `<time>${escape(shortDate(node.updated_at || node.created_at))}</time>`}</div></div>
+      ${picture ? `<button data-home-open="shorts" class="for-you-card-media" type="button" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}的媒体">${picture}${video ? '<span class="for-you-video-badge"><i class="fa-solid fa-play" aria-hidden="true"></i></span>' : ""}</button>` : `<div class="for-you-card-quote for-you-text-card palette-${palette}${titleSize}">${description ? `<button type="button" class="for-you-card-description" data-home-node-id="${escape(id)}" aria-label="${escape(title)}"><p>${escape(description.slice(0, 360))}</p></button>` : ''}`}
+
+      <div class="for-you-card-content"><div class="for-you-card-heading">
+        <button type="button" class="for-you-card-title" title="${escape(title)}" data-home-node-id="${escape(id)}">${escape(title)}</button>
+        <span class="for-you-card-stat" title="\u6d4f\u89c8\u91cf"><i class="fa-regular fa-eye" aria-hidden="true"></i><b data-knowledge-views="${escape(id)}">${Number(node.viewCount) || 0}</b></span>
+        <button type="button" class="for-you-card-graph" data-home-card-graph="${escape(id)}" title="\u5173\u7cfb\u56fe" aria-label="\u67e5\u770b ${escape(title)} \u7684\u5173\u7cfb\u56fe"><i class="fa-solid fa-diagram-project" aria-hidden="true"></i></button>
+      </div>${author || likes !== undefined ? `<div class="for-you-card-meta">${author ? `<span class="for-you-card-author">${escape(author)}</span>` : ''}${likes !== undefined ? `<span class="for-you-card-stat"><i class="fa-regular fa-heart" aria-hidden="true"></i> ${Number(likes) || 0}</span>` : ''}</div>` : ''}</div>
+      ${picture ? '' : '</div>'}
     </article>`;
   }
   function homeKnowledgeCard(node) {
@@ -688,7 +738,7 @@
     const id = node.id || node._id || "";
     return `<article class="app-home-knowledge-card" data-home-node-id="${escape(id)}">
       <button type="button" data-home-open="shorts" class="app-home-card-media${cover || video ? "" : " is-placeholder"}" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}">${cover ? `<img src="${escape(cover)}" alt="" loading="lazy">` : video ? `<video src="${escape(video)}" muted playsinline preload="metadata"></video><span class="app-media-type"><i class="fa-solid fa-play" aria-hidden="true"></i> 视频</span>` : '<i class="fa-solid fa-lightbulb" aria-hidden="true"></i>'}</button>
-      <div class="app-home-card-body"><div class="app-home-card-meta"><span>${escape(knowledgeCategoryLabel(node))}</span><time>${escape(shortDate(node.updated_at || node.created_at))}</time></div><button type="button" class="app-home-card-title" title="${escape(title)}" data-home-node-id="${escape(id)}">${escape(title)}</button>${knowledgeCardTags(node)}<div class="app-home-card-footer"><span title="浏览量"><i class="fa-regular fa-eye" aria-hidden="true"></i> <b data-knowledge-views="${escape(node.id || node._id || "")}">${Number(node.viewCount) || 0}</b></span><span class="app-home-card-id">${escape(id)}</span><span>查看详情 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span></div></div>
+      <div class="app-home-card-body"><div class="app-home-card-meta"><time>${escape(shortDate(node.updated_at || node.created_at))}</time></div><button type="button" class="app-home-card-title" title="${escape(title)}" data-home-node-id="${escape(id)}">${escape(title)}</button><div class="app-home-card-footer"><span title="浏览量"><i class="fa-regular fa-eye" aria-hidden="true"></i> <b data-knowledge-views="${escape(node.id || node._id || "")}">${Number(node.viewCount) || 0}</b></span><span class="app-home-card-id">${escape(id)}</span><span>查看详情 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span></div></div>
     </article>`;
   }
   function applicationBanner() {
@@ -1204,7 +1254,7 @@
     }
     rating.hidden = false;
     const database =
-      new URLSearchParams(location.search).get("db") || "default";
+      window.getCurrentDbParam() || "default";
     const cacheKey = `${database}:${node.id || node._id}`;
     if (!force && inspirationScoreCache.has(cacheKey))
       return revealJevScore(rating, inspirationScoreCache.get(cacheKey));
@@ -1511,6 +1561,7 @@
       document.querySelector(".home-discovery-main") ||
       byId("applicationHomePanel");
     const scrollTop = scrollPanel?.scrollTop || 0;
+    const filterScrollLeft = content.querySelector(".recommendation-type-filter")?.scrollLeft || 0;
     content.classList.remove("is-filtering");
     homeVisibleNodes = nodes;
     homeInspirationIndex = homeVisibleNodes.length
@@ -1531,19 +1582,25 @@
           : "For You · 为你推荐";
     if (homeFeed === "news") {
       content.innerHTML = `<section class="home-news-board"><div class="home-news-timeline">${homeNewsTimeline(nodes)}</div>${homeError ? homePagination() : ""}</section>`;
-      if (scrollPanel) scrollPanel.scrollTop = scrollTop;
+      const typeFilter = content.querySelector(".recommendation-type-filter");
+    bindTypeFilter(typeFilter, filterScrollLeft);
+    if (scrollPanel) scrollPanel.scrollTop = scrollTop;
       window.newsTimelineLayout?.mount(content);
       return;
     }
     if (homeFeed === "popular") {
-      content.innerHTML = `<section class="home-popular-board" aria-label="热门知识排行榜"><header class="home-popular-heading"><div><h1>热门知识 <b>TOP 30</b></h1><p>按浏览量从高到低排序，展示前 30 名。</p></div><i class="fa-solid fa-fire" aria-hidden="true"></i></header><div class="home-popular-list">${nodes.slice(0, 30).map(homePopularRow).join("") || (!homeBusy && !homeError ? '<p class="home-popular-status">暂无热门知识</p>' : "")}</div>${homePagination()}</section>`;
-      if (scrollPanel) scrollPanel.scrollTop = scrollTop;
+      content.innerHTML = `<section class="home-popular-board" aria-label="热门知识排行榜"><div class="home-popular-list">${nodes.slice(0, 30).map(homePopularRow).join("") || (!homeBusy && !homeError ? '<p class="home-popular-status">暂无热门知识</p>' : "")}</div>${homePagination()}</section>`;
+      const typeFilter = content.querySelector(".recommendation-type-filter");
+    bindTypeFilter(typeFilter, filterScrollLeft);
+    if (scrollPanel) scrollPanel.scrollTop = scrollTop;
       return;
     }
     content.innerHTML = `
       <dialog class="app-inspiration-modal" data-home-inspiration-modal aria-label="知识画像"><div class="app-inspiration-profile-layer" data-jev-profile-layer ${showJev ? "" : "hidden"}>${showJev ? profileLoading() : ""}</div><div class="app-inspiration-modal-core"><button type="button" class="app-inspiration-close" data-home-inspiration-close aria-label="关闭"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button><div class="app-inspiration-draw-shell">${inspirationDrawContent(inspiration)}</div></div></dialog>
       <div class="app-home-workspace app-home-workspace--horizontal">
-      <section class="app-knowledge-panel${homeFeed === "for-you" ? " is-for-you-feed" : ""}">${homeFeed === "for-you" ? "" : `${applicationBanner()}${homeCategoryNavigation()}<div class="app-home-section-heading compact app-knowledge-list-heading"><div><h2>${escape(activeCategory?.name || feedTitle)}</h2></div><div class="app-knowledge-list-actions"><span class="app-list-count">共 ${homeTotal} 条 · ${homeFeed === "for-you" ? "已加载" : "本页"} ${nodes.length} 条</span><button id="knowledgeRoamLaunch" type="button" class="btn" data-home-roam-open data-home-roam-class="${escape(homeSelectedCategory)}"><i class="fa-solid fa-route" aria-hidden="true"></i><span>知识漫游</span></button><button type="button" class="btn" data-home-inspiration-open><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i><span>知识画像</span></button></div></div>`}<div class="${homeFeed === "for-you" ? "for-you-masonry" : "app-home-knowledge-grid"}">${nodes.map(homeFeed === "for-you" ? homeWaterfallCard : homeKnowledgeCard).join("") || '<div class="app-home-empty"><i class="fa-solid fa-inbox" aria-hidden="true"></i><strong>该分类暂无知识</strong><span>选择其他分类，或创建一条新知识。</span></div>'}</div>${homePagination()}</section></div>`;
+      <section class="app-knowledge-panel${homeFeed === "for-you" ? " is-for-you-feed" : ""}">${homeFeed === "for-you" ? recommendationTypeFilter() : `${applicationBanner()}${homeCategoryNavigation()}<div class="app-home-section-heading compact app-knowledge-list-heading"><div><h2>${escape(activeCategory?.name || feedTitle)}</h2></div><div class="app-knowledge-list-actions"><span class="app-list-count">共 ${homeTotal} 条 · ${homeFeed === "for-you" ? "已加载" : "本页"} ${nodes.length} 条</span><button id="knowledgeRoamLaunch" type="button" class="btn" data-home-roam-open data-home-roam-class="${escape(homeSelectedCategory)}"><i class="fa-solid fa-route" aria-hidden="true"></i><span>知识漫游</span></button><button type="button" class="btn" data-home-inspiration-open><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i><span>知识画像</span></button></div></div>`}<div class="${homeFeed === "for-you" ? "for-you-masonry" : "app-home-knowledge-grid"}">${nodes.map(homeFeed === "for-you" ? homeWaterfallCard : homeKnowledgeCard).join("") || '<div class="app-home-empty"><i class="fa-solid fa-inbox" aria-hidden="true"></i><strong>该分类暂无知识</strong><span>选择其他分类，或创建一条新知识。</span></div>'}</div>${homePagination()}</section></div>`;
+    const typeFilter = content.querySelector(".recommendation-type-filter");
+    bindTypeFilter(typeFilter, filterScrollLeft);
     if (scrollPanel) scrollPanel.scrollTop = scrollTop;
     if (homeFeed === "for-you")
       window.homeWaterfall?.mount({
@@ -1561,29 +1618,7 @@
   }
   async function syncHomeMaintenanceAction() {
     const button = byId("appHomeMaintenance");
-    if (!button) return;
-    const slug = new URLSearchParams(location.search).get("db") || "default";
-    try {
-      const data = await api("/api/applications", { scope: "market" });
-      const project = (data.projects || []).find((item) => item.slug === slug);
-      if (!project) throw new Error("应用不存在");
-      currentHomeApplicationId = String(project.id);
-      const label = !window.authUser
-        ? "登录后申请维护"
-        : project.member
-          ? "维护管理"
-          : "申请维护";
-      button.querySelector("span").textContent = label;
-      button.title = label;
-      button.hidden = false;
-      button.classList.toggle(
-        "primary",
-        Boolean(window.authUser && !project.member),
-      );
-    } catch {
-      currentHomeApplicationId = "";
-      button.hidden = true;
-    }
+    if (button) button.hidden = true;
   }
   async function populateTypes(selected = "") {
     const version = ++typesVersion;
@@ -1618,7 +1653,19 @@
   });
   window.closeHomeDetailDrawer = closeHomeDetailDrawer;
   window.addEventListener("hashchange", closeHomeDetailDrawer);
+  const homeInitialRequests = new Map();
   window.loadApplicationHome = async function () {
+    await window.kbAuthReady;
+    if(window.kbViewMode !== 'app_home')return;
+    const scope=(window.getCurrentDbParam() || 'default') + ':' + readHomeFeed() + ':' + (window.authUser?.id || 'anonymous');
+    if(homeInitialRequests.has(scope))return homeInitialRequests.get(scope);
+    const request=loadHomeInitial();
+    homeInitialRequests.set(scope,request);
+    const finish=()=>{if(homeInitialRequests.get(scope)===request)homeInitialRequests.delete(scope);};
+    request.then(finish,finish);
+    return request;
+  };
+  async function loadHomeInitial() {
     homeFeed = readHomeFeed();
     writeHomeFeedRoute();
     homeRecommendationSeed = crypto.randomUUID();
@@ -1635,6 +1682,7 @@
     homeTotal = 0;
     homeBusy = false;
     homeError = "";
+    let renderedEarly = false;
     const results = await Promise.allSettled([
       api(
         homeFeed === "for-you"
@@ -1648,8 +1696,16 @@
           hide_entity: "1",
           defined_class_only: "1",
         },
-      ),
-      api("/api/kb/classes"),
+      ).then(data => {
+        if(version === homeVersion && homeFeed === 'for-you') {
+          homeNodes=(data.nodes || []).slice(0,homeRequestSize());homeVisibleNodes=homeNodes;
+          homeTotal=Number(data.total) || 0;homeError='';
+          // Render knowledge immediately; category/application metadata can arrive later.
+          renderHome(); renderedEarly = true;
+        }
+        return data;
+      }),
+      api("/api/kb/classes?counts=0"),
       api("/api/applications", { scope: "market" }),
     ]);
     if (version !== homeVersion) return;
@@ -1666,8 +1722,9 @@
     homeRetry = { page: 1, category: "" };
     homeCategories =
       results[1].status === "fulfilled" ? results[1].value || [] : [];
+    recommendationTypes = shuffleLeafTypes(Array.isArray(homeCategories) ? homeCategories : homeCategories.items || []);
     const currentSlug =
-      new URLSearchParams(location.search).get("db") || "default";
+      window.getCurrentDbParam() || "default";
     homeApplication =
       results[2].status === "fulfilled"
         ? (results[2].value.projects || []).find(
@@ -1686,10 +1743,18 @@
         ? `${total} 条知识 · ${homeCategories.length} 个分类`
         : "知识加载失败，请稍后重试";
     byId("appHomeCount").dataset.total = String(total);
-    renderHome();
+    if(renderedEarly && homeFeed === 'for-you') {
+      const bar=byId('appHomeContent').querySelector('.recommendation-filter-bar');
+      if(bar){
+        const scrollLeft=bar.querySelector('.recommendation-type-filter')?.scrollLeft || 0;
+        const template=document.createElement('template');template.innerHTML=recommendationTypeFilter();
+        const replacement=template.content.firstElementChild;bar.replaceWith(replacement);
+        bindTypeFilter(replacement.querySelector('.recommendation-type-filter'),scrollLeft);
+      }
+    } else renderHome();
     void syncHomeMaintenanceAction();
     void loadRemainingNews(version);
-  };
+  }
   document.addEventListener(
     "click",
     (event) => {
@@ -1746,7 +1811,7 @@
       url.hash = new URLSearchParams({
         view: workspaceLink.dataset.homeAction,
       });
-      window.open(url.href, "_blank", "noopener,noreferrer");
+      window.open(window.projectViewUrl(workspaceLink.dataset.homeAction, url).href, "_blank", "noopener,noreferrer");
       return;
     }
     const action =
@@ -1968,12 +2033,10 @@
     window.setViewMode("app_search");
   });
   byId("appHomeBrowse").addEventListener("click", () =>
-    window.setViewMode("table"),
+    window.setViewMode("app_explore"),
   );
-  byId("appHomeMaintenance").addEventListener("click", () => {
-    if (currentHomeApplicationId)
-      window.openApplicationDetails?.(currentHomeApplicationId);
-  });
+  // Application management is reached through the workspace navigation only.
+  byId("appHomeMaintenance").hidden = true;
   byId("appSearchForm").addEventListener("submit", (event) => {
     event.preventDefault();
     page = 1;
@@ -2205,7 +2268,6 @@
     if (event.target.closest("[data-search-retry]")) search();
   });
   const refresh = () => {
-    homeVersion++;
     searchVersion++;
     if (window.kbViewMode === "app_home") window.loadApplicationHome();
     if (window.kbViewMode === "app_search") window.loadApplicationSearch();

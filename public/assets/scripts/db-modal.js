@@ -1,7 +1,7 @@
 (function () {
   function getUrlParam(name) {
     const url = new URL(window.location.href);
-    return url.searchParams.get(name);
+    return name === "db" ? window.getCurrentDbParam() : url.searchParams.get(name);
   }
 
   function normalizeHashForDbSwitch(hash) {
@@ -46,10 +46,11 @@
     } catch (e) {}
   }
 
-  function setUrlParam(name, value) {
+  function setUrlParam(name, value, space) {
     const previousValue = getUrlParam(name) || "";
-    const url = new URL(window.location.href);
-    url.searchParams.set(name, value);
+    const url = name === "db" ? window.projectSwitchUrl(value, space) : new URL(window.location.href);
+    if (name === "db") { url.searchParams.delete("db"); }
+    else url.searchParams.set(name, value);
     if (name === "db" && previousValue !== String(value || "")) {
       url.searchParams.delete("node");
       url.searchParams.delete("type");
@@ -577,7 +578,8 @@
     }
   }
 
-  async function showAppLogoSwitcher() {
+  async function showAppLogoSwitcher(options = {}) {
+    const sourceSpace = options.space || window.getPageSpace(window.kbViewMode || window.getProjectPageRoute().view || 'app_home');
     let dialog = document.getElementById('appLogoSwitcher');
     if (!dialog) {
       dialog = document.createElement('dialog');
@@ -590,6 +592,7 @@
     dialog.replaceChildren();
     const close = document.createElement('button');
     close.className = 'app-logo-switcher-close'; close.textContent = '×'; close.setAttribute('aria-label', '关闭');
+    close.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>';
     close.onclick = () => dialog.close();
     const heading = document.createElement('h2'); heading.textContent = '选择应用';
     const grid = document.createElement('div'); grid.className = 'app-logo-switcher-grid';
@@ -608,7 +611,9 @@
         window.dispatchEvent(new CustomEvent('kb-application-updated', { detail: project }));
         void window.loadProjectsToSidebar?.();
       };
-      for (const project of data.projects || []) {
+      const isDefault = project => Number(project.is_default) === 1 || getProjectDbId(project) === 'default';
+      const projects = [...(data.projects || [])].sort((a, b) => Number(isDefault(b)) - Number(isDefault(a)));
+      for (const project of projects) {
         const db = getProjectDbId(project);
         if (!db) continue;
         const name = project.title || project.name || db;
@@ -616,7 +621,14 @@
         button.title = name; button.setAttribute('aria-label', name);
         if (db === getUrlParam('db')) button.setAttribute('aria-current', 'true');
         const tile = document.createElement('span'); tile.className = 'app-logo-switcher-tile';
-        tile.textContent = Array.from(name).slice(0, 2).join('');
+        // Stable color per application, without changing colors on each render.
+        let colorHash = 0;
+        for (const character of db) colorHash = (Math.imul(colorHash, 31) + character.codePointAt(0)) | 0;
+        const hue = [12, 32, 76, 152, 184, 214, 252, 284, 326][(colorHash >>> 0) % 9];
+        tile.style.setProperty('--app-tile-hue', String(hue));
+        const initials = document.createElement('span');
+        initials.textContent = Array.from(name.trim()).slice(0, 2).join('');
+        tile.append(initials);
         const logo = String(project.image || project.logo || project.img || '').trim();
         if (logo) {
           try {
@@ -627,24 +639,41 @@
           } catch {}
         }
         button.appendChild(tile);
-        button.onclick = () => { dialog.close(); if (db !== getUrlParam('db')) setUrlParam('db', db); };
+        const enterApplication = () => { dialog.close(); if (db !== getUrlParam('db')) setUrlParam('db', db, sourceSpace); };
+        button.setAttribute('aria-pressed', 'false');
+        button.ondblclick = enterApplication;
+        button.onkeydown = event => {
+          if (event.key === 'Enter') { event.preventDefault(); enterApplication(); }
+        };
         const card = document.createElement('div');
-        card.style.cssText = 'position:relative;display:flex;flex-direction:column;align-items:center;gap:14px';
+        card.className = 'app-logo-switcher-card';
+        const selectApplication = () => {
+          for (const other of grid.querySelectorAll('.app-logo-switcher-card')) {
+            other.classList.toggle('is-selected', other === card);
+            other.querySelector('.app-logo-switcher-item')?.setAttribute('aria-pressed', String(other === card));
+          }
+        };
+        button.onclick = selectApplication;
+        card.onclick = event => { if (!event.target.closest('input')) selectApplication(); };
+        card.ondblclick = event => { if (event.target === card) enterApplication(); };
         card.append(button);
         const label = document.createElement('button'); label.type = 'button'; label.textContent = name;
-        label.style.cssText = 'background:none;border:0;color:inherit;max-width:150px;overflow-wrap:anywhere;cursor:pointer';
+        label.className = 'app-logo-switcher-label';
         label.disabled = !project.editSettings;
         label.title = project.editSettings ? '点击重命名' : name;
         label.onclick = () => {
           const input = document.createElement('input'); input.value = project.title || name; input.maxLength = 100;
-          input.style.cssText = 'width:140px;padding:6px'; label.replaceWith(input); input.focus(); input.select();
+          input.className = 'app-logo-switcher-input'; label.replaceWith(input); input.focus(); input.select();
           let done = false;
           const finish = async (cancel = false) => {
             if (done) return; done = true;
             const title = input.value.trim(); input.disabled = true;
             try {
               if (!cancel && title && title !== project.title) await saveProject(project, { title });
-              label.textContent = project.title || name; status.textContent = '';
+              label.textContent = project.title || name;
+              button.title = label.textContent; button.setAttribute('aria-label', label.textContent);
+              initials.textContent = Array.from(label.textContent.trim()).slice(0, 2).join('');
+              status.textContent = '';
             } catch (error) { status.textContent = `重命名失败：${error.message}`; }
             input.replaceWith(label);
           };
@@ -657,7 +686,8 @@
         if (project.editSettings) {
           const upload = document.createElement('button'); upload.type = 'button'; upload.textContent = '↑';
           upload.title = '上传 Logo'; upload.setAttribute('aria-label', `上传 ${name} 的 Logo`);
-          upload.style.cssText = 'position:absolute;right:-10px;top:-10px;border:1px solid #777;border-radius:50%;width:30px;height:30px;background:#30303d;color:white;cursor:pointer';
+          upload.className = 'app-logo-switcher-upload';
+          upload.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4m-4 4 4-4 4 4M5 15v5h14v-5"/></svg>';
           const file = document.createElement('input'); file.type = 'file'; file.accept = 'image/*'; file.hidden = true;
           upload.onclick = () => file.click();
           file.onchange = async () => {
@@ -671,7 +701,7 @@
               const result = await response.json(); if (!result.url) throw new Error('未返回图片地址');
               await saveProject(project, { image: result.url });
               tile.querySelector('img')?.remove();
-              const img = document.createElement('img'); img.src = result.url; img.alt = ''; tile.append(img);
+              const img = document.createElement('img'); img.src = result.url; img.alt = ''; img.onerror = () => img.remove(); tile.append(img);
               status.textContent = 'Logo 已更新';
             } catch (error) { status.textContent = `上传失败：${error.message}`; }
             finally { upload.disabled = false; file.value = ''; }
@@ -682,7 +712,9 @@
           const remove = document.createElement('button');
           remove.type = 'button'; remove.textContent = '移除应用';
           remove.setAttribute('aria-label', `移除 ${name}`);
-          remove.style.cssText = 'background:none;border:0;color:#ff8585;font-size:12px;cursor:pointer';
+          remove.className = 'app-logo-switcher-remove';
+          remove.title = '\u79fb\u9664\u5e94\u7528';
+          remove.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg>';
           remove.onclick = async () => {
             const title = project.title || project.name || db;
             const confirmation = window.prompt(`移除将删除应用“${title}”及其数据，无法恢复。请输入应用名称确认：`);
@@ -699,11 +731,10 @@
               const result = await response.json();
               if (!response.ok || result.success === false) throw new Error(result.error || result.message || '移除失败');
               if (db === getUrlParam('db')) {
-                const next = new URL(location.href); next.searchParams.delete('db'); next.searchParams.delete('node');
-                next.hash = 'view=applications'; location.href = next.href; return;
+                const next = window.projectSwitchUrl('default', sourceSpace); location.href = next.href; return;
               }
               void window.loadProjectsToSidebar?.();
-              await showAppLogoSwitcher();
+              await showAppLogoSwitcher({ space: sourceSpace });
             } catch (error) { status.textContent = `移除失败：${error.message}`; }
             finally { remove.disabled = false; }
           };
@@ -727,7 +758,7 @@
           if (!response.ok) throw new Error(result.error || '创建失败');
           window.dispatchEvent(new CustomEvent('kb-application-updated', { detail: result.project }));
           void window.loadProjectsToSidebar?.();
-          await showAppLogoSwitcher();
+          await showAppLogoSwitcher({ space: sourceSpace });
         } catch (error) { status.textContent = `创建失败：${error.message}`; }
         finally { create.disabled = false; }
       };
@@ -816,7 +847,7 @@
         });
 
         const params = new URLSearchParams(window.location.search);
-        const dbName = params.get("db");
+        const dbName = window.getCurrentDbParam();
         if (dbName) {
           dbSwitcher.value = dbName;
           const found = data.projects.find(
@@ -883,7 +914,7 @@
           }
           if (data && data.success) {
             const nextUrl = new URL(window.location.href);
-            nextUrl.searchParams.set("db", name.replace(/\.sqlite$/, ""));
+            nextUrl.pathname = "/" + encodeURIComponent(name.replace(/\.sqlite$/, "")); nextUrl.searchParams.delete("db");
             nextUrl.searchParams.delete('node');
             nextUrl.searchParams.delete('view');
             nextUrl.hash = 'view=app_home';
@@ -920,7 +951,7 @@
   function initDbParamBootstrap() {
     document.addEventListener("DOMContentLoaded", async function () {
       const params = new URLSearchParams(window.location.search);
-      const dbName = params.get("db");
+      const dbName = window.getCurrentDbParam();
       if (dbName) {
         try {
           const resp = await fetch(

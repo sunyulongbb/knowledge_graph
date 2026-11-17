@@ -154,7 +154,7 @@
   categoryEditor.querySelector('input').addEventListener('keydown', event => {
     if (event.isComposing) return;
     if (event.key === 'Enter') { event.preventDefault(); categoryEditor.querySelector('[data-create]').click(); }
-    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); categoryEditor.hidden = true; addCategory.focus(); }
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); categoryEditor.hidden = true; (dialog.dataset.step === 'type' ? typeStep.querySelector('.quick-type-add') : addCategory).focus(); }
   });
   categoryEditor.querySelector('[data-create]').onclick = async () => {
     const input = categoryEditor.querySelector('input'), button = categoryEditor.querySelector('[data-create]');
@@ -173,8 +173,12 @@
       choiceRows.category = categoryOptions(flatten(categoryNodes));
       renderChoices('category');
       const option = Array.from(fields.namedItem('category').options).find(item => item.value === created.id);
-      if (option) option.selected = true;
+      if (option) {
+        if (dialog.dataset.step === 'type') for (const item of fields.namedItem('category').options) item.selected = false;
+        option.selected = true;
+      }
       updateMeta(); void renderCategoryTree();
+      if (dialog.dataset.step === 'type') renderTypeStep();
       input.value = ''; categoryEditor.hidden = true;
       get('[data-quick-options]').textContent = '分类已添加并选中';
       window.dispatchEvent(new CustomEvent('kb:classes-updated'));
@@ -392,7 +396,7 @@
   }
   function scopedUrl(path) {
     const url = new URL(path, location.origin),
-      db = new URLSearchParams(location.search).get("db");
+      db = window.getCurrentDbParam();
     if (db) url.searchParams.set("db", db);
     return url;
   }
@@ -589,6 +593,7 @@
       positionOntology();
     }
   }
+  let presetCategoryId = '';
   async function loadOptions() {
     const token = ++version;
     const status = get("[data-quick-options]");
@@ -625,8 +630,19 @@
     const defaultOntology = await defaultRequest;
     if (token !== version || !dialog.open) return;
     const typeControl = fields.namedItem('type');
-    if (!typeControl.value && defaultOntology?.id && Array.from(typeControl.options).some(option => option.value === defaultOntology.id)) typeControl.value = defaultOntology.id;
+    if (dialog.dataset.step !== 'type' && !typeControl.value && defaultOntology?.id && Array.from(typeControl.options).some(option => option.value === defaultOntology.id)) typeControl.value = defaultOntology.id;
+    if (presetCategoryId) {
+      const category = fields.namedItem('category');
+      const match = Array.from(category.options).find(option => option.value === presetCategoryId);
+      if (match) {
+        for (const option of category.options) option.selected = option === match;
+        setComposerStep('content');
+      } else setComposerStep('type');
+      presetCategoryId = '';
+    }
+    get('[data-quick-save]').disabled = false;
     updateMeta();
+    renderTypeStep();
     status.textContent = results.some((result) => result.status === "rejected")
       ? "部分选项加载失败，可重试或先保存内容。"
       : "";
@@ -638,8 +654,143 @@
       status.append(retry);
     }
   }
-  window.openQuickKnowledge = function () {
+
+  const typeStep = document.createElement('section');
+  typeStep.className = 'quick-type-step';
+  typeStep.innerHTML = '<div class="quick-type-choices" role="group" aria-label="\u77e5\u8bc6\u7c7b\u578b"></div><p class="quick-type-status" role="status"></p>';
+  get('[data-quick-layout]').before(typeStep);
+  const nextStep = document.createElement('button');
+  nextStep.type = 'button'; nextStep.className = 'btn primary'; nextStep.dataset.quickNext = '';
+  nextStep.textContent = '\u4e0b\u4e00\u6b65'; nextStep.disabled = true;
+  const backStep = document.createElement('button');
+  backStep.type = 'button'; backStep.className = 'btn'; backStep.dataset.quickBack = '';
+  backStep.textContent = '\u4e0a\u4e00\u6b65';
+  get('.quick-knowledge-footer').append(backStep, nextStep);
+  function setComposerStep(step) {
+    dialog.dataset.step = step;
+    closeOntology();
+    fields.namedItem('content').required = step === 'content';
+    if (step === 'content') fields.namedItem('content').focus();
+  }
+  function renderTypeStep() {
+    const control = fields.namedItem('category');
+    const choices = typeStep.querySelector('.quick-type-choices');
+    choices.replaceChildren();
+    const findPath = (nodes, id, parents = []) => {
+      for (const node of nodes) {
+        const path = [...parents, node];
+        if (String(node.id) === id) return path;
+        const found = findPath(node.children || [], id, path);
+        if (found.length) return found;
+      }
+      return [];
+    };
+    const path = findPath(categoryNodes, control.value);
+    const current = path[path.length - 1];
+    const rows = current ? (current.children?.length ? current.children : [current]) : categoryNodes;
+    let navigation = typeStep.querySelector('.quick-type-path');
+    if (!navigation) {
+      navigation = document.createElement('nav'); navigation.className = 'quick-type-path';
+      navigation.setAttribute('aria-label', '\u7c7b\u578b\u5c42\u7ea7'); choices.before(navigation);
+    }
+    navigation.replaceChildren();
+    const selectType = id => {
+      for (const item of control.options) item.selected = item.value === id;
+      updateMeta(); void renderCategoryTree(); renderTypeStep();
+    };
+    const addCrumb = (label, id, isCurrent) => {
+      const button = document.createElement('button'); button.type = 'button'; button.textContent = label;
+      if (isCurrent) button.setAttribute('aria-current', 'location');
+      button.onclick = () => { selectType(id); typeStep.querySelector('.quick-type-choices button')?.focus(); };
+      navigation.append(button);
+    };
+    addCrumb('\u5168\u90e8\u7c7b\u578b', '', !path.length);
+    for (const node of path) addCrumb(node.name || node.label || node.id, String(node.id), node === current);
+    for (const node of rows) {
+      const button = document.createElement('button'); button.type = 'button';
+      const icon = document.createElement('i'); icon.className = node.children?.length ? 'fa-solid fa-folder' : 'fa-solid fa-tag'; icon.setAttribute('aria-hidden','true');
+      const label = document.createElement('span'); label.textContent = node.name || node.label || node.id;
+      button.append(icon, label); button.setAttribute('aria-pressed', String(control.value === String(node.id)));
+      if (node.children?.length) {
+        const arrow = document.createElement('span'); arrow.textContent = '\u203a'; arrow.setAttribute('aria-hidden', 'true'); button.append(arrow);
+      }
+      button.onclick = () => { selectType(String(node.id)); typeStep.querySelector('.quick-type-choices button')?.focus(); };
+      choices.append(button);
+    }
+    const addType = document.createElement('button'); addType.type = 'button';
+    addType.className = 'quick-type-add';
+    addType.title = '\u65b0\u589e\u7c7b\u578b'; addType.setAttribute('aria-label', addType.title);
+    addType.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+    addType.disabled = control.disabled;
+    addType.onclick = () => {
+      typeStep.append(categoryEditor);
+      categoryEditor.dataset.parent = current ? String(current.id) : '';
+      categoryEditor.querySelector('[data-create]').disabled = false;
+      categoryEditor.querySelector('[data-parent]').textContent = current
+        ? '\u65b0\u589e\u4e0b\u7ea7\u7c7b\u578b' : '\u65b0\u589e\u7b2c\u4e00\u5c42\u7c7b\u578b';
+      categoryEditor.hidden = false;
+      categoryEditor.querySelector('input').value = '';
+      categoryEditor.querySelector('input').focus();
+    };
+    choices.append(addType);
+    if (current) {
+      const remove = document.createElement('button'); remove.type = 'button';
+      remove.className = 'quick-type-delete';
+      const icon = document.createElement('i'); icon.className = 'fa-regular fa-trash-can'; icon.setAttribute('aria-hidden', 'true');
+      const label = document.createElement('span'); label.textContent = '\u5220\u9664\u5f53\u524d\u7c7b\u578b'; remove.append(icon); remove.setAttribute('aria-label', label.textContent);
+      remove.disabled = control.disabled || Boolean(current.children?.length);
+      remove.title = current.children?.length ? '\u8bf7\u5148\u5220\u9664\u4e0b\u7ea7\u7c7b\u578b' : label.textContent;
+      remove.onclick = async () => {
+        if (saving || saved || !window.confirm('\u786e\u8ba4\u5220\u9664\u7c7b\u578b\u201c' + (current.name || current.label || current.id) + '\u201d\uff1f')) return;
+        const scope = scopedUrl('/api/kb/classes');
+        const request = new URL(scope); request.searchParams.set('id', String(current.id));
+        remove.disabled = true; addType.disabled = true;
+        choices.inert = true; navigation.inert = true; nextStep.disabled = true;
+        const status = typeStep.querySelector('.quick-type-status');
+        status.textContent = '\u6b63\u5728\u5220\u9664\u2026';
+        try {
+          const response = await fetch(request, { method:'DELETE' });
+          const text = await response.text();
+          let result = {};
+          try { result = text ? JSON.parse(text) : {}; } catch {}
+          if (!response.ok || result.ok === false || result.success === false) {
+            throw new Error(result.error || result.message || (response.status === 401 ? '\u8bf7\u5148\u767b\u5f55' : response.status === 403 ? '\u6ca1\u6709\u5220\u9664\u7c7b\u578b\u7684\u6743\u9650' : text || '\u5220\u9664\u5931\u8d25'));
+          }
+          const refreshed = await fetch(scope); if (!refreshed.ok) throw new Error('\u7c7b\u578b\u5df2\u5220\u9664\uff0c\u5217\u8868\u5237\u65b0\u5931\u8d25\uff0c\u8bf7\u91cd\u65b0\u6253\u5f00');
+          const data = await refreshed.json();
+          if (!dialog.open || scope.href !== scopedUrl('/api/kb/classes').href) return;
+          categoryNodes = buildCategoryTree(Array.isArray(data) ? data : data.items || []);
+          const flatten = rows => rows.flatMap(row => [row, ...flatten(row.children || [])]);
+          choiceRows.category = categoryOptions(flatten(categoryNodes));
+          renderChoices('category');
+          const parent = path[path.length - 2];
+          for (const option of control.options) option.selected = Boolean(parent && option.value === String(parent.id));
+          categoryEditor.hidden = true;
+          updateMeta(); renderTypeStep();
+          window.dispatchEvent(new CustomEvent('kb:classes-updated'));
+        } catch (error) {
+          status.textContent = '\u5220\u9664\u5931\u8d25\uff1a' + error.message;
+        } finally {
+          choices.inert = false; navigation.inert = false; remove.disabled = false; addType.disabled = false;
+          nextStep.disabled = control.disabled || !control.value;
+        }
+      };
+      choices.append(remove);
+    }
+
+    nextStep.disabled = control.disabled || !current;
+    const status = typeStep.querySelector('.quick-type-status');
+    status.replaceChildren();
+    if (!rows.length) {
+      status.textContent = '\u6682\u65e0\u53ef\u9009\u7c7b\u578b\uff0c\u8bf7\u786e\u8ba4\u5df2\u914d\u7f6e\u7c7b\u578b\u6811\u6216\u91cd\u8bd5\u3002';
+      const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'btn'; retry.textContent = '\u91cd\u8bd5'; retry.onclick = () => void loadOptions(); status.append(retry);
+    }
+  }
+  nextStep.onclick = () => { if (!nextStep.disabled) setComposerStep('content'); };
+  backStep.onclick = () => { setComposerStep('type'); renderTypeStep(); typeStep.querySelector('button')?.focus(); };
+  window.openQuickKnowledge = function (options = {}) {
     if (dialog.open) return;
+    presetCategoryId = String(options.categoryId || '');
     previousFocus = document.activeElement;
     get("[data-quick-author]").textContent =
       window.authUser?.displayName || window.authUser?.username || "新增知识";
@@ -670,8 +821,13 @@
       "当前应用";
     if (saved) showForm();
     updateMeta();
+    setComposerStep(presetCategoryId ? 'content' : 'type');
+    get('[data-quick-save]').disabled = Boolean(presetCategoryId);
+    nextStep.disabled = true;
+    typeStep.querySelector('.quick-type-choices').replaceChildren();
+    typeStep.querySelector('.quick-type-status').textContent = '\u6b63\u5728\u52a0\u8f7d\u7c7b\u578b\u2026';
     dialog.showModal();
-    fields.namedItem("content").focus();
+    get('[data-quick-close]').focus();
     void loadOptions();
   };
   get("[data-quick-ontology]").addEventListener("click", () => {
@@ -705,7 +861,7 @@
     button.onclick = close;
   });
   get("[data-quick-done]").onclick = close;
-  get("[data-quick-another]").onclick = showForm;
+  get("[data-quick-another]").onclick = () => { showForm(); setComposerStep('type'); void loadOptions(); };
   dialog.querySelectorAll("[data-quick-toggle]").forEach((button) => {
     button.onclick = () => togglePanel(button.dataset.quickToggle);
   });
@@ -803,6 +959,7 @@
     previousFocus?.focus?.({ preventScroll: true });
   });
   form.addEventListener("submit", async (event) => {
+    if (dialog.dataset.step === 'type') { event.preventDefault(); nextStep.click(); return; }
     event.preventDefault();
     if (saving || saved || !form.reportValidity()) return;
     const value = (key) => String(fields.namedItem(key).value || "").trim();

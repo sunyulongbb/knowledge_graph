@@ -26,7 +26,7 @@
       kbDocumentRoot.setAttribute("data-theme", "light");
     }
     try {
-      const appThemeScope = new URLSearchParams(location.search).get("db") || "default";
+      const appThemeScope = window.getCurrentDbParam() || "default";
       const cachedAppTheme = JSON.parse(localStorage.getItem(`kb-app-theme:${appThemeScope}`) || "null");
       const themeMode = kbDocumentRoot.getAttribute("data-theme") === "dark" ? "dark" : "light";
       const cachedAccent = cachedAppTheme?.[themeMode];
@@ -1994,7 +1994,7 @@
     <div class="header-bar">
       <div class="header-brand" style="display:flex;align-items:center;gap:10px;">
         <div id="headerProject" style="align-items:center;gap:8px;min-width:0;">
-          <button id="headerProjectAvatar" class="header-project-logo" type="button" aria-label="展开应用栏；双击切换应用" title="单击收起/展开应用栏，双击切换应用" aria-controls="projectSidebar appLogoSwitcher" aria-haspopup="dialog" aria-expanded="false"
+          <button id="headerProjectAvatar" class="header-project-logo" type="button" aria-label="展开应用栏；双击切换应用" title="单击收起/展开应用栏，双击切换应用" aria-controls="projectSidebar" aria-expanded="false"
             style="width:28px;height:28px;border-radius:6px;background:#e0e7ef;background-size:cover;background-position:center;border:1px solid var(--border);display:inline-grid;flex-shrink:0;"></button>
           <button id="headerProjectName" class="header-project-name" type="button" title="进入应用首页" aria-label="进入应用首页"
             style="font-weight:600;color:var(--fg);font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;display:inline-block;">&nbsp;</button>
@@ -4855,7 +4855,7 @@
           <button type="button" class="home-discovery-brand" id="homeSidebarBrandToggle" title="单击收起/展开菜单，双击切换应用" aria-label="收起菜单；双击切换应用" aria-controls="homeDiscoverySidebar appLogoSwitcher" aria-haspopup="dialog" aria-expanded="true"><span class="home-discovery-mark" id="homeDiscoveryLogo" aria-hidden="true"><i class="fa-solid fa-layer-group"></i></span><span><strong id="homeDiscoveryBrand"></strong></span></button>
           <script>
             try {
-              const brandScope = new URLSearchParams(location.search).get('db') || 'default';
+              const brandScope = window.getCurrentDbParam() || 'default';
               document.getElementById('homeDiscoveryBrand').textContent = localStorage.getItem(`kb:application-name:${brandScope}`) || '';
               const savedLogo = localStorage.getItem(`kb:application-logo:${brandScope}`) || '';
               if (/^(https?:\/\/|\/(?!\/)|data:image\/)/i.test(savedLogo)) {
@@ -4868,24 +4868,32 @@
           </script>
           </div>
           <nav class="home-discovery-nav" aria-label="发现内容">
-            <button type="button" data-home-feed="for-you" aria-current="page" title="For You · 为你推荐"><i class="fa-solid fa-house" aria-hidden="true"></i><span>For You<small>为你推荐</small></span></button>
-            <button type="button" data-home-action="shorts" title="Short · 短视频"><i class="fa-solid fa-circle-play" aria-hidden="true"></i><span>Short<small>短视频</small></span></button>
-            <button type="button" data-home-feed="popular" title="Popular · 热门"><i class="fa-solid fa-fire" aria-hidden="true"></i><span>Popular<small>热门知识</small></span></button>
-            <button type="button" data-home-feed="news" title="News · 最新发布"><i class="fa-regular fa-newspaper" aria-hidden="true"></i><span>News<small>最新发布</small></span></button>
-            <button type="button" data-home-action="app_explore" title="Explore · 探索"><i class="fa-regular fa-compass" aria-hidden="true"></i><span>Explore<small>探索知识</small></span></button>
-            <button type="button" data-home-action="learning" title="Learning"><i class="fa-solid fa-graduation-cap" aria-hidden="true"></i><span>Learning<small>学习路线与练习</small></span></button>
+            <button type="button" data-home-feed="for-you" aria-current="page" title="为你推荐"><i class="fa-solid fa-house" aria-hidden="true"></i><span>为你推荐</span></button>
+            <button type="button" data-home-action="shorts" title="短视频"><i class="fa-solid fa-circle-play" aria-hidden="true"></i><span>短视频</span></button>
+            <button type="button" data-home-feed="popular" title="热门"><i class="fa-solid fa-fire" aria-hidden="true"></i><span>热门</span></button>
+            <button type="button" data-home-feed="news" title="最新"><i class="fa-regular fa-newspaper" aria-hidden="true"></i><span>最新</span></button>
+            <button type="button" data-home-action="app_explore" title="探索"><i class="fa-regular fa-compass" aria-hidden="true"></i><span>探索</span></button>
+            <button type="button" data-home-action="learning" title="学习"><i class="fa-solid fa-graduation-cap" aria-hidden="true"></i><span>学习</span></button>
+          <button type="button" data-home-action="create" title="新增知识"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>新增知识</span></button>
           </nav>
-          <button type="button" class="home-discovery-create" data-home-action="create" title="新增知识"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>新增知识</span></button>
-          <div class="home-discovery-tools" aria-label="工作空间">
-            <span class="home-discovery-section-label">工作空间</span>
+          <div class="home-discovery-footer">
+            <button id="homeDiscoveryLogin" type="button" data-home-action="login" title="登录" aria-label="登录"><i class="fa-solid fa-arrow-right-to-bracket" aria-hidden="true"></i><span>登录</span></button>
+            <button id="homeDiscoveryAccountButton" type="button" data-home-action="account" title="个人信息" aria-label="个人信息" hidden><i id="homeDiscoveryAvatar" class="home-sidebar-avatar fa-regular fa-user" aria-hidden="true"></i><span id="homeDiscoveryAccount">登录</span></button>
+            <details class="home-settings">
+              <summary class="home-settings-toggle" title="设置"><i class="fa-solid fa-gear" aria-hidden="true"></i><span>设置</span></summary>
+              <div class="home-settings-menu">
+                <button type="button" onclick="window.openKnowledgeBackup()" title="知识备份"><i class="fa-solid fa-database" aria-hidden="true"></i><span>知识备份</span></button>
+            <button type="button" data-home-action="theme" title="切换主题"><i class="fa-solid fa-circle-half-stroke" aria-hidden="true"></i><span>切换主题</span></button>
+          <details class="home-discovery-tools" aria-label="工作空间">
+            <summary class="home-workspace-toggle" title="工作空间"><i class="fa-solid fa-layer-group" aria-hidden="true"></i><span>工作空间</span><svg class="home-workspace-chevron" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m7 4 6 6-6 6"/></svg></summary>
+            <div class="home-workspace-items">
             <button type="button" data-home-new-tab="true" data-home-action="table" title="知识库"><i class="fa-solid fa-table-cells-large" aria-hidden="true"></i><span>知识库</span></button>
             <button type="button" data-home-new-tab="true" data-home-action="vis" title="关系画布"><i class="fa-solid fa-diagram-project" aria-hidden="true"></i><span>关系画布</span></button>
             <button type="button" data-home-new-tab="true" data-home-action="applications" title="应用中心"><i class="fa-solid fa-layer-group" aria-hidden="true"></i><span>应用中心</span></button>
           </div>
-          <div class="home-discovery-footer">
-            <button id="homeDiscoveryLogin" type="button" data-home-action="login" title="登录" aria-label="登录"><i class="fa-solid fa-arrow-right-to-bracket" aria-hidden="true"></i><span>登录</span></button>
-            <button id="homeDiscoveryAccountButton" type="button" data-home-action="account" title="个人信息" aria-label="个人信息" hidden><i id="homeDiscoveryAvatar" class="home-sidebar-avatar fa-regular fa-user" aria-hidden="true"></i><span id="homeDiscoveryAccount">登录</span></button>
-            <button type="button" data-home-action="theme" title="切换主题"><i class="fa-solid fa-circle-half-stroke" aria-hidden="true"></i><span>切换主题</span></button>
+          </details>
+              </div>
+            </details>
           </div>
         </aside>
         <div class="home-discovery-main">
@@ -5241,7 +5249,7 @@
             createProjectModal.style.display = 'none';
             // 切换到新项目并在路由中写入 db 参数
             const url = new URL(window.location.href);
-            url.searchParams.set('db', name);
+            url.pathname = '/' + encodeURIComponent(name); url.searchParams.delete('db');
             window.location.href = url.toString();
           } else {
             createProjectError.textContent = (data && data.message) ? data.message : '创建失败';
@@ -5903,6 +5911,7 @@
       "app_home",
       "app_search",
       "app_explore",
+      "joined_type",
       "big_bang",
       "knowledge_graph",
       "learning",
@@ -5973,7 +5982,7 @@
 
     function getRouteStateFromHash() {
       const params = getHashParams();
-      const view = normalizeViewModeInput(params.view || "");
+      const view = normalizeViewModeInput(params.view || window.getProjectPageRoute().view || "");
       const node = typeof params.node === "string" ? params.node.trim() : "";
       return { view, node };
     }
@@ -6014,7 +6023,7 @@
 
     function reportApiUrl(path = '') {
       const api = new URL(`/api/kb/reports${path}`, window.location.origin);
-      const dbName = new URL(window.location.href).searchParams.get('db');
+      const dbName = window.getCurrentDbParam();
       if (dbName) api.searchParams.set('db', dbName);
       return `${api.pathname}${api.search}`;
     }
@@ -6158,7 +6167,7 @@
         section.hidden = true;
         return;
       }
-      const dbScope = new URLSearchParams(window.location.search).get('db') || '';
+      const dbScope = window.getCurrentDbParam() || '';
       const scopedUrl = (path) => {
         const url = new URL(path, window.location.origin);
         if (dbScope) url.searchParams.set('db', dbScope);
@@ -6345,14 +6354,11 @@
         }
         targetHash = `#${params.toString()}`;
       }
-      if (replace) {
-        const newUrl = `${window.location.pathname}${window.location.search}${targetHash}`;
-        history.replaceState(null, "", newUrl);
-        return;
-      }
-      if (window.location.hash === targetHash) return;
-      window.kbSuppressNextHashChange = true;
-      window.location.hash = targetHash;
+      const newUrl = window.projectViewUrl(normalizedMode);
+      newUrl.hash = shouldIncludeNode ? new URLSearchParams({ node:normalizedNode }).toString() : '';
+      if (newUrl.href === window.location.href) return;
+      history[replace ? 'replaceState' : 'pushState'](null, '', newUrl);
+
     }
 
     function getPinnedKnowledgeRouteState() {
@@ -6669,7 +6675,7 @@
       if (!fullId || typeof loadAttributes !== "function") return Promise.resolve();
       const list = document.getElementById("attrList");
       const panel = document.getElementById("attrPanel");
-      const expectedKey = `${window.authUser?.id || "anonymous"}:${new URLSearchParams(location.search).get("db") || ""}:${fullId}`;
+      const expectedKey = `${window.authUser?.id || "anonymous"}:${window.getCurrentDbParam() || ""}:${fullId}`;
       const isCurrentList = list?.dataset.entityKey === expectedKey;
       const hasRenderedContent = list?.dataset.loadState === "ready";
       if (panel) panel.style.display = "";
@@ -7318,7 +7324,10 @@
     window.kbClearLastKnowledgeNodeId = () => persistLastKnowledgeNodeId("");
 
     function setViewMode(mode, options = {}) {
-      const normalized = normalizeViewModeInput(mode) || "table";
+      const requested = normalizeViewModeInput(mode) || "table";
+      const normalized = window.resolveSpaceView(window.kbRenderedViewMode, requested,
+        options.skipRouteUpdate === true || window.isSpaceNavigationClick());
+      if (!normalized) return;
       const usesEntityRouteNode = [
         "entry",
         "table",
@@ -7566,7 +7575,7 @@
       const isProfile = normalized === 'profile';
       const isAppSearch = normalized === 'app_search';
       const isAppHome = normalized === 'app_home';
-      const isExplore = normalized === 'app_explore' || normalized === 'big_bang' || normalized === 'knowledge_graph';
+      const isExplore = normalized === 'joined_type' || normalized === 'app_explore' || normalized === 'big_bang' || normalized === 'knowledge_graph';
       document.body.classList.toggle('home-relation-active', normalized === 'knowledge_graph');
       document.body.classList.toggle('home-big-bang-active', normalized === 'big_bang');
       const isLearning = normalized === 'learning';
@@ -7589,7 +7598,7 @@
       document.getElementById('applicationSearchPanel').style.display = isAppSearch ? '' : 'none';
       document.getElementById('btnApplicationSearch').classList.toggle('active', isAppSearch);
       if (isAppHome) window.loadApplicationHome?.();
-      if (normalized === 'app_explore') window.loadKnowledgeExplore?.();
+      if (normalized === 'app_explore' || normalized === 'joined_type') window.loadKnowledgeExplore?.();
       if (normalized === 'big_bang') window.loadKnowledgeBigBang?.();
       if (normalized === 'knowledge_graph') window.loadKnowledgeRelation?.(targetNodeIdRaw);
       if (isLearning) window.loadKnowledgeLearning?.();
@@ -7976,7 +7985,7 @@
         const returnView = normalizeViewModeInput(returnState.view || "");
         const targetView = returnView && !["detail", "knowledge_detail"].includes(returnView)
           ? returnView
-          : "table";
+          : window.kbViewMode === "knowledge_detail" ? "app_home" : "table";
         const returnNodeId = String(returnState.nodeId || "").trim();
         const nodeAwareReturnViews = ["entry", "table", "vis", "report_detail"];
         setViewMode(targetView, nodeAwareReturnViews.includes(targetView) && returnNodeId
@@ -8968,6 +8977,7 @@
     }
 
 
+    window.addEventListener("popstate", () => window.dispatchEvent(new HashChangeEvent("hashchange")));
     window.addEventListener("hashchange", () => {
       if (window.kbSuppressNextHashChange) {
         window.kbSuppressNextHashChange = false;
@@ -9957,7 +9967,7 @@
       const url = new URL("/api/kb/graph", window.location.origin);
       // 传递当前页面的 db 参数以确定项目范围
       const pageParams = new URLSearchParams(window.location.search || "");
-      const dbParam = pageParams.get("db");
+      const dbParam = window.getCurrentDbParam();
       if (dbParam) {
         url.searchParams.set("db", dbParam);
       }
@@ -10058,7 +10068,7 @@
         // normalize id to include entity/ prefix
         const fullId = ensureEntityIdPrefix(nodeId);
         const url = new URL("/api/kb/node/graph", window.location.origin);
-        const graphDb = new URLSearchParams(window.location.search).get('db');
+        const graphDb = window.getCurrentDbParam();
         if (graphDb) url.searchParams.set('db', graphDb);
         url.searchParams.set("id", fullId);
         if (direction && direction !== "both") {
@@ -10972,7 +10982,7 @@
     function getCurrentGraphDbScope() {
       try {
         const url = new URL(window.location.href);
-        return String(url.searchParams.get("db") || "default").trim() || "default";
+        return String(window.getCurrentDbParam() || "default").trim() || "default";
       } catch {
         return "default";
       }

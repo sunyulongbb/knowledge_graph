@@ -139,7 +139,7 @@
         showToast("已登出");
       } catch {}
       const defaultHome = new URL(window.location.pathname || "/", window.location.origin);
-      defaultHome.searchParams.set("db", "default");
+      defaultHome.pathname = "/default"; defaultHome.searchParams.delete("db");
       defaultHome.hash = "view=app_home";
       window.location.assign(defaultHome.toString());
     } catch (e) {
@@ -683,7 +683,5 @@
   window.openProfileModal = openProfileModal;
   window.closeProfileModal = closeProfileModal;
 
-  try {
-    whoami();
-  } catch {}
+  window.kbAuthReady = Promise.resolve().then(() => whoami()).catch(() => {});
 })();
