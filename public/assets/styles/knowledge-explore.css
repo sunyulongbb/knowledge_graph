@@ -2,18 +2,33 @@ body.home-explore-active #applicationHomePanel > .home-discovery-main { display:
 #knowledgeExplorePage { display: none; min-width: 0; min-height: 0; overflow: auto; overflow-anchor: none; background: var(--surface-0); scrollbar-width: none; }
 body.home-explore-active:not(.home-big-bang-active):not(.home-relation-active) #knowledgeExplorePage { display: block; grid-column: 2; grid-row: 1; }
 .home-discovery-nav button[data-home-action="app_explore"][aria-current="page"] { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--surface-0)); }
-.explore-content { width: 100%; margin: 0; padding: 28px 24px 48px; box-sizing: border-box; }
-.explore-heading { position: static; display: block; padding: 0; border: 0; background: transparent; box-shadow: none; }
+.explore-content { width: 100%; margin: 0; padding: 20px 20px 40px; box-sizing: border-box; }
+.explore-heading { position: static; display: block; padding: 0 0 10px; border: 0; border-bottom: 1px solid var(--border); background: transparent; box-shadow: none; }
 .explore-heading p { margin: 0 0 8px; color: var(--muted); font-size: 10px; font-weight: 600; letter-spacing: .16em; }
 .explore-heading h1 { margin: 0 0 10px; font-size: 32px; font-weight: 700; letter-spacing: -.04em; }
 .explore-heading > span { color: var(--muted); font-size: 13px; }
-.explore-topic-tabs { display: flex; gap: 8px; overflow-x: auto; padding: 28px 0 20px; border-bottom: 1px solid var(--border); scrollbar-width: none; }
-.explore-topic-tabs button { flex-shrink: 0; padding: 8px 13px; font-size: 12px; font-weight: 600; }
+.explore-community-banner { position: relative; height: clamp(76px, 10vw, 112px); overflow: hidden; border-radius: 10px; background: radial-gradient(ellipse at 18% 0%, color-mix(in srgb, var(--category-color, var(--accent)) 48%, var(--surface-1)), transparent 62%), linear-gradient(120deg, color-mix(in srgb, var(--category-color, var(--accent)) 24%, var(--surface-1)), var(--surface-1) 72%); }
+.explore-community-banner::after { position: absolute; inset: 0; content: ''; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--surface-0) 22%, transparent)); }
+.explore-community-banner img { width: 100%; height: 100%; object-fit: cover; opacity: .48; }
+.explore-heading-row { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 68px; padding: 0 6px; }
+.explore-heading-main { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.explore-community-avatar { display: grid; flex: 0 0 62px; place-items: center; width: 62px; height: 62px; margin-top: -22px; overflow: hidden; border: 3px solid var(--surface-0); border-radius: 50%; color: var(--category-color, var(--accent)); background: var(--surface-1); font-size: 24px; box-shadow: 0 2px 10px #0002; }
+.explore-community-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.explore-heading-copy { min-width: 0; padding: 6px 0 2px; }
+.explore-heading-copy h1 { margin: 0; overflow-wrap: anywhere; font-size: clamp(21px, 2.5vw, 28px); }
+.explore-heading-copy p { margin: 3px 0 0; overflow: hidden; color: var(--muted); font-size: 12px; letter-spacing: normal; text-overflow: ellipsis; white-space: nowrap; }
+.explore-heading-actions { display: flex; align-items: center; align-self: center; justify-content: flex-end; gap: 6px; flex: 0 0 auto; }
+.explore-type-actions { display: flex; align-items: center; gap: 6px; }
+#knowledgeExplorePage .explore-heading-actions .explore-type-actions > button { box-sizing: border-box; height: 34px; min-height: 34px; flex: 0 0 auto; padding: 0 13px; border-radius: 18px; font-size: 12px; font-weight: 600; line-height: 1; }
+#knowledgeExplorePage .explore-heading-actions .explore-type-actions > [data-explore-join] { border-radius: 22px; background: var(--fg); color: var(--surface-0); }
+#knowledgeExplorePage .explore-heading-actions .explore-type-actions > [data-explore-join]:hover { background: color-mix(in srgb, var(--fg) 86%, var(--accent)); }
+#knowledgeExplorePage .explore-heading-actions .explore-type-actions > [data-explore-create] { display: inline-flex; align-items: center; gap: 8px; }
+#knowledgeExplorePage .explore-heading-actions .explore-type-actions > [data-explore-create] { border-color: var(--border-strong, var(--border)); background: transparent; }
+#knowledgeExplorePage .explore-heading-actions .explore-icon-action { box-sizing: border-box; display: grid; flex: 0 0 34px; place-items: center; width: 34px; height: 34px; min-height: 34px; margin: 0; padding: 0; border-radius: 50%; color: var(--muted); font-size: 13px; line-height: 1; }
 #knowledgeExplorePage button { font-family: inherit; cursor: pointer; color: var(--fg); background: var(--surface-0); border: 1px solid var(--border); border-radius: 8px; }
 #knowledgeExplorePage button:hover { border-color: color-mix(in srgb, var(--accent) 65%, var(--border)); background: var(--surface-1); }
 #knowledgeExplorePage button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 #knowledgeExplorePage button:disabled { opacity: .45; cursor: default; }
-#knowledgeExplorePage .explore-topic-tabs button[aria-current="page"] { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--surface-0)); }
 .explore-group { margin-top: 28px; }
 .explore-group-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .explore-group-heading h2 { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: -.02em; }
@@ -33,9 +48,12 @@ body.home-explore-active:not(.home-big-bang-active):not(.home-relation-active) #
 .explore-category-description { grid-column: 1 / -1; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--muted); font-size: 12px; line-height: 1.6; }
 #knowledgeExplorePage .explore-show-more { display: block; margin: 14px auto 0; padding: 8px 16px; border: 0; border-radius: 20px; background: var(--surface-1); font-size: 12px; }
 .explore-show-more i { margin-left: 5px; font-size: 10px; }
-.explore-breadcrumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 24px; color: var(--muted); }
-#knowledgeExplorePage .explore-breadcrumbs button { padding: 4px 0; border: 0; background: none; color: var(--muted); font-size: 12px; }
-#knowledgeExplorePage .explore-breadcrumbs button[aria-current="page"] { color: var(--fg); font-weight: 600; }
+.explore-subcategory-section { min-width: 0; margin-top: 14px; }
+#knowledgeExplorePage .explore-subcategory-filter { margin: 0; }
+#knowledgeExplorePage .explore-subcategory-filter .recommendation-type-filter { justify-content: flex-start; }
+#knowledgeExplorePage .explore-subcategory-filter .recommendation-type-filter button { background: var(--surface-1); }
+#knowledgeExplorePage .explore-subcategory-filter .recommendation-type-filter button:hover { background: var(--border); }
+#knowledgeExplorePage .explore-subcategory-filter .recommendation-type-filter button[aria-pressed="true"] { background: var(--fg); color: var(--surface-0); }
 .explore-state { margin: 32px 0; padding: 32px 16px; border-radius: 12px; background: var(--surface-1); text-align: center; color: var(--muted); font-size: 13px; }
 .explore-state button { margin: 10px; padding: 7px 14px; }
 .explore-knowledge-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
@@ -48,9 +66,24 @@ body.home-explore-active:not(.home-big-bang-active):not(.home-relation-active) #
 .explore-pagination { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 24px; font-size: 12px; }
 .explore-pagination button { padding: 7px 12px; }
 @media (max-width: 1200px) { .explore-category-grid, .explore-knowledge-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 850px) {
+  .explore-heading-row { align-items: flex-start; flex-direction: column; gap: 8px; padding-bottom: 12px; }
+  .explore-heading-actions { width: 100%; justify-content: flex-start; }
+  #knowledgeExplorePage .explore-heading-actions .explore-type-actions { margin-right: auto; }
+}
 @media (max-width: 600px) {
-  .explore-content { padding: 24px 8px 40px; }
+  .explore-content { padding: 16px 8px 32px; }
   .explore-heading h1 { font-size: 26px; }
+  .explore-community-banner { height: 68px; border-radius: 8px; }
+  .explore-heading-row { align-items: flex-start; flex-direction: column; gap: 6px; padding: 0 4px 9px; }
+  .explore-heading-main { width: 100%; gap: 10px; }
+  .explore-community-avatar { flex-basis: 52px; width: 52px; height: 52px; margin-top: -18px; border-width: 3px; font-size: 20px; }
+  .explore-heading-copy { padding-top: 6px; }
+  .explore-heading-copy h1 { font-size: 21px; }
+  .explore-heading-copy p { font-size: 11px; }
+  .explore-heading-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+  #knowledgeExplorePage .explore-heading-actions .explore-type-actions { flex: 1 1 auto; }
+  #knowledgeExplorePage .explore-heading-actions .explore-type-actions > button { height: 34px; min-height: 34px; padding-inline: 12px; }
   .explore-category-grid, .explore-knowledge-grid { grid-template-columns: minmax(0, 1fr); }
   .explore-group-heading h2 { font-size: 16px; }
   .explore-group-heading { flex-wrap: wrap; }
@@ -88,14 +121,8 @@ body.home-explore-active:not(.home-big-bang-active):not(.home-relation-active) #
 #knowledgeExplorePage .explore-tile-caption button:hover { text-decoration:underline; }
 #knowledgeExplorePage .explore-media-tile:focus-within .explore-tile-caption { opacity:1; transform:none; }
 
-#knowledgeExplorePage .explore-heading { position:relative; padding-right:56px; }
-#knowledgeExplorePage .explore-heading [data-explore-big-bang] { position:absolute; top:0; right:0; display:grid; place-items:center; width:40px; height:40px; margin:0; padding:0; border-radius:12px; font-size:17px; }
-#knowledgeExplorePage .explore-heading [data-explore-short-video] { position:absolute; top:0; right:48px; display:grid; place-items:center; width:40px; height:40px; margin:0; padding:0; border-radius:12px; font-size:16px; }
-
-.explore-type-actions { display:flex; align-items:center; gap:8px; margin-left:auto; }
 .home-pinned-types { margin-block:10px; }
 .home-pinned-types[hidden] { display:none; }
 .home-pinned-types button > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
 #knowledgeExplorePage .explore-heading[hidden],
-#knowledgeExplorePage .explore-topic-tabs[hidden] { display:none; }

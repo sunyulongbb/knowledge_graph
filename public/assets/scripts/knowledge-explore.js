@@ -163,18 +163,11 @@
     if (!response.ok) throw Error(`加载失败（${response.status}）`);
     return response.json();
   }
-  function ancestry(id) {
-    const result = [], seen = new Set();
-    while (id && tree.byId.has(id) && !seen.has(id)) {
-      seen.add(id); const row = tree.byId.get(id); result.unshift(row); id = row.parent_id;
-    }
-    return result;
-  }
   function categoryCard(row) {
     const image = imageUrl(row.image), color = /^#[\da-f]{6}$/i.test(row.color || '') ? row.color : '';
     return `<button class="explore-category-card" type="button" data-explore-category="${escape(row.id)}">
       <span class="explore-category-icon" ${color ? `style="--category-color:${color}"` : ''}>${image ? `<img src="${escape(image)}" alt="" loading="lazy">` : '<i class="fa-solid fa-shapes" aria-hidden="true"></i>'}</span>
-      <span class="explore-category-info"><strong>${escape(name(row))}</strong><small>${Math.max(0, Number(row.instance_count) || 0)} 条直属知识 · ${childrenOf(row.id).length} 个子分类</small></span>
+      <span class="explore-category-info"><strong>${escape(name(row))}</strong><small>${Math.max(0, Number(row.instance_count) || 0)} 条直属知识</small></span>
       <span class="explore-category-open">探索 <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></span>
       <span class="explore-category-description">${escape(row.description || '查看该分类的知识和子分类。')}</span>
     </button>`;
@@ -204,21 +197,31 @@
       : itemsError ? `<span role="alert">${escape(itemsError)}</span> <button type="button" data-explore-retry-items>重试</button>`
       : exhausted || page * pageSize >= total ? '<span role="status">已经看完全部知识</span>'
       : '<button type="button" data-explore-load-more>加载更多</button>';
-    return `<section class="explore-group"><div class="explore-group-heading"><h2>${escape((selectedTag ? '#' + selectedTag : name(current)))}的知识</h2><span>${total} 条知识（含子分类）</span></div>${content}<div class="explore-pagination" data-explore-load-status>${status}</div></section>`;
+    return `<section class="explore-group">${content}<div class="explore-pagination" data-explore-load-status>${status}</div></section>`;
+  }
+  function subcategoryFilter() {
+    if (!selected) return '';
+    const children = childrenOf(selected);
+    if (!children.length) return '';
+    return `<section class="explore-subcategory-section" aria-label="子分类">
+      <nav class="recommendation-filter-bar explore-subcategory-filter" aria-label="子分类筛选">
+        <div class="recommendation-type-filter">
+          <button type="button" data-explore-category="${escape(selected)}" aria-pressed="true">全部</button>
+          ${children.map(row => `<button type="button" data-explore-category="${escape(row.id)}" aria-pressed="${row.id === selected}">${escape(name(row))}</button>`).join('')}
+        </div>
+      </nav>
+    </section>`;
   }
 
   function render() {
     const scrollTop = ['app_explore','joined_type'].includes(window.kbViewMode) ? panel.scrollTop : savedScrollTop;
     savedScrollTop = scrollTop;
-    const crumbs = ancestry(selected), activeRoot = crumbs[0]?.id || '';
     let content;
     if (loadingTree) content = '<div class="explore-state" role="status">正在加载分类…</div>';
     else if (treeError) content = `<div class="explore-state" role="alert">${escape(treeError)} <button type="button" data-explore-retry>重新加载</button></div>`;
     else if (!selectedTag && !tree.byId.size) content = '<div class="explore-state"><i class="fa-solid fa-shapes" aria-hidden="true"></i><h2>还没有分类</h2><p>在知识库中建立分类后，即可在这里探索。</p><button type="button" data-explore-workspace>管理分类</button></div>';
     else if (selected || selectedTag) {
-      content = `<nav class="explore-breadcrumbs" aria-label="分类路径"><button type="button" data-explore-category="">全部分类</button>${crumbs.map(row => `<span aria-hidden="true">/</span><button type="button" data-explore-category="${escape(row.id)}" ${row.id === selected ? 'aria-current="page"' : ''}>${escape(name(row))}</button>`).join('')}</nav>`;
-      const children = childrenOf(selected);
-      if (children.length) content += group('继续探索子分类', children, selected);
+      content = subcategoryFilter();
       content += knowledgeSection();
     } else {
       const recommended = [...tree.byId.values()].filter(row => Number(row.instance_count) > 0)
@@ -227,8 +230,31 @@
       for (const root of tree.roots) content += group(name(root), childrenOf(root.id).length ? childrenOf(root.id) : [root], root.id, root.id);
     }
     renderPins();
-    panel.innerHTML = `<div class="explore-content"><header class="explore-heading" ${!selected && !selectedTag ? 'hidden' : ''}>${tree.byId.has(selected) ? `<h1>${escape(name(tree.byId.get(selected)))}</h1><div class="explore-type-actions"><button type="button" class="btn" data-explore-join>${readPins().some(item => item.id === selected) ? '\u5df2\u52a0\u5165' : 'Join'}</button><button type="button" class="btn primary" data-explore-create><i class="fa-solid fa-plus" aria-hidden="true"></i> \u65b0\u589e\u77e5\u8bc6</button></div><button class="btn" type="button" data-explore-short-video title="\u5728\u77ed\u89c6\u9891\u4e2d\u63a2\u7d22\u6b64\u5206\u7c7b" aria-label="\u5728\u77ed\u89c6\u9891\u4e2d\u63a2\u7d22\u6b64\u5206\u7c7b"><i class="fa-solid fa-clapperboard" aria-hidden="true"></i></button>` : ''}<button class="btn" type="button" data-explore-big-bang title="Big Bang \u77e5\u8bc6\u5b87\u5b99" aria-label="Big Bang \u77e5\u8bc6\u5b87\u5b99"><i class="fa-solid fa-atom" aria-hidden="true"></i></button></header>
-      <nav class="explore-topic-tabs" ${!selected && !selectedTag ? 'hidden' : ''} aria-label="一级分类"><button type="button" data-explore-category="" ${!selected ? 'aria-current="page"' : ''}>全部</button>${tree.roots.map(row => `<button type="button" data-explore-category="${escape(row.id)}" ${row.id === activeRoot ? 'aria-current="page"' : ''}>${escape(name(row))}</button>`).join('')}</nav>${content}</div>`;
+    const currentCategory = tree.byId.get(selected);
+    const categoryImage = imageUrl(currentCategory?.image);
+    const categoryColor = /^#[\da-f]{6}$/i.test(currentCategory?.color || '') ? currentCategory.color : '';
+    const headingTitle = currentCategory ? name(currentCategory) : selectedTag ? '#' + selectedTag : '探索分类';
+    const categoryStats = currentCategory ? [
+      Number(currentCategory.instance_count) > 0 ? `${Number(currentCategory.instance_count)} 条直属知识` : '',
+    ].filter(Boolean).join(' · ') : '';
+    const headingDescription = currentCategory
+      ? currentCategory.description || categoryStats
+      : selectedTag ? '正在浏览此标签下的知识。' : '按分类发现、浏览和管理知识。';
+    const heading = `<header class="explore-heading">
+      <div class="explore-community-banner" ${categoryColor ? `style="--category-color:${categoryColor}"` : ''} aria-hidden="true">${categoryImage ? `<img src="${escape(categoryImage)}" alt="">` : ''}</div>
+      <div class="explore-heading-row">
+        <div class="explore-heading-main">
+          <span class="explore-community-avatar" ${categoryColor ? `style="--category-color:${categoryColor}"` : ''}>${categoryImage ? `<img src="${escape(categoryImage)}" alt="">` : `<i class="fa-solid ${currentCategory ? 'fa-shapes' : selectedTag ? 'fa-hashtag' : 'fa-compass' }" aria-hidden="true"></i>`}</span>
+          <div class="explore-heading-copy"><h1>${escape(headingTitle)}</h1><p>${escape(headingDescription)}</p></div>
+        </div>
+        <div class="explore-heading-actions">
+          ${currentCategory ? `<div class="explore-type-actions"><button type="button" class="btn" data-explore-join>${readPins().some(item => item.id === selected) ? '\u5df2\u52a0\u5165' : 'Join'}</button><button type="button" class="btn primary" data-explore-create><i class="fa-solid fa-plus" aria-hidden="true"></i> \u65b0\u589e\u77e5\u8bc6</button></div>
+          <button class="btn explore-icon-action" type="button" data-explore-short-video title="\u5728\u77ed\u89c6\u9891\u4e2d\u63a2\u7d22\u6b64\u5206\u7c7b" aria-label="\u5728\u77ed\u89c6\u9891\u4e2d\u63a2\u7d22\u6b64\u5206\u7c7b"><i class="fa-solid fa-clapperboard" aria-hidden="true"></i></button>` : ''}
+          <button class="btn explore-icon-action" type="button" data-explore-big-bang title="Big Bang \u77e5\u8bc6\u5b87\u5b99" aria-label="Big Bang \u77e5\u8bc6\u5b87\u5b99"><i class="fa-solid fa-atom" aria-hidden="true"></i></button>
+        </div>
+      </div>
+    </header>`;
+    panel.innerHTML = `<div class="explore-content">${heading}${content}</div>`;
     panel.scrollTop = scrollTop;
   }
   async function loadItems(nextPage = 1, append = false) {
