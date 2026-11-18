@@ -29,23 +29,26 @@ body.home-explore-active:not(.home-big-bang-active):not(.home-relation-active) #
 #knowledgeExplorePage button:hover { border-color: color-mix(in srgb, var(--accent) 65%, var(--border)); background: var(--surface-1); }
 #knowledgeExplorePage button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 #knowledgeExplorePage button:disabled { opacity: .45; cursor: default; }
-.explore-group { margin-top: 28px; }
+.explore-top-category-bar { margin: 12px 0 18px; }
+#knowledgeExplorePage .explore-top-category-bar .recommendation-type-filter { justify-content: flex-start; }
+#knowledgeExplorePage .explore-top-category-bar .recommendation-type-filter button { background: var(--surface-1); }
+#knowledgeExplorePage .explore-top-category-bar .recommendation-type-filter button:hover { background: var(--border); }
+#knowledgeExplorePage .explore-top-category-bar .recommendation-type-filter button[aria-pressed="true"] { background: var(--fg); color: var(--surface-0); }
+.explore-group { margin-top: 18px; }
 .explore-group-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .explore-group-heading h2 { margin: 0; font-size: 18px; font-weight: 650; letter-spacing: -.02em; }
 #knowledgeExplorePage .explore-group-heading h2 > button { padding:0; border:0; border-radius:0; background:none; color:inherit; font:inherit; text-align:left; }
 #knowledgeExplorePage .explore-group-heading h2 > button:hover { color:var(--accent); }
 .explore-group-heading > span { color: var(--muted); font-size: 12px; }
 #knowledgeExplorePage .explore-group-heading > button { background: none; border: 0; color: var(--muted); font-size: 12px; }
-.explore-category-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-#knowledgeExplorePage .explore-category-card { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; grid-template-rows: auto 1fr; gap: 10px; min-height: 116px; padding: 14px; text-align: left; border-radius: 12px; transition: background .15s, border-color .15s; }
-.explore-category-icon { --category-color: var(--accent); display: grid; place-items: center; width: 40px; height: 40px; overflow: hidden; border-radius: 50%; color: var(--category-color); background: color-mix(in srgb, var(--category-color) 12%, var(--surface-0)); font-size: 18px; }
+.explore-category-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+#knowledgeExplorePage .explore-category-card { display: grid; grid-template-columns: 34px minmax(0, 1fr) 12px; align-items: center; gap: 8px; min-width: 0; min-height: 62px; padding: 8px; text-align: left; border-radius: 10px; transition: background .15s, border-color .15s; }
+.explore-category-icon { --category-color: var(--accent); display: grid; place-items: center; width: 34px; height: 34px; overflow: hidden; border-radius: 50%; color: var(--category-color); background: color-mix(in srgb, var(--category-color) 12%, var(--surface-0)); font-size: 15px; }
 .explore-category-icon img { width: 100%; height: 100%; object-fit: cover; }
-.explore-category-info { min-width: 0; }
-.explore-category-info strong { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; }
-.explore-category-info small { display: block; color: var(--muted); font-size: 10px; margin-top: 4px; line-height: 1.5; }
-.explore-category-open { align-self: start; padding: 6px 9px; border-radius: 16px; background: var(--surface-1); font-size: 10px; white-space: nowrap; }
-.explore-category-open i { margin-left: 3px; font-size: 9px; }
-.explore-category-description { grid-column: 1 / -1; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.explore-category-info { min-width: 0; overflow: hidden; }
+.explore-category-info strong { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; }
+.explore-category-info small { display: block; overflow: hidden; color: var(--muted); font-size: 10px; margin-top: 2px; line-height: 1.3; white-space: nowrap; text-overflow: ellipsis; }
+.explore-category-open { justify-self: end; color: var(--muted); font-size: 10px; }
 #knowledgeExplorePage .explore-show-more { display: block; margin: 14px auto 0; padding: 8px 16px; border: 0; border-radius: 20px; background: var(--surface-1); font-size: 12px; }
 .explore-show-more i { margin-left: 5px; font-size: 10px; }
 .explore-subcategory-section { min-width: 0; margin-top: 14px; }
@@ -65,7 +68,8 @@ body.home-explore-active:not(.home-big-bang-active):not(.home-relation-active) #
 .explore-knowledge-card small { color: var(--muted); font-size: 12px; }
 .explore-pagination { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 24px; font-size: 12px; }
 .explore-pagination button { padding: 7px 12px; }
-@media (max-width: 1200px) { .explore-category-grid, .explore-knowledge-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 1100px) { .explore-category-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } .explore-knowledge-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 750px) { .explore-category-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 850px) {
   .explore-heading-row { align-items: flex-start; flex-direction: column; gap: 8px; padding-bottom: 12px; }
   .explore-heading-actions { width: 100%; justify-content: flex-start; }
@@ -84,7 +88,11 @@ body.home-explore-active:not(.home-big-bang-active):not(.home-relation-active) #
   .explore-heading-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
   #knowledgeExplorePage .explore-heading-actions .explore-type-actions { flex: 1 1 auto; }
   #knowledgeExplorePage .explore-heading-actions .explore-type-actions > button { height: 34px; min-height: 34px; padding-inline: 12px; }
-  .explore-category-grid, .explore-knowledge-grid { grid-template-columns: minmax(0, 1fr); }
+  .explore-category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  #knowledgeExplorePage .explore-category-card { grid-template-columns: 30px minmax(0, 1fr) 10px; gap: 6px; min-height: 56px; padding: 6px; }
+  .explore-category-icon { width: 30px; height: 30px; font-size: 13px; }
+  .explore-category-info strong { font-size: 11px; }
+  .explore-knowledge-grid { grid-template-columns: minmax(0, 1fr); }
   .explore-group-heading h2 { font-size: 16px; }
   .explore-group-heading { flex-wrap: wrap; }
   .explore-category-open { padding: 6px 8px; }

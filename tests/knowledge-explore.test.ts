@@ -63,18 +63,23 @@ test('explore renders real category cards and opens scoped knowledge without the
   const h = setup((url: URL)=>url.pathname.endsWith('/classes')?rows:{nodes:[{id:'Q1',name:'月球'}],total:1});
   await h.window.loadKnowledgeExplore();
   expect(h.panel.innerHTML).toContain('天文学');
-  expect(h.panel.innerHTML).toContain('认识宇宙');
+  expect(h.panel.innerHTML).toContain('explore-top-category-bar');
+  expect(h.panel.innerHTML).toContain('data-explore-category="" aria-pressed="true">全部</button>');
   expect(h.panel.innerHTML).not.toContain('explore-topic-tabs');
   expect(h.panel.innerHTML).toContain('探索分类');
   expect(h.panel.innerHTML).toContain('explore-community-banner');
+  expect(h.panel.innerHTML).toContain('explore-top-category-bar');
+  expect(h.panel.innerHTML).toContain('data-explore-category="science" aria-pressed="false">科学</button>');
   expect(h.panel.innerHTML).not.toContain('个子分类');
   expect(h.requests[0]?.searchParams.get('db')).toBe('demo');
   h.click('[data-explore-category]',{exploreCategory:'science'}); await tick();
+  expect(h.panel.innerHTML).toContain('data-explore-category="science" aria-pressed="true">科学</button>');
   expect(h.panel.innerHTML).toContain('explore-subcategory-filter');
   expect(h.panel.innerHTML).toContain('data-explore-category="space" aria-pressed="false">天文学</button>');
   h.click('[data-explore-category]',{exploreCategory:'space'}); await tick();
   expect(h.requests[2]?.pathname).toBe('/api/kb/discover/search');
   expect(h.requests[2]?.searchParams.get('class_id')).toBe('space');
+  expect(h.panel.innerHTML).toContain('认识宇宙');
   expect(h.panel.innerHTML).toContain('explore-community-banner');
   expect(h.panel.innerHTML).toContain('explore-community-avatar');
   expect(h.panel.innerHTML).toContain('explore-heading-actions');
@@ -83,6 +88,8 @@ test('explore renders real category cards and opens scoped knowledge without the
   const styles = readFileSync(new URL('../public/assets/styles/knowledge-explore.css', import.meta.url), 'utf8');
   expect(styles).toContain('box-sizing: border-box; height: 34px; min-height: 34px; flex: 0 0 auto;');
   expect(styles).toContain('flex: 0 0 34px;');
+  expect(styles).toContain('grid-template-columns: repeat(6, minmax(0, 1fr));');
+  expect(styles).toContain('@media (max-width: 1100px) { .explore-category-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }');
   expect(h.panel.innerHTML).not.toContain('天文学的知识');
   expect(h.panel.innerHTML).not.toContain('含子分类');
   expect(h.panel.innerHTML).not.toContain('<h2>子分类</h2>');
@@ -90,6 +97,7 @@ test('explore renders real category cards and opens scoped knowledge without the
   expect(h.panel.innerHTML).toContain('月球');
   expect(h.panel.innerHTML).not.toContain('explore-breadcrumbs');
   expect(h.panel.innerHTML).not.toContain('explore-subcategory-filter');
+  expect(h.panel.innerHTML).toContain('data-explore-category="science" aria-pressed="true">科学</button>');
   h.click('[data-explore-node]',{exploreNode:'Q1'});
   expect(h.views).toEqual([['shorts',{targetNodeId:'Q1'}]]);
   expect(h.window.kbShortsLaunch.category).toBe('天文学');
@@ -149,6 +157,15 @@ test('empty classifications show an explicit empty state', async () => {
   await h.window.loadKnowledgeExplore();
   expect(h.panel.innerHTML).toContain('还没有分类');
   expect(h.views).toEqual([]);
+});
+
+test('all category cards render without a show-more button', async () => {
+  const categories=[{id:'root',name:'总类'},...Array.from({length:8},(_,index)=>({id:`child-${index}`,name:`子类${index}`,parent_id:'root'}))];
+  const h=setup(()=>categories);
+  await h.window.loadKnowledgeExplore();
+  for(let index=0;index<8;index++) expect(h.panel.innerHTML).toContain(`data-explore-category="child-${index}"`);
+  expect(h.panel.innerHTML).not.toContain('显示更多');
+  expect(h.panel.innerHTML).not.toContain('data-explore-more');
 });
 
 test('category heading hides empty knowledge and subcategory counts', async () => {

@@ -138,7 +138,6 @@
   let selectedTag = '';
   let tree = buildExploreTree([]), selected = '', items = [], total = 0, page = 1;
   let loadingTree = false, loadingItems = false, treeError = '', itemsError = '', treeVersion = 0, itemsVersion = 0;
-  const expanded = new Map();
   const pageSize = 12;
   let treeReady = false, loadedDatabase = null, savedScrollTop = 0;
   let exhausted = false, scrollTimer = 0, retryPage = 1, retryAppend = false;
@@ -153,6 +152,11 @@
   }
   const name = row => row?.name || row?.label || row?.id || selectedTag;
   const childrenOf = id => tree.children.get(id) || [];
+  function rootOf(id) {
+    let row = tree.byId.get(id);
+    while (row && tree.byId.has(row.parent_id)) row = tree.byId.get(row.parent_id);
+    return row?.id || '';
+  }
   const imageUrl = value => typeof value === 'string' && /^(https?:\/\/|\/(?!\/))/i.test(value.trim()) ? value.trim() : '';
   async function api(path, params = {}) {
     const url = new URL(path, location.origin);
@@ -165,18 +169,17 @@
   }
   function categoryCard(row) {
     const image = imageUrl(row.image), color = /^#[\da-f]{6}$/i.test(row.color || '') ? row.color : '';
+    const count = Math.max(0, Number(row.instance_count) || 0);
     return `<button class="explore-category-card" type="button" data-explore-category="${escape(row.id)}">
       <span class="explore-category-icon" ${color ? `style="--category-color:${color}"` : ''}>${image ? `<img src="${escape(image)}" alt="" loading="lazy">` : '<i class="fa-solid fa-shapes" aria-hidden="true"></i>'}</span>
-      <span class="explore-category-info"><strong>${escape(name(row))}</strong><small>${Math.max(0, Number(row.instance_count) || 0)} 条直属知识</small></span>
-      <span class="explore-category-open">探索 <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></span>
-      <span class="explore-category-description">${escape(row.description || '查看该分类的知识和子分类。')}</span>
+      <span class="explore-category-info"><strong>${escape(name(row))}</strong>${count ? `<small>${count} 条知识</small>` : ''}</span>
+      <i class="explore-category-open fa-solid fa-chevron-right" aria-hidden="true"></i>
     </button>`;
   }
-  function group(title, rows, key, parentId = '') {
-    const count = expanded.get(key) || 6;
+  function group(title, rows, parentId = '') {
     return `<section class="explore-group"><div class="explore-group-heading"><h2>${parentId?`<button type="button" data-explore-category="${escape(parentId)}">${escape(title)}</button>`:escape(title)}</h2>${parentId ? `<button type="button" data-explore-category="${escape(parentId)}">查看全部 <i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>` : ''}</div>
-      <div class="explore-category-grid">${rows.slice(0, count).map(categoryCard).join('')}</div>
-      ${rows.length > count ? `<button class="explore-show-more" type="button" data-explore-more="${escape(key)}">显示更多 <i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button>` : ''}</section>`;
+      <div class="explore-category-grid">${rows.map(categoryCard).join('')}</div>
+    </section>`;
   }
   function knowledgeSection() {
     const current = tree.byId.get(selected);
@@ -212,6 +215,16 @@
       </nav>
     </section>`;
   }
+  function topCategoryFilter() {
+    if (loadingTree || !tree.roots.length) return '';
+    const activeRoot = rootOf(selected);
+    return `<nav class="recommendation-filter-bar explore-top-category-bar" aria-label="一级分类筛选">
+      <div class="recommendation-type-filter">
+        <button type="button" data-explore-category="" aria-pressed="${!selected && !selectedTag}">全部</button>
+        ${tree.roots.map(row => `<button type="button" data-explore-category="${escape(row.id)}" aria-pressed="${row.id === activeRoot}">${escape(name(row))}</button>`).join('')}
+      </div>
+    </nav>`;
+  }
 
   function render() {
     const scrollTop = ['app_explore','joined_type'].includes(window.kbViewMode) ? panel.scrollTop : savedScrollTop;
@@ -226,10 +239,11 @@
     } else {
       const recommended = [...tree.byId.values()].filter(row => Number(row.instance_count) > 0)
         .sort((a, b) => Number(b.instance_count) - Number(a.instance_count)).slice(0, 6);
-      content = recommended.length ? group('从这些分类开始', recommended, 'recommended') : '';
-      for (const root of tree.roots) content += group(name(root), childrenOf(root.id).length ? childrenOf(root.id) : [root], root.id, root.id);
+      content = recommended.length ? group('从这些分类开始', recommended) : '';
+      for (const root of tree.roots) content += group(name(root), childrenOf(root.id).length ? childrenOf(root.id) : [root], root.id);
     }
     renderPins();
+    const categoryFilter = topCategoryFilter();
     const currentCategory = tree.byId.get(selected);
     const categoryImage = imageUrl(currentCategory?.image);
     const categoryColor = /^#[\da-f]{6}$/i.test(currentCategory?.color || '') ? currentCategory.color : '';
@@ -254,7 +268,7 @@
         </div>
       </div>
     </header>`;
-    panel.innerHTML = `<div class="explore-content">${heading}${content}</div>`;
+    panel.innerHTML = `<div class="explore-content">${heading}${categoryFilter}${content}</div>`;
     panel.scrollTop = scrollTop;
   }
   async function loadItems(nextPage = 1, append = false) {
@@ -369,8 +383,6 @@
     if(event.target.closest('[data-explore-big-bang]')) { savedScrollTop=panel.scrollTop; clearTimeout(scrollTimer); window.setViewMode('big_bang'); return; }
     const category = event.target.closest('[data-explore-category]');
     if (category) { selectCategory(category.dataset.exploreCategory); return; }
-    const more = event.target.closest('[data-explore-more]');
-    if (more) { const key = more.dataset.exploreMore; expanded.set(key, (expanded.get(key) || 6) + 6); render(); return; }
     if (event.target.closest('[data-explore-load-more]')) { loadMoreItems(); return; }
     const detail = event.target.closest('[data-explore-detail]');
     if (detail) { savedScrollTop = panel.scrollTop; clearTimeout(scrollTimer); window.setViewMode('knowledge_detail', { targetNodeId: detail.dataset.exploreDetail }); return; }
