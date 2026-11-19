@@ -7,6 +7,7 @@
   const byId = dom.byId || ((id) => document.getElementById(id));
   const btnClsAdd = byId("btnClsAdd");
   const btnClassImport = byId("btnClassImport");
+  const btnClassExport = byId("btnClassExport");
   const classImportFile = byId("classImportFile");
   const classImportStatus = byId("classImportStatus");
   const clsTree = byId("clsTree");
@@ -87,6 +88,7 @@
   let propRecommendActiveId = "";
   let classTreeController = null;
   let classTreeUpdateQueued = false;
+  let pendingClassTreeRender = null;
   if (classForm) classForm.dataset.classModalOwner = "schema-panel";
 
   // Local wrapper for pickUiDatatype (defined in attr-panel.js)
@@ -530,25 +532,41 @@
   }
 
   async function exportClassTree(rootId = '') {
+    if (btnClassExport) btnClassExport.disabled = true;
+    if (classImportStatus) classImportStatus.textContent = '正在导出分类…';
     try {
       const url = appendCurrentDbToUrl(new URL('/api/kb/classes', window.location.origin));
       const data = await apiGet(url.toString());
       const rows = Array.isArray(data) ? data : data.items || [];
+      const ids = new Set(rows.map(row => row.id));
+      const children = new Map();
+      rows.forEach(row => { const parent = row.parent_id || row.parent || ''; if (!children.has(parent)) children.set(parent, []); children.get(parent).push(row); });
+      children.forEach(list => list.sort((a,b) => (a.sort_order || 0) - (b.sort_order || 0)));
+      const exported = new Set();
       const encode = (row, seen = new Set()) => {
+        exported.add(row.id);
         if (seen.has(row.id)) throw new Error('分类层级存在循环');
         const next = new Set(seen); next.add(row.id);
         let tags = row.tags || []; if (typeof tags === 'string') { try { tags = JSON.parse(tags); } catch { tags = []; } }
-        return { name: row.name || row.label || row.id, description: row.description || '', color: row.color || null, image: row.image || null,
+        return { id: row.id, name: row.name || row.label || row.id, description: row.description || '', color: row.color || null, image: row.image || null,
           tags: Array.isArray(tags) ? tags.filter((tag) => typeof tag === 'string' && tag.trim()) : [],
-          children: rows.filter((item) => (item.parent_id || item.parent) === row.id).sort((a,b) => (a.sort_order || 0) - (b.sort_order || 0)).map((item) => encode(item,next)) };
+          children: (children.get(row.id) || []).map(item => encode(item,next)) };
       };
-      const roots = rootId ? rows.filter((item) => item.id === rootId) : rows.filter((item) => !(item.parent_id || item.parent));
+      const roots = rootId ? rows.filter((item) => item.id === rootId) : rows.filter((item) => !ids.has(item.parent_id || item.parent));
       if (!roots.length) throw new Error('没有可导出的分类');
-      const blob = new Blob([JSON.stringify({version:1,classes:roots.map((item) => encode(item))},null,2)], {type:'application/json'});
+      const classes = roots.map(item => encode(item));
+      if (!rootId && exported.size !== rows.length) throw new Error('分类存在循环或重复 ID，无法完整导出，请先修复层级');
+      const blob = new Blob([JSON.stringify({version:1,classes},null,2)], {type:'application/json'});
       const link = document.createElement('a'); const objectUrl = URL.createObjectURL(blob); link.href = objectUrl;
       link.download = (rootId ? '分类分支' : '全部分类') + '-' + new Date().toISOString().slice(0,10) + '.json'; document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(objectUrl),1000);
-    } catch (error) { alert('导出失败：' + (error.message || error)); }
+      if (classImportStatus) classImportStatus.textContent = `已导出 ${exported.size} 个分类（含层级、颜色、图片和标签）`;
+    } catch (error) {
+      if (classImportStatus) classImportStatus.textContent = `导出失败：${error.message || error}`;
+      else alert('导出失败：' + (error.message || error));
+    } finally { if (btnClassExport) btnClassExport.disabled = false; }
   }
+
+  btnClassExport?.addEventListener('click', () => void exportClassTree());
 
   if (btnClassImport && classImportFile) {
     btnClassImport.addEventListener("click", () => classImportFile.click());
@@ -559,11 +577,27 @@
       if (classImportStatus) classImportStatus.textContent = "正在导入分类…";
       try {
         if (file.size > 2 * 1024 * 1024) throw new Error("JSON 文件不能超过 2 MB");
+        let payload;
+        try { payload = JSON.parse((await file.text()).replace(/^\uFEFF/, '')); }
+        catch { throw new Error('文件不是有效 JSON，请使用分类导出文件或下载示例'); }
+        if (payload?.version !== 1 || !Array.isArray(payload.classes) || !payload.classes.length) throw new Error('需要 version: 1 和非空 classes 数组，请参考示例');
+        let count = 0;
+        const validate = (nodes, depth = 1) => {
+          if (depth > 32) throw new Error('分类层级不能超过 32 层');
+          for (const node of nodes) {
+            if (++count > 1000) throw new Error('一次最多导入 1000 个分类');
+            if (!node || typeof node.name !== 'string' || !node.name.trim()) throw new Error('第 ' + count + ' 个分类缺少名称');
+            if (node.children !== undefined && !Array.isArray(node.children)) throw new Error('分类“' + node.name + '”的 children 必须是数组');
+            validate(node.children || [], depth + 1);
+          }
+        };
+        validate(payload.classes);
+        if (classImportStatus) classImportStatus.textContent = '正在导入 ' + count + ' 个分类…';
         const url = appendCurrentDbToUrl(new URL("/api/kb/classes/import", window.location.origin));
         const response = await fetch(url.toString(), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: (await file.text()).replace(/^\uFEFF/, ""),
+          body: JSON.stringify(payload),
         });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
@@ -660,6 +694,7 @@
   function renderClassTree(items, options = {}) {
     if (!clsTree) return;
     if (!classTreeController) {
+      pendingClassTreeRender = { items, options };
       if (!window.kbOntologyTreeModuleReady) {
         clsTree.innerHTML = '<div class="muted">分类树组件加载中...</div>';
         return;
@@ -803,7 +838,12 @@
                 renderClassTree(window.kbClasses || []);
               },
             });
-            renderClassTree(items, options);
+            const latestRender = pendingClassTreeRender;
+            pendingClassTreeRender = null;
+            renderClassTree(
+              latestRender?.items || items,
+              latestRender?.options || options,
+            );
           })
           .catch((error) => {
             classTreeUpdateQueued = false;

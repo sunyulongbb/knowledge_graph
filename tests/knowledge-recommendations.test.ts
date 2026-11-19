@@ -87,3 +87,12 @@ test('Shorts menu refresh stops the old player and requests a fresh recommendati
   expect(requests[0]!.searchParams.get('recommendation_seed')).not.toBe(requests[1]!.searchParams.get('recommendation_seed'));
   expect(requests.every(url=>url.searchParams.get('db')==='demo')).toBe(true);
 });
+
+test('shorts rank unseen videos first and diversify adjacent categories',()=>{
+  const nodes=[candidate('seen','a'),candidate('shown','a'),...Array.from({length:6},(_,i)=>({...candidate('a'+i,'a'),videos:['/a.mp4']})),...Array.from({length:6},(_,i)=>({...candidate('b'+i,'b'),video:'/b.mp4'}))];
+  const result=rankRecommendations(nodes,[{node:nodes[0]!,weight:0,seen:true}],'shorts',{surface:'shorts',shown:new Set(['shown'])});
+  expect(result.slice(0,6).every(node=>!['seen','shown'].includes(node.id))).toBe(true);
+  expect(new Set(result.slice(0,4).map(node=>node.type)).size).toBe(2);
+  expect(new Set(result.map(node=>node.id)).size).toBe(nodes.length);
+  expect(result).toEqual(rankRecommendations(nodes,[{node:nodes[0]!,weight:0,seen:true}],'shorts',{surface:'shorts',shown:new Set(['shown'])}));
+});

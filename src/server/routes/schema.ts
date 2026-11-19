@@ -1,5 +1,5 @@
 import { reorderClasses } from '../class-reorder.ts';
-import { sortTags } from '../tag-order.ts';
+import { parseTagStorage, sortTags } from '../tag-order.ts';
 import { loadPropertyTailSuggestions } from '../property-tail-suggestions.ts';
 import { db, getProjectByIdentifier } from "../db.ts";
 import { resolve } from "path";
@@ -882,10 +882,7 @@ export async function handleSchemaRoutes(
     for (const table of ["classes", "nodes"]) {
       const rows = db.query(`SELECT tags FROM ${table}${hasProjectScope ? " WHERE project_id = ?" : ""}`).all(...scopedProjectParams()) as any[];
       for (const row of rows) {
-        try {
-          const tags = JSON.parse(row.tags || "[]");
-          if (Array.isArray(tags)) values.push(...tags);
-        } catch {}
+        values.push(...parseTagStorage(row.tags));
       }
     }
     try {
@@ -924,9 +921,7 @@ export async function handleSchemaRoutes(
       .map((row: any) => {
         let rowTags: string[] = [];
         let rowAnalyses: any[] = [];
-        try {
-          rowTags = JSON.parse(row.tags || "[]");
-        } catch {}
+        rowTags = parseTagStorage(row.tags);
         try {
           rowAnalyses = normalizeClassAnalyses(JSON.parse(row.analyses || "[]"), false);
         } catch {}
@@ -942,7 +937,7 @@ export async function handleSchemaRoutes(
           image: row.image,
           sort_order: row.sort_order,
           instance_count: row.instance_count ?? 0,
-          tags: sortTags(Array.isArray(rowTags) ? rowTags : []),
+          tags: sortTags(rowTags),
           analyses: rowAnalyses,
         };
       });

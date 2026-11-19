@@ -53,6 +53,99 @@
     return data;
   }
   const message = (text) => { refs.status.textContent = text; };
+  let inlineClassification = null;
+  async function quickTaxonomy(kind) {
+    if (kind === 'category' && inlineClassification?.open) { inlineClassification.close(); return; }
+    const targetId = idOf(node);
+    const editor = document.createElement('dialog'); editor.className = 'reel-taxonomy-editor' + (kind === 'category' ? ' reel-taxonomy-inline' : '');
+    const title = document.createElement('h3'); title.textContent = kind === 'category' ? '快速分类' : '打标签';
+    const body = document.createElement('div'); body.className = 'reel-taxonomy-body'; body.textContent = '正在加载…';
+    const status = document.createElement('p'); status.setAttribute('role','status');
+    const footer = document.createElement('div'); footer.className = 'reel-taxonomy-footer';
+    const cancel = document.createElement('button'); cancel.type='button'; cancel.className='btn'; cancel.textContent='关闭';
+    const save = document.createElement('button'); save.type='button'; save.className='btn primary'; save.textContent='保存'; save.disabled=true;
+    footer.append(cancel,save); if(kind==='category')footer.hidden=true; editor.append(title,body,status,footer); (kind === 'category' ? refs.main : document.body).append(editor);
+    let saving=false, taxonomyTree=null;
+    const chosen=new Set();
+    let savedCategories=[];
+    cancel.onclick=()=>{if(!saving)editor.close();};
+    editor.addEventListener('click', event => {
+      if (event.target !== editor || saving || kind !== 'category') return;
+      const rect=editor.getBoundingClientRect();
+      if(event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) editor.close();
+    });
+    editor.addEventListener('cancel',event=>{if(saving)event.preventDefault();});
+    editor.addEventListener('close',()=>{taxonomyTree?.destroy();if(inlineClassification === editor)inlineClassification=null;editor.remove();},{once:true});
+    if(kind === 'category') { inlineClassification=editor;editor.show(); } else editor.showModal();
+    editor.addEventListener('wheel',event=>event.stopPropagation(),{passive:true});
+    editor.addEventListener('touchmove',event=>event.stopPropagation(),{passive:true});
+    editor.addEventListener('keydown',event=>{event.stopPropagation();if(event.key==='Escape'&&!saving)editor.close();});
+    try {
+      const data = await api('/api/kb/node',{id:targetId}); const current=data.node || data;
+      if (!editor.open) return;
+      if (!current.can_edit && scope !== 'default') throw Error('没有编辑此知识的权限');
+      body.replaceChildren();
+      let input;
+      if(kind==='category') {
+        const data=await api('/api/kb/classes',{counts:'0'}); const rows=Array.isArray(data)?data:data.items||[];
+        list(current.categoryIds || current.categories || current.class_ids).forEach(value=>chosen.add(String(value.id || value)));
+        savedCategories=[...chosen];
+        const byId=new Map(rows.map(row=>[String(row.id),{...row,id:String(row.id),children:[]}]));
+        const roots=[];
+        for(const row of byId.values()) {
+          const parent=String(row.parent_id || row.parent || '');
+          const seen=new Set([row.id]); let ancestor=parent;
+          while(ancestor && byId.has(ancestor) && !seen.has(ancestor)) { seen.add(ancestor); const item=byId.get(ancestor); ancestor=String(item.parent_id || item.parent || ''); }
+          if(byId.has(parent) && !(ancestor && seen.has(ancestor))) byId.get(parent).children.push(row); else roots.push(row);
+        }
+        const treeHost=document.createElement('div'); treeHost.className='reel-class-tree'; body.append(treeHost);
+        if(!editor.open)return;
+        const nativeRows = new Map();
+        const renderBranches = nodes => {
+          const ul=document.createElement('ul'); ul.className='dhx_tree-list';
+          for(const item of nodes) {
+            const li=document.createElement('li'); li.className='dhx_tree-list-item' + (item.children.length ? ' dhx_tree-list-item--parent' : '');
+            const wrapper=document.createElement('div'); wrapper.className=item.children.length?'dhx_tree-folder':'dhx_tree-list-item__content';
+            const label=document.createElement('button'); label.type='button'; label.className='class-tree-node';
+            label.dataset.classActivate=item.id;
+            const text=document.createElement('span'); text.className='ontology-node-label'; text.textContent=item.name || item.label || item.id; label.append(text);
+            label.onclick=()=>{if(saving)return;chosen.has(item.id)?chosen.delete(item.id):chosen.add(item.id);taxonomyTree.refreshAssignedStates();save.click();};
+            wrapper.append(label);li.append(wrapper); nativeRows.set(item.id,label);
+            if(item.children.length) {
+              const children=renderBranches(item.children);
+              const toggle=document.createElement('button'); toggle.type='button'; toggle.className='reel-class-toggle'; toggle.textContent='⌄'; toggle.setAttribute('aria-label','展开或收起'+(item.name || item.id)); toggle.setAttribute('aria-expanded','true');
+              toggle.onclick=()=>{children.hidden=!children.hidden;toggle.setAttribute('aria-expanded',String(!children.hidden));toggle.textContent=children.hidden?'›':'⌄';};
+              wrapper.prepend(toggle);li.append(children);
+            }
+            ul.append(li);
+          }
+          return ul;
+        };
+        taxonomyTree={
+          refreshAssignedStates(){nativeRows.forEach((label,id)=>{label.classList.toggle('is-assigned',chosen.has(id));label.setAttribute('aria-pressed',String(chosen.has(id)));});},
+          destroy(){nativeRows.clear();},
+        };
+        treeHost.classList.add('reel-class-tree-static');
+        treeHost.append(renderBranches(roots));
+        taxonomyTree.refreshAssignedStates();
+        status.textContent = '共 ' + byId.size + ' 个分类';
+        if(!rows.length)treeHost.textContent='暂无分类，请先在工作空间创建分类';
+      } else {
+        input=document.createElement('textarea'); input.rows=4; input.value=list(current.tags).join('，'); input.placeholder='输入标签，用逗号分隔'; input.setAttribute('aria-label','知识标签'); body.append(input);
+      }
+      save.disabled=false;
+      save.onclick=async()=>{
+        saving=true;save.disabled=true;cancel.disabled=true;status.textContent='正在保存…';
+        try {
+          const values=kind==='category'?{categoryIds:[...chosen]}:{tags:[...new Set(input.value.split(/[,，;；、\n]+/).map(value=>value.trim()).filter(Boolean))]};
+          const result=await api('/api/kb/nodes/update',{}, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:targetId,...values})});
+          if(result.ok===false)throw Error(result.error || '保存失败');
+          if(idOf(node)===targetId)Object.assign(node,values);
+          if(kind==='category'){savedCategories=[...chosen];status.textContent='已保存';}else{editor.close();message('标签已保存');}
+        }catch(error){if(kind==='category'){chosen.clear();savedCategories.forEach(id=>chosen.add(id));taxonomyTree?.refreshAssignedStates();}status.textContent='保存失败：'+error.message;}finally{saving=false;save.disabled=false;cancel.disabled=false;}
+      };
+    }catch(error){status.textContent=error.message;body.textContent='';}
+  }
   function stopMedia() { refs?.stage.querySelectorAll('video').forEach((video) => { video.pause(); video.removeAttribute('src'); video.load(); }); }
   function updateVideoControls() {
     const video = refs.stage.querySelector('video');
@@ -222,6 +315,7 @@
     } catch (error) { if (token === version && dialog.open) message(error.message); }
   }
   function renderNode(data) {
+    inlineClassification?.close();
     favorited=false;
     if(refs.favorite){refs.favorite.setAttribute('aria-pressed','false');refs.favoriteLabel.textContent='收藏';setFavoriteCount(0);}
     if(refs.viewCount){refs.viewCount.dataset.knowledgeViews=idOf(data);refs.viewCount.dataset.db=scope||'default';refs.viewCount.textContent=String(Number(data.viewCount)||0);}
@@ -311,7 +405,9 @@
       if (!others.length) { message('当前分类暂无其他知识'); return; }
       const unseen = others.filter((item) => !recent.includes(idOf(item)));
       const candidates = unseen.length ? unseen : others;
-      target = page && window.kbViewMode === 'shorts' ? candidates[0] : candidates[Math.floor(Math.random() * candidates.length)];
+      // Sample across the recommendation queue instead of always replaying its first item.
+      const pool = page && window.kbViewMode === 'shorts' ? candidates.slice(0, 30) : candidates;
+      target = pool[Math.floor(Math.random() * pool.length)];
     }
     busy = true; const token = ++version; message('');
     try {
@@ -319,7 +415,7 @@
       if (token !== version || !dialog.open) return;
       if (!data.node) throw Error('知识不存在或不可访问');
       if (direction < 0) history.pop(); else history.push(idOf(node));
-      recent.push(idOf(node)); recent = recent.slice(-30);
+      recent.push(idOf(node)); recent = recent.slice(-300);
       await slideNode(data.node, direction, token);
     } catch (error) { if (token === version && error.name !== 'AbortError') message(error.message); }
     finally { if (token === version) busy = false; }
@@ -377,6 +473,7 @@
   }
   function close() { if (document.fullscreenElement === dialog) void document.exitFullscreen().catch(() => {}); if (dialog?.open) dialog.close(); cleanup(); }
   function cleanup() {
+    inlineClassification?.close();
     version++; requestController?.abort(); clearTransition(); stopMedia(); busy = false;
     if (oldOverflow !== undefined) { document.body.style.overflow = oldOverflow; oldOverflow = undefined; }
     if (focusBefore?.isConnected) focusBefore.focus({ preventScroll: true }); focusBefore = null;
@@ -409,7 +506,7 @@
       <div class="home-reel-playback" data-ref="playback" hidden><button data-ref="play" aria-label="播放">▶</button><button data-ref="mute" aria-label="关闭声音">关闭声音</button><span data-ref="time" class="home-reel-time">0:00 / 0:00</span></div>
       <input data-ref="seek" class="home-reel-seek" type="range" min="0" max="100" step="0.1" value="0" aria-label="视频进度">
       <section class="home-reel-overlay" data-ref="overlay" hidden><header><strong data-ref="overlayTitle"></strong><button data-ref="overlayClose" aria-label="关闭信息">×</button></header><p data-ref="overlayText"></p><div class="home-reel-pages"><button data-ref="overlayPrev">上一页</button><span data-ref="overlayCount"></span><button data-ref="overlayNext">下一页</button></div><form data-ref="commentForm"><textarea data-ref="commentInput" maxlength="2000" rows="2" placeholder="写下评论…" aria-label="评论内容"></textarea><button type="submit">发送评论</button></form></section>
-      <aside class="home-reel-rail"><div data-ref="creatorAvatar" class="home-reel-creator-avatar"></div><button data-ref="relationGraph" class="home-reel-graph" aria-label="\u67e5\u770b\u77e5\u8bc6\u5173\u8054\u5173\u7cfb\u56fe"><i class="fa-solid fa-diagram-project" aria-hidden="true"></i><small>\u5173\u7cfb\u56fe</small></button><button data-ref="uploadVideo" class="home-reel-upload" aria-label="上传视频"><i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i><small>上传视频</small></button><input data-ref="videoFile" type="file" accept=".mp4,.webm,.avi,.mkv,.ogg,.mpeg" hidden><button data-action="favorite" data-ref="favorite" aria-label="收藏知识" aria-pressed="false"><i class="fa-regular fa-bookmark" aria-hidden="true"></i><small data-ref="favoriteLabel">收藏</small><b data-ref="favoriteCount">0</b></button><button data-action="like" data-ref="like" aria-label="点赞"><i class="fa-regular fa-heart" aria-hidden="true"></i><b data-ref="likeCount">0</b></button><button data-action="comment" aria-label="评论"><i class="fa-regular fa-comment" aria-hidden="true"></i><b data-ref="commentCount">0</b></button><button data-action="share" aria-label="转发"><i class="fa-solid fa-share" aria-hidden="true"></i><b data-ref="shareCount">0</b></button><button data-ref="up" aria-label="返回上一条浏览历史"><i class="fa-solid fa-chevron-up" aria-hidden="true"></i><small>上一条历史</small></button><button data-ref="down" aria-label="向下随机翻页"><i class="fa-solid fa-chevron-down" aria-hidden="true"></i><small>随机下一条</small></button></aside>
+      <aside class="home-reel-rail"><button data-action="quick-category" aria-label="快速分类"><i class="fa-solid fa-folder-tree" aria-hidden="true"></i><small>分类</small></button><button data-action="quick-tags" aria-label="打标签"><i class="fa-solid fa-tags" aria-hidden="true"></i><small>标签</small></button><div data-ref="creatorAvatar" class="home-reel-creator-avatar"></div><button data-ref="relationGraph" class="home-reel-graph" aria-label="\u67e5\u770b\u77e5\u8bc6\u5173\u8054\u5173\u7cfb\u56fe"><i class="fa-solid fa-diagram-project" aria-hidden="true"></i><small>\u5173\u7cfb\u56fe</small></button><button data-ref="uploadVideo" class="home-reel-upload" aria-label="上传视频"><i class="fa-solid fa-cloud-arrow-up" aria-hidden="true"></i><small>上传视频</small></button><input data-ref="videoFile" type="file" accept=".mp4,.webm,.avi,.mkv,.ogg,.mpeg" hidden><button data-action="favorite" data-ref="favorite" aria-label="收藏知识" aria-pressed="false"><i class="fa-regular fa-bookmark" aria-hidden="true"></i><small data-ref="favoriteLabel">收藏</small><b data-ref="favoriteCount">0</b></button><button data-action="like" data-ref="like" aria-label="点赞"><i class="fa-regular fa-heart" aria-hidden="true"></i><b data-ref="likeCount">0</b></button><button data-action="comment" aria-label="评论"><i class="fa-regular fa-comment" aria-hidden="true"></i><b data-ref="commentCount">0</b></button><button data-action="share" aria-label="转发"><i class="fa-solid fa-share" aria-hidden="true"></i><b data-ref="shareCount">0</b></button><button data-ref="up" aria-label="返回上一条浏览历史"><i class="fa-solid fa-chevron-up" aria-hidden="true"></i><small>上一条历史</small></button><button data-ref="down" aria-label="向下随机翻页"><i class="fa-solid fa-chevron-down" aria-hidden="true"></i><small>随机下一条</small></button></aside>
     </div></div><div class="home-reel-status" data-ref="status" role="status" aria-live="polite"></div>`;
     refs = Object.fromEntries(Array.from(dialog.querySelectorAll('[data-ref]')).map((el) => [el.dataset.ref, el]));
     refs.rail = dialog.querySelector('.home-reel-rail');
@@ -458,7 +555,7 @@
       try { await api(`/api/knowledge/${encodeURIComponent(idOf(node))}/comments`, {}, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) }); if (token === version) { refs.commentInput.value = ''; await loadInteractions(token); message('评论已发送'); } }
       catch (error) { if (token === version) message(error.message); } finally { actionBusy = false; }
     };
-    dialog.addEventListener('click', (event) => { const button = event.target.closest('[data-action]'); if (button) void action(button.dataset.action); });
+    dialog.addEventListener('click', (event) => { const button = event.target.closest('[data-action]'); if (button?.dataset.action === 'quick-category') void quickTaxonomy('category'); else if (button?.dataset.action === 'quick-tags') void quickTaxonomy('tags'); else if (button) void action(button.dataset.action); });
     dialog.addEventListener('keydown', (event) => {
       if (event.target.closest('[data-portrait-content]')) return;
       if (event.target.closest('input,textarea,select') || event.altKey || event.ctrlKey || event.metaKey) return;

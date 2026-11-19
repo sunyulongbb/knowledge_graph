@@ -2734,7 +2734,6 @@
         let uploadingImages = false;
         const pasteStatus = document.createElement('p');
         pasteStatus.className = 'detail-image-paste-status'; pasteStatus.setAttribute('role','status');
-        if (!hasImageMedia) pasteStatus.textContent = '\u6682\u65e0\u56fe\u7247\uff0c\u53ef\u76f4\u63a5\u7c98\u8d34\u56fe\u7247\u4e0a\u4f20';
         document.getElementById('detailInner')?.prepend(pasteStatus);
         const pasteDatabase = window.getCurrentDbParam?.() || 'default';
         document.addEventListener('paste', async event => {

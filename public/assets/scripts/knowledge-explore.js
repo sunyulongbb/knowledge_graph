@@ -168,16 +168,15 @@
     return response.json();
   }
   function categoryCard(row) {
-    const image = imageUrl(row.image), color = /^#[\da-f]{6}$/i.test(row.color || '') ? row.color : '';
     const count = Math.max(0, Number(row.instance_count) || 0);
-    return `<button class="explore-category-card" type="button" data-explore-category="${escape(row.id)}">
-      <span class="explore-category-icon" ${color ? `style="--category-color:${color}"` : ''}>${image ? `<img src="${escape(image)}" alt="" loading="lazy">` : '<i class="fa-solid fa-shapes" aria-hidden="true"></i>'}</span>
+    const joined = readPins().some(item => item.id === row.id);
+    return `<div class="explore-category-tile" data-category-name="${escape(name(row).toLocaleLowerCase())}"><button class="explore-category-card" type="button" data-explore-category="${escape(row.id)}">
       <span class="explore-category-info"><strong>${escape(name(row))}</strong>${count ? `<small>${count} 条知识</small>` : ''}</span>
       <i class="explore-category-open fa-solid fa-chevron-right" aria-hidden="true"></i>
-    </button>`;
+    </button><button type="button" class="explore-card-join" data-explore-join="${escape(row.id)}" aria-pressed="${joined}" title="${joined ? '已加入，点击退出' : '加入'}" aria-label="${joined ? '退出' : '加入'}${escape(name(row))}"><i class="fa-solid ${joined ? 'fa-check' : 'fa-plus'}" aria-hidden="true"></i></button></div>`;
   }
   function group(title, rows, parentId = '') {
-    return `<section class="explore-group"><div class="explore-group-heading"><h2>${parentId?`<button type="button" data-explore-category="${escape(parentId)}">${escape(title)}</button>`:escape(title)}</h2>${parentId ? `<button type="button" data-explore-category="${escape(parentId)}">查看全部 <i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>` : ''}</div>
+    return `<section class="explore-group"><div class="explore-group-heading"><h2>${parentId?`<button type="button" data-explore-category="${escape(parentId)}">${escape(title)}</button>`:escape(title)}</h2><span class="explore-group-count">${rows.length} 个分类</span></div>
       <div class="explore-category-grid">${rows.map(categoryCard).join('')}</div>
     </section>`;
   }
@@ -204,16 +203,25 @@
   }
   function subcategoryFilter() {
     if (!selected) return '';
-    const children = childrenOf(selected);
-    if (!children.length) return '';
-    return `<section class="explore-subcategory-section" aria-label="子分类">
-      <nav class="recommendation-filter-bar explore-subcategory-filter" aria-label="子分类筛选">
-        <div class="recommendation-type-filter">
-          <button type="button" data-explore-category="${escape(selected)}" aria-pressed="true">全部</button>
-          ${children.map(row => `<button type="button" data-explore-category="${escape(row.id)}" aria-pressed="${row.id === selected}">${escape(name(row))}</button>`).join('')}
-        </div>
-      </nav>
-    </section>`;
+    const path = [], seen = new Set();
+    let current = tree.byId.get(selected);
+    while (current && !seen.has(current.id)) {
+      seen.add(current.id); path.unshift(current);
+      current = tree.byId.get(current.parent_id || current.parent);
+    }
+    return path.map((parent, index) => {
+      const children = childrenOf(parent.id);
+      if (!children.length) return '';
+      const active = path[index + 1]?.id || '';
+      return `<section class="explore-subcategory-section" aria-label="${escape(name(parent))}的子分类">
+        <nav class="recommendation-filter-bar explore-subcategory-filter" aria-label="${escape(name(parent))}子分类筛选">
+          <div class="recommendation-type-filter">
+            <button type="button" data-explore-category="${escape(parent.id)}" aria-pressed="${!active}">全部</button>
+            ${children.map(row => `<button type="button" data-explore-category="${escape(row.id)}" aria-pressed="${row.id === active}">${escape(name(row))}</button>`).join('')}
+          </div>
+        </nav>
+      </section>`;
+    }).join('');
   }
   function topCategoryFilter() {
     if (loadingTree || !tree.roots.length) return '';
@@ -259,7 +267,7 @@
       <div class="explore-heading-row">
         <div class="explore-heading-main">
           <span class="explore-community-avatar" ${categoryColor ? `style="--category-color:${categoryColor}"` : ''}>${categoryImage ? `<img src="${escape(categoryImage)}" alt="">` : `<i class="fa-solid ${currentCategory ? 'fa-shapes' : selectedTag ? 'fa-hashtag' : 'fa-compass' }" aria-hidden="true"></i>`}</span>
-          <div class="explore-heading-copy"><h1>${escape(headingTitle)}</h1><p>${escape(headingDescription)}</p></div>
+          <div class="explore-heading-copy"><h1>${escape(headingTitle)}</h1><p>${escape(headingDescription)}</p>${!selected && !selectedTag ? `<span class="explore-directory-count">${tree.roots.length} 个主题 · ${tree.byId.size} 个分类</span>` : ''}</div>
         </div>
         <div class="explore-heading-actions">
           ${currentCategory ? `<div class="explore-type-actions"><button type="button" class="btn" data-explore-join>${readPins().some(item => item.id === selected) ? '\u5df2\u52a0\u5165' : 'Join'}</button><button type="button" class="btn primary" data-explore-create><i class="fa-solid fa-plus" aria-hidden="true"></i> \u65b0\u589e\u77e5\u8bc6</button></div>
@@ -268,7 +276,24 @@
         </div>
       </div>
     </header>`;
-    panel.innerHTML = `<div class="explore-content">${heading}${categoryFilter}${content}</div>`;
+    panel.innerHTML = `<div class="explore-content${!selected && !selectedTag ? ' is-directory' : ''}">${heading}${categoryFilter}${content}</div>`;
+    if (!selected && !selectedTag && !loadingTree && !treeError) {
+      const search=document.createElement('label'); search.className='explore-directory-search';
+      const icon=document.createElement('i'); icon.className='fa-solid fa-magnifying-glass';icon.setAttribute('aria-hidden','true');
+      const input=document.createElement('input');input.type='search';input.placeholder='查找分类';input.setAttribute('aria-label','查找分类');
+      search.append(icon,input);panel.querySelector('.explore-heading-actions')?.prepend(search);
+      const empty=document.createElement('p');empty.className='explore-search-empty';empty.textContent='没有匹配的分类，试试其他关键词';empty.hidden=true;empty.setAttribute('role','status');panel.querySelector('.explore-content').append(empty);
+      input.oninput=()=>{
+        const query=input.value.trim().toLocaleLowerCase();let total=0;
+        panel.querySelectorAll('.explore-group').forEach(group=>{
+          let visible=0;
+          const title=group.querySelector('h2')?.textContent.toLocaleLowerCase() || '';
+          group.querySelectorAll('.explore-category-tile').forEach(tile=>{tile.hidden=!!query&&!title.includes(query)&&!tile.dataset.categoryName.includes(query);if(!tile.hidden)visible++;});
+          group.hidden=!visible;total+=visible;
+        });empty.hidden=!query||total>0;
+      };
+      input.onkeydown=event=>{if(event.key==='Escape'){input.value='';input.oninput();event.stopPropagation();}};
+    }
     panel.scrollTop = scrollTop;
   }
   async function loadItems(nextPage = 1, append = false) {
@@ -362,8 +387,10 @@
     }
   };
   panel.addEventListener('click', event => {
-    if (event.target.closest('[data-explore-join]') && tree.byId.has(selected)) {
-      const typeId=selected, typeName=name(tree.byId.get(selected));
+    const joinButton = event.target.closest('[data-explore-join]');
+    const joinId = joinButton?.dataset.exploreJoin || selected;
+    if (joinButton && tree.byId.has(joinId)) {
+      const typeId=joinId, typeName=name(tree.byId.get(joinId));
       void (async()=>{
         await loadJoinedTypes();
         if(!tree.byId.has(typeId))return;

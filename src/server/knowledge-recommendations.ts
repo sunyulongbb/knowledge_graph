@@ -18,12 +18,28 @@ export function rankRecommendations(nodes:Row[],signals:Signal[],seed:string,opt
   const interests=new Map<string,number>(),seen=new Set<string>();
   for(const signal of signals){if(signal.seen)seen.add(idOf(signal.node));for(const feature of features(signal.node))interests.set(feature,(interests.get(feature)||0)+signal.weight);}
   const unique=new Map(nodes.map(node=>[idOf(node),node]));
-  return [...unique.values()].map(node=>{
+  const shorts=options.surface==='shorts';
+  const scored = [...unique.values()].filter(node=>idOf(node)).map(node=>{
     const keys=features(node),interest=keys.reduce((sum,key)=>sum+Math.log1p(interests.get(key)||0),0)/Math.sqrt(Math.max(1,keys.length));
-    const videos=list(node.videos||node.video).length;
-    const score=interest*2.5+noise(seed,idOf(node))*4+(options.surface==='shorts'&&videos?1.5:0)-(seen.has(idOf(node))?3:0)-(options.shown?.has(idOf(node))?5:0);
+    const videos=[...list(node.videos),...list(node.video)].filter(value=>typeof value==='string'?value.trim():value?.url||value?.src).length;
+    const score=interest*(shorts?1.5:2.5)+noise(seed,idOf(node))*(shorts?6:4)+(shorts&&videos?3:0)-(seen.has(idOf(node))?(shorts?8:3):0)-(options.shown?.has(idOf(node))?(shorts?10:5):0);
     return {node,score};
-  }).sort((a,b)=>b.score-a.score||idOf(a.node).localeCompare(idOf(b.node))).map(row=>row.node);
+  }).sort((a,b)=>b.score-a.score||idOf(a.node).localeCompare(idOf(b.node)));
+  if(!shorts)return scored.map(row=>row.node);
+  const result:Row[]=[];
+  while(scored.length){
+    const recent=result.slice(-3),last=recent[recent.length-1];
+    const adjusted=(row:{node:Row;score:number})=>{
+      const keys=new Set(features(row.node).filter(key=>!key.startsWith('tag:')));
+      const repeats=recent.reduce((total,node)=>total+features(node).filter(key=>keys.has(key)).length,0);
+      const sameType=last&&(last.typeId||last.type)&&(last.typeId||last.type)===(row.node.typeId||row.node.type);
+      return row.score-repeats*1.5-(sameType?2:0);
+    };
+    let best=0,bestScore=-Infinity;
+    scored.forEach((row,index)=>{const score=adjusted(row);if(score>bestScore){best=index;bestScore=score;}});
+    result.push(scored.splice(best,1)[0]!.node);
+  }
+  return result;
 }
 export function createKnowledgeRecommendations(deps:{
   db:Database;getUser:(req:Request)=>KnowledgeUser|null;getProject:(slug:string)=>{id:number;name:string}|null;

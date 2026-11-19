@@ -3895,6 +3895,18 @@ export async function handleCoreKbRoutes(
     }
     try {
       const body = (await req.json()) as any;
+      if (body.mapCategoryToOntology === true) {
+        if (!Array.isArray(body.categoryIds) || body.categoryIds.some((id: unknown) => typeof id !== 'string')) return Response.json({error:'分类列表无效'},{status:400});
+        delete body.type; body.typeId = null;
+        if (body.categoryIds.length) {
+          const placeholders = body.categoryIds.map(() => '?').join(',');
+          const row = db.query(`SELECT n.type, COUNT(DISTINCT n.id) AS uses FROM nodes n
+            JOIN entity_classes ec ON ec.entity_id=n.id JOIN ontologies o ON o.id=n.type
+            WHERE ec.class_id IN (${placeholders}) AND n.project_id IS ? AND o.project_id IS ?
+            GROUP BY n.type ORDER BY uses DESC,n.type ASC LIMIT 1`).get(...body.categoryIds,scopedProjectId,scopedProjectId) as any;
+          body.typeId = row?.type || null;
+        }
+      }
       const taxonomy = normalizeEntityTaxonomy(body);
       const taxonomyError = validateCanonicalTaxonomy(body, taxonomy);
       if (taxonomyError) return taxonomyError;

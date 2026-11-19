@@ -1,3 +1,5 @@
+import { importEnterpriseClasses } from '../enterprise-class-import.ts';
+import { ClassImportError } from '../class-import.ts';
 import type { EnterpriseKnowledgeSearch } from '../enterprise-search.ts';
 import { sortTags } from '../tag-order.ts';
 import type { EnterpriseSqliteBackup } from '../enterprise-sqlite-backup.ts';
@@ -51,7 +53,7 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
   const geographicSearch = new GeographicKnowledgeSearch(deps.store);
   return async (req: Request, url: URL, method: string): Promise<Response | null> => {
     if (!enterpriseKnowledgeEnabled() || (!enterpriseKnowledgePath(url.pathname) && !(method === 'GET' && schemaReadPaths.has(url.pathname))
-      && !(method === 'POST' && ['/api/kb/ontologies/import', '/api/kb/properties/from-knowledge'].includes(url.pathname))
+      && !(method === 'POST' && ['/api/kb/classes/import', '/api/kb/ontologies/import', '/api/kb/properties/from-knowledge'].includes(url.pathname))
       && !(method === 'DELETE' && ['/api/kb/ontologies/clear', '/api/kb/ontologies'].includes(url.pathname))
       && !(['POST', 'DELETE'].includes(method) && propertyWritePaths.has(url.pathname)))) return null;
     try {
@@ -99,6 +101,14 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
         if(!deps.backup)throw new KnowledgeStoreError('\u672a\u914d\u7f6e\u5907\u4efd',503);
         if(method==='POST') void deps.backup.flush(database).catch(error=>console.error('Manual knowledge backup failed:',error));
         return Response.json(deps.backup.progress(database),{status:method==='POST'?202:200});
+      }
+      if (path === '/api/kb/classes/import' && method === 'POST') {
+        const current = loggedIn();
+        if (!deps.canCreate(current, project)) throw new KnowledgeStoreError('需要应用成员权限才能导入分类',403);
+        const raw = await req.text();
+        if (new TextEncoder().encode(raw).length > 2*1024*1024) throw new ClassImportError('JSON 文件不能超过 2 MB');
+        let input; try { input = JSON.parse(raw.replace(/^\uFEFF/,'')); } catch { throw new ClassImportError('JSON 格式错误'); }
+        return Response.json({ok:true,...await importEnterpriseClasses(store,database,Number(project.id),input,() => deps.getSchema?.(project))});
       }
       if (path === '/api/kb/classes' && method === 'POST') {
         const current = loggedIn();
@@ -520,18 +530,16 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
             body.typeId = null;
             if (categoryIds.length) {
               const definitions = await store.importSchema(database) || deps.getSchema?.(project);
-              const category = definitions?.classes.find(row => row.id === categoryIds[0]);
-              if (!category) throw new KnowledgeStoreError('所选分类不存在');
-              let ontology = definitions?.ontologies.find(row => row.status !== 'deprecated' &&
-                (row.id === category.ontology_id || String(row.name).trim().toLowerCase() === String(category.name).trim().toLowerCase()));
-              if (!ontology) {
-                await importEnterpriseOntologies(store, database, Number(project.id), {
-                  version: 1, ontologies: [{ name: category.name }],
-                }, () => deps.getSchema?.(project));
-                ontology = (await store.importSchema(database))?.ontologies.find(row => row.status !== 'deprecated' && String(row.name).trim().toLowerCase() === String(category.name).trim().toLowerCase());
-              }
-              if (!ontology) throw new KnowledgeStoreError('分类对应的本体创建失败');
-              body.typeId = ontology.id;
+              if (categoryIds.some((id: string) => !definitions?.classes.some(row => row.id === id))) throw new KnowledgeStoreError('所选分类不存在');
+              const validTypes = (definitions?.ontologies || []).filter(row => row.status !== 'deprecated').map(row => row.id);
+              const readable = await store.searchAccess(database, current);
+              const candidates = await store.query(database, `FOR doc IN entity
+                FILTER doc._key IN @readable AND doc.type IN @types
+                  AND LENGTH(INTERSECTION(NOT_NULL(doc.class_ids, []), @categories)) > 0
+                COLLECT type = doc.type WITH COUNT INTO uses
+                SORT uses DESC, type ASC LIMIT 1 RETURN type`,
+                {readable:readable.map(row => row.key), types:validTypes, categories:categoryIds});
+              body.typeId = candidates[0] || null;
             }
           }
           const prepared = await prepareEntityImageValues(body, Number(project.id));
@@ -693,7 +701,7 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
             database: deps.getProject(url.searchParams.get('db') || 'default')?.name,
           }, { status: 409 });
         }
-        if (error instanceof KnowledgeStoreError || error instanceof EntityImportError || error instanceof OntologyImportError || error instanceof TypeError || error instanceof RangeError) {
+        if (error instanceof KnowledgeStoreError || error instanceof EntityImportError || error instanceof OntologyImportError || error instanceof ClassImportError || error instanceof TypeError || error instanceof RangeError) {
           return Response.json({ error: error.message }, { status: error instanceof KnowledgeStoreError ? error.status : 400 });
         }
         console.error('Enterprise knowledge request failed:', error);

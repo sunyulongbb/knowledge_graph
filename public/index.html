@@ -76,7 +76,7 @@
       customElements.whenDefined("media-video-layout"),
     ]).then(() => true);
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20261116-presence-checkboxes" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20261119-category-autosave" />
   <link rel="stylesheet" href="/assets/styles/home-discovery.css?v=20261113-create-hover" />
   <link rel="stylesheet" href="/assets/styles/shorts-page.css?v=20261117-creator-avatar-slide" />
   <link rel="stylesheet" href="/assets/styles/knowledge-card-tags.css?v=20261111-1" />
@@ -84,10 +84,10 @@
   <link rel="stylesheet" href="/assets/styles/user-profile.css?v=20261111-layout" />
   <link rel="stylesheet" href="/assets/styles/knowledge-relation-page.css?v=20261111-collapse-detail" />
   <link rel="stylesheet" href="/assets/styles/knowledge-big-bang.css?v=20261111-keyboard-borderless" />
-  <link rel="stylesheet" href="/assets/styles/knowledge-explore.css?v=20261117-category-shorts" />
+  <link rel="stylesheet" href="/assets/styles/knowledge-explore.css?v=20261120-no-explore-eyebrow" />
   <link rel="stylesheet" href="/assets/styles/quick-knowledge.css?v=20261116-default-ontology" />
   <link rel="stylesheet" href="/assets/styles/home-waterfall.css?v=20261111-knowledge-notes" />
-  <link rel="stylesheet" href="/assets/styles/home-popular.css?v=20261110-1" />
+  <link rel="stylesheet" href="/assets/styles/home-popular.css?v=20261120-borderless" />
   <link rel="stylesheet" href="/assets/styles/home-news.css?v=20261116-full-width" />
   <link rel="stylesheet" href="/assets/styles/knowledge-learning.css?v=20261110-full-width" />
   <link rel="stylesheet" href="/assets/styles/learning-journey.css?v=20261111-celebrate" />
@@ -4764,10 +4764,14 @@
           <section class="class-module module-taxonomy">
             <div class="module-compact-toolbar class-tree-header" role="toolbar" aria-label="分类与标签操作">
               <div class="module-title-actions class-tree-actions">
-                <button class="btn icon" id="btnClassImport" type="button" title="导入分类 JSON" aria-label="导入分类 JSON">
-                  <i class="fa-solid fa-file-import"></i>
+                <button class="btn class-tree-file-action" id="btnClassImport" type="button" title="导入分类 JSON" aria-label="导入分类 JSON">
+                  <i class="fa-solid fa-file-import" aria-hidden="true"></i><span>导入</span>
                 </button>
+                <a class="btn class-tree-file-action" href="/examples/class-import.json" download title="下载分类导入示例" aria-label="下载分类导入示例"><i class="fa-solid fa-file-arrow-down" aria-hidden="true"></i><span>示例</span></a>
                 <input id="classImportFile" type="file" accept=".json,application/json" hidden />
+                <button class="btn class-tree-file-action" id="btnClassExport" type="button" title="导出全部分类 JSON" aria-label="导出全部分类 JSON">
+                  <i class="fa-solid fa-file-export" aria-hidden="true"></i><span>导出</span>
+                </button>
                 <button class="btn icon" id="btnClsAdd" type="button" title="新增根分类" aria-label="新增根分类">
                   <i class="fa-solid fa-folder-plus"></i>
                 </button>
@@ -17736,19 +17740,19 @@
   <script src="/assets/scripts/attr-panel.js?v=20260925-tail-suggestions"></script>
   <script src="/assets/scripts/entity-import.js?v=20261029-1"></script>
   <!-- relation-panel.js 已移除，使用 edgehandles 拖拽创建关系 -->
-  <script src="/assets/scripts/schema-panel.js?v=20261110-server-tag-order"></script>
+  <script src="/assets/scripts/schema-panel.js?v=20261119-import-export"></script>
   <script src="/assets/scripts/relation-insights.js?v=20261105-compact-list"></script>
   <script src="/assets/scripts/wiki-clipboard.js?v=20261105-html-paste"></script>
   <script src="/assets/scripts/knowledge-views.js?v=20261112-1"></script>
   <script src="/assets/scripts/account-history.js?v=20261112-view-counts"></script>
-  <script src="/assets/scripts/detail-panel.js?v=20261117-detail-paste-capture"></script>
+  <script src="/assets/scripts/detail-panel.js?v=20261119-remove-image-hint"></script>
   <script src="/assets/scripts/graph-classification.js?v=20261012"></script>
   <script src="/assets/scripts/graph-details.js?v=20261012-classification"></script>
   <script src="/assets/scripts/knowledge-interactions.js?v=20260904-1"></script>
   <script src="/assets/scripts/knowledge-access.js?v=20261011-member-access"></script>
   <script src="/assets/scripts/applications.js?v=20261116-create-form"></script>
   <script src="/assets/scripts/user-management.js?v=20260915-1"></script>
-  <script src="/assets/scripts/home-media-viewer.js?v=20261117-creator-avatar-slide"></script>
+  <script src="/assets/scripts/home-media-viewer.js?v=20261119-random-shorts"></script>
   <script src="/assets/scripts/shorts-page.js?v=20261117-category-feed"></script>
   <script src="/assets/scripts/manual-classify.js?v=20260929-existing-classes"></script>
   <script src="/assets/scripts/knowledge-context-menu.js?v=20261116-utf8-fix"></script>
@@ -17760,7 +17764,7 @@
   <script src="/assets/scripts/knowledge-learning.js?v=20261111-copy-cleanup"></script>
   <script src="/assets/scripts/knowledge-relation-page.js?v=20261111-close-collapses"></script>
   <script src="/assets/scripts/knowledge-big-bang.js?v=20261112-view-counts"></script>
-  <script src="/assets/scripts/knowledge-explore.js?v=20261117-category-shorts"></script>
+  <script src="/assets/scripts/knowledge-explore.js?v=20261120-no-explore-eyebrow"></script>
   <script src="/assets/scripts/user-profile.js?v=20261110-api-errors"></script>
   <script src="/assets/scripts/sidebar-panel.js?v=20261112-logo-click-double"></script>
   <script src="/assets/scripts/auth-panel.js?v=20261113-profile-logout"></script>

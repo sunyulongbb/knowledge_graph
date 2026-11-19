@@ -99,3 +99,12 @@ test('alias matching overwrites the Arango ontology in place', async () => {
   await importEnterpriseOntologies(f.store, 'app', 7, {version:1,ontologies:[{name:'覆盖天体',alias:['天体']}]});
   expect(f.saved().ontologies.find(row => row.id === before.id).name).toBe('覆盖天体');
 });
+
+test('enterprise class import updates by ID in the authoritative schema', async () => {
+  const { importEnterpriseClasses } = await import('../src/server/enterprise-class-import.ts');
+  const f = fixture();
+  await importEnterpriseClasses(f.store,'app',7,{version:1,classes:[{id:'class/a',name:'原名称',description:'保留描述'}]});
+  expect(await importEnterpriseClasses(f.store,'app',7,{version:1,classes:[{id:'class/a',name:'新名称',tags:['更新'] }]})).toEqual({created:0,updated:1,total:1});
+  expect(f.saved().classes).toHaveLength(1);
+  expect(f.saved().classes[0]).toMatchObject({id:'class/a',name:'新名称',description:'保留描述',tags:['更新']});
+});

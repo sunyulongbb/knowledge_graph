@@ -3,6 +3,7 @@ import type { Database } from "bun:sqlite";
 export class ClassImportError extends Error {}
 
 type ClassInput = {
+  id: string | null;
   name: string;
   description: string;
   color: string | null;
@@ -23,12 +24,19 @@ export function parseClassImport(input: unknown): ClassInput[] {
   for (const key of Object.keys(root)) if (!["version", "classes"].includes(key)) fail(`文件包含不支持的字段：${key}`);
   if (!Array.isArray(root.classes) || !root.classes.length) fail("classes 必须是非空数组");
   let count = 0;
+  const seenIds = new Set<string>();
   const parse = (value: unknown, path: string, depth: number): ClassInput => {
     if (++count > 1000) fail("一次最多导入 1000 个分类");
     if (depth > 32) fail("分类层级不能超过 32 层");
     const row = object(value, path);
-    const fields = ["name", "description", "color", "image", "tags", "children"];
+    const fields = ["id", "name", "description", "color", "image", "tags", "children"];
     for (const key of Object.keys(row)) if (!fields.includes(key)) fail(`${path} 包含不支持的字段：${key}`);
+    if (row.id !== undefined && (typeof row.id !== "string" || !row.id.trim() || row.id.trim().length > 200)) fail(`${path}.id 必须是 1–200 个字符的字符串`);
+    if (typeof row.id === "string") {
+      const id = row.id.trim();
+      if (seenIds.has(id)) fail(`${path}.id 在文件中重复`);
+      seenIds.add(id);
+    }
     if (typeof row.name !== "string" || !row.name.trim()) fail(`${path}.name 必须是非空字符串`);
     if (row.description !== undefined && typeof row.description !== "string") fail(`${path}.description 必须是字符串`);
     if (row.color != null && (typeof row.color !== "string" || !/^#[\da-f]{6}$/i.test(row.color))) fail(`${path}.color 必须是 #RRGGBB 格式`);
@@ -37,6 +45,7 @@ export function parseClassImport(input: unknown): ClassInput[] {
     if (row.children !== undefined && !Array.isArray(row.children)) fail(`${path}.children 必须是数组`);
     const tags = [...new Map(((row.tags || []) as string[]).map((tag) => [tag.trim().toLowerCase(), tag.trim()])).values()];
     return {
+      id: row.id === undefined ? null : (row.id as string).trim(),
       name: (row.name as string).trim(),
       description: String(row.description || "").trim(),
       color: (row.color as string) || null,
@@ -55,21 +64,28 @@ export function importClasses(db: Database, input: unknown, projectId: number | 
     let created = 0;
     let updated = 0;
     const siblings = db.query("SELECT id, name FROM classes WHERE parent_id IS ? AND project_id IS ?");
+    const byId = db.query("SELECT id, name FROM classes WHERE id = ? AND project_id IS ?");
+    const idExists = db.query("SELECT 1 FROM classes WHERE id = ?");
     const insert = db.prepare("INSERT INTO classes(id,name,description,parent_id,project_id,color,image,tags,sort_order) VALUES(?,?,?,?,?,?,?,?,?)");
     const importNode = (node: ClassInput, parentId: string | null) => {
+      const byIdRow = node.id ? byId.get(node.id, projectId) as { id: string; name: string } | null : null;
       const rows = siblings.all(parentId, projectId) as { id: string; name: string }[];
-      const existing = rows.find((row) => row.name.trim().toLowerCase() === node.name.toLowerCase());
+      const existing = byIdRow || rows.find((row) => row.name.trim().toLowerCase() === node.name.toLowerCase());
       let id = existing?.id;
       if (id) {
-        const fields = ["description", "color", "image", "tags"] as const;
-        const supplied = fields.filter((field) => node.provided.includes(field));
+        const fields = byIdRow
+          ? ["name", "parent_id", "description", "color", "image", "tags"] as const
+          : ["description", "color", "image", "tags"] as const;
+        const supplied = fields.filter((field) => field === "parent_id" || node.provided.includes(field));
         if (supplied.length) {
-          const values = supplied.map((field) => field === "tags" ? JSON.stringify(node.tags) : node[field]);
+          const values = supplied.map((field) =>
+            field === "parent_id" ? parentId : field === "tags" ? JSON.stringify(node.tags) : node[field],
+          );
           db.run(`UPDATE classes SET ${supplied.map((field) => `${field}=?`).join(",")} WHERE id=? AND project_id IS ?`, [...values, id, projectId]);
         }
         updated++;
       } else {
-        id = `class/${crypto.randomUUID()}`;
+        id = node.id && !idExists.get(node.id) ? node.id : `class/${crypto.randomUUID()}`;
         const order = db.query("SELECT COALESCE(MAX(sort_order),0)+1 AS next FROM classes WHERE parent_id IS ? AND project_id IS ?").get(parentId, projectId) as { next: number };
         insert.run(id, node.name, node.description, parentId, projectId, node.color, node.image, JSON.stringify(node.tags), order.next);
         created++;
