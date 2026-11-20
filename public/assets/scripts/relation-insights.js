@@ -18,7 +18,7 @@
     if (status) status.textContent = '';
     const recommendations = insights.recommendations || [];
     if (count) count.textContent = `${recommendations.length} 个潜在关联实体`;
-    host.append(element('p', 'relation-hint', '根据共同关联的实体和相似关系推荐，帮助你发现值得进一步了解的知识。推荐线索不代表已确认的实体关系。'));
+    host.classList.add('relation-gallery');
     if (!recommendations.length) {
       host.append(element('p', 'relation-empty', '暂未发现足够明确的关联线索。'));
       return true;
@@ -45,7 +45,13 @@
       const heading = element('div', 'relation-card-heading');
       heading.append(nodeButton(item.node, 'relation-entity-link'), element('span', 'relation-entity-type', item.node.typeLabel || item.node.ontology?.name || '实体'));
       heading.append(element('span', 'relation-recommendation-label', item.evidenceLabel));
-      card.append(heading);
+      const media = nodeButton(item.node, 'relation-gallery-media', '');
+      let candidate = item.node.thumbnail || item.node.image || item.node.image_url || item.node.images?.[0] || '';
+      if (typeof candidate === 'object') candidate = candidate.url || candidate.src || '';
+      let imageUrl = ''; try { const url = new URL(candidate, location.origin); if (candidate && ['http:','https:'].includes(url.protocol)) imageUrl = url.href; } catch {}
+      const placeholder = element('span','relation-gallery-placeholder',label(item.node).slice(0,1));
+      if (imageUrl) { const image = document.createElement('img'); image.src=imageUrl; image.alt=label(item.node); image.loading='lazy'; image.addEventListener('error',()=>image.replaceWith(placeholder),{once:true}); media.append(image); } else media.append(placeholder);
+      card.append(media, heading);
       if (item.node.description) card.append(element('p', 'relation-card-description', item.node.description));
       const reasons = element('ul', 'relation-recommendation-reasons');
       for (const reason of item.reasons || []) reasons.append(element('li', '', reason));
@@ -67,15 +73,27 @@
       card.append(details, nodeButton(item.node, 'relation-more', '查看实体'));
       return card;
     });
-    cards.forEach((card, index) => { card.hidden = index >= 6; grid.append(card); }); host.append(grid);
-    if (cards.length > 6) {
-      let expanded = false;
-      const more = element('button', 'relation-more', `查看更多推荐（${cards.length - 6}）`); more.type = 'button'; more.setAttribute('aria-expanded', 'false');
-      more.addEventListener('click', () => {
-        expanded = !expanded; cards.forEach((card, index) => { card.hidden = !expanded && index >= 6; });
-        more.textContent = expanded ? '收起推荐' : `查看更多推荐（${cards.length - 6}）`; more.setAttribute('aria-expanded', String(expanded));
-      }); host.append(more);
+    let selected = '', pageIndex = 0;
+    const pageSize = 8, tabs = element('div','relation-gallery-tabs');
+    tabs.setAttribute('aria-label','推荐分类');
+    const typeOf = item => item.node.typeLabel || item.node.ontology?.name || '实体';
+    const categories = [...new Set(recommendations.map(typeOf))];
+    const controls = element('div','relation-gallery-controls');
+    const previous = element('button','relation-gallery-arrow','‹'), next = element('button','relation-gallery-arrow','›');
+    previous.type=next.type='button'; previous.setAttribute('aria-label','上一页推荐');next.setAttribute('aria-label','下一页推荐');
+    const indicators = element('div','relation-gallery-indicators');
+    const statusText=element('span','relation-gallery-status'); statusText.setAttribute('aria-live','polite');
+    function draw() {
+      const visible = cards.filter((_,i)=>!selected || typeOf(recommendations[i])===selected);
+      const pages = Math.max(1,Math.ceil(visible.length/pageSize));pageIndex=Math.min(pageIndex,pages-1);
+      cards.forEach(card=>{card.hidden=true});visible.slice(pageIndex*pageSize,(pageIndex+1)*pageSize).forEach(card=>{card.hidden=false});
+      previous.disabled=pageIndex===0;next.disabled=pageIndex===pages-1;statusText.textContent=`${pageIndex+1} / ${pages}`;
+      indicators.replaceChildren();for(let i=0;i<pages;i++){const dot=element('button','relation-gallery-indicator');dot.type='button';dot.setAttribute('aria-label',`第 ${i+1} 页`);dot.setAttribute('aria-current',String(i===pageIndex));dot.onclick=()=>{pageIndex=i;draw()};indicators.append(dot)}
+      tabs.querySelectorAll('button').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.category===selected)));
     }
+    for(const category of ['',...categories]) {const button=element('button','relation-gallery-tab');button.type='button';button.dataset.category=category;const icon=element('i',category?'fa-solid fa-tag':'fa-solid fa-list');icon.setAttribute('aria-hidden','true');button.append(icon,document.createTextNode(category||'全部'));button.onclick=()=>{selected=category;pageIndex=0;draw()};tabs.append(button)}
+    previous.onclick=()=>{pageIndex--;draw()};next.onclick=()=>{pageIndex++;draw()};
+    cards.forEach(card=>grid.append(card));controls.append(previous,indicators,statusText,next);host.append(tabs,controls,grid);draw();
     if (insights.truncated) host.append(element('p', 'relation-limit-note', '当前推荐基于已分析的部分关联数据。'));
     return true;
   };

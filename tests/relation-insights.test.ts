@@ -64,6 +64,9 @@ test('detail and standalone insights endpoints use graph paths without legacy re
 });
 
 class Element {
+  dataset: Record<string,string> = {}; onclick?: Function; disabled=false;
+  classList = { add: (name:string) => { this.className += ' '+name; } };
+  querySelectorAll(tag:string): Element[] { return all(this).filter(node=>node.tag===tag); }
   children: Element[] = []; className = ''; textContent = ''; hidden = false;
   attrs: Record<string, string> = {}; events: Record<string, Function> = {};
   constructor(public tag: string) {}
@@ -77,7 +80,7 @@ const all = (root: Element): Element[] => [root, ...root.children.flatMap(all)];
 test('recommendation UI explains potential associations with expandable evidence and navigable entities using safe text', () => {
   const host = new Element('div'), section = new Element('section'), count = new Element('span'), status = new Element('span');
   const elements: Record<string, Element> = { detailIncomingRelations: section, detailIncomingRelationGroups: host, detailIncomingRelationCount: count, detailIncomingRelationStatus: status };
-  const document = { createElement: (tag: string) => new Element(tag), getElementById: (id: string) => elements[id] };
+  const document = { createTextNode: (text:string) => { const node=new Element('#text');node.textContent=text;return node; }, createElement: (tag: string) => new Element(tag), getElementById: (id: string) => elements[id] };
   const opened: any[] = [], window: any = { setViewMode: (...args: any[]) => opened.push(args), kbViewMode: 'knowledge_detail' };
   new Function('window', 'document', readFileSync('public/assets/scripts/relation-insights.js', 'utf8'))(window, document);
   const insights = buildRelationInsights(center, paths, format, true).relationInsights;
@@ -99,7 +102,7 @@ test('recommendation UI explains potential associations with expandable evidence
 
 test('recommendations fold large lists and reset to an explicit empty state on navigation', () => {
   const host = new Element('div'), section = new Element('section');
-  const document = { createElement: (tag: string) => new Element(tag), getElementById: (id: string) => id === 'detailIncomingRelationGroups' ? host : id === 'detailIncomingRelations' ? section : new Element('span') };
+  const document = { createTextNode: (text:string) => { const node=new Element('#text');node.textContent=text;return node; }, createElement: (tag: string) => new Element(tag), getElementById: (id: string) => id === 'detailIncomingRelationGroups' ? host : id === 'detailIncomingRelations' ? section : new Element('span') };
   const window: any = {};
   new Function('window', 'document', readFileSync('public/assets/scripts/relation-insights.js', 'utf8'))(window, document);
   const manyPaths = Array.from({ length: 10 }, (_, index) => {
@@ -108,10 +111,10 @@ test('recommendations fold large lists and reset to an explicit empty state on n
   });
   window.renderKnowledgeRelations(buildRelationInsights(center, manyPaths, format).relationInsights, format(center));
   const cards = all(host).filter(node => node.className.includes('relation-recommendation') && node.tag === 'article');
-  expect(cards.filter(card => card.hidden)).toHaveLength(4);
-  const more = host.children.find(node => node.className === 'relation-more')!;
-  more.events.click!(); expect(cards.some(card => card.hidden)).toBe(false); expect(more.attrs['aria-expanded']).toBe('true');
-  more.events.click!(); expect(cards.filter(card => card.hidden)).toHaveLength(4);
+  expect(cards.filter(card => card.hidden)).toHaveLength(2);
+  const arrows = all(host).filter(node=>node.className==='relation-gallery-arrow');
+  arrows[1]!.onclick!(); expect(cards.filter(card=>!card.hidden)).toHaveLength(2);
+  arrows[0]!.onclick!(); expect(cards.filter(card=>!card.hidden)).toHaveLength(8);
   window.renderKnowledgeRelations(buildRelationInsights(center, [], format).relationInsights, format(center));
   expect(all(host).some(node => node.tag === 'article')).toBe(false);
   expect(all(host).some(node => node.className === 'relation-empty')).toBe(true);

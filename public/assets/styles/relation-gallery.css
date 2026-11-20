@@ -1,0 +1,31 @@
+﻿#detailIncomingRelationGroups.relation-gallery{padding:0;min-width:0;color:var(--fg)}
+.relation-gallery-tabs{display:flex;gap:4px;border-bottom:1px solid var(--border-strong);overflow:auto;margin:16px 0 0;scrollbar-width:thin}
+.relation-gallery-tabs .relation-gallery-tab{display:flex;align-items:center;justify-content:center;gap:9px;flex:0 0 auto;min-width:100px;padding:12px 20px;border:1px solid transparent;border-bottom:0;border-radius:6px 6px 0 0;background:transparent;color:var(--muted);font:inherit;font-size:13px;cursor:pointer}
+.relation-gallery-tabs .relation-gallery-tab[aria-pressed=true]{border-color:var(--border-strong);color:var(--fg);background:linear-gradient(var(--surface-2,var(--surface-1)),transparent)}
+.relation-gallery-controls{display:flex;align-items:center;justify-content:center;gap:14px;margin:12px 0 8px;min-height:24px}
+.relation-gallery-controls button{cursor:pointer;background:transparent;border:0;color:var(--muted)}
+.relation-gallery-controls .relation-gallery-arrow{font-size:26px;line-height:1;width:32px;height:30px;border-radius:4px}
+.relation-gallery-controls button:disabled{opacity:.25;cursor:default}
+.relation-gallery-indicators{display:flex;gap:5px;flex-wrap:wrap;justify-content:center;max-width:70%}
+.relation-gallery-indicators .relation-gallery-indicator{width:25px;height:16px;padding:6px 0;background:linear-gradient(var(--muted),var(--muted)) center/100% 3px no-repeat;opacity:.4}
+.relation-gallery-indicators .relation-gallery-indicator[aria-current=true]{opacity:1;background-image:linear-gradient(var(--fg),var(--fg))}
+.relation-gallery-status{font-size:11px;color:var(--muted)}
+.relation-gallery .relation-recommendation-list{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px 20px;border-bottom:1px solid var(--border-strong);padding:8px 0 24px}
+.relation-gallery .relation-recommendation-list .relation-recommendation{display:flex;flex-direction:column;min-width:0;border:0;background:transparent;border-radius:0;padding:0;gap:0;box-shadow:none}
+.relation-gallery .relation-recommendation-list .relation-recommendation[hidden]{display:none}
+.relation-gallery .relation-gallery-media{display:flex;align-items:center;justify-content:center;width:100%;height:205px;padding:0;border:0;background:transparent;cursor:pointer;overflow:hidden;border-radius:0}
+.relation-gallery .relation-gallery-media img{display:block;max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;transition:transform .2s}
+.relation-gallery .relation-gallery-media:hover img{transform:scale(1.035)}
+.relation-gallery .relation-gallery-placeholder{display:grid;place-items:center;width:100%;height:100%;background:var(--surface-1);color:var(--muted);font-size:46px;font-weight:300}
+.relation-gallery .relation-recommendation-list .relation-card-heading{display:flex;flex-wrap:wrap;gap:5px 8px;margin-top:10px;align-items:center}
+.relation-gallery .relation-recommendation-list .relation-entity-link{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--fg);padding:0;border:0;background:transparent;max-width:100%;text-align:left}
+.relation-gallery .relation-recommendation-list .relation-entity-type{font-size:10px;color:var(--muted);background:transparent;border:0;padding:0}
+.relation-gallery .relation-recommendation-label{display:none}
+.relation-gallery .relation-recommendation-list .relation-card-description{font-size:11px;margin:5px 0;color:var(--muted);line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.relation-gallery .relation-recommendation-list .relation-recommendation-evidence{margin-top:5px;border:0;padding:0;font-size:11px}
+.relation-gallery .relation-recommendation-evidence summary{font-size:11px;color:var(--muted);cursor:pointer}
+.relation-gallery .relation-recommendation-list .relation-recommendation>.relation-more{display:none}
+.relation-gallery button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media(min-width:1400px){.relation-gallery .relation-gallery-media{height:225px}}
+@media(max-width:950px){.relation-gallery .relation-recommendation-list{grid-template-columns:repeat(3,minmax(0,1fr))}.relation-gallery .relation-gallery-media{height:175px}}
+@media(max-width:650px){.relation-gallery .relation-recommendation-list{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px 14px}.relation-gallery .relation-gallery-media{height:165px}.relation-gallery-tabs .relation-gallery-tab{min-width:80px;padding:10px 14px}}
