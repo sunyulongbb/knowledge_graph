@@ -167,7 +167,7 @@ panel.querySelector('.relation-legend').replaceChildren();panel.querySelector('[
   panel.querySelector('[data-expand]').onclick=()=>{if(selected)void expandNode(selected);};
   // Shared entry across the different knowledge card renderers, including appended cards.
   function addEntries(){
-    document.querySelectorAll('.for-you-card,.app-home-knowledge-card,.explore-knowledge-card,.home-popular-row,.home-news-card,.app-knowledge-item').forEach(card=>{
+    document.querySelectorAll('.for-you-card,.app-home-knowledge-card,.home-popular-row,.home-news-card,.app-knowledge-item').forEach(card=>{
       if(card.querySelector('[data-knowledge-graph],[data-home-card-graph]'))return;
       const id=card.dataset.knowledgeId||card.dataset.homeNodeId||card.querySelector('[data-explore-node]')?.dataset.exploreNode||card.querySelector('[data-search-node-id]')?.dataset.searchNodeId;
       if(!id)return;

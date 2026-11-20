@@ -12445,8 +12445,11 @@ header {
 }
 
 #headerProjectName {
-  font-size: 15px !important;
-  font-weight: 600 !important;
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-size: 17px !important;
+  font-weight: 650 !important;
+  line-height: 1.4;
+  letter-spacing: .02em;
 }
 
 header .view-toggle {

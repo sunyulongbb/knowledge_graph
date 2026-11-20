@@ -620,6 +620,19 @@
     location.hash = url.hash;
   }
   function homeNewsTimeline(nodes) {
+    return homeNewsGallery(nodes);
+  }
+  function homeNewsGallery(nodes) {
+    const selected = newsSelectedMonth || newsMonths[0]?.month || '';
+    const years = [...new Set(newsMonths.map(bucket => bucket.month.slice(0,4)))];
+    const selectedYear = selected.slice(0,4) || years[0];
+    const navigation = `<nav class="home-news-months" aria-label="知识时间筛选"><div class="news-year-row" aria-label="年份">${years.map(year=>`<button type="button" data-news-month="${year}" aria-pressed="${year===selectedYear}">${year} 年</button>`).join('')}</div><div class="news-month-row" aria-label="月份">${newsMonths.filter(bucket=>bucket.month.startsWith(selectedYear)).map(bucket=>`<button type="button" data-news-month="${bucket.month}" aria-pressed="${bucket.month===selected}">${Number(bucket.month.slice(5))} 月 <small>${bucket.count}</small></button>`).join('')}</div></nav>`;
+    return `${navigation}<div class="news-gallery-stage"><button type="button" class="news-gallery-prev" data-news-slide="-1" aria-label="上一组">‹</button><div class="news-gallery-track">${nodes.map(node=>{
+      const id=node.id||node._id||'', title=node.name||node.label||id, image=firstImage(node)||firstCover(node), video=firstVideo(node);
+      return `<article class="news-gallery-item"><button type="button" data-home-node-id="${escape(id)}" title="${escape(title)}">${image?`<img src="${escape(image)}" alt="${escape(title)}" loading="lazy">`:video?`<video src="${escape(video)}" muted playsinline preload="metadata"></video>`:`<span class="news-gallery-placeholder"><i class="fa-regular fa-lightbulb"></i><strong>${escape(title)}</strong></span>`}</button><time>${escape(shortDate(node.created_at))}</time><span class="news-gallery-caption">${escape(title)}</span></article>`;
+    }).join('') || '<p class="news-axis-hint">暂无知识</p>'}</div><button type="button" class="news-gallery-next" data-news-slide="1" aria-label="下一组">›</button></div>`;
+  }
+  function homeNewsTimelineLegacy(nodes) {
     const groups = new Map();
     for (const node of nodes) {
       let raw = String(node.created_at || "").trim();
@@ -686,6 +699,8 @@
     return `<article class="home-popular-row" data-home-node-id="${escape(id)}"><span class="home-popular-rank ${index < 3 ? "is-top-" + (index + 1) : ""}">${String(index + 1).padStart(2, "0")}</span><button type="button" data-home-open="shorts" class="home-popular-thumb" data-home-node-id="${escape(id)}" aria-label="查看 ${escape(title)}">${image ? `<img src="${escape(image)}" alt="" loading="lazy">` : video ? `<video src="${escape(video)}" muted playsinline preload="metadata"></video>` : '<i class="fa-regular fa-lightbulb" aria-hidden="true"></i>'}${video ? '<span><i class="fa-solid fa-play" aria-hidden="true"></i> 视频</span>' : ""}</button><div class="home-popular-copy"><div class="home-popular-meta"><time>${escape(shortDate(node.updated_at || node.created_at))}</time></div><button class="home-popular-title" type="button" data-home-node-id="${escape(id)}">${escape(title)}</button>${node.description ? `<p>${escape(node.description)}</p>` : ""}<div class="home-popular-actions"><span title="浏览量"><i class="fa-regular fa-eye" aria-hidden="true"></i> <b data-knowledge-views="${escape(id)}">${Number(node.viewCount) || 0}</b></span>${stats ? `<span><i class="fa-regular fa-heart" aria-hidden="true"></i> ${Number(stats.likes) || 0}</span><span><i class="fa-regular fa-comment" aria-hidden="true"></i> ${Number(stats.comments) || 0}</span><span><i class="fa-solid fa-share" aria-hidden="true"></i> ${Number(stats.shares) || 0}</span>` : ""}<button type="button" data-home-node-id="${escape(id)}">查看详情 <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></button></div></div></article>`;
   }
   byId('appHomeContent').addEventListener('click', event => {
+    const slide=event.target.closest('[data-news-slide]');
+    if(slide){const track=byId('appHomeContent').querySelector('.news-gallery-track');track?.scrollBy({left:Number(slide.dataset.newsSlide)*track.clientWidth,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});return;}
     const button=event.target.closest('[data-home-card-graph]');
     if(!button)return;
     event.preventDefault();event.stopPropagation();
