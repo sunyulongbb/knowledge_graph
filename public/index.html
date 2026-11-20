@@ -5,7 +5,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>知识库</title>
-  <script src="/assets/scripts/application-scope.js?v=20261028-route-scope"></script>
+  <script src="/assets/scripts/application-scope.js?v=20261120-topics"></script>
 
   <script>
     // Apply sidebar width before the first paint, including responsive defaults.
@@ -4878,6 +4878,7 @@
             <button type="button" data-home-feed="news" title="最新"><i class="fa-regular fa-newspaper" aria-hidden="true"></i><span>最新</span></button>
             <button type="button" data-home-action="app_explore" title="探索"><i class="fa-regular fa-compass" aria-hidden="true"></i><span>探索</span></button>
             <button type="button" data-home-action="learning" title="学习"><i class="fa-solid fa-graduation-cap" aria-hidden="true"></i><span>学习</span></button>
+<button type="button" data-home-action="topics" title="专题"><i class="fa-solid fa-chart-pie"></i><span>专题</span></button>
           <button type="button" data-home-action="create" title="新增知识"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>新增知识</span></button>
           </nav>
           <div class="home-discovery-footer">
@@ -5919,6 +5920,7 @@
       "big_bang",
       "knowledge_graph",
       "learning",
+      "topics",
       "knowledge_detail",
       "entry",
       "table",
@@ -7232,6 +7234,7 @@
         knowledge_graph: "\u77e5\u8bc6\u5173\u8054\u5173\u7cfb\u56fe",
         app_explore: "探索知识",
         learning: "知识学习",
+        topics: "专题",
         report_home: "报告",
         report_generate: "新建报告",
         report_detail: "报告详情",
@@ -7456,6 +7459,7 @@
         }
         if (normalized === 'knowledge_graph') { window.loadKnowledgeRelation?.(targetNodeIdRaw); if (!skipRouteUpdate) syncHashForView(normalized, {nodeId:targetNodeIdRaw,includeNode:Boolean(targetNodeIdRaw),replace:replaceRoute}); return; }
         if (normalized === 'big_bang') { window.loadKnowledgeBigBang?.(); return; }
+        if (normalized === 'topics') { window.loadTopics?.(); return; }
         if (normalized === 'learning') { window.loadKnowledgeLearning?.(); return; }
         if (normalized === 'shorts') {
           window.loadShortsPage?.(targetNodeIdRaw);
@@ -7586,17 +7590,20 @@
       const isExplore = normalized === 'joined_type' || normalized === 'app_explore' || normalized === 'big_bang' || normalized === 'knowledge_graph';
       document.body.classList.toggle('home-relation-active', normalized === 'knowledge_graph');
       document.body.classList.toggle('home-big-bang-active', normalized === 'big_bang');
+      const isTopics = normalized === 'topics';
+      if (isTopics) window.loadTopics?.();
+      document.body.classList.toggle('home-topics-active', isTopics);
       const isLearning = normalized === 'learning';
-      document.body.classList.toggle('home-discovery-active', isAppHome || isShorts || isExplore || isLearning || isProfile || isStandaloneDetail || isAppSearch);
+      document.body.classList.toggle('home-discovery-active', isAppHome || isShorts || isExplore || isTopics || isLearning || isProfile || isStandaloneDetail || isAppSearch);
       document.body.classList.toggle('home-search-active', isAppSearch);
       document.body.classList.toggle('home-detail-active', isStandaloneDetail);
       document.body.classList.toggle('home-profile-active', isProfile);
       document.body.classList.toggle('home-shorts-active', isShorts);
       document.body.classList.toggle('home-explore-active', isExplore);
       document.body.classList.toggle('home-learning-active', isLearning);
-      const isGlobalPage = isApplications || isUserManagement || isProfile || isAppHome || isAppSearch || isStandaloneDetail || isShorts || isExplore || isLearning;
+      const isGlobalPage = isApplications || isUserManagement || isProfile || isAppHome || isAppSearch || isStandaloneDetail || isShorts || isExplore || isTopics || isLearning;
       if (knowledgeDetailPagePanel) knowledgeDetailPagePanel.style.display = isStandaloneDetail ? '' : 'none';
-      document.getElementById('applicationHomePanel').style.display = isAppHome || isShorts || isExplore || isLearning || isProfile || isStandaloneDetail || isAppSearch ? '' : 'none';
+      document.getElementById('applicationHomePanel').style.display = isAppHome || isShorts || isExplore || isTopics || isLearning || isProfile || isStandaloneDetail || isAppSearch ? '' : 'none';
       // Reveal only after the initial route and sidebar layout have both applied.
       // The callback runs after this synchronous view update, before painting.
       if (document.documentElement.hasAttribute('data-shell-pending')) {
@@ -17760,7 +17767,7 @@
   <script src="/assets/scripts/home-waterfall.js?v=20261111-compact-columns"></script>
   <script src="/assets/scripts/home-sidebar.js?v=20261112-logo-click-double"></script>
   <script src="/assets/scripts/news-timeline-layout.js?v=20261112-packed-cards"></script>
-  <script src="/assets/scripts/application-pages.js?v=20261116-results-2"></script>
+  <script src="/assets/scripts/application-pages.js?v=20261120-topics"></script>
   <script src="/assets/scripts/knowledge-learning.js?v=20261111-copy-cleanup"></script>
   <script src="/assets/scripts/knowledge-relation-page.js?v=20261111-close-collapses"></script>
   <script src="/assets/scripts/knowledge-big-bang.js?v=20261112-view-counts"></script>
@@ -17944,6 +17951,8 @@
   <script src="/node_modules/drawflow/dist/drawflow.min.js"></script>
   <script type="module" src="/assets/scripts/pipeline-ui.js?v=20261010-merge3"></script>
   <script src="/assets/scripts/ui-shell.js?v=20261028-route-scope"></script>
+<script src="/assets/scripts/topic-charts.js?v=20261120-reference-final"></script>
+<script src="/assets/scripts/topics.js?v=20261120-reference-final"></script>
 </body>
 
 </html>

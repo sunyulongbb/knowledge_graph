@@ -159,7 +159,7 @@
     });
     document
       .querySelectorAll(
-        '[data-home-action="shorts"], [data-home-action="app_explore"], [data-home-action="learning"]',
+        '[data-home-action="shorts"], [data-home-action="app_explore"], [data-home-action="learning"], [data-home-action="topics"]',
       )
       .forEach((button) => {
         if (

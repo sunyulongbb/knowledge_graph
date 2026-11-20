@@ -106,3 +106,15 @@ test('static scripts revalidate with ETag on browser refresh',async()=>{
  const repeated=await serveStaticRoute(new Request(origin+path,{headers:{'If-None-Match':etag!}}),path);
  expect(repeated?.status).toBe(304);expect(await repeated!.text()).toBe('');
 });
+
+
+test('topics navigation belongs to home and supports direct project routes', async () => {
+  const window: any = { location:new URL(origin + '/project_example/home/topics') };
+  runInNewContext(await Bun.file('public/assets/scripts/application-scope.js').text(), { window, URL, URLSearchParams });
+  expect(window.getPageSpace('topics')).toBe('home');
+  expect(window.resolveSpaceView('learning', 'topics')).toBe('topics');
+  expect(window.resolveSpaceView('app_home', 'topics')).toBe('topics');
+  expect(window.getProjectPageRoute().view).toBe('topics');
+  expect(window.projectViewUrl('topics').pathname).toBe('/project_example/home/topics');
+  expect((await serveStaticRoute(new Request(window.location.href), window.location.pathname))?.status).toBe(200);
+});

@@ -1,3 +1,4 @@
+import { createTopicsHandler } from './topics.ts';
 import { createKnowledgeRecommendations } from './knowledge-recommendations.ts';
 import { createKnowledgeViews } from './knowledge-views.ts';
 import { apiErrorResponse } from './api-error.ts';
@@ -69,6 +70,7 @@ const enterpriseStore = enterpriseKnowledgeEnabled() ? EnterpriseKnowledgeStore.
 const knowledgeViews = createKnowledgeViews({db:adminDb,store:enterpriseStore,getUser:getKnowledgeUser,getProject:getProjectByIdentifier});
 const accountActivity = createAccountActivity({ db: adminDb, store: enterpriseStore, getUser: getCurrentUser, getProject: getProjectByIdentifier });
 const handleUserProfile = createUserProfileHandler(adminDb, getCurrentUser, accountActivity);
+const handleTopics = createTopicsHandler({db:adminDb,store:enterpriseStore,getUser:getCurrentUser,getProject:getProjectByIdentifier});
 const handleLearning = createLearningHandler({ db: adminDb, store: enterpriseStore, getUser: getCurrentUser, getKnowledgeUser, getProject: getProjectByIdentifier });
 const enterpriseBackup = enterpriseStore ? EnterpriseSqliteBackup.open(enterpriseStore, adminDb.filename) : undefined;
 const handleApplications = createApplicationHandler(adminDb, getCurrentUser, {
@@ -184,6 +186,8 @@ const server = Bun.serve({
       if (viewResponse) return viewResponse;
       const activityResponse = await accountActivity.handle(req, url);
       if (activityResponse) return activityResponse;
+      const topicsResponse = await handleTopics(req, url);
+      if (topicsResponse) return topicsResponse;
       const learningResponse = await handleLearning(req, url);
       if (learningResponse) return learningResponse;
       const sqliteSyncResponse = await handleSqliteKnowledgeSync(req, url);

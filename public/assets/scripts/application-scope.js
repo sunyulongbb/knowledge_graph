@@ -29,7 +29,7 @@
     }
   }
 
-  const homeViews = new Set(['app_home','app_search','app_explore','joined_type','shorts','learning','big_bang','knowledge_graph','knowledge_detail','profile']);
+  const homeViews = new Set(['app_home','app_search','app_explore','joined_type','shorts','learning','topics','big_bang','knowledge_graph','knowledge_detail','profile']);
   window.getPageSpace = view => homeViews.has(view) ? 'home' : 'workspace';
   window.resolveSpaceView = (from, to, allowCrossSpace = false) => {
     if (allowCrossSpace || !from) return to;
@@ -42,7 +42,7 @@
     navigationClick = Boolean(event.target?.closest?.('.home-discovery-nav,.home-discovery-tools,.home-discovery-footer,.nav-item,#headerProjectName,#homeSidebarBrandToggle'));
     queueMicrotask(() => { navigationClick = false; });
   }, true);
-  const pageNames = { app_home:'home', app_explore:'explore', joined_type:'type', app_search:'search', shorts:'shorts', learning:'learning', table:'table', vis:'graph', applications:'applications', profile:'profile', knowledge_detail:'knowledge' };
+  const pageNames = { app_home:'home', app_explore:'explore', joined_type:'type', app_search:'search', shorts:'shorts', learning:'learning', topics:'topics', table:'table', vis:'graph', applications:'applications', profile:'profile', knowledge_detail:'knowledge' };
   window.getProjectPageRoute = function () {
     const segments = window.location.pathname.split('/');
     const page = ['home','workspace'].includes(segments[2]) ? (segments[3] || (segments[2] === 'home' ? 'home' : 'table')) : segments[2] || '';
