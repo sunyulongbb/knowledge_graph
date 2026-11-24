@@ -305,3 +305,58 @@ html body #applicationHomePanel .home-discovery-sidebar .home-settings-menu .hom
 html body #applicationHomePanel .home-discovery-sidebar .home-settings-menu button,
 html body #applicationHomePanel .home-discovery-sidebar .home-settings-menu .home-workspace-toggle{justify-content:flex-start;gap:10px;padding:9px 10px;width:100%}
 html body #applicationHomePanel .home-settings-menu .home-workspace-chevron{display:block;margin-left:auto;flex-shrink:0}
+/* Breadcrumb navigation: clear hierarchy with a stable back control. */
+#detailPanel .detail-navigation-leading{min-width:0;gap:12px;align-items:center}
+#detailPanel .detail-back-btn{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;min-width:34px;min-height:34px;padding:7px 10px;border:1px solid var(--border);border-radius:7px;background:var(--surface-0);color:var(--muted);cursor:pointer}
+#detailPanel .detail-back-btn:hover{color:var(--fg);background:var(--surface-1)}
+#detailPanel .detail-breadcrumbs{display:flex;align-items:center;gap:9px;min-width:0;overflow:auto;white-space:nowrap;scrollbar-width:none;padding:4px 0}
+#detailPanel .detail-breadcrumbs button{flex-shrink:0;border:0;background:transparent;padding:4px 2px;color:var(--muted);font-size:12px;max-width:220px;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+#detailPanel .detail-breadcrumbs button:hover{color:var(--accent)}
+#detailPanel .detail-breadcrumbs>i{font-size:8px;color:var(--muted);opacity:.6;flex-shrink:0}
+#detailPanel .detail-breadcrumbs>[aria-current=page]{color:var(--fg);font-size:12px;font-weight:500;max-width:320px;overflow:hidden;text-overflow:ellipsis}
+#detailPanel .detail-breadcrumbs button:focus-visible,#detailPanel .detail-back-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media(max-width:600px){#detailPanel .detail-breadcrumbs button{max-width:125px}#detailPanel .detail-breadcrumbs>[aria-current=page]{max-width:180px}#detailPanel .detail-breadcrumbs{gap:6px}}
+/* Per-image descriptions remain attached to their own carousel slide. */
+#wikiTopMedia .detail-carousel-slide{position:relative}
+#wikiTopMedia .detail-image-caption{position:absolute;left:12px;right:12px;bottom:12px;max-height:45%;overflow:auto;padding:9px 12px;border-radius:8px;background:color-mix(in srgb,var(--surface-0) 94%,transparent);color:var(--fg);font-size:12px;line-height:1.6;z-index:2;text-align:left}
+#wikiTopMedia .detail-image-caption:empty{display:none}
+#wikiTopMedia .detail-image-caption p{white-space:pre-wrap;margin:0 0 4px;overflow-wrap:anywhere}
+#wikiTopMedia .detail-image-caption textarea{display:block;box-sizing:border-box;width:100%;min-height:64px;padding:8px;border:1px solid var(--border);border-radius:5px;background:var(--surface-0);color:var(--fg);font:inherit;resize:vertical}
+#wikiTopMedia .detail-image-caption button{font:inherit;font-size:11px;padding:4px 8px;margin:5px 6px 0 0;border:1px solid var(--border);border-radius:5px;color:var(--fg);background:var(--surface-0);cursor:pointer}
+#wikiTopMedia .detail-image-caption .detail-image-caption-edit{border:0;background:transparent;color:var(--muted);padding:0;margin:0}
+#wikiTopMedia .detail-image-caption [hidden]{display:none}
+/* Image caption action and bottom editor. */
+#wikiTopMedia .detail-carousel-slide>.detail-image-caption-edit{position:absolute;top:12px;right:12px;z-index:4;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;border:1px solid #ffffff38;border-radius:8px;background:#151922a8;color:#fff;font-size:14px;box-shadow:0 2px 8px #0002;backdrop-filter:blur(8px);cursor:pointer;transition:background .15s,transform .15s}
+#wikiTopMedia .detail-carousel-slide>.detail-image-caption-edit:hover{background:#151922df;transform:translateY(-1px)}
+#wikiTopMedia .detail-image-caption-edit:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+#wikiTopMedia .detail-carousel-slide>.detail-image-caption-edit[hidden],#wikiTopMedia .detail-image-caption[hidden]{display:none}
+#wikiTopMedia .detail-image-caption{left:12px;right:12px;bottom:12px;padding:12px 15px;border:1px solid var(--border);border-radius:9px;background:color-mix(in srgb,var(--surface-0) 95%,transparent);color:var(--fg);font-family:inherit;font-size:13px;line-height:1.75;box-shadow:0 4px 18px #00000012;backdrop-filter:blur(10px)}
+#wikiTopMedia .detail-image-caption p{margin:0;font-size:13px;font-weight:400;line-height:1.75;color:var(--fg);letter-spacing:.015em;white-space:pre-wrap}
+#wikiTopMedia .detail-image-caption textarea{min-height:76px;padding:10px 12px;font-size:13px;line-height:1.65;border-radius:6px;background:var(--surface-0);color:var(--fg)}
+#wikiTopMedia .detail-image-caption textarea::placeholder{color:var(--muted);font-size:12px}
+#wikiTopMedia .detail-image-caption textarea:focus{outline:2px solid color-mix(in srgb,var(--accent) 35%,transparent);border-color:var(--accent)}
+#wikiTopMedia .detail-image-caption-actions{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:10px}
+#wikiTopMedia .detail-image-caption-actions button{padding:5px 13px;margin:0;font-size:12px;border-radius:6px}
+#wikiTopMedia .detail-image-caption-actions .detail-image-caption-save{background:var(--accent);color:var(--accent-contrast);border-color:var(--accent)}
+#wikiTopMedia .detail-image-caption-actions span{color:var(--muted);font-size:11px}
+#wikiTopMedia .detail-image-caption-actions button:disabled{opacity:.55;cursor:wait}
+@media(max-width:600px){#wikiTopMedia .detail-image-caption{left:8px;right:8px;bottom:8px;padding:9px 11px}#wikiTopMedia .detail-image-caption p{font-size:12px}#wikiTopMedia .detail-carousel-slide>.detail-image-caption-edit{top:8px;right:8px;width:30px;height:30px}}
+/* Wikipedia-like figure captions: below the image, without an overlay. */
+#wikiTopMedia{height:auto!important;max-height:none!important;aspect-ratio:auto!important;overflow:visible}
+#wikiTopMedia>.detail-carousel-container{height:clamp(240px,42vh,520px);flex-shrink:0;border-radius:6px}
+#wikiTopMedia .detail-image-caption-host{width:100%;box-sizing:border-box;background:var(--surface-0);border-bottom:1px solid var(--border);padding:0}
+#wikiTopMedia .detail-image-caption-host[hidden]{display:none}
+#wikiTopMedia .detail-image-caption{position:static;max-height:none;overflow:visible;padding:11px 4px 13px;border:0;border-radius:0;background:transparent;color:var(--fg);box-shadow:none;backdrop-filter:none;text-align:left}
+#wikiTopMedia .detail-image-caption p{font-family:inherit;font-size:12px;line-height:1.65;letter-spacing:0;font-weight:400;color:var(--muted);margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+#wikiTopMedia .detail-image-caption:has(textarea){padding:12px 0 14px}
+#wikiTopMedia .detail-image-caption textarea{display:block;box-sizing:border-box;width:100%;min-height:74px;padding:10px 12px;border:1px solid var(--border-strong);border-radius:3px;box-shadow:none;background:var(--surface-0);font-family:inherit;font-size:13px;line-height:1.6;color:var(--fg);resize:vertical}
+#wikiTopMedia .detail-image-caption textarea:focus{outline:0;border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+#wikiTopMedia .detail-image-caption textarea::placeholder{color:var(--muted-2,var(--muted));font-size:12px}
+#wikiTopMedia .detail-image-caption-actions{justify-content:flex-start;gap:10px;margin-top:8px}
+#wikiTopMedia .detail-image-caption-actions button{padding:5px 12px;border-radius:3px;font-size:12px;line-height:1.5;box-shadow:none}
+#wikiTopMedia .detail-image-caption-actions button:not(.detail-image-caption-save){border-color:transparent;background:transparent;color:var(--muted)}
+#wikiTopMedia .detail-image-caption-actions span{margin-left:auto;font-size:11px}
+#wikiTopMedia .detail-carousel-slide>.detail-image-caption-edit{width:29px;height:29px;border-radius:4px;font-size:12px;background:color-mix(in srgb,var(--surface-0) 90%,transparent);color:var(--muted);border:1px solid var(--border);box-shadow:none;backdrop-filter:none}
+#wikiTopMedia .detail-carousel-slide>.detail-image-caption-edit:hover{background:var(--surface-0);color:var(--accent);transform:none}
+#wikiTopMedia .detail-image-thumbnails{margin-top:10px}
+@media(max-width:600px){#wikiTopMedia>.detail-carousel-container{height:clamp(220px,35vh,360px)}#wikiTopMedia .detail-image-caption{padding:9px 2px 11px}#wikiTopMedia .detail-image-caption p{font-size:12px}}

@@ -50,7 +50,7 @@ export function arangoNodeResponse(node: Doc, user: KnowledgeUser | null): Doc {
   return {
     ...data, ...fields, id, _id: id, name, label: name, label_zh: name,
     description, desc_zh: description, aliases, aliases_zh: aliases,
-    tags: json(node.tags, []), images, image: images[0] || '', covers, cover: covers.find((value: string) => value.trim()) || '',
+    image_metadata: json(node.image_metadata, []), tags: json(node.tags, []), images, image: images[0] || '', covers, cover: covers.find((value: string) => value.trim()) || '',
     videos, video: videos[0] || '', categories, categoryIds: categories,
     classes: categories.map((id: string) => ({ id, name: id })), categoryLabels: categories,
     classId: categories[0] || null, classLabel: categories[0] || null,
@@ -303,6 +303,14 @@ export class EnterpriseKnowledgeStore {
         const append = input[`append${key[0]!.toUpperCase()}${key.slice(1)}`] === true;
         row[key] = JSON.stringify(append ? [...new Set([...json(previous?.[key], []), ...input[key]])] : input[key]);
       }
+    }
+    if (input.image_metadata !== undefined || input.images !== undefined) {
+      const metadata = input.image_metadata === undefined ? json(previous?.image_metadata, []) : input.image_metadata;
+      if (!Array.isArray(metadata) || metadata.length > 1000 || metadata.some((item: any) => !item || typeof item.url !== 'string' || typeof item.description !== 'string' || item.description.length > 4000 || (item.title !== undefined && (typeof item.title !== 'string' || item.title.length > 300)))) throw new KnowledgeStoreError('图片描述格式无效，描述最多 4000 字');
+      const urls = new Set(knowledgeMedia(row).images);
+      const unique = new Map<string, {url:string;title?:string;description:string}>();
+      for (const item of metadata) if (urls.has(item.url)) unique.set(item.url, {url:item.url,...(item.title !== undefined ? {title:item.title.trim()} : {}),description:item.description.trim()});
+      row.image_metadata = [...unique.values()];
     }
     if (input.appendVideos === true && input.appendCovers === true && input.videos !== undefined && input.covers !== undefined) {
       const paired = appendVideoCoverPairs(json(previous?.videos, []), json(previous?.covers, []), input.videos, input.covers);

@@ -463,14 +463,35 @@
     const slides = document.createElement("div");
     slides.className = "detail-carousel-slides";
 
+    const captionHost=document.createElement('div');captionHost.className='detail-image-caption-host';
+    const captions=[];
     entries.forEach((entry, index) => {
       const slide = document.createElement("div");
       slide.className = "detail-carousel-slide";
       const img = document.createElement("img");
       img.src = entry.url;
       img.alt = entry.label || `Image ${index + 1}`;
-      img.onclick = () => window.open(entry.url, "_blank");
+      img.onclick = () => window.openKnowledgeImageViewer?.(entries.map(item=>({url:item.url,label:options.imageMetadata?.find(meta=>meta.url===item.url)?.title||item.label,description:options.imageMetadata?.find(meta=>meta.url===item.url)?.description||''})),index);
+      const metadata=options.imageMetadata?.find(item=>item.url===entry.url)||{};
+      const description = metadata.description || '', title=metadata.title||'';
+      img.alt = description || entry.label || `图片 ${index+1}`;
       slide.appendChild(img);
+      const caption = document.createElement('div'); caption.className='detail-image-caption';caption.hidden=!(title||description);caption.dataset.hasDescription=String(Boolean(description));
+      const captionTitle=document.createElement('h4');captionTitle.className='detail-image-caption-title';captionTitle.textContent=title;captionTitle.hidden=!title;caption.append(captionTitle);
+      const captionText=document.createElement('p');captionText.textContent=description;captionText.hidden=!description;caption.append(captionText);
+      if(options.canDelete?.(entry.url) && options.onDescribe){
+        const edit=document.createElement('button');edit.type='button';edit.className='detail-image-caption-edit';edit.innerHTML='<i class="fa-regular fa-pen-to-square" aria-hidden="true"></i>';edit.title=description?'编辑描述':'添加图片描述';edit.setAttribute('aria-label',edit.title);edit.setAttribute('aria-expanded','false');
+        edit.onclick=()=>{
+          if(caption.querySelector('textarea'))return;caption.hidden=false;captionHost.hidden=false;edit.setAttribute('aria-expanded','true');
+          const titleInput=document.createElement('input');titleInput.type='text';titleInput.maxLength=300;titleInput.value=captionTitle.textContent;titleInput.placeholder='图片标题';titleInput.setAttribute('aria-label','图片标题');titleInput.className='detail-image-title-input';
+          const textarea=document.createElement('textarea');textarea.value=captionText.textContent;textarea.maxLength=4000;textarea.placeholder='为这张图片添加简短说明…';textarea.setAttribute('aria-label','图片描述');
+          const actions=document.createElement('div'),save=document.createElement('button'),cancel=document.createElement('button'),status=document.createElement('span');save.type=cancel.type='button';save.textContent='保存';cancel.textContent='取消';status.setAttribute('role','status');actions.className='detail-image-caption-actions';save.className='detail-image-caption-save';
+          const close=()=>{titleInput.remove();textarea.remove();captionTitle.hidden=!captionTitle.textContent;actions.remove();edit.hidden=false;captionText.hidden=!captionText.textContent;caption.hidden=!(captionTitle.textContent||captionText.textContent);captionHost.hidden=caption.hidden;caption.dataset.hasDescription=String(Boolean(captionText.textContent));edit.setAttribute('aria-expanded','false');edit.focus()};cancel.onclick=close;
+          save.onclick=async()=>{save.disabled=cancel.disabled=true;try{await options.onDescribe(entry.url,textarea.value.trim(),titleInput.value.trim());captionTitle.textContent=titleInput.value.trim();captionText.textContent=textarea.value.trim();img.alt=captionText.textContent||entry.label||'图片';edit.title=captionText.textContent?'编辑描述':'添加图片描述';edit.setAttribute('aria-label',edit.title);close()}catch(error){status.textContent=error.message||'保存失败';save.disabled=cancel.disabled=false}};
+          actions.append(save,cancel,status);caption.append(titleInput,textarea,actions);edit.hidden=captionText.hidden=captionTitle.hidden=true;titleInput.focus();
+        };slide.append(edit);
+      }
+      captionHost.append(caption);captions.push(caption);if(index!==0)caption.hidden=true;
       slides.appendChild(slide);
       const cell = document.createElement('div'); cell.className = 'detail-image-thumbnail';
       const button = document.createElement('button'); button.type = 'button';
@@ -502,6 +523,7 @@
       if (index < 0) index = slideCount - 1;
       if (index >= slideCount) index = 0;
       currentIndex = index;
+      captions.forEach((caption,i)=>{caption.hidden=i!==index||(!caption.textContent.trim()&&!caption.querySelector('textarea'));});captionHost.hidden=captions[index].hidden;
       updateTransform();
       thumbnails.querySelectorAll('.detail-image-thumbnail-select').forEach((button, i) => button.setAttribute('aria-pressed', String(i === currentIndex)));
       const dots = carousel.querySelectorAll(".detail-carousel-dot");
@@ -551,7 +573,8 @@
       });
     }
 
-    topMedia.append(carousel, thumbnails);
+    captionHost.hidden=captions[0]?.hidden!==false;
+    topMedia.append(carousel, captionHost, thumbnails);
     topMedia.style.display = "";
     requestAnimationFrame(() => updateTransform());
     syncDetailTopMediaStage();
@@ -2702,7 +2725,15 @@
       // Media types use tabs. Select the first available type in priority
       // order: image, video, then PDF.
       const ownedImages = Array.isArray(doc?.images) ? doc.images : normalizeMediaStringList(doc?.images);
+      let imageMetadata=Array.isArray(doc?.image_metadata)?doc.image_metadata:[];
       const hasImageMedia = renderWikiMediaGrid(detailMediaAttrItems, imageEntries, {
+        imageMetadata,
+        onDescribe: async (url,description,title) => {
+          const metadata=[...imageMetadata.filter(item=>item.url!==url),{url,title,description}];
+          const updateUrl=appendDetailDb(new URL('/api/kb/nodes/update',location.origin));
+          const response=await fetch(updateUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:String(doc?._id||doc?.id||fullId).replace(/^entity\//,''),image_metadata:metadata})});
+          const result=await response.json().catch(()=>({}));if(!response.ok||result.ok===false)throw Error(result.error||'保存失败');imageMetadata=metadata;options.imageMetadata=metadata;
+        },
         canDelete: url => (doc?.can_edit || canEditDefaultApplication()) && ownedImages.some(image => extractImageUrls(image, true).includes(url)),
         onDelete: async url => {
           const updateUrl = appendDetailDb(new URL('/api/kb/nodes/update', location.origin));

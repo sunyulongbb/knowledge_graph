@@ -456,7 +456,7 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
               hasMedia: ['1', 'true'].includes(url.searchParams.get('has_media') || ''),
               propertyId, propertyValue: url.searchParams.get('property_value'),
               ...(discovery ? {
-                publicationMonths: url.searchParams.get('publication_months') === '1', publicationMonth: url.searchParams.get('publication_month'), publicationYear:url.searchParams.get('publication_year'),
+                dateField: url.searchParams.get('date_field') === 'updated' ? 'updated' : 'created', publicationMonths: url.searchParams.get('publication_months') === '1', publicationMonth: url.searchParams.get('publication_month'), publicationYear:url.searchParams.get('publication_year'),
                 matchMode: url.searchParams.get('match_mode'), searchScope: url.searchParams.get('search_scope'),
                 excludeQuery: url.searchParams.get('exclude_q'), updatedFrom: url.searchParams.get('updated_from'), updatedTo: url.searchParams.get('updated_to')
               } : {}),

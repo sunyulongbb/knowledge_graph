@@ -92,7 +92,7 @@
     return homeFeed === "popular"
       ? "popular"
       : homeFeed === "news"
-        ? "created_desc"
+        ? "modified_desc"
         : "richness";
   }
   function homeRequestSize() {
@@ -106,7 +106,7 @@
     try {
       let total = Infinity;
       for (let offset=0; offset<total; offset+=200) {
-        const data = await api('/api/kb/discover/search',{order:'created_desc',limit:200,offset,...(month.length===4?{publication_year:month}:{publication_month:month}),hide_entity:'1',defined_class_only:'1'});
+        const data = await api('/api/kb/discover/search',{order:'modified_desc',date_field:'updated',limit:200,offset,...(month.length===4?{publication_year:month}:{publication_month:month}),hide_entity:'1',defined_class_only:'1'});
         if (request !== newsMonthVersion || version !== homeVersion || homeFeed !== 'news') return;
         total = Number(data.total)||0;
         collected.push(...(data.nodes||[]));
@@ -121,7 +121,7 @@
   async function loadRemainingNews(version) {
     if(homeFeed !== 'news') return;
     try {
-      const data = await api('/api/kb/discover/search',{publication_months:'1',limit:1,offset:0,hide_entity:'1',defined_class_only:'1'});
+      const data = await api('/api/kb/discover/search',{publication_months:'1',date_field:'updated',limit:1,offset:0,hide_entity:'1',defined_class_only:'1'});
       if(version !== homeVersion || homeFeed !== 'news') return;
       newsMonths = data.months || [];
       if(newsMonths.length) await loadNewsMonth(newsMonths[0].month);
@@ -629,7 +629,7 @@
     const navigation = `<nav class="home-news-months" aria-label="知识时间筛选"><div class="news-year-row" aria-label="年份">${years.map(year=>`<button type="button" data-news-month="${year}" aria-pressed="${year===selectedYear}">${year} 年</button>`).join('')}</div><div class="news-month-row" aria-label="月份">${newsMonths.filter(bucket=>bucket.month.startsWith(selectedYear)).map(bucket=>`<button type="button" data-news-month="${bucket.month}" aria-pressed="${bucket.month===selected}">${Number(bucket.month.slice(5))} 月 <small>${bucket.count}</small></button>`).join('')}</div></nav>`;
     return `${navigation}<div class="news-gallery-stage"><button type="button" class="news-gallery-prev" data-news-slide="-1" aria-label="上一组">‹</button><div class="news-gallery-track">${nodes.map(node=>{
       const id=node.id||node._id||'', title=node.name||node.label||id, image=firstImage(node)||firstCover(node), video=firstVideo(node);
-      return `<article class="news-gallery-item"><button type="button" data-home-node-id="${escape(id)}" title="${escape(title)}">${image?`<img src="${escape(image)}" alt="${escape(title)}" loading="lazy">`:video?`<video src="${escape(video)}" muted playsinline preload="metadata"></video>`:`<span class="news-gallery-placeholder"><i class="fa-regular fa-lightbulb"></i><strong>${escape(title)}</strong></span>`}</button><time>${escape(shortDate(node.created_at))}</time><span class="news-gallery-caption">${escape(title)}</span></article>`;
+      return `<article class="news-gallery-item"><button type="button" data-home-node-id="${escape(id)}" title="${escape(title)}">${image?`<img src="${escape(image)}" alt="${escape(title)}" loading="lazy">`:video?`<video src="${escape(video)}" muted playsinline preload="metadata"></video>`:`<span class="news-gallery-placeholder"><i class="fa-regular fa-lightbulb"></i><strong>${escape(title)}</strong></span>`}</button><time>${escape(shortDate(node.updated_at || node.created_at))}</time><span class="news-gallery-caption">${escape(title)}</span></article>`;
     }).join('') || '<p class="news-axis-hint">暂无知识</p>'}</div><button type="button" class="news-gallery-next" data-news-slide="1" aria-label="下一组">›</button></div>`;
   }
   function homeNewsTimelineLegacy(nodes) {

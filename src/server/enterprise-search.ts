@@ -41,7 +41,7 @@ export type EnterpriseSearchOptions = {
   matchMode?: string | null; searchScope?: string | null; excludeQuery?: string | null;
   updatedFrom?: string | null; updatedTo?: string | null;
   includeTypes?: string[] | null;
-  publicationMonths?: boolean; publicationMonth?: string | null;
+  dateField?: 'updated' | 'created'; publicationMonths?: boolean; publicationMonth?: string | null;
   publicationYear?: string | null;
 };
 export function buildEnterpriseSearchQuery(options: EnterpriseSearchOptions, readableKeys: string[]) {
@@ -166,8 +166,8 @@ export class EnterpriseKnowledgeSearch {
       // run date math or date_histogram against that mapping.
       const publicationRuntime = options.publicationMonths || options.publicationMonth || options.publicationYear ? {
         publication_date: {type:'date',script:{source:`
-          if (doc.containsKey('created_at_sort') && doc['created_at_sort'].size() > 0) {
-            def value = doc['created_at_sort'].value.toString();
+          if (doc.containsKey('${options.dateField === 'updated' ? 'updated_at_sort' : 'created_at_sort'}') && doc['${options.dateField === 'updated' ? 'updated_at_sort' : 'created_at_sort'}'].size() > 0) {
+            def value = doc['${options.dateField === 'updated' ? 'updated_at_sort' : 'created_at_sort'}'].value.toString();
             try { emit(java.time.Instant.parse(value).toEpochMilli()); }
             catch (Exception e) { }
           }`}}

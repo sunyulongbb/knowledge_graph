@@ -274,3 +274,12 @@ test('publication histogram and month filter use a runtime date over keyword tim
   expect(requests[1].runtime_mappings.publication_date.type).toBe('date');
   expect(requests[1].query.bool.filter).toContainEqual({range:{publication_date:{gte:'2026-12-01',lt:'2026-12-01||+1M',time_zone:'Asia/Shanghai'}}});
 });
+
+test('latest feed sorts and buckets knowledge by update timestamp',async()=>{
+ const requests:any[]=[];const search=new EnterpriseKnowledgeSearch({searchAccess:async()=>[{key:'allowed'}]} as any,new ElasticsearchClient({url:'http://es'},async(_input,init)=>{requests.push(JSON.parse(String(init?.body)));return reply({hits:{total:{value:0},hits:[]},aggregations:{months:{buckets:[]}}})}));
+ await search.search('app',owner,{limit:1,offset:0,publicationMonths:true,dateField:'updated'});
+ expect(requests[0].runtime_mappings.publication_date.script.source).toContain("doc['updated_at_sort']");
+ await search.search('app',owner,{limit:24,offset:0,order:'modified_desc',publicationMonth:'2026-11',dateField:'updated'});
+ expect(requests[1].sort[0]).toEqual({updated_at_sort:{order:'desc',unmapped_type:'keyword'}});
+ expect(requests[1].runtime_mappings.publication_date.script.source).toContain("doc['updated_at_sort']");
+});
