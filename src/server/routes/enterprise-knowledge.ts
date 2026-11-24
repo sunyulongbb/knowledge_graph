@@ -54,7 +54,7 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
   return async (req: Request, url: URL, method: string): Promise<Response | null> => {
     if (!enterpriseKnowledgeEnabled() || (!enterpriseKnowledgePath(url.pathname) && !(method === 'GET' && schemaReadPaths.has(url.pathname))
       && !(method === 'POST' && ['/api/kb/classes/import', '/api/kb/ontologies/import', '/api/kb/properties/from-knowledge'].includes(url.pathname))
-      && !(method === 'DELETE' && ['/api/kb/ontologies/clear', '/api/kb/ontologies'].includes(url.pathname))
+      && !(method === 'DELETE' && ['/api/kb/ontologies/clear', '/api/kb/ontologies', '/api/kb/classes/clear'].includes(url.pathname))
       && !(['POST', 'DELETE'].includes(method) && propertyWritePaths.has(url.pathname)))) return null;
     try {
       if (enterpriseMediaPath(url.pathname)) {
@@ -133,6 +133,25 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
           return row;
         }, ['knowledge_schema']);
         return Response.json({ ...result, parent: result.parent_id, label: result.name });
+      }
+      if (path === '/api/kb/classes/clear' && method === 'DELETE') {
+        const current = loggedIn();
+        if (!deps.canCreate(current, project)) throw new KnowledgeStoreError('需要应用成员权限才能清空分类', 403);
+        await store.ensureImportSchema(database);
+        const deleted = await store.transaction(database, async trx => {
+          const seed = await store.importSchema(database, trx) || deps.getSchema?.(project);
+          const schema = structuredClone({ classes: seed?.classes || [], ontologies: seed?.ontologies || [], properties: seed?.properties || [], ontology_properties: seed?.ontology_properties || [] });
+          const count = schema.classes.length;
+          schema.classes = [];
+          await store.query(database, `FOR doc IN entity FILTER LENGTH(NOT_NULL(doc.class_ids, [])) > 0 UPDATE doc WITH { class_ids: [], updated_at: @now, updated_at_sort: @now, updated_by_user_id: @uid } IN entity`, { now: new Date().toISOString(), uid: current.id }, trx);
+          const { body } = await store.client.database(database, '/_api/document/knowledge_schema?overwriteMode=replace', {
+            method: 'POST', headers: { 'x-arango-trx-id': trx }, body: JSON.stringify([{ _key: 'definitions', ...schema }]),
+          });
+          if (!Array.isArray(body) || body.some(row => row.error)) throw new Error('Category clearing failed');
+          return count;
+        }, ['knowledge_schema']);
+        const sync = await synchronizeWrite();
+        return Response.json({ ok: true, deleted, sync });
       }
       if (path === '/api/kb/classes' && method === 'DELETE') {
         const current = loggedIn();

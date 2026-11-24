@@ -2321,9 +2321,10 @@
       try {
         const url = appendCurrentDbToUrl(new URL("/api/kb/classes/clear", window.location.origin));
         const response = await fetch(url.toString(), { method: "DELETE" });
-        if (!response.ok) throw new Error("HTTP " + response.status);
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || data.message || "HTTP " + response.status);
         window.kbSelectedClassId = null;
+        window.kbEntityClasses = [];
         await loadClasses();
         if (classImportStatus) classImportStatus.textContent = `已清空 ${data.deleted || 0} 个分类`;
       } catch (error) {
