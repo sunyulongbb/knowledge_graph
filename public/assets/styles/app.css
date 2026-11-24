@@ -15128,3 +15128,47 @@ dialog.reel-taxonomy-editor.reel-taxonomy-inline:has(.reel-class-tree) {
 .reel-class-tree-static .reel-class-toggle { border:0; background:transparent; color:inherit; cursor:pointer; padding:5px; font-size:16px; }
 .reel-class-tree-static [hidden] { display:none !important; }
 .reel-taxonomy-inline .reel-taxonomy-footer[hidden] { display:none !important; }
+
+/* Motion accents preserve the transparent, text-only selected state. */
+.reel-taxonomy-inline[open] { animation:reel-category-reveal .3s cubic-bezier(.2,.8,.2,1) both; }
+.reel-taxonomy-inline h3 { letter-spacing:.08em; font-weight:600; }
+.reel-taxonomy-inline .reel-class-tree-static > ul > li { animation:reel-category-item .36s cubic-bezier(.2,.8,.2,1) both; animation-delay:var(--category-delay,0ms); }
+#homeMediaViewer .reel-class-tree-static button.class-tree-node { transition:color .2s ease,text-shadow .25s ease,transform .2s ease; transform-origin:center; }
+#homeMediaViewer .reel-class-tree-static button.class-tree-node:hover { transform:translateY(-2px); text-shadow:0 2px 12px #ffffff55; }
+#homeMediaViewer .reel-class-tree-static button.class-tree-node.is-assigned { text-shadow:0 0 14px color-mix(in srgb,var(--accent) 55%,transparent); }
+.reel-taxonomy-inline .reel-class-toggle { transition:opacity .2s,transform .2s; opacity:.65; }
+.reel-taxonomy-inline .reel-class-toggle:hover { opacity:1; transform:scale(1.15); }
+.reel-taxonomy-inline .reel-taxonomy-body { scroll-behavior:smooth; }
+@keyframes reel-category-reveal { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+@keyframes reel-category-item { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+@media(prefers-reduced-motion:reduce) {
+  .reel-taxonomy-inline[open],.reel-taxonomy-inline .reel-class-tree-static > ul > li { animation:none; }
+  #homeMediaViewer .reel-class-tree-static button.class-tree-node,.reel-taxonomy-inline .reel-class-toggle { transition:none; transform:none; }
+  .reel-taxonomy-inline .reel-taxonomy-body { scroll-behavior:auto; }
+}
+
+.reel-tag-choices section { margin-bottom:16px; }
+.reel-tag-choices h4 { margin:0 0 8px; font-size:14px; font-weight:500; color:#fff; text-shadow:0 1px 4px #0009; }
+.reel-tag-chip-list { display:flex; flex-wrap:wrap; gap:6px; }
+#homeMediaViewer .reel-tag-chip-list button.class-tree-node { width:auto; padding:6px 10px; border:1px solid #ffffff30; border-radius:7px; color:#fff; background:rgba(20,24,32,.38); cursor:pointer; }
+#homeMediaViewer .reel-tag-chip-list button.class-tree-node.is-assigned { color:var(--accent); border-color:transparent; background:transparent; box-shadow:none; }
+
+/* A clearer hierarchy for the full-width short-video category map. */
+#homeMediaViewer .reel-taxonomy-inline { padding:16px 12px; }
+#homeMediaViewer .reel-taxonomy-inline > h3 { font-size:16px; font-weight:600; letter-spacing:.02em; margin:0 0 16px; }
+#homeMediaViewer .reel-class-tree-static { font-size:14px; padding:0 4px; }
+#homeMediaViewer .reel-class-tree-static > .dhx_tree-list { padding-left:0; border-left:0; }
+#homeMediaViewer .reel-class-tree-static .dhx_tree-list-item--parent { padding-top:4px; margin-bottom:12px; }
+#homeMediaViewer .reel-class-tree-static .dhx_tree-folder { gap:4px; margin-bottom:7px; }
+#homeMediaViewer .reel-class-tree-static .dhx_tree-folder > button.class-tree-node { padding:4px 5px; min-height:30px; font-size:15px; font-weight:600; line-height:1.5; text-shadow:0 1px 8px #0008; }
+#homeMediaViewer .reel-class-tree-static .dhx_tree-list-item--parent > .dhx_tree-list { padding-left:16px; margin-left:10px; border-left:1px solid #ffffff18; }
+#homeMediaViewer .reel-class-tree-static ul.dhx_tree-list > .dhx_tree-list-item:not(.dhx_tree-list-item--parent) { margin:0 7px 7px 0 !important; border-radius:6px; }
+#homeMediaViewer .reel-class-tree-static .dhx_tree-list-item:not(.dhx_tree-list-item--parent) button.class-tree-node { padding:6px 10px; min-height:32px; font-size:13px; line-height:1.45; border-radius:5px; }
+#homeMediaViewer .reel-class-tree-static .reel-class-toggle { display:grid; place-items:center; width:24px; height:28px; padding:0; flex-shrink:0; font-size:16px; color:#ffffffa6; }
+#homeMediaViewer .reel-class-tree-static button.class-tree-node:focus-visible { outline:1px solid #ffffff90; outline-offset:3px; }
+#homeMediaViewer .reel-class-tree-static button.class-tree-node.is-assigned { font-weight:600; text-shadow:0 0 12px color-mix(in srgb,var(--accent) 40%,transparent); }
+#homeMediaViewer .reel-taxonomy-inline > p { margin:10px 0 0; font-size:11px; color:#ffffffa6; text-shadow:0 1px 5px #0009; }
+@media(max-width:600px) {
+  #homeMediaViewer .reel-class-tree-static .dhx_tree-list-item--parent > .dhx_tree-list { padding-left:10px; margin-left:6px; }
+  #homeMediaViewer .reel-class-tree-static .dhx_tree-list-item:not(.dhx_tree-list-item--parent) button.class-tree-node { min-height:34px; }
+}

@@ -55,16 +55,16 @@
   const message = (text) => { refs.status.textContent = text; };
   let inlineClassification = null;
   async function quickTaxonomy(kind) {
-    if (kind === 'category' && inlineClassification?.open) { inlineClassification.close(); return; }
+    if (inlineClassification?.open) { const same=inlineClassification.dataset.kind===kind;inlineClassification.close();if(same)return; }
     const targetId = idOf(node);
-    const editor = document.createElement('dialog'); editor.className = 'reel-taxonomy-editor' + (kind === 'category' ? ' reel-taxonomy-inline' : '');
+    const editor = document.createElement('dialog'); editor.className = 'reel-taxonomy-editor reel-taxonomy-inline';editor.dataset.kind=kind;
     const title = document.createElement('h3'); title.textContent = kind === 'category' ? '快速分类' : '打标签';
     const body = document.createElement('div'); body.className = 'reel-taxonomy-body'; body.textContent = '正在加载…';
     const status = document.createElement('p'); status.setAttribute('role','status');
     const footer = document.createElement('div'); footer.className = 'reel-taxonomy-footer';
     const cancel = document.createElement('button'); cancel.type='button'; cancel.className='btn'; cancel.textContent='关闭';
     const save = document.createElement('button'); save.type='button'; save.className='btn primary'; save.textContent='保存'; save.disabled=true;
-    footer.append(cancel,save); if(kind==='category')footer.hidden=true; editor.append(title,body,status,footer); (kind === 'category' ? refs.main : document.body).append(editor);
+    footer.append(cancel,save); footer.hidden=true; editor.append(title,body,status,footer); refs.main.append(editor);
     let saving=false, taxonomyTree=null;
     const chosen=new Set();
     let savedCategories=[];
@@ -76,7 +76,7 @@
     });
     editor.addEventListener('cancel',event=>{if(saving)event.preventDefault();});
     editor.addEventListener('close',()=>{taxonomyTree?.destroy();if(inlineClassification === editor)inlineClassification=null;editor.remove();},{once:true});
-    if(kind === 'category') { inlineClassification=editor;editor.show(); } else editor.showModal();
+    inlineClassification=editor;editor.show();
     editor.addEventListener('wheel',event=>event.stopPropagation(),{passive:true});
     editor.addEventListener('touchmove',event=>event.stopPropagation(),{passive:true});
     editor.addEventListener('keydown',event=>{event.stopPropagation();if(event.key==='Escape'&&!saving)editor.close();});
@@ -101,6 +101,7 @@
         const treeHost=document.createElement('div'); treeHost.className='reel-class-tree'; body.append(treeHost);
         if(!editor.open)return;
         const nativeRows = new Map();
+        const reducedMotion=()=>window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         const renderBranches = nodes => {
           const ul=document.createElement('ul'); ul.className='dhx_tree-list';
           for(const item of nodes) {
@@ -108,13 +109,14 @@
             const wrapper=document.createElement('div'); wrapper.className=item.children.length?'dhx_tree-folder':'dhx_tree-list-item__content';
             const label=document.createElement('button'); label.type='button'; label.className='class-tree-node';
             label.dataset.classActivate=item.id;
+            li.style.setProperty('--category-delay',Math.min(ul.childElementCount,10)*22+'ms');
             const text=document.createElement('span'); text.className='ontology-node-label'; text.textContent=item.name || item.label || item.id; label.append(text);
-            label.onclick=()=>{if(saving)return;chosen.has(item.id)?chosen.delete(item.id):chosen.add(item.id);taxonomyTree.refreshAssignedStates();save.click();};
+            label.onclick=()=>{if(saving)return;chosen.has(item.id)?chosen.delete(item.id):chosen.add(item.id);taxonomyTree.refreshAssignedStates();if(!reducedMotion())label.animate([{transform:'scale(1)'},{transform:'scale(1.045)'},{transform:'scale(1)'}],{duration:260,easing:'cubic-bezier(.2,.8,.2,1)'});save.click();};
             wrapper.append(label);li.append(wrapper); nativeRows.set(item.id,label);
             if(item.children.length) {
               const children=renderBranches(item.children);
               const toggle=document.createElement('button'); toggle.type='button'; toggle.className='reel-class-toggle'; toggle.textContent='⌄'; toggle.setAttribute('aria-label','展开或收起'+(item.name || item.id)); toggle.setAttribute('aria-expanded','true');
-              toggle.onclick=()=>{children.hidden=!children.hidden;toggle.setAttribute('aria-expanded',String(!children.hidden));toggle.textContent=children.hidden?'›':'⌄';};
+              toggle.onclick=()=>{children.hidden=!children.hidden;toggle.setAttribute('aria-expanded',String(!children.hidden));toggle.textContent=children.hidden?'›':'⌄';if(!children.hidden&&!reducedMotion())children.animate([{opacity:0,transform:'translateY(-6px)'},{opacity:1,transform:'translateY(0)'}],{duration:220,easing:'ease-out'});};
               wrapper.prepend(toggle);li.append(children);
             }
             ul.append(li);
@@ -131,18 +133,38 @@
         status.textContent = '共 ' + byId.size + ' 个分类';
         if(!rows.length)treeHost.textContent='暂无分类，请先在工作空间创建分类';
       } else {
-        input=document.createElement('textarea'); input.rows=4; input.value=list(current.tags).join('，'); input.placeholder='输入标签，用逗号分隔'; input.setAttribute('aria-label','知识标签'); body.append(input);
+        const data=await api('/api/kb/classes');if(!editor.open)return;
+        const rows=Array.isArray(data)?data:data.items||[];
+        list(current.tags).forEach(tag=>chosen.add(String(tag))); savedCategories=[...chosen];
+        const ids=new Set(list(current.categoryIds || current.categories || current.class_ids).map(value=>String(value.id || value)));
+        const byId=new Map(rows.map(row=>[String(row.id),row]));
+        for(const id of [...ids]) { let parent=byId.get(id);const seen=new Set();while(parent&&!seen.has(parent.id)){seen.add(parent.id);ids.add(String(parent.id));parent=byId.get(String(parent.parent_id || parent.parent || ''));} }
+        const treeHost=document.createElement('div');treeHost.className='reel-class-tree reel-class-tree-static reel-tag-choices';body.append(treeHost);
+        const buttons=[];const available=new Set();
+        const group=(name,tags)=>{
+          if(!tags.length)return;
+          const section=document.createElement('section');const heading=document.createElement('h4');heading.textContent=name;section.append(heading);
+          const chips=document.createElement('div');chips.className='reel-tag-chip-list';
+          tags.forEach(tag=>{tag=String(tag).trim();if(!tag)return;available.add(tag);const button=document.createElement('button');button.type='button';button.className='class-tree-node';button.textContent='# '+tag;
+            button.onclick=()=>{if(saving)return;chosen.has(tag)?chosen.delete(tag):chosen.add(tag);taxonomyTree.refreshAssignedStates();save.click();};buttons.push({button,tag});chips.append(button);});section.append(chips);treeHost.append(section);
+        };
+        rows.filter(row=>ids.has(String(row.id))).forEach(row=>group(row.name || row.label || row.id,list(row.tags)));
+        group('已有标签',[...chosen].filter(tag=>!available.has(tag)));
+        taxonomyTree={refreshAssignedStates(){buttons.forEach(({button,tag})=>{button.classList.toggle('is-assigned',chosen.has(tag));button.setAttribute('aria-pressed',String(chosen.has(tag)));});},destroy(){buttons.length=0;}};
+        taxonomyTree.refreshAssignedStates();
+        if(!available.size)treeHost.textContent=ids.size?'所选分类暂无关联标签，请先在工作空间设置':'请先选择知识分类';
+
       }
       save.disabled=false;
       save.onclick=async()=>{
         saving=true;save.disabled=true;cancel.disabled=true;status.textContent='正在保存…';
         try {
-          const values=kind==='category'?{categoryIds:[...chosen]}:{tags:[...new Set(input.value.split(/[,，;；、\n]+/).map(value=>value.trim()).filter(Boolean))]};
+          const values=kind==='category'?{categoryIds:[...chosen]}:{tags:[...chosen]};
           const result=await api('/api/kb/nodes/update',{}, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:targetId,...values})});
           if(result.ok===false)throw Error(result.error || '保存失败');
           if(idOf(node)===targetId)Object.assign(node,values);
-          if(kind==='category'){savedCategories=[...chosen];status.textContent='已保存';}else{editor.close();message('标签已保存');}
-        }catch(error){if(kind==='category'){chosen.clear();savedCategories.forEach(id=>chosen.add(id));taxonomyTree?.refreshAssignedStates();}status.textContent='保存失败：'+error.message;}finally{saving=false;save.disabled=false;cancel.disabled=false;}
+          savedCategories=[...chosen];status.textContent='已保存';
+        }catch(error){chosen.clear();savedCategories.forEach(id=>chosen.add(id));taxonomyTree?.refreshAssignedStates();status.textContent='保存失败：'+error.message;}finally{saving=false;save.disabled=false;cancel.disabled=false;}
       };
     }catch(error){status.textContent=error.message;body.textContent='';}
   }

@@ -76,8 +76,8 @@
       customElements.whenDefined("media-video-layout"),
     ]).then(() => true);
   </script>
-  <link rel="stylesheet" href="/assets/styles/app.css?v=20261119-category-autosave" />
-  <link rel="stylesheet" href="/assets/styles/home-discovery.css?v=20261124-settings-labels" />
+  <link rel="stylesheet" href="/assets/styles/app.css?v=20261120-category-hierarchy" />
+  <link rel="stylesheet" href="/assets/styles/home-discovery.css?v=20261124-figure-visible" />
   <link rel="stylesheet" href="/assets/styles/shorts-page.css?v=20261117-creator-avatar-slide" />
   <link rel="stylesheet" href="/assets/styles/knowledge-card-tags.css?v=20261111-1" />
   <link rel="stylesheet" href="/assets/styles/search-trends.css?v=20261116-search-polish" />
@@ -1988,6 +1988,9 @@
   </style>
   <link rel="stylesheet" href="/assets/styles/ontology-workspace.css?v=20261116-default-menu" />
 <link rel="stylesheet" href="/assets/styles/relation-gallery.css?v=20261120-gallery">
+<link rel="stylesheet" href="/assets/styles/knowledge-image-viewer.css?v=20261124">
+<script defer src="/assets/scripts/knowledge-image-viewer.js?v=20261124"></script>
+<link rel="stylesheet" href="/assets/styles/knowledge-figure.css?v=20261124-image-title">
 </head>
 
 <body>
@@ -7274,7 +7277,11 @@
       const source = document.createElement("button");
       source.type = "button";
       source.dataset.detailBreadcrumbSource = "true";
-      source.textContent = detailSourceViewLabel(normalizeViewModeInput(window.kbDetailReturnState?.view || "table"));
+      const returnState = window.kbDetailReturnState || {};
+      source.textContent = returnState.label || detailSourceViewLabel(normalizeViewModeInput(returnState.view || "table"));
+      const back = document.getElementById('btnDetailBack');
+      if (back) { const path = window.kbDetailBreadcrumbs || []; const text = path.length ? '返回 ' + (path.at(-1).label || '上一条知识') : '返回 ' + source.textContent; back.title=text; back.setAttribute('aria-label',text); }
+      if (returnState.contextLabel) { host.appendChild(source); appendSeparator(); const context=document.createElement('button'); context.type='button'; context.dataset.detailBreadcrumbSource='true';context.textContent=returnState.contextLabel;context.title=context.textContent;host.appendChild(context); } else
       host.appendChild(source);
       const path = Array.isArray(window.kbDetailBreadcrumbs) ? window.kbDetailBreadcrumbs : [];
       path.forEach((item, index) => {
@@ -7367,7 +7374,14 @@
         const previousRoute = typeof getRouteStateFromHash === "function"
           ? getRouteStateFromHash()
           : { view: "", node: "" };
+        const sourceUrl = new URL(location.href);
+        const feed = sourceUrl.searchParams.get('home_feed') || window.getProjectPageRoute?.().feed;
+        const context = window.getDetailSourceContext?.(previousMode) || {};
         window.kbDetailReturnState = {
+          url: sourceUrl.href,
+          label: previousMode === 'app_home' ? ({news:'最新',popular:'热门','for-you':'推荐'}[feed] || '应用首页') : detailSourceViewLabel(previousMode),
+          ...context,
+          scrollPositions: ['.home-discovery-main','#topicsPage','#applicationSearchPanel','#knowledgeExplorePage'].map(selector => ({selector,top:document.querySelector(selector)?.scrollTop || 0})),
           view: detailReturnView || previousMode,
           nodeId: normalizeViewModeInput(previousRoute?.view || "") === previousMode
             ? String(previousRoute?.node || "").trim()
@@ -7999,9 +8013,15 @@
           : window.kbViewMode === "knowledge_detail" ? "app_home" : "table";
         const returnNodeId = String(returnState.nodeId || "").trim();
         const nodeAwareReturnViews = ["entry", "table", "vis", "report_detail"];
+        window.kbRestoringDetailSource = returnState;
+        if (returnState.url) { const sourceUrl=new URL(returnState.url,location.origin);if(sourceUrl.origin===location.origin)history.replaceState(history.state,'',sourceUrl); }
         setViewMode(targetView, nodeAwareReturnViews.includes(targetView) && returnNodeId
           ? { targetNodeId: returnNodeId }
           : {});
+        requestAnimationFrame(() => {
+          for (const item of returnState.scrollPositions || []) { const element=document.querySelector(item.selector);if(element)element.scrollTop=item.top; }
+        });
+        window.kbRestoringDetailSource = null;
         if (targetView !== "table") return;
         const scrollTop = Number(
           returnState.scrollTop || window.kbTableListScrollTop || 0,
@@ -17748,14 +17768,14 @@
   <script src="/assets/scripts/wiki-clipboard.js?v=20261105-html-paste"></script>
   <script src="/assets/scripts/knowledge-views.js?v=20261112-1"></script>
   <script src="/assets/scripts/account-history.js?v=20261112-view-counts"></script>
-  <script src="/assets/scripts/detail-panel.js?v=20261119-remove-image-hint"></script>
+  <script src="/assets/scripts/detail-panel.js?v=20261124-image-title"></script>
   <script src="/assets/scripts/graph-classification.js?v=20261012"></script>
   <script src="/assets/scripts/graph-details.js?v=20261012-classification"></script>
   <script src="/assets/scripts/knowledge-interactions.js?v=20260904-1"></script>
   <script src="/assets/scripts/knowledge-access.js?v=20261011-member-access"></script>
   <script src="/assets/scripts/applications.js?v=20261116-create-form"></script>
   <script src="/assets/scripts/user-management.js?v=20260915-1"></script>
-  <script src="/assets/scripts/home-media-viewer.js?v=20261119-random-shorts"></script>
+  <script src="/assets/scripts/home-media-viewer.js?v=20261120-category-hierarchy"></script>
   <script src="/assets/scripts/shorts-page.js?v=20261117-category-feed"></script>
   <script src="/assets/scripts/manual-classify.js?v=20260929-existing-classes"></script>
   <script src="/assets/scripts/knowledge-context-menu.js?v=20261116-utf8-fix"></script>
@@ -17763,7 +17783,7 @@
   <script src="/assets/scripts/home-waterfall.js?v=20261111-compact-columns"></script>
   <script src="/assets/scripts/home-sidebar.js?v=20261112-logo-click-double"></script>
   <script src="/assets/scripts/news-timeline-layout.js?v=20261112-packed-cards"></script>
-  <script src="/assets/scripts/application-pages.js?v=20261120-topics"></script>
+  <script src="/assets/scripts/application-pages.js?v=20261124-news-updated"></script>
   <script src="/assets/scripts/knowledge-learning.js?v=20261111-copy-cleanup"></script>
   <script src="/assets/scripts/knowledge-relation-page.js?v=20261111-close-collapses"></script>
   <script src="/assets/scripts/knowledge-big-bang.js?v=20261112-view-counts"></script>
@@ -17948,7 +17968,7 @@
   <script type="module" src="/assets/scripts/pipeline-ui.js?v=20261010-merge3"></script>
   <script src="/assets/scripts/ui-shell.js?v=20261028-route-scope"></script>
 <script src="/assets/scripts/topic-charts.js?v=20261120-reference-final"></script>
-<script src="/assets/scripts/topics.js?v=20261120-fluid-width"></script>
+<script src="/assets/scripts/topics.js?v=20261124-navigation"></script>
 </body>
 
 </html>
