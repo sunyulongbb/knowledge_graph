@@ -23,3 +23,12 @@
 #detailPanel #wikiTopMedia .detail-image-title-input{display:block;box-sizing:border-box;width:100%;min-height:38px;margin:0 0 9px;padding:8px 11px;font-family:inherit;font-size:14px;font-weight:500;line-height:1.5;color:var(--fg);background:var(--surface-0);border:1px solid var(--border-strong);border-radius:2px}
 #detailPanel #wikiTopMedia .detail-image-title-input:focus{outline:1px solid var(--accent);border-color:var(--accent)}
 #detailPanel #wikiTopMedia .detail-image-title-input::placeholder{color:var(--muted);font-weight:400}
+/* Center figure text and thumbnails while keeping overflow reachable. */
+#detailPanel #wikiTopMedia .detail-image-caption{text-align:center}
+#detailPanel #wikiTopMedia .detail-image-caption-title,
+#detailPanel #wikiTopMedia .detail-image-caption p{text-align:center;margin-inline:auto}
+#detailPanel #wikiTopMedia .detail-image-thumbnails{display:flex;justify-content:safe center;align-items:center;width:100%;overflow-x:auto;flex-wrap:nowrap}
+#detailPanel #wikiTopMedia .detail-image-thumbnail{flex-grow:0;flex-shrink:0}
+#detailPanel #wikiTopMedia .detail-image-caption:has(textarea){text-align:left}
+#detailPanel #wikiTopMedia .detail-image-title-input,
+#detailPanel #wikiTopMedia .detail-image-caption textarea{text-align:left}
