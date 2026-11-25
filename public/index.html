@@ -77,7 +77,7 @@
     ]).then(() => true);
   </script>
   <link rel="stylesheet" href="/assets/styles/app.css?v=20261120-category-hierarchy" />
-  <link rel="stylesheet" href="/assets/styles/home-discovery.css?v=20261124-figure-visible" />
+  <link rel="stylesheet" href="/assets/styles/home-discovery.css?v=20261125-detail-graph" />
   <link rel="stylesheet" href="/assets/styles/shorts-page.css?v=20261117-creator-avatar-slide" />
   <link rel="stylesheet" href="/assets/styles/knowledge-card-tags.css?v=20261111-1" />
   <link rel="stylesheet" href="/assets/styles/search-trends.css?v=20261116-search-polish" />
@@ -3775,6 +3775,7 @@
                 <nav id="detailBreadcrumbs" class="detail-breadcrumbs" aria-label="详情访问路径"></nav>
               </div>
               <div class="detail-entity-navigation" role="group" aria-label="切换实体">
+                <button id="btnDetailOpenGraph" class="btn detail-open-graph" type="button" title="查看当前知识的关系图"><i class="fa-solid fa-diagram-project" aria-hidden="true"></i><span>关系图</span></button>
                 <button id="btnDetailDeleteKnowledge" class="btn danger" type="button" hidden><i class="fa-solid fa-trash-can" aria-hidden="true"></i> 删除知识</button>
                 <button id="btnDetailPrevious" class="btn" type="button" disabled><i class="fa-solid fa-chevron-left" aria-hidden="true"></i> 上一个</button>
                 <button id="btnDetailNext" class="btn" type="button" disabled>下一个 <i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>
@@ -7988,6 +7989,12 @@
     if (btnViewClean)
       btnViewClean.addEventListener("click", (e) => { e.preventDefault(); setViewMode("clean"); });
 
+    document.getElementById('btnDetailOpenGraph')?.addEventListener('click', () => {
+      const id=String(window.kbActiveDetailRouteId || window.kbActiveDetailNodeId || window.kbDetailCurrentCrumb?.id || '').trim();
+      if (!id) return;
+      const view=window.kbViewMode === 'knowledge_detail' ? 'knowledge_graph' : 'vis';
+      setViewMode(view, {targetNodeId:id});
+    });
     if (btnDetailBack)
       btnDetailBack.addEventListener("click", (e) => {
         e.preventDefault();

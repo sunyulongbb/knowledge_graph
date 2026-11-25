@@ -360,3 +360,6 @@ html body #applicationHomePanel .home-settings-menu .home-workspace-chevron{disp
 #wikiTopMedia .detail-carousel-slide>.detail-image-caption-edit:hover{background:var(--surface-0);color:var(--accent);transform:none}
 #wikiTopMedia .detail-image-thumbnails{margin-top:10px}
 @media(max-width:600px){#wikiTopMedia>.detail-carousel-container{height:clamp(220px,35vh,360px)}#wikiTopMedia .detail-image-caption{padding:9px 2px 11px}#wikiTopMedia .detail-image-caption p{font-size:12px}}
+#detailPanel .detail-open-graph{display:inline-flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap;color:var(--accent);border-color:var(--border);background:var(--surface-0)}
+#detailPanel .detail-open-graph:hover{background:var(--surface-1)}
+#detailPanel .detail-open-graph i{margin:0}
