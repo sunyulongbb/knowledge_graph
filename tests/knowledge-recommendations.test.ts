@@ -96,3 +96,24 @@ test('shorts rank unseen videos first and diversify adjacent categories',()=>{
   expect(new Set(result.map(node=>node.id)).size).toBe(nodes.length);
   expect(result).toEqual(rankRecommendations(nodes,[{node:nodes[0]!,weight:0,seen:true}],'shorts',{surface:'shorts',shown:new Set(['shown'])}));
 });
+
+test('homepage recommendations enforce classified candidates and final results', async () => {
+  const h=setup();await h.call('classified-home');
+  expect(h.calls.filter(url=>url.searchParams.has('order')).every(url=>url.searchParams.get('defined_class_only')==='1')).toBe(true);
+  expect(h.calls.filter(url=>url.searchParams.has('ids')).at(-1)!.searchParams.get('defined_class_only')).toBe('1');
+});
+
+test('shorts place all video knowledge before image-only items even when videos were seen', () => {
+  const video = {...candidate('v','science'), videos:['/v.webm']};
+  const image = {...candidate('i','art'), images:['/i.jpg']};
+  const ranked=rankRecommendations([image,video],[{node:video,weight:0,seen:true},{node:image,weight:100}],'video-priority',{surface:'shorts',shown:new Set(['v'])});
+  expect(ranked.map(node=>node.id)).toEqual(['v','i']);
+});
+
+test('shorts order video then image then text regardless of interest score', () => {
+  const video = {...candidate('video','v'),videos:['/video.webm']};
+  const image = {...candidate('image','i'),images:['/image.jpg']};
+  const text = candidate('text','t');
+  const ranked=rankRecommendations([text,image,video],[{node:text,weight:10000},{node:image,weight:1000},{node:video,weight:0,seen:true}],'media-order',{surface:'shorts',shown:new Set(['video'])});
+  expect(ranked.map(node=>node.id)).toEqual(['video','image','text']);
+});

@@ -198,8 +198,8 @@ export function createApplicationHandler(db: Database, getUser: (req: Request) =
       db.run("INSERT INTO projects(name,title,description,file,image,theme_color,tags,link,owner_user_id,banner_image) VALUES(?,?,?,'app.sqlite',?,'#ff7a2b','[]',?,?,?)", [name, title, description, String(body.image || ''), String(body.link || ''), user.id, String(body.banner_image || '').trim()]);
       const created = projectBy(name);
       try {
-        importOntologies(db, defaultCoreOntology, Number(created.id));
-        await cloneOptions.initializeOntology?.(name, Number(created.id), defaultCoreOntology);
+        // New applications start with an empty ontology.
+
       } catch (cause) {
         db.transaction(() => {
           db.run('DELETE FROM ontology_properties WHERE ontology_id IN (SELECT id FROM ontologies WHERE project_id = ?)', [created.id]);

@@ -187,6 +187,29 @@ test('entity import keeps existing local media URLs and ordinary web links uncha
   expect(localized.input).toEqual(input);
 });
 
+test('entity updates preserve omitted images and merge duplicate relation values', () => {
+  const db = fixture();
+  try {
+    importEntity(db, { version: 1, entity: {
+      id: 'media-and-relations', name: '知识', type: '人物', images: ['/old.jpg'],
+      attributes: [{ id: 'related', name: '关联', datatype: 'wikibase-item', value: [{ id: 'one' }, { id: 'one' }, { id: 'two' }] }],
+    } }, 1);
+    importEntity(db, { version: 1, entity: {
+      id: 'media-and-relations', name: '知识更新', type: '人物',
+      attributes: [{ id: 'related', name: '关联', datatype: 'wikibase-item', value: [{ id: 'two' }, { id: 'three' }, { id: 'three' }] }],
+    } }, 1);
+
+    expect(JSON.parse((db.query("SELECT images FROM nodes WHERE id='media-and-relations'").get() as any).images)).toEqual(['/old.jpg']);
+    const relation = JSON.parse((db.query("SELECT value FROM attributes WHERE node_id='media-and-relations' AND key='related'").get() as any).value);
+    expect(relation.map((item: any) => item.id)).toEqual(['one', 'two', 'three']);
+
+    importEntity(db, { version: 1, entity: { id: 'media-and-relations', name: '知识更新', type: '人物', images: ['/new.jpg', '/old.jpg'] } }, 1);
+    expect(JSON.parse((db.query("SELECT images FROM nodes WHERE id='media-and-relations'").get() as any).images)).toEqual(['/old.jpg', '/new.jpg']);
+    importEntity(db, { version: 1, entity: { id: 'media-and-relations', name: '知识更新', type: '人物', images: [] } }, 1);
+    expect(JSON.parse((db.query("SELECT images FROM nodes WHERE id='media-and-relations'").get() as any).images)).toEqual(['/old.jpg', '/new.jpg']);
+  } finally { db.close(); }
+});
+
 test('entity import media uses the project shared uploads directories', () => {
   const source = readFileSync('src/server/entity-import.ts', 'utf8');
   expect(source).toContain("resolve(import.meta.dir, '..', '..', 'uploads', config.folder)");

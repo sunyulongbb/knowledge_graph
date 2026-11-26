@@ -7,6 +7,81 @@
     return url.toString();
   };
   const activeId = () => String(byId("detailPanel")?.dataset.entityId || window.kbActiveDetailNodeId || "").trim();
+  const wikiSyncAnchor = byId('btnEditWiki');
+  if (wikiSyncAnchor) {
+    const button = document.createElement('button');
+    button.type = 'button'; button.className = 'btn icon';
+    button.title = '同步 Wikipedia 百科'; button.setAttribute('aria-label', button.title);
+    button.innerHTML = '<i class="fa-brands fa-wikipedia-w" aria-hidden="true"></i>';
+    wikiSyncAnchor.before(button);
+    button.onclick = async () => {
+      const id = activeId(); if (!id) return;
+      const dialog = document.createElement('dialog');
+      dialog.style.cssText = 'width:min(600px,90vw);padding:24px;border-radius:16px';
+      dialog.innerHTML = '<h3>同步 Wikipedia 百科</h3><progress max="100" value="0" style="width:100%"></progress><pre role="log" aria-live="polite" style="white-space:pre-wrap;max-height:320px;overflow:auto"></pre><button type="button">关闭</button><button type="button" data-refresh hidden>刷新查看百科</button>';
+      document.body.append(dialog); dialog.showModal();
+      let finished = false;
+      dialog.querySelector('button').onclick = () => { dialog.close(); if (finished) dialog.remove(); };
+      dialog.querySelector('[data-refresh]').onclick = () => location.reload();
+      const log = text => { const el = dialog.querySelector('pre'); el.textContent += text + '\n'; el.scrollTop = el.scrollHeight; };
+      button.disabled = true;
+      try {
+        const request = overwrite => fetch(apiUrl('/api/kb/entity/sync-wikipedia'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, overwrite }) });
+        let response = await request(false);
+        if (response.status === 409) {
+          const data = await response.json();
+          if (data.code !== 'WIKI_OVERWRITE_REQUIRED') throw new Error(data.error || '同步冲突');
+          if (!window.confirm('知识页面已有内容。是否使用 Wikipedia 百科覆盖现有 Markdown？')) { log('已取消，原内容保留'); return; }
+          response = await request(true);
+        }
+        if (!response.ok) { const data = await response.json(); throw new Error(data.error || '同步失败'); }
+        const reader = response.body.getReader(), decoder = new TextDecoder(); let buffer = '';
+        while (true) {
+          const { value, done } = await reader.read(); buffer += decoder.decode(value, { stream: !done });
+          const lines = buffer.split('\n'); buffer = lines.pop();
+          for (const line of lines) if (line.trim()) {
+            const entry = JSON.parse(line); log(entry.message);
+            if (!entry.error) dialog.querySelector('progress').value = entry.progress;
+            if (entry.done) dialog.querySelector('[data-refresh]').hidden = false;
+          }
+          if (done) break;
+        }
+      } catch (error) { log('错误：' + error.message); }
+      finally { button.disabled = false; finished = true; if (!dialog.open) dialog.remove(); }
+    };
+  }
+  const mediaAnchor = byId('btnEditWiki');
+  if (mediaAnchor) {
+    const button = document.createElement('button');
+    button.className = 'btn icon'; button.type = 'button';
+    button.title = '同步媒体文件'; button.setAttribute('aria-label', '同步媒体文件');
+    button.innerHTML = '<i class="fa-solid fa-cloud-arrow-down" aria-hidden="true"></i>';
+    mediaAnchor.before(button);
+    button.onclick = async () => {
+      const id = activeId(); if (!id) return;
+      const dialog = document.createElement('dialog');
+      dialog.style.cssText = 'width:min(600px,90vw);padding:24px;border-radius:16px';
+      dialog.innerHTML = '<h3>同步媒体文件</h3><progress max="100" value="0" style="width:100%"></progress><pre role="log" aria-live="polite" style="white-space:pre-wrap;max-height:320px;overflow:auto"></pre><button type="button">关闭</button>';
+      document.body.append(dialog); dialog.showModal();
+      let finished = false;
+      dialog.querySelector('button').onclick = () => { dialog.close(); if (finished) dialog.remove(); };
+      const log = text => { const el = dialog.querySelector('pre'); el.textContent += text + '\n'; el.scrollTop = el.scrollHeight; };
+      button.disabled = true;
+      try {
+        const response = await fetch(apiUrl('/api/kb/entity/sync-media'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+        if (!response.ok) { const data = await response.json(); throw new Error(data.error || '同步失败'); }
+        const reader = response.body.getReader(), decoder = new TextDecoder(); let buffer = '';
+        while (true) {
+          const { value, done } = await reader.read(); buffer += decoder.decode(value, { stream: !done });
+          const lines = buffer.split('\n'); buffer = lines.pop();
+          for (const line of lines) if (line.trim()) { const entry = JSON.parse(line); log(entry.message); if (!entry.error) dialog.querySelector('progress').value = entry.progress; }
+          if (done) break;
+        }
+        log('关闭弹框后刷新详情页，可查看已保存的媒体。');
+      } catch (error) { log('错误：' + error.message); }
+      finally { button.disabled = false; finished = true; if (!dialog.open) dialog.remove(); }
+    };
+  }
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
   const setMessage = (text, error) => { const el = byId("knowledgeCommentMessage"); if (el) { el.textContent = text || ""; el.style.color = error ? "var(--danger, #dc2626)" : ""; } };
   function updateCounts(data) {

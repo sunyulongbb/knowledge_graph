@@ -61,7 +61,8 @@
       activeCategoryName = String(route.get('category') || '').trim();
     }
     window.kbShortsLaunch = null;
-    const nodes = Array.isArray(launch.nodes) ? launch.nodes : [];
+    const mediaTier = node => { const media = window.homeKnowledgeMediaViewer.collectMedia(node); return media.some(item => item.kind === 'video') ? 2 : media.some(item => item.kind === 'image') ? 1 : 0; };
+    const nodes = Array.isArray(launch.nodes) ? [...launch.nodes].sort((a,b) => mediaTier(b)-mediaTier(a)) : [];
     if (activeCategoryId) setTimeout(() => {
       if (token === version && window.kbViewMode === 'shorts') writeShortsRoute(id || activeId);
     }, 0);

@@ -1,6 +1,7 @@
 ﻿/* Detail figures use the same image-first composition as the media viewer. */
-#detailPanel #wikiTopMedia{display:flex;flex-direction:column;width:100%;height:auto!important;max-height:none!important;overflow:visible!important;aspect-ratio:auto!important;background:var(--surface-0);border:1px solid var(--border);box-sizing:border-box}
-#detailPanel #wikiTopMedia>.detail-carousel-container{width:100%;height:clamp(300px,65vh,760px)!important;max-height:none!important;aspect-ratio:auto!important;border-radius:0!important;background:#111;overflow:hidden}
+#detailPanel .detail-top-media-stage{min-width:0}
+#detailPanel #wikiTopMedia{display:flex;flex-direction:column;width:100%;min-width:0;height:auto!important;max-height:none!important;overflow:visible!important;aspect-ratio:auto!important;background:var(--surface-0);border:1px solid var(--border);box-sizing:border-box}
+#detailPanel #wikiTopMedia>.detail-carousel-container{width:100%;min-width:0;box-sizing:border-box;height:clamp(300px,65vh,760px)!important;max-height:none!important;aspect-ratio:auto!important;border-radius:0!important;background:#111;overflow:hidden}
 #detailPanel #wikiTopMedia .detail-carousel-slides,#detailPanel #wikiTopMedia .detail-carousel-slide{height:100%;background:#111}
 #detailPanel #wikiTopMedia .detail-carousel-slide>img{width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain;border-radius:0!important;background:#111;cursor:zoom-in}
 #detailPanel #wikiTopMedia .detail-image-caption-host{box-sizing:border-box;width:100%;background:var(--surface-0);border-bottom:1px solid var(--border)}
@@ -27,7 +28,13 @@
 #detailPanel #wikiTopMedia .detail-image-caption{text-align:center}
 #detailPanel #wikiTopMedia .detail-image-caption-title,
 #detailPanel #wikiTopMedia .detail-image-caption p{text-align:center;margin-inline:auto}
-#detailPanel #wikiTopMedia .detail-image-thumbnails{display:flex;justify-content:safe center;align-items:center;width:100%;overflow-x:auto;flex-wrap:nowrap}
+#detailPanel #wikiTopMedia .detail-image-thumbnails{display:flex;justify-content:safe center;align-items:center;width:100%;min-width:0;box-sizing:border-box;overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none;user-select:none;-webkit-user-select:none}
+#detailPanel #wikiTopMedia .detail-image-thumbnails::-webkit-scrollbar{display:none}
+#detailPanel #wikiTopMedia .detail-image-thumbnails.is-draggable,
+#detailPanel #wikiTopMedia .detail-image-thumbnails.is-draggable .detail-image-thumbnail-select{cursor:grab}
+#detailPanel #wikiTopMedia .detail-image-thumbnails.is-dragging{cursor:grabbing;scroll-snap-type:none;scroll-behavior:auto}
+#detailPanel #wikiTopMedia .detail-image-thumbnails.is-dragging .detail-image-thumbnail-select{cursor:grabbing;pointer-events:none;transition:none;transform:none!important;box-shadow:none!important}
+#detailPanel #wikiTopMedia .detail-image-thumbnails.is-dragging .detail-image-thumbnail-delete{pointer-events:none}
 #detailPanel #wikiTopMedia .detail-image-thumbnail{flex-grow:0;flex-shrink:0}
 #detailPanel #wikiTopMedia .detail-image-caption:has(textarea){text-align:left}
 #detailPanel #wikiTopMedia .detail-image-title-input,

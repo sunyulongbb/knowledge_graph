@@ -544,7 +544,7 @@ export class EnterpriseKnowledgeStore {
       OPTIONS { order: 'bfs', uniqueVertices: 'path', uniqueEdges: 'path' }
       FILTER NOT blocked AND neighbor._id != @vertex
       LIMIT @limit
-      RETURN { vertices: path.vertices, edges: path.edges }`, {
+      RETURN { vertices: (FOR vertex IN path.vertices RETURN UNSET(vertex, 'wiki_md')), edges: path.edges }`, {
       vertex, limit: maximum + 1, full: Boolean(user?.fullAccess), admin: user?.role === 'admin', uid: user?.id || -1,
       projects: [...(user?.ownedProjectIds || []), ...(user?.memberProjectIds || [])],
     });

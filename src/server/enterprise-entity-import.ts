@@ -1,6 +1,7 @@
+import { applyWikidataSchema } from './wikidata-schema.ts';
 import { randomUUID } from 'node:crypto';
 import { edgeDocuments } from './arangodb.ts';
-import { EntityImportError, parseEntityImports } from './entity-import.ts';
+import { EntityImportError, mergeEntityRelationValues, parseEntityImports } from './entity-import.ts';
 import { canUseArangoKnowledge, cleanKnowledgeId, KnowledgeStoreError, localizedText } from './enterprise-knowledge.ts';
 import type { EnterpriseKnowledgeStore, ImportSchema } from './enterprise-knowledge.ts';
 import type { KnowledgeUser } from './knowledge-access.ts';
@@ -12,11 +13,16 @@ const array = (value: any): any[] => {
   if (Array.isArray(value)) return value;
   try { const parsed = JSON.parse(value || '[]'); return Array.isArray(parsed) ? parsed : []; } catch { return []; }
 };
+const storedValue = (value: unknown) => {
+  if (typeof value !== 'string') return value;
+  try { return JSON.parse(value); } catch { return value; }
+};
 
 /** Import knowledge directly into one ArangoDB transaction; SQLite is never opened. */
 export async function importEnterpriseEntities(
   store: EnterpriseKnowledgeStore, database: string, projectId: number, input: unknown, user: KnowledgeUser,
   legacySchema?: () => Partial<ImportSchema> | undefined,
+  options: { updateTrees?: boolean; updateCategories?: boolean; referenceTrees?: boolean } = {},
 ) {
   const entities = parseEntityImports(input);
   const ids = new Set<string>();
@@ -62,7 +68,7 @@ export async function importEnterpriseEntities(
     }
     const ensureOntology = (definition: Doc) => {
       let ontology = (definition.id && schema.ontologies.find(row => row.id === definition.id))
-        || schema.ontologies.find(row => key(row.name) === key(definition.name));
+        || schema.ontologies.find(row => key(row.name) === key(definition.name) || array(row.alias).some(alias => key(alias) === key(definition.name)));
       const created = !ontology;
       if (!ontology) {
         ontology = { ...definition, id: definition.id || `ontology/${randomUUID()}`, alias: [definition.name],
@@ -74,9 +80,17 @@ export async function importEnterpriseEntities(
     };
     const results: Doc[] = [];
     for (const entity of entities) {
-      const { ontology, created } = ensureOntology(entity.ontology);
+      const wikidata = /^Q[1-9][0-9]*$/.test(entity.id) && (entity.link.startsWith('https://www.wikidata.org/wiki/') || entity.ontology.name === 'Wikidata 实体');
+      const modeled = wikidata && options.updateTrees !== false ? applyWikidataSchema(schema, entity, projectId, options.updateCategories !== false) : null;
+      if (modeled?.memberships.length) {
+        const primary = modeled.memberships[0]!;
+        entity.ontology = { id: primary.id, name: primary.name, description: '' };
+      }
+      const { ontology, created } = options.updateTrees === false
+        ? { ontology: { id: previous.get(entity.id)?.type_id || null }, created: false }
+        : ensureOntology(entity.ontology);
       let categoriesCreated = 0, categoriesUpdated = 0;
-      const categoryIds: string[] = [], categoryTags: string[] = [];
+      const categoryIds: string[] = modeled?.categoryIds || [], categoryTags: string[] = [];
       const category = (definition: typeof entity.categories[number], parentId: string | null) => {
         let row = schema.classes.find(row => (row.parent_id || null) === parentId && key(row.name) === key(definition.name));
         if (row) {
@@ -93,13 +107,16 @@ export async function importEnterpriseEntities(
         categoryTags.push(...array(row.tags));
         for (const child of definition.children) category(child, row.id);
       };
-      for (const definition of entity.categories) category(definition, null);
+      if (options.updateTrees !== false && options.updateCategories !== false) for (const definition of entity.categories) category(definition, null);
       nodes.set(entity.id, store.patch(previous.get(entity.id)!, {
         id: entity.id, name: entity.name, description: entity.description, aliases: entity.aliases,
         typeId: ontology.id, tags: [...new Map([...entity.tags, ...categoryTags].map(tag => [key(tag), tag])).values()],
-        images: entity.images, videos: entity.videos, pdf: entity.pdf, link: entity.link, visibility: entity.visibility,
-        ...(entity.hasCategories ? { categoryIds } : {}),
+        ...(entity.hasImages ? { images: entity.images, appendImages: true } : {}),
+        ...(entity.hasVideos ? { videos: entity.videos } : {}), pdf: entity.pdf, link: entity.link, visibility: entity.visibility,
+        ...((options.updateTrees !== false && options.updateCategories !== false && (entity.hasCategories || modeled)) ? { categoryIds } : {}),
+        ...(modeled ? { type_ids: modeled.memberships.map((row: Doc) => row.id) } : {}),
       }, projectId, user));
+      if (modeled) nodes.get(entity.id)!.type_ids = modeled.memberships.map((row: Doc) => row.id);
       results.push({ entityId: entity.id, entityCreated: !previous.get(entity.id), entityUpdated: Boolean(previous.get(entity.id)),
         ontologyId: ontology.id, ontologyCreated: created, propertiesCreated: 0, attributesCreated: 0, attributesUpdated: 0,
         referencedEntitiesCreated: 0, referencedEntitiesMatched: 0, categoriesCreated, categoriesUpdated, categoriesLinked: categoryIds.length });
@@ -135,7 +152,7 @@ export async function importEnterpriseEntities(
         else {
           const referenceId = id || `reference-${randomUUID()}`;
           if (referenceId.length > 512) throw new EntityImportError('无效的引用实体 ID');
-          const { ontology } = ensureOntology({ id: 'ontology/wikibase-item', name: '实体条目', description: '由实体导入中的 wikibase-item 属性值自动创建' });
+          const { ontology } = options.referenceTrees === false || options.updateTrees === false ? { ontology: { id: null } } : ensureOntology({ id: 'ontology/wikibase-item', name: '实体条目', description: '由实体导入中的 wikibase-item 属性值自动创建' });
           target = store.patch(null, { id: referenceId, name: labels[0] || referenceId, typeId: ontology.id,
             description: `由实体属性引用自动创建（${referenceId}）`, visibility: entity.visibility,
             link: `https://www.wikidata.org/wiki/${encodeURIComponent(referenceId)}` }, projectId, user);
@@ -149,7 +166,7 @@ export async function importEnterpriseEntities(
       const replacements = new Map<string, Parameters<typeof edgeDocuments>[1][number]>();
       for (const attribute of entity.attributes) {
         let property = (attribute.id && schema.properties.find(row => row.id === attribute.id))
-          || schema.properties.find(row => key(row.name) === key(attribute.name));
+          || schema.properties.find(row => [row.name, ...array(row.alias)].some(name => key(name) === key(attribute.name) || key(name) === key(attribute.name.replace(/\s*\(P[0-9]+\)$/, ''))));
         if (!property) {
           property = { id: attribute.id || `property/${randomUUID()}`, name: attribute.name, alias: [attribute.name],
             description: attribute.description, project_id: projectId };
@@ -157,10 +174,22 @@ export async function importEnterpriseEntities(
           result.propertiesCreated++;
         }
         Object.assign(property, { datatype: attribute.datatype, valuetype: valueTypeFor(attribute.datatype), status: 'active' });
-        if (!schema.ontology_properties.some(row => row.ontology_id === result.ontologyId && row.property_id === property.id)) {
+        if (options.updateTrees !== false && result.ontologyId && !schema.ontology_properties.some(row => row.ontology_id === result.ontologyId && row.property_id === property.id)) {
           schema.ontology_properties.push({ ontology_id: result.ontologyId, property_id: property.id });
         }
-        const value = normalizeValue(attribute.datatype, attribute.datatype === 'wikibase-item' ? await resolveReference(attribute.value) : attribute.value);
+        for (const typeId of options.updateTrees === false ? [] : nodes.get(entity.id)!.type_ids || []) {
+          if (!schema.ontology_properties.some(row => row.ontology_id === typeId && row.property_id === property.id)) schema.ontology_properties.push({ ontology_id: typeId, property_id: property.id });
+        }
+        let attributeValue = attribute.datatype === 'wikibase-item' ? await resolveReference(attribute.value) : attribute.value;
+        if (attribute.datatype === 'wikibase-item') {
+          const previousValues = replacements.has(property.id)
+            ? [storedValue(replacements.get(property.id)!.value)]
+            : attrs.filter(attr => attr.key === property.id).map(attr => storedValue(attr.value));
+          const validPrevious = mergeEntityRelationValues(previousValues).filter(value => value && typeof value === 'object' && String((value as any).id || '').trim());
+          const merged = mergeEntityRelationValues(validPrevious, attributeValue);
+          attributeValue = Array.isArray(attributeValue) || previousValues.some(Array.isArray) || merged.length > 1 ? merged : merged[0];
+        }
+        const value = normalizeValue(attribute.datatype, attributeValue);
         if (existingKeys.has(property.id) || replacements.has(property.id)) result.attributesUpdated++;
         else result.attributesCreated++;
         replacements.set(property.id, { id: `attr/${randomUUID()}`, node_id: entity.id, key: property.id,

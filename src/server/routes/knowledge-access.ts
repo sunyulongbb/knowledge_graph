@@ -148,7 +148,7 @@ export async function guardKnowledgeRequest(req: Request, url: URL, method: stri
   }
   if (path === '/api/kb/nodes/engagement') return check(body.id, 'read');
   if (path === '/api/kb/entity/resolve') return null;
-  if (path === '/api/kb/entity/import') {
+  if (['/api/kb/entity/import', '/api/kb/entity/import-wikidata'].includes(path)) {
     const appSlug = url.searchParams.get('db');
     const project = appSlug ? getProjectByIdentifier(appSlug) : null;
     return project && applicationPermissions(db, user, project).member ? null : response('仅应用成员可以导入实体', 403);

@@ -96,11 +96,11 @@ export function createAccountActivity(deps: { db: Database; store: EnterpriseKno
       const user = deps.getUser(req); if (!user || user.id <= 0 || user.status === 'disabled') throw new KnowledgeStoreError('请先登录',401);
       const project = deps.getProject(url.searchParams.get('db') || 'default'); if (!project) throw new KnowledgeStoreError('应用不存在',404);
       if (joinedTypesRoute) {
+        const availableClasses: Row[] = store ? (await store.importSchema(project.name))?.classes || [] : db.query('SELECT id,name FROM classes WHERE project_id=? OR project_id IS NULL').all(project.id) as Row[];
+        const classNames = new Map(availableClasses.map(row => [String(row.id), String(row.name || row.id)]));
         if (req.method === 'GET') {
-          const types = db.query(`SELECT saved.type_id AS id, COALESCE(c.name,saved.type_name) AS name
-            FROM account_joined_types saved
-            JOIN classes c ON c.id=saved.type_id AND (c.project_id=? OR c.project_id IS NULL)
-            WHERE saved.user_id=? AND saved.project_id=? ORDER BY saved.sort_order,saved.type_id`).all(project.id,user.id,project.id) as Row[];
+          const saved = db.query('SELECT type_id AS id FROM account_joined_types WHERE user_id=? AND project_id=? ORDER BY sort_order,type_id').all(user.id,project.id) as Row[];
+          const types = saved.filter(row => classNames.has(row.id)).map(row => ({ id: row.id, name: classNames.get(row.id) }));
           return privateJson({ types });
         }
         if (req.method !== 'PUT') throw new KnowledgeStoreError('不支持的操作',405);
@@ -108,9 +108,7 @@ export function createAccountActivity(deps: { db: Database; store: EnterpriseKno
         if (!body || !Array.isArray(body.typeIds) || body.typeIds.length > 200) throw new KnowledgeStoreError('类型列表无效');
         const typeIds: string[] = Array.from(new Set<string>((body.typeIds as unknown[]).map(value => String(value || '').trim())));
         if (typeIds.some((id: string) => !id || id.length > 256)) throw new KnowledgeStoreError('类型 ID 无效');
-        const classes: Row[] = typeIds.length
-          ? db.query(`SELECT id,name FROM classes WHERE id IN (${typeIds.map(() => '?').join(',')}) AND (project_id=? OR project_id IS NULL)`).all(...typeIds,project.id) as Row[]
-          : [];
+        const classes: Row[] = typeIds.filter(id => classNames.has(id)).map(id => ({ id, name: classNames.get(id) }));
         if (classes.length !== typeIds.length) throw new KnowledgeStoreError('类型不存在或不属于当前应用',400);
         const byId = new Map(classes.map(row => [String(row.id),String(row.name || row.id)]));
         db.transaction(() => {

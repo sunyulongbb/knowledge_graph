@@ -108,11 +108,11 @@ test('array import commits graph and schema before ES indexing without immediate
   expect(node.owner_user_id).toBe(42); expect(node.class_ids).toHaveLength(2); expect(JSON.parse(node.tags)).toContain('分类标签');
   const attrs = await f.store.attributes('app', 'a');
   const refs = JSON.parse(attrs.find(row => row.key === 'related')!.value);
-  expect(refs[0].id).toBe('b'); expect(refs[1].id).toBe(refs[2].id);
+  expect(refs).toHaveLength(2); expect(refs[0].id).toBe('b'); expect(refs[1].id).toBeTruthy();
   const schema = await f.store.importSchema('app');
   expect(schema!.ontologies.map(row => row.name)).toEqual(['人物', '实体条目']); expect(schema!.classes.map(row => row.name)).toEqual(['主体', '人员']);
   expect(schema!.properties).toHaveLength(2); expect(schema!.ontology_properties).toHaveLength(2);
-  expect(f.indexed).toHaveLength(3); expect(f.indexed.find(row => row.sqlite_id === 'a')!.search_attributes).toHaveLength(4); expect(f.backups()).toBe(0);
+  expect(f.indexed).toHaveLength(3); expect(f.indexed.find(row => row.sqlite_id === 'a')!.search_attributes).toHaveLength(3); expect(f.backups()).toBe(0);
   const schemaUrl = new URL('http://local/api/kb/ontology/property?db=app&ontology_id=' + encodeURIComponent(schema!.ontologies[0]!.id));
   expect(await (await f.handler(new Request(schemaUrl), schemaUrl, 'GET'))!.json()).toMatchObject({ items: [{ name: '同事' }, { name: '出生日期' }] });
 }));
@@ -127,6 +127,32 @@ test('updates replace incoming properties and preserve other values, categories 
   expect(node.class_ids).toEqual(old.class_ids); expect(node.wiki_md).toBe('保留页面'); expect(node.owner_user_id).toBe(42); expect(node.maintainer_ids).toEqual([123]);
   const attrs = await f.store.attributes('app', 'a'); expect(attrs).toHaveLength(2);
   expect(attrs.find(row => row.key === 'p')!.value).toBe('工程师'); expect(attrs.find(row => row.key === 'q')!.value).toBe('保留');
+});
+
+test('enterprise updates preserve omitted images and merge duplicate relation values', async () => {
+  const f = fixture();
+  await importEnterpriseEntities(f.store, 'app', 7, [{
+    id: 'media-and-relations', name: '知识', type: '人物', images: ['/old.jpg'],
+    attributes: [{ id: 'related', name: '关联', datatype: 'wikibase-item', value: [{ id: 'one' }, { id: 'one' }, { id: 'two' }] }],
+  }], user);
+  await importEnterpriseEntities(f.store, 'app', 7, [{
+    id: 'media-and-relations', name: '知识更新', type: '人物',
+    attributes: [{ id: 'related', name: '关联', datatype: 'wikibase-item', value: [{ id: 'two' }, { id: 'three' }, { id: 'three' }] }],
+  }], user);
+
+  const node = f.tables().entity!.get(documentKey('media-and-relations'))!;
+  expect(JSON.parse(node.images)).toEqual(['/old.jpg']);
+  const relation = JSON.parse((await f.store.attributes('app', 'media-and-relations')).find(row => row.key === 'related')!.value);
+  expect(relation.map((item: any) => item.id)).toEqual(['one', 'two', 'three']);
+
+  await importEnterpriseEntities(f.store, 'app', 7, [{
+    id: 'media-and-relations', name: '知识更新', type: '人物', images: ['/new.jpg', '/old.jpg'],
+  }], user);
+  expect(JSON.parse(f.tables().entity!.get(documentKey('media-and-relations'))!.images)).toEqual(['/old.jpg', '/new.jpg']);
+  await importEnterpriseEntities(f.store, 'app', 7, [{
+    id: 'media-and-relations', name: '知识更新', type: '人物', images: [],
+  }], user);
+  expect(JSON.parse(f.tables().entity!.get(documentKey('media-and-relations'))!.images)).toEqual(['/old.jpg', '/new.jpg']);
 });
 
 test('malformed, empty and duplicate batches fail before Arango requests', async () => {
@@ -194,4 +220,34 @@ test('legacy definitions seed Arango once, and subsequent imports use only the c
   expect(first).toMatchObject({ ontologyId: 'old-type', ontologyCreated: false, propertiesCreated: 0 });
   expect(reads).toBe(1); expect(legacy.ontologies[0]!.status).toBe('deprecated');
   expect((await f.store.importSchema('app'))!.ontologies[0]!.status).toBe('active');
+});
+
+test('reimport upgrades legacy text attributes into entity relations', async () => {
+  const f = fixture();
+  await importEnterpriseEntities(f.store, 'app', 7, [{ id: 'Q42', name: 'Source', type: 'Wikidata', attributes: [{ id: 'P31', name: 'instance', datatype: 'string', value: ['http://www.wikidata.org/entity/Q5'] }] }], user);
+  await importEnterpriseEntities(f.store, 'app', 7, [{ id: 'Q42', name: 'Source', type: 'Wikidata', attributes: [{ id: 'P31', name: 'instance', datatype: 'wikibase-item', value: [{ id: 'Q5' }] }] }], user);
+  const attrs = await f.store.attributes('app', 'Q42');
+  const relation = JSON.parse(attrs.find(row => row.key === 'P31')!.value);
+  expect(relation.map((item: any) => item.id)).toEqual(['Q5']);
+});
+
+test('Wikidata type matches ontology aliases and adds property association', async () => {
+  const f = fixture();
+  await importEnterpriseEntities(f.store, 'app', 7, [{ id: 'seed', name: 'seed', type: { id: 'person', name: '人类' } }], user);
+  const result = await importEnterpriseEntities(f.store, 'app', 7, [{ id: 'Q42', name: 'Source', type: 'Wikidata 实体', attributes: [{ id: 'P31', name: '实例', datatype: 'wikibase-item', value: [{ id: 'Q5', label_zh: '人类' }] }] }], user);
+  expect(result.ontologyId).toBe('person');
+  const schema = await f.store.importSchema('app');
+  expect(schema!.ontology_properties).toContainEqual({ ontology_id: 'person', property_id: 'P31' });
+});
+
+test('related entity import does not extend ontology or category trees', async () => {
+  const f = fixture();
+  await importEnterpriseEntities(f.store, 'app', 7, [{ id: 'Q42', name: 'Root', type: 'Wikidata 实体', attributes: [{ id: 'P31', name: 'instance', datatype: 'wikibase-item', value: [{ id: 'Q5', label_zh: '人类' }] }] }], user, undefined, { referenceTrees: false });
+  const before = structuredClone(await f.store.importSchema('app'))!;
+  await importEnterpriseEntities(f.store, 'app', 7, [{ id: 'Q5', name: '人类', type: 'Wikidata 实体', attributes: [{ id: 'P279', name: 'subclass', datatype: 'wikibase-item', value: [{ id: 'Q999' }] }] }], user, undefined, { updateTrees: false, referenceTrees: false });
+  const after = (await f.store.importSchema('app'))!;
+  expect(after.ontologies).toEqual(before.ontologies);
+  expect(after.classes).toEqual(before.classes);
+  expect(after.ontology_properties).toEqual(before.ontology_properties);
+  expect(await f.store.get('app', 'Q5')).toBeTruthy();
 });

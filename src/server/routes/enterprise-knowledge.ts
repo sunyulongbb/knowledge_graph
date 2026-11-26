@@ -1,3 +1,6 @@
+import { fetchWikipediaMarkdown } from '../wikipedia-import.ts';
+import { wikidataImportStream } from '../wikidata-import-stream.ts';
+import { fetchWikidataEntity, directWikidataTargets } from '../wikidata-import.ts';
 import { importEnterpriseClasses } from '../enterprise-class-import.ts';
 import { ClassImportError } from '../class-import.ts';
 import type { EnterpriseKnowledgeSearch } from '../enterprise-search.ts';
@@ -248,13 +251,82 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
         const result = await importEnterpriseOntologies(store, database, Number(project.id), input, () => deps.getSchema?.(project));
         return Response.json({ ok: true, ...result });
       }
-      if (path === '/api/kb/entity/import' && method === 'POST') {
+      if (['/api/kb/entity/import', '/api/kb/entity/import-wikidata'].includes(path) && method === 'POST') {
         const current = loggedIn();
         if (!deps.canCreate(current, project)) throw new KnowledgeStoreError('仅应用成员可以导入实体', 403);
         if (!deps.sync) throw new KnowledgeStoreError('未配置 Elasticsearch 同步，无法导入实体', 503);
         let input: unknown;
         try { input = await req.json(); }
         catch { throw new KnowledgeStoreError('无效的 JSON 请求'); }
+        if (path === '/api/kb/entity/import-wikidata') {
+          const id = (input as any)?.id;
+          const downloadMedia = (input as any)?.downloadMedia !== false;
+          return wikidataImportStream(async log => {
+            log(5, '正在查询知识实体');
+            const knowledge = await fetchWikidataEntity(id);
+            // Omitted media preserves existing attachments on reimport.
+            delete (knowledge.entity as any).images;
+            delete (knowledge.entity as any).videos;
+            log(30, '查询完成，正在写入 ArangoDB');
+            const result = await importEnterpriseEntities(store, database, Number(project.id), knowledge, current, () => deps.getSchema?.(project), { referenceTrees: false });
+            log(31, '正在导入维基百科知识页面');
+            try {
+              const existing = await store.get(database, result.entityId);
+              if (existing?.wiki_md?.trim()) log(31, '已有知识页面，保留原内容');
+              else {
+                const markdown = await fetchWikipediaMarkdown(knowledge.entity.id);
+                if (markdown) { await store.update(database, result.entityId, { wiki_md: markdown }, current); log(31, '维基百科 Markdown 已保存'); }
+                else log(31, '没有中文或英文维基百科页面');
+              }
+            } catch (error) { log(31, `百科导入失败，继续处理：${error instanceof Error ? error.message : error}`); }
+            const targets = directWikidataTargets(knowledge);
+            log(32, `开始导入一层关系实体，共 ${targets.length} 个`, { entityId: result.entityId });
+            // Fetch in small groups, then write sequentially to avoid schema transaction conflicts.
+            for (let offset = 0; offset < targets.length; offset += 1) {
+              const group = targets.slice(offset, offset + 1);
+              const fetched = await Promise.allSettled(group.map(target => fetchWikidataEntity(target)));
+              for (let index = 0; index < fetched.length; index++) {
+                const item = fetched[index]!;
+                const target = group[index];
+                const progress = 32 + Math.floor((offset + index + 1) / targets.length * 17);
+                if (item.status === 'rejected') {
+                  log(progress, `关系实体 ${target} 查询失败：${item.reason instanceof Error ? item.reason.message : item.reason}`);
+                  continue;
+                }
+                try {
+                  await importEnterpriseEntities(store, database, Number(project.id), item.value, current, undefined, { updateCategories: false, referenceTrees: false });
+                  log(progress, `已导入关系实体 ${target}：${item.value.entity.name}`);
+                } catch (error) { log(progress, `关系实体 ${target} 入库失败：${error instanceof Error ? error.message : error}`); }
+              }
+            }
+            if (downloadMedia) {
+            log(50, '知识已入库，正在查询媒体文件', { entityId: result.entityId });
+            try {
+              const media = await fetchWikidataEntity(id, true);
+              log(52, `媒体查询完成：图片 ${media.entity.images.length} 个，视频 ${media.entity.videos.length} 个`);
+              const resources = [...media.entity.images.map(url => ({ kind: 'images', url })), ...media.entity.videos.map(url => ({ kind: 'videos', url }))];
+              const images: string[] = [], videos: string[] = [];
+              for (let index = 0; index < resources.length; index++) {
+                const resource = resources[index]!;
+                log(55 + Math.floor(index / resources.length * 35), `正在下载媒体 ${index + 1}/${resources.length}：${resource.url}`);
+                try {
+                  const localized = await localizeEntityImportMedia({ version: 1, entity: { ...knowledge.entity, images: [], videos: [], [resource.kind]: [resource.url] } }, Number(project.id), message => log(55 + Math.floor(index / resources.length * 35), message));
+                  try {
+                    const entity = (localized.input as any).entity;
+                    images.push(...entity.images); videos.push(...entity.videos);
+                    await importEnterpriseEntities(store, database, Number(project.id), { ...knowledge, entity: { ...knowledge.entity, images, videos } }, current, undefined, { referenceTrees: false });
+                  } catch (error) { cleanupLocalizedEntityImport(localized.files); throw error; }
+                  log(55 + Math.floor((index + 1) / resources.length * 35), '媒体已下载并关联');
+                } catch (error) { log(90, `媒体下载失败：${error instanceof Error ? error.message : error}`); }
+              }
+              if (!resources.length) log(90, '没有可下载的图片或视频');
+            } catch (error) { log(90, `媒体处理失败，知识已保留：${error instanceof Error ? error.message : error}`); }
+            } else log(90, '已跳过媒体查询和下载');
+            log(95, '正在同步搜索索引');
+            const sync = await synchronizeWrite();
+            log(100, sync === 'pending' ? '知识已入库，搜索索引等待后台同步' : '导入完成', { done: true, entityId: result.entityId });
+          });
+        }
         parseEntityImports(input);
         const localized = await localizeEntityImportMedia(input, Number(project.id));
         let result: Doc;
@@ -352,6 +424,59 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
         if (!body || typeof body !== 'object' || Array.isArray(body)) throw new KnowledgeStoreError('请求必须是 JSON 对象');
       }
       const id = cleanKnowledgeId(url.searchParams.get('id') || url.searchParams.get('entityId') || url.searchParams.get('entity_id') || body.id || body.entityId || body.entity_id);
+      if (path === '/api/kb/entity/sync-wikipedia' && method === 'POST') {
+        const current = loggedIn();
+        const node = await store.get(database, id);
+        if (!node || !canUseArangoKnowledge(node, current, 'edit')) throw new KnowledgeStoreError('知识不存在或无编辑权限', 403);
+        const wikidataId = /^Q[1-9][0-9]*$/.test(id) ? id : String(node.link || '').match(/^https:\/\/www\.wikidata\.org\/wiki\/(Q[1-9][0-9]*)$/)?.[1];
+        if (!wikidataId) throw new KnowledgeStoreError('此知识没有 Wikidata 实体 ID');
+        if (String(node.wiki_md || '').trim() && body.overwrite !== true) {
+          return Response.json({ error: '知识页面已有内容，请确认是否覆盖', code: 'WIKI_OVERWRITE_REQUIRED' }, { status: 409 });
+        }
+        return wikidataImportStream(async log => {
+          log(10, '正在获取 Wikipedia 百科页面（优先中文）');
+          const markdown = await fetchWikipediaMarkdown(wikidataId);
+          if (!markdown) throw new KnowledgeStoreError('此实体没有中文或英文 Wikipedia 页面');
+          log(70, '已转换为 Markdown，正在保存知识页面');
+          const latest = await store.get(database, id);
+          if (String(latest?.wiki_md || '') !== String(node.wiki_md || '')) throw new KnowledgeStoreError('知识页面在同步期间已修改，请重新同步');
+          await store.update(database, id, { wiki_md: markdown }, current);
+          log(90, '百科已保存，正在同步索引');
+          const sync = await synchronizeWrite();
+          log(100, sync === 'pending' ? '百科已保存，索引等待同步' : 'Wikipedia 百科同步完成', { done: true, entityId: id });
+        });
+      }
+      if (path === '/api/kb/entity/sync-media' && method === 'POST') {
+        const current = loggedIn();
+        const node = await store.get(database, id);
+        if (!node || !canUseArangoKnowledge(node, current, 'edit')) throw new KnowledgeStoreError('知识不存在或无编辑权限', 403);
+        const wikidataId = /^Q[1-9][0-9]*$/.test(id) ? id : String(node.link || '').match(/^https:\/\/www\.wikidata\.org\/wiki\/(Q[1-9][0-9]*)$/)?.[1];
+        if (!wikidataId) throw new KnowledgeStoreError('此知识没有 Wikidata 实体 ID');
+        return wikidataImportStream(async log => {
+          log(5, '正在查询图片和视频');
+          const media = await fetchWikidataEntity(wikidataId, true);
+          const resources = [...media.entity.images.map(url => ({ kind: 'images', url })), ...media.entity.videos.map(url => ({ kind: 'videos', url }))];
+          log(10, `找到图片 ${media.entity.images.length} 个，视频 ${media.entity.videos.length} 个`);
+          for (let index = 0; index < resources.length; index++) {
+            const resource = resources[index]!;
+            const progress = 10 + Math.floor(index / resources.length * 80);
+            log(progress, `正在同步 ${index + 1}/${resources.length}：${resource.url}`);
+            let files: string[] = [];
+            try {
+              const localized = await localizeEntityImportMedia({ version: 1, entity: { [resource.kind]: [resource.url] } }, Number(project.id), message => log(progress, message));
+              files = localized.files;
+              const latest = await store.get(database, id);
+              const rawMedia = latest?.[resource.kind];
+              const existing = typeof rawMedia === 'string' ? JSON.parse(rawMedia || '[]') : rawMedia;
+              const downloaded = (localized.input as any).entity[resource.kind];
+              await store.update(database, id, { [resource.kind]: [...new Set([...(Array.isArray(existing) ? existing : []), ...downloaded])] }, current);
+              log(progress, '已保存到本地知识库');
+            } catch (error) { cleanupLocalizedEntityImport(files); log(progress, `同步失败：${error instanceof Error ? error.message : error}`); }
+          }
+          const sync = await synchronizeWrite();
+          log(100, sync === 'pending' ? '媒体处理结束，索引等待同步' : '媒体处理结束', { done: true, entityId: id });
+        });
+      }
       if (path === '/api/kb/geography/viewport' && method === 'GET') {
         const selected = url.searchParams.get('class_id');
         const classes = selected ? new Set([selected]) : null;
@@ -581,6 +706,9 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
         if (['/api/kb/node', '/api/kb/node/relation-insights'].includes(path) && method === 'GET') {
           if (!id) throw new KnowledgeStoreError('缺少知识 ID');
           const node = await store.require(database, id, user);
+          if (path === '/api/kb/node' && url.searchParams.get('basic') === '1') {
+            return Response.json({ node: resultNode(node) }, { headers: { 'Cache-Control': 'private, no-store' } });
+          }
           const [attributes, graph] = await Promise.all([
             path === '/api/kb/node' ? store.attributes(database, id) : Promise.resolve([]),
             store.relationPaths?.(database, id, user, integer(url.searchParams.get('relation_limit'), 500, 1000)),

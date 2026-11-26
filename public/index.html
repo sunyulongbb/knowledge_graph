@@ -1990,7 +1990,7 @@
 <link rel="stylesheet" href="/assets/styles/relation-gallery.css?v=20261120-gallery">
 <link rel="stylesheet" href="/assets/styles/knowledge-image-viewer.css?v=20261124">
 <script defer src="/assets/scripts/knowledge-image-viewer.js?v=20261124"></script>
-<link rel="stylesheet" href="/assets/styles/knowledge-figure.css?v=20261124-centered-caption">
+<link rel="stylesheet" href="/assets/styles/knowledge-figure.css?v=20261126-thumbnail-drag-ux">
 </head>
 
 <body>
@@ -6556,6 +6556,7 @@
           if (scopedUrl instanceof URL) url.search = scopedUrl.search;
         }
         url.searchParams.set("id", fullId);
+        url.searchParams.set("basic", "1");
         const resp = await fetch(url.toString());
         if (!resp.ok) throw new Error("HTTP " + resp.status);
         const data = await resp.json();
@@ -17350,6 +17351,7 @@
           if (scopedUrl instanceof URL) url.search = scopedUrl.search;
         }
         url.searchParams.set("id", fullId);
+        url.searchParams.set("basic", "1");
         const resp = await fetch(url);
         if (!resp.ok) throw new Error("HTTP " + resp.status);
         const data = await resp.json();
@@ -17767,7 +17769,7 @@
   <script src="/assets/scripts/table-panel.js?v=20261116-presence-all"></script>
   <script src="/assets/scripts/table-selection.js?v=20261116-utf8-fix"></script>
   <script src="/assets/scripts/entity-manage-table.js?v=20261028-cover-url"></script>
-  <script src="/assets/scripts/attr-panel.js?v=20260925-tail-suggestions"></script>
+  <script src="/assets/scripts/attr-panel.js?v=20261126-local-all"></script>
   <script src="/assets/scripts/entity-import.js?v=20261029-1"></script>
   <!-- relation-panel.js 已移除，使用 edgehandles 拖拽创建关系 -->
   <script src="/assets/scripts/schema-panel.js?v=20261124-clear-classes"></script>
@@ -17775,15 +17777,15 @@
   <script src="/assets/scripts/wiki-clipboard.js?v=20261105-html-paste"></script>
   <script src="/assets/scripts/knowledge-views.js?v=20261112-1"></script>
   <script src="/assets/scripts/account-history.js?v=20261112-view-counts"></script>
-  <script src="/assets/scripts/detail-panel.js?v=20261124-image-title"></script>
+  <script src="/assets/scripts/detail-panel.js?v=20261126-local-all"></script>
   <script src="/assets/scripts/graph-classification.js?v=20261012"></script>
   <script src="/assets/scripts/graph-details.js?v=20261012-classification"></script>
   <script src="/assets/scripts/knowledge-interactions.js?v=20260904-1"></script>
   <script src="/assets/scripts/knowledge-access.js?v=20261011-member-access"></script>
   <script src="/assets/scripts/applications.js?v=20261116-create-form"></script>
   <script src="/assets/scripts/user-management.js?v=20260915-1"></script>
-  <script src="/assets/scripts/home-media-viewer.js?v=20261120-category-hierarchy"></script>
-  <script src="/assets/scripts/shorts-page.js?v=20261117-category-feed"></script>
+  <script src="/assets/scripts/home-media-viewer.js?v=20261126-local-media"></script>
+  <script src="/assets/scripts/shorts-page.js?v=20261126-video-first"></script>
   <script src="/assets/scripts/manual-classify.js?v=20260929-existing-classes"></script>
   <script src="/assets/scripts/knowledge-context-menu.js?v=20261116-utf8-fix"></script>
   <script src="/assets/scripts/quick-knowledge.js?v=20261116-default-ontology"></script>

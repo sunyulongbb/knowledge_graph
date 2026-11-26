@@ -1,4 +1,4 @@
-﻿// 关系面板重展示轻编辑模式
+// 关系面板重展示轻编辑模式
 const byId =
   (window.kbApp &&
     kbApp.dom &&
@@ -65,6 +65,17 @@ if (btnAttrReset) {
   const nodeForm = document.getElementById("nodeForm");
   let entityEditMode = false;
 
+  function localMediaHtml(html) {
+    const template = document.createElement('template'); template.innerHTML = String(html || '');
+    template.content.querySelectorAll('img,video,audio,source,iframe').forEach(element => {
+      const src = element.getAttribute('src'); let local = false;
+      try { const url = new URL(src || '', location.origin); local = Boolean(src) && url.origin === location.origin && url.pathname.startsWith('/static/uploads/'); } catch {}
+      if (!local) { element.remove(); return; }
+      element.removeAttribute('srcset'); element.removeAttribute('poster');
+    });
+    template.content.querySelectorAll('[style]').forEach(element => { if (/url\s*\(/i.test(element.getAttribute('style'))) element.removeAttribute('style'); });
+    return template.innerHTML;
+  }
   function setEntityEditMode(edit) {
     entityEditMode = !!edit;
     // 社媒式创建卡片统一常驻显示，不再进行头部/表单二选一切换。
@@ -861,6 +872,7 @@ if (btnAttrReset) {
             ) {
               src = `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(src)}`;
             }
+            if (readOnly) { try { const url = new URL(src, location.origin); if (url.origin !== location.origin || !url.pathname.startsWith('/static/uploads/')) return; } catch { return; } }
             imageUrls.push(src);
           });
         });
@@ -1264,9 +1276,10 @@ if (btnAttrReset) {
           }
         }
         try {
-          val.innerHTML = it.snaktype === "somevalue" ? "未知值" : it.snaktype === "novalue" ? "无值" : renderAsMediaThumb
+          const valueHtml = it.snaktype === "somevalue" ? "未知值" : it.snaktype === "novalue" ? "无值" : renderAsMediaThumb
             ? renderMediaThumbHtml(valItem)
             : renderAttrValue(valDtype, valItem);
+          val.innerHTML = readOnly ? localMediaHtml(valueHtml) : valueHtml;
         } catch (e) {
           val.textContent = formatAttrValue(valDtype, valItem);
         }

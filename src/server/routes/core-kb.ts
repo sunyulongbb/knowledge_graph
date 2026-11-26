@@ -1,3 +1,4 @@
+import { fetchWikidataEntity } from '../wikidata-import.ts';
 import { randomKnowledge } from '../random-knowledge.ts';
 import { definedClassEntityFilterSql, ontologyTypeFilterSql } from '../ontology-filter.ts';
 import { db, getProjectByIdentifier } from "../db.ts";
@@ -3871,10 +3872,11 @@ export async function handleCoreKbRoutes(
     }
   }
 
-  if (url.pathname === "/api/kb/entity/import" && method === "POST") {
+  if (["/api/kb/entity/import", "/api/kb/entity/import-wikidata"].includes(url.pathname) && method === "POST") {
     let localizedFiles: string[] = [];
     try {
-      const input = await req.json();
+      const payload = await req.json();
+      const input = url.pathname.endsWith("import-wikidata") ? await fetchWikidataEntity(payload.id) : payload;
       const localized = await localizeEntityImportMedia(input, scopedProjectId);
       localizedFiles = localized.files;
       const result = importEntity(db, localized.input, scopedProjectId);

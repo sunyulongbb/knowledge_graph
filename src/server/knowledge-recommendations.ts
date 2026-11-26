@@ -23,7 +23,8 @@ export function rankRecommendations(nodes:Row[],signals:Signal[],seed:string,opt
     const keys=features(node),interest=keys.reduce((sum,key)=>sum+Math.log1p(interests.get(key)||0),0)/Math.sqrt(Math.max(1,keys.length));
     const videos=[...list(node.videos),...list(node.video)].filter(value=>typeof value==='string'?value.trim():value?.url||value?.src).length;
     const score=interest*(shorts?1.5:2.5)+noise(seed,idOf(node))*(shorts?6:4)+(shorts&&videos?3:0)-(seen.has(idOf(node))?(shorts?8:3):0)-(options.shown?.has(idOf(node))?(shorts?10:5):0);
-    return {node,score};
+    const images=[...list(node.images),...list(node.image),...list(node.image_url)].filter(value=>typeof value==='string'?value.trim():value?.url||value?.src).length;
+    return {node,score,hasVideo:videos>0,mediaTier:videos>0?2:images>0?1:0};
   }).sort((a,b)=>b.score-a.score||idOf(a.node).localeCompare(idOf(b.node)));
   if(!shorts)return scored.map(row=>row.node);
   const result:Row[]=[];
@@ -35,8 +36,9 @@ export function rankRecommendations(nodes:Row[],signals:Signal[],seed:string,opt
       const sameType=last&&(last.typeId||last.type)&&(last.typeId||last.type)===(row.node.typeId||row.node.type);
       return row.score-repeats*1.5-(sameType?2:0);
     };
+    const mediaTier=Math.max(...scored.map(row=>row.mediaTier));
     let best=0,bestScore=-Infinity;
-    scored.forEach((row,index)=>{const score=adjusted(row);if(score>bestScore){best=index;bestScore=score;}});
+    scored.forEach((row,index)=>{if(row.mediaTier!==mediaTier)return;const score=adjusted(row);if(score>bestScore){best=index;bestScore=score;}});
     result.push(scored.splice(best,1)[0]!.node);
   }
   return result;
@@ -59,6 +61,18 @@ export function createKnowledgeRecommendations(deps:{
     value.catch(()=>{if(candidates.get(key)?.value===value)candidates.delete(key);});
     if(candidates.size>64)candidates.delete(candidates.keys().next().value!);
     return value;
+  }
+  async function classified(database:string,nodes:Row[]):Promise<Row[]> {
+    if(!nodes.length)return [];
+    if(!deps.store) return [];
+    const rows=await deps.store.query(database, `LET definitions = DOCUMENT('knowledge_schema/definitions')
+      LET classes = NOT_NULL(definitions.classes, [])[*].id
+      FOR doc IN entity
+        FILTER doc.sqlite_id IN @ids OR doc.id IN @ids
+        FILTER LENGTH(INTERSECTION(NOT_NULL(doc.class_ids, []), classes)) > 0
+        RETURN {id: NOT_NULL(doc.sqlite_id, doc.id)}`, {ids:nodes.map(idOf)});
+    const allowed=new Set(rows.map(idOf));
+    return nodes.filter(node=>allowed.has(idOf(node)));
   }
   const has=(table:string)=>!!db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table);
   async function signals(project:{id:number;name:string},user:KnowledgeUser|null,actor:string):Promise<Signal[]>{
@@ -93,7 +107,7 @@ export function createKnowledgeRecommendations(deps:{
       const seed=(url.searchParams.get('recommendation_seed')||crypto.randomUUID()).slice(0,100);
       const limit=Math.max(1,Math.min(100,Number(url.searchParams.get('limit'))||24)),offset=Math.max(0,Math.min(10000,Number(url.searchParams.get('offset'))||0));
       if(!Number.isSafeInteger(limit)||!Number.isSafeInteger(offset))return json({error:'分页参数无效'},400);
-      const filters=['class_id','tag','hide_entity','defined_class_only','has_media'].map(key=>[key,url.searchParams.get(key)||'']);
+      const filters=['class_id','tag','hide_entity','defined_class_only','has_media'].map(key=>[key,key==='defined_class_only'?'1':url.searchParams.get(key)||'']);
       const key=JSON.stringify([project.id,actor,seed,filters,url.searchParams.get('surface')||'',user?.role,user?.ownedProjectIds,user?.memberProjectIds,user?.fullAccess]);
       const build=async()=>{
         const base=new URL('/api/kb/discover/search',url.origin);base.searchParams.set('db',project.name);for(const [key,value] of filters)if(value)base.searchParams.set(key!,value);
@@ -106,9 +120,9 @@ export function createKnowledgeRecommendations(deps:{
         const sampleOffset=Math.floor(noise(seed,'sample')*Math.max(1,Math.min(2000,Number(rich.total)-79)));
         const sample=sampleOffset?await search('id',sampleOffset):{nodes:[],total:0};
         const shown=new Set((db.query('SELECT node_id FROM knowledge_recommendation_exposures WHERE project_id=? AND actor=? AND last_shown>?').all(project.id,actor,now()-1800000) as Row[]).map(row=>String(row.node_id)));
-        const ranked=rankRecommendations([...rich.nodes,...recent.nodes,...sample.nodes],profile,seed,{surface:url.searchParams.get('surface')||'',shown});
+        const ranked=rankRecommendations(await classified(project.name,[...rich.nodes,...recent.nodes,...sample.nodes]),profile,seed,{surface:url.searchParams.get('surface')||'',shown});
         const previous=db.query('SELECT first_id FROM knowledge_recommendation_refresh WHERE project_id=? AND actor=?').get(project.id,actor) as Row|null;
-        if(ranked.length>1&&idOf(ranked[0]!)===previous?.first_id)[ranked[0],ranked[1]]=[ranked[1]!,ranked[0]!];
+        if(url.searchParams.get('surface')!=='shorts'&&ranked.length>1&&idOf(ranked[0]!)===previous?.first_id)[ranked[0],ranked[1]]=[ranked[1]!,ranked[0]!];
         const hints:Record<string,Row>={};
         for(const node of ranked){
           const media:Row={};
@@ -123,13 +137,13 @@ export function createKnowledgeRecommendations(deps:{
         try{snapshot={...await task,created:now()};cache.set(key,snapshot);}finally{pending.delete(key);}
         if(cache.size>64)cache.delete(cache.keys().next().value!);
       }
-      const fresh=new URL('/api/kb/discover/search',url.origin);fresh.searchParams.set('db',project.name);
+      const fresh=new URL('/api/kb/discover/search',url.origin);fresh.searchParams.set('db',project.name);fresh.searchParams.set('defined_class_only','1');
       const pageIds=snapshot.ids.slice(offset,offset+limit);
       fresh.searchParams.set('ids',JSON.stringify(pageIds));fresh.searchParams.set('limit',String(Math.max(1,pageIds.length)));
       if(!pageIds.length)return json({nodes:[],total:snapshot.ids.length,recommendation_seed:seed,personalized:Boolean(user&&user.id>0)},200,cookie);
       const response=await deps.search(req,fresh,user);if(!response?.ok)throw Error('Elasticsearch recommendation page failed');
       const data=await response.json();const byId=new Map<string,Row>((data.nodes || []).map((node:Row)=>[idOf(node),node]));
-      const output=pageIds.filter(id=>byId.has(id)).map(id=>byId.get(id)!);
+      const output=await classified(project.name,pageIds.filter(id=>byId.has(id)).map(id=>byId.get(id)!));
       db.transaction(()=>{
         for(const node of output)db.run('INSERT INTO knowledge_recommendation_exposures(project_id,actor,node_id,last_shown) VALUES(?,?,?,?) ON CONFLICT(project_id,actor,node_id) DO UPDATE SET last_shown=excluded.last_shown',[project.id,actor,idOf(node),now()]);
         if(offset===0&&output[0])db.run('INSERT INTO knowledge_recommendation_refresh(project_id,actor,first_id) VALUES(?,?,?) ON CONFLICT(project_id,actor) DO UPDATE SET first_id=excluded.first_id',[project.id,actor,idOf(output[0])]);

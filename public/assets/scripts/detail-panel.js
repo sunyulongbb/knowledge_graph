@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   // Inline detail panel helper
   // ----------------------
   const SHOW_DETAIL_ATTR_SECTION = false;
@@ -229,12 +229,19 @@
       return url;
     }
   }
+  function isLocalKnowledgeMedia(value) {
+    if (typeof value !== 'string' || !value.trim()) return false;
+    try {
+      const url = new URL(value, window.location.origin);
+      return url.origin === window.location.origin && url.pathname.startsWith('/static/uploads/');
+    } catch { return false; }
+  }
   function addImageCandidate(list, seen, url, label, force = false) {
     try {
       if (!url || typeof url !== "string") return;
       const normalized = normalizeImageUrl(url);
       const src = (normalized || url || "").trim();
-      if (!src) return;
+      if (!src || !isLocalKnowledgeMedia(src)) return;
       if (!force && !isImageUrl(src)) return;
       if (seen.has(src)) return;
       seen.add(src);
@@ -458,6 +465,46 @@
 
     const thumbnails = document.createElement("div");
     thumbnails.className = "detail-image-thumbnails";
+    if (entries.length > 1) {
+      thumbnails.classList.add("is-draggable");
+      let suppressThumbnailClick = false;
+      thumbnails.addEventListener("click", (event) => {
+        if (!suppressThumbnailClick) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        suppressThumbnailClick = false;
+      }, true);
+      thumbnails.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0 || !event.isPrimary || event.target.closest(".detail-image-thumbnail-delete")) return;
+        const pointerId = event.pointerId;
+        const startX = event.clientX;
+        const startScrollLeft = thumbnails.scrollLeft;
+        let dragged = false;
+        const move = (moveEvent) => {
+          if (moveEvent.pointerId !== pointerId) return;
+          const delta = moveEvent.clientX - startX;
+          if (!dragged && Math.abs(delta) < 5) return;
+          dragged = true;
+          thumbnails.classList.add("is-dragging");
+          thumbnails.scrollLeft = startScrollLeft - delta;
+          moveEvent.preventDefault();
+        };
+        const end = (endEvent) => {
+          if (endEvent.pointerId !== pointerId) return;
+          window.removeEventListener("pointermove", move);
+          window.removeEventListener("pointerup", end);
+          window.removeEventListener("pointercancel", end);
+          thumbnails.classList.remove("is-dragging");
+          if (dragged) {
+            suppressThumbnailClick = true;
+            window.setTimeout(() => { suppressThumbnailClick = false; }, 0);
+          }
+        };
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", end);
+        window.addEventListener("pointercancel", end);
+      });
+    }
     const carousel = document.createElement("div");
     carousel.className = "detail-carousel-container";
     const slides = document.createElement("div");
@@ -497,7 +544,7 @@
       const button = document.createElement('button'); button.type = 'button';
       button.className = 'detail-image-thumbnail-select'; button.setAttribute('aria-label', '查看图片 ' + (index + 1));
       button.setAttribute('aria-pressed', String(index === 0));
-      const thumb = document.createElement('img'); thumb.src = entry.url; thumb.alt = ''; thumb.loading = 'lazy'; button.append(thumb);
+      const thumb = document.createElement('img'); thumb.src = entry.url; thumb.alt = ''; thumb.loading = 'lazy'; thumb.draggable = false; button.append(thumb);
       button.onclick = () => goToSlide(index); cell.append(button);
       if (options.canDelete?.(entry.url)) {
         const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'detail-image-thumbnail-delete';
@@ -1645,6 +1692,10 @@
         }
       }
       url.searchParams.set("id", fullId);
+      const relationUrl = new URL(url);
+      relationUrl.pathname = "/api/kb/node/relation-insights";
+      const relationTask = fetch(relationUrl).then(response => response.ok ? response.json() : null).catch(() => null);
+      url.searchParams.set("basic", "1");
       const resp = await fetch(url.toString());
       if (!resp.ok) throw new Error("HTTP " + resp.status);
       const data = await resp.json();
@@ -1688,11 +1739,14 @@
           '<div class="muted">未找到详情</div>';
         return;
       }
-      if (!window.renderKnowledgeRelations?.(data && data.relationInsights, doc, showNodeDetailInline)) renderIncomingRelations(data && data.incomingRelations, {
+      void relationTask.then(relations => {
+        if (!relations || !isLatestDetailLoad()) return;
+      if (!window.renderKnowledgeRelations?.(relations && relations.relationInsights, doc, showNodeDetailInline)) renderIncomingRelations(relations && relations.incomingRelations, {
         nodeId: String((doc && (doc._id || doc.id)) || fullId || "").trim(),
         canEdit: typeof window.canEditCurrentKnowledge === "function" ? Boolean(window.canEditCurrentKnowledge()) : false,
         order: doc && doc.relation_order ? doc.relation_order.incoming : null,
       });
+      }).catch(error => console.warn('详情关系加载失败', error));
       // prefer authoritative id from doc if available
       try {
         const canonicalIdRaw =
@@ -1868,7 +1922,7 @@
         });
       }
 
-      const wikiHtmlPresent = Boolean(data.page?.html || (doc && doc.html));
+      const wikiHtmlPresent = Boolean((data.page?.html ? localMediaHtml(data.page.html) : "") || (doc && doc.html));
       const wikiTopDescEl = document.getElementById("wikiTopDesc");
       const topDescText =
         pickLabelValue(
@@ -1949,7 +2003,7 @@
         const videoUrls = [
           ...normalizeMediaStringList(doc && doc.video),
           ...normalizeMediaStringList(doc && doc.videos),
-        ].filter((url, index, arr) => url && arr.indexOf(url) === index);
+        ].filter((url, index, arr) => isLocalKnowledgeMedia(url) && arr.indexOf(url) === index);
         if (videoUrls.length) {
           const normalizeDetailCoverSlots = (value) => {
             let source = value;
@@ -1979,7 +2033,8 @@
             })();
             const fromCovers = String(coverList[index] || "").trim();
             const fromCover = String(doc?.cover || "").trim();
-            const poster = fromCovers || (videoUrls.length === 1 ? fromCover : "");
+            const candidatePoster = fromCovers || (videoUrls.length === 1 ? fromCover : "");
+            const poster = isLocalKnowledgeMedia(candidatePoster) ? candidatePoster : "";
             const extMatch = resolvedUrl.split("?")[0].match(/\.([a-z0-9]+)$/i);
             return {
               index,
@@ -2822,8 +2877,8 @@
       try {
         const view = document.getElementById("wikiView");
         view.innerHTML =
-          data.page?.html ||
-          (doc && doc.html) ||
+          (data.page?.html ? localMediaHtml(data.page.html) : "") ||
+          (doc && doc.html ? localMediaHtml(doc.html) : "") ||
           '<div class="muted">暂无百科内容。</div>';
         try {
           const be = document.getElementById("btnEditWiki");
@@ -3171,15 +3226,26 @@
     }
   }
 
+  function localMediaHtml(html) {
+    const template = document.createElement('template'); template.innerHTML = String(html || '');
+    template.content.querySelectorAll('img,video,audio,source,iframe').forEach(element => {
+      const src = element.getAttribute('src'); let local = false;
+      try { const url = new URL(src || '', location.origin); local = Boolean(src) && url.origin === location.origin && url.pathname.startsWith('/static/uploads/'); } catch {}
+      if (!local) { element.remove(); return; }
+      element.removeAttribute('srcset'); element.removeAttribute('poster');
+    });
+    template.content.querySelectorAll('[style]').forEach(element => { if (/url\s*\(/i.test(element.getAttribute('style'))) element.removeAttribute('style'); });
+    return template.innerHTML;
+  }
   function setWikiViewHtml(view, html) {
     if (!view) return;
     if (typeof DOMPurify !== "undefined") {
       try {
-        view.innerHTML = DOMPurify.sanitize(html);
+        view.innerHTML = DOMPurify.sanitize(localMediaHtml(html));
         return;
       } catch {}
     }
-    view.innerHTML = html;
+    view.innerHTML = localMediaHtml(html);
   }
 
   async function loadWikiInline(entityId, lang = "zh") {

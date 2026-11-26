@@ -1,6 +1,9 @@
+import { createHash } from 'node:crypto';
+import { fetchImportMedia } from './import-media-fetch.ts';
+import { importProxyOptions } from './import-proxy.ts';
 import type { Database } from 'bun:sqlite';
 import { lookup } from 'node:dns/promises';
-import { mkdirSync, unlinkSync } from 'node:fs';
+import { mkdirSync, unlinkSync, existsSync, readFileSync } from 'node:fs';
 import { isIP } from 'node:net';
 import { resolve } from 'node:path';
 import { normalizeDatatype, normalizeValue, uiDatatype, valueTypeFor } from '../shared/wikidata.ts';
@@ -12,7 +15,7 @@ type LocalizedEntityImport = { input: unknown; files: string[] };
 
 const mediaKinds = {
   image: { folder: 'node-images', maxSize: 20 * 1024 * 1024, mime: /^image\//, extensions: new Set(['jpg','jpeg','png','gif','webp','svg','bmp','ico','avif','heif','heic']) },
-  video: { folder: 'node-videos', maxSize: 500 * 1024 * 1024, mime: /^video\//, extensions: new Set(['mp4','webm','ogg','mov','m4v']) },
+  video: { folder: 'node-videos', maxSize: 500 * 1024 * 1024, mime: /^video\//, extensions: new Set(['mp4','webm','ogg','ogv','mov','m4v']) },
   pdf: { folder: 'node-pdfs', maxSize: 100 * 1024 * 1024, mime: /^application\/pdf(?:$|;)/, extensions: new Set(['pdf']) },
 } as const;
 
@@ -39,13 +42,29 @@ const extensionFor = (url: URL, contentType: string, kind: keyof typeof mediaKin
   return map[mime] || '';
 };
 
-async function downloadImportMedia(source: string, kind: keyof typeof mediaKinds, _projectId: number | null) {
+async function downloadImportMedia(source: string, kind: keyof typeof mediaKinds, _projectId: number | null, report?: (message: string) => void) {
+  const normalizedSource = new URL(source);
+  normalizedSource.hash = '';
+  if (['commons.wikimedia.org', 'upload.wikimedia.org'].includes(normalizedSource.hostname)) normalizedSource.protocol = 'https:';
+  const cacheDirectory = resolve(import.meta.dir, '..', '..', 'uploads', '.media-sources');
+  const indexFile = resolve(cacheDirectory, createHash('sha256').update(`${kind}:${normalizedSource.href}`).digest('hex') + '.json');
+  try {
+    const entry = JSON.parse(readFileSync(indexFile, 'utf8'));
+    if (/^[a-f0-9-]+\.[a-z0-9]+$/.test(entry.filename)) {
+      const file = resolve(import.meta.dir, '..', '..', 'uploads', mediaKinds[kind].folder, entry.filename);
+      if (existsSync(file)) {
+        report?.('媒体已存在，跳过请求和下载');
+        return { file, url: `/static/uploads/${mediaKinds[kind].folder}/${entry.filename}`, reused: true };
+      }
+    }
+  } catch { /* Missing or stale source index falls back to downloading. */ }
   let current = new URL(source);
   let response: Response | null = null;
   const timeoutMs = kind === 'video' ? 180_000 : 90_000;
+  const downloadSignal = AbortSignal.timeout(timeoutMs);
   for (let redirect = 0; redirect <= 5; redirect++) {
     await assertPublicMediaUrl(current);
-    response = await fetch(current, { redirect: 'manual', signal: AbortSignal.timeout(timeoutMs), headers: { 'User-Agent': 'KnowledgeGraphEntityImport/1.0', Accept: kind === 'image' ? 'image/*' : kind === 'video' ? 'video/*' : 'application/pdf' } });
+    response = await fetchImportMedia(current, { ...importProxyOptions(), redirect: 'manual', signal: downloadSignal, headers: { 'User-Agent': 'KnowledgeGraphEntityImport/1.0', Accept: kind === 'image' ? 'image/*' : kind === 'video' ? 'video/*' : 'application/pdf' } }, report);
     if ([301,302,303,307,308].includes(response.status)) {
       const location = response.headers.get('location');
       if (!location) throw new EntityImportError(`资源重定向缺少地址：${source}`);
@@ -73,14 +92,16 @@ async function downloadImportMedia(source: string, kind: keyof typeof mediaKinds
   const filename = `${crypto.randomUUID()}.${extension}`;
   const file = resolve(directory, filename);
   await Bun.write(file, bytes);
-  return { file, url: `/static/uploads/${config.folder}/${filename}` };
+  mkdirSync(cacheDirectory, { recursive: true });
+  await Bun.write(indexFile, JSON.stringify({ source: normalizedSource.href, filename }));
+  return { file, url: `/static/uploads/${config.folder}/${filename}`, reused: false };
 }
 
 export function cleanupLocalizedEntityImport(files: string[]) {
   for (const file of files) { try { unlinkSync(file); } catch {} }
 }
 
-export async function localizeEntityImportMedia(input: unknown, projectId: number | null): Promise<LocalizedEntityImport> {
+export async function localizeEntityImportMedia(input: unknown, projectId: number | null, report?: (message: string) => void): Promise<LocalizedEntityImport> {
   const root = structuredClone(input);
   const files: string[] = [];
   const localizedBySource = new Map<string, string>();
@@ -92,12 +113,12 @@ export async function localizeEntityImportMedia(input: unknown, projectId: numbe
     if (cached) return cached;
     let saved: Awaited<ReturnType<typeof downloadImportMedia>>;
     try {
-      saved = await downloadImportMedia(source, kind, projectId);
+      saved = await downloadImportMedia(source, kind, projectId, report);
     } catch (error) {
       const kindLabel = kind === 'image' ? '图片' : kind === 'video' ? '视频' : 'PDF';
       throw new EntityImportError(`${kindLabel}同步失败：${source}：${error instanceof Error ? error.message : String(error)}`);
     }
-    files.push(saved.file);
+    if (!saved.reused) files.push(saved.file);
     localizedBySource.set(cacheKey, saved.url);
     return saved.url;
   };
@@ -135,10 +156,31 @@ export async function localizeEntityImportMedia(input: unknown, projectId: numbe
 type ParsedAttribute = { id: string; name: string; datatype: string; value: unknown; description: string };
 type ParsedEntity = {
   id: string; name: string; description: string; aliases: string[]; tags: string[];
-  images: string[]; videos: string[]; pdf: string; link: string; visibility: 'public' | 'private';
+  images: string[]; hasImages: boolean; videos: string[]; hasVideos: boolean; pdf: string; link: string; visibility: 'public' | 'private';
   ontology: { id: string; name: string; description: string }; attributes: ParsedAttribute[];
   hasCategories: boolean; categories: ReturnType<typeof parseClassImport>;
 };
+
+export function mergeEntityRelationValues(...values: unknown[]): unknown[] {
+  const merged = new Map<string, unknown>();
+  const add = (value: unknown) => {
+    if (Array.isArray(value)) {
+      for (const item of value) add(item);
+      return;
+    }
+    if (value === undefined || value === null) return;
+    const item = value && typeof value === 'object' ? value as Record<string, unknown> : null;
+    const id = String(item?.id || '').replace(/^entity\//, '').trim();
+    const label = String(item?.label_zh || item?.entity_label_zh || item?.label || item?.name || '').trim();
+    const identity = id ? `id:${id}` : label ? `label:${label.toLocaleLowerCase()}` : `value:${JSON.stringify(value)}`;
+    const previous = merged.get(identity);
+    merged.set(identity, previous && item && typeof previous === 'object'
+      ? { ...(previous as Record<string, unknown>), ...item }
+      : value);
+  };
+  for (const value of values) add(value);
+  return [...merged.values()];
+}
 
 const object = (value: unknown, path: string): Record<string, any> => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new EntityImportError(`${path} 必须是对象`);
@@ -148,6 +190,16 @@ const strings = (value: unknown, path: string) => {
   if (value === undefined) return [];
   if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) throw new EntityImportError(`${path} 必须是字符串数组`);
   return [...new Set(value.map((item) => item.trim()).filter(Boolean))];
+};
+const storedImages = (value: unknown): string[] => {
+  if (value == null || value === '') return [];
+  let parsed: unknown;
+  try { parsed = JSON.parse(String(value)); }
+  catch { throw new EntityImportError('已有图片数据格式无效，无法合并导入图片'); }
+  if (!Array.isArray(parsed) || parsed.some((item) => typeof item !== 'string')) {
+    throw new EntityImportError('已有图片数据格式无效，无法合并导入图片');
+  }
+  return parsed;
 };
 const normalizeImportedValue = (datatype: string, value: unknown): unknown => {
   if (Array.isArray(value)) return value.map((item) => normalizeImportedValue(datatype, item));
@@ -216,7 +268,8 @@ export function parseEntityImport(input: unknown): ParsedEntity {
     id: String(entity.id || '').replace(/^entity\//, '').trim(), name: entity.name.trim(),
     description: String(entity.description || ''), aliases: strings(entity.aliases, 'entity.aliases'),
     tags: strings(entity.tags, 'entity.tags'), images: strings(entity.images, 'entity.images'),
-    videos: strings(entity.videos, 'entity.videos'), pdf: String(entity.pdf || '').trim(), link: String(entity.link || '').trim(),
+    hasImages: Object.prototype.hasOwnProperty.call(entity, 'images'),
+    videos: strings(entity.videos, 'entity.videos'), hasVideos: Object.prototype.hasOwnProperty.call(entity, 'videos'), pdf: String(entity.pdf || '').trim(), link: String(entity.link || '').trim(),
     visibility: entity.visibility === 'private' ? 'private' : 'public',
     ontology: { id: String(type.id || '').trim(), name: String(type.name || type.id || '').trim(), description: String(type.description || '').trim() },
     attributes, hasCategories, categories,
@@ -318,10 +371,13 @@ function importParsedEntity(db: Database, entity: ParsedEntity, projectId: numbe
     for (const category of entity.categories) syncCategory(category, null);
     const mergedTags = [...new Map([...entity.tags, ...categoryTags].map((tag) => [tag.toLowerCase(), tag])).values()];
     const nodeId = entity.id;
-    const existingNode = db.query('SELECT id,project_id FROM nodes WHERE id=? LIMIT 1').get(nodeId) as any;
+    const existingNode = db.query('SELECT id,project_id,images FROM nodes WHERE id=? LIMIT 1').get(nodeId) as any;
     const entityCreated = !existingNode;
     if (existingNode) {
-      db.run('UPDATE nodes SET name=?,type=?,description=?,aliases=?,tags=?,images=?,videos=?,pdf=?,link=?,visibility=?,updated_at=CURRENT_TIMESTAMP WHERE id=?', [entity.name, ontology.id, entity.description, JSON.stringify(entity.aliases), JSON.stringify(mergedTags), JSON.stringify(entity.images), JSON.stringify(entity.videos), entity.pdf, entity.link, entity.visibility, nodeId]);
+      const images = entity.hasImages
+        ? JSON.stringify([...new Set([...storedImages(existingNode.images), ...entity.images])])
+        : existingNode.images;
+      db.run('UPDATE nodes SET name=?,type=?,description=?,aliases=?,tags=?,images=?,videos=?,pdf=?,link=?,visibility=?,updated_at=CURRENT_TIMESTAMP WHERE id=?', [entity.name, ontology.id, entity.description, JSON.stringify(entity.aliases), JSON.stringify(mergedTags), images, JSON.stringify(entity.videos), entity.pdf, entity.link, entity.visibility, nodeId]);
     } else {
       db.run('INSERT INTO nodes(id,name,type,description,aliases,tags,images,videos,pdf,link,visibility,project_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', [nodeId, entity.name, ontology.id, entity.description, JSON.stringify(entity.aliases), JSON.stringify(mergedTags), JSON.stringify(entity.images), JSON.stringify(entity.videos), entity.pdf, entity.link, entity.visibility, projectId]);
     }
@@ -417,14 +473,23 @@ function importParsedEntity(db: Database, entity: ParsedEntity, projectId: numbe
       }
       db.run('INSERT OR IGNORE INTO ontology_properties(ontology_id,property_id) VALUES(?,?)', [ontology.id, property.id]);
       const datatype = normalizeDatatype(property.datatype || attribute.datatype, property.valuetype);
-      if (datatype === 'wikibase-item') attribute.value = resolveReferencedEntities(attribute.value);
+      let attributeValue = attribute.value;
+      if (datatype === 'wikibase-item') attributeValue = resolveReferencedEntities(attributeValue);
+      const existingAttributes = db.query('SELECT value FROM attributes WHERE node_id=? AND key=?').all(nodeId, property.id) as { value: string }[];
+      if (datatype === 'wikibase-item') {
+        const existingValues = existingAttributes.map((item) => {
+          try { return JSON.parse(item.value); } catch { return item.value; }
+        });
+        const merged = mergeEntityRelationValues(existingValues, attributeValue);
+        attributeValue = Array.isArray(attributeValue) || existingValues.some(Array.isArray) || merged.length > 1 ? merged : merged[0];
+      }
       let value: unknown;
       try {
-        value = normalizeValue(datatype, attribute.value);
+        value = normalizeValue(datatype, attributeValue);
       } catch (error) {
         throw new EntityImportError(`属性“${attribute.name}”的值无效：${error instanceof Error ? error.message : '格式无效'}`);
       }
-      const existingAttributeCount = Number((db.query('SELECT COUNT(*) AS count FROM attributes WHERE node_id=? AND key=?').get(nodeId, property.id) as any)?.count || 0);
+      const existingAttributeCount = existingAttributes.length;
       if (existingAttributeCount) {
         db.run('DELETE FROM attributes WHERE node_id=? AND key=?', [nodeId, property.id]);
         attributesUpdated++;

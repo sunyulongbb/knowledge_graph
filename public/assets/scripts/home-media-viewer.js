@@ -4,21 +4,28 @@
     if (typeof value !== 'string' || !value.trim()) return [];
     try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed : [parsed]; } catch { return [value]; }
   };
+  function isLocalKnowledgeMedia(value) {
+    if (typeof value !== 'string' || !value.trim()) return false;
+    try {
+      const url = new URL(value, window.location.origin);
+      return url.origin === window.location.origin && url.pathname.startsWith('/static/uploads/');
+    } catch { return false; }
+  }
   function collectMedia(node) {
     const result = [], seen = new Set();
     let data = node.data;
     if (typeof data === 'string') { try { data = JSON.parse(data); } catch { data = {}; } }
     data = data && typeof data === 'object' ? data : {};
     const covers = list(node.covers).length ? list(node.covers) : list(data.covers).length ? list(data.covers) : list(node.cover || data.cover);
-    for (const [kind, values] of [['image', [...list(node.images), ...list(node._attr_images), node.image]], ['video', [...list(node.videos), ...list(node._attr_videos), node.video]]]) {
+    for (const [kind, values] of [['video', [...list(node.videos), ...list(node._attr_videos), node.video]], ['image', [...list(node.images), ...list(node._attr_images), node.image]]]) {
       let videoIndex = 0;
       for (const value of values) {
         const url = typeof value === 'string' ? value : value?.url || value?.src || '';
         const cover = kind === 'video' ? covers[videoIndex++] : '';
         const poster = typeof cover === 'string' ? cover : cover?.url || cover?.src || '';
-        if (!/^(https?:\/\/|\/(?!\/))/i.test(url) || seen.has(kind + url)) continue;
+        if (!isLocalKnowledgeMedia(url) || seen.has(kind + url)) continue;
         seen.add(kind + url);
-        result.push({ kind, url, ...(kind === 'video' && /^(https?:\/\/|\/(?!\/)|data:image\/)/i.test(poster) ? { poster } : {}) });
+        result.push({ kind, url, ...(kind === 'video' && isLocalKnowledgeMedia(poster) ? { poster } : {}) });
       }
     }
     return result;
@@ -428,8 +435,13 @@
       const unseen = others.filter((item) => !recent.includes(idOf(item)));
       const candidates = unseen.length ? unseen : others;
       // Sample across the recommendation queue instead of always replaying its first item.
-      const pool = page && window.kbViewMode === 'shorts' ? candidates.slice(0, 30) : candidates;
-      target = pool[Math.floor(Math.random() * pool.length)];
+      if (page && window.kbViewMode === 'shorts') {
+        const tier = item => { const entries = collectMedia(item); return entries.some(entry => entry.kind === 'video') ? 2 : entries.some(entry => entry.kind === 'image') ? 1 : 0; };
+        const highestTier = Math.max(...candidates.map(tier));
+        target = candidates.find(item => tier(item) === highestTier);
+      } else {
+        target = candidates[Math.floor(Math.random() * candidates.length)];
+      }
     }
     busy = true; const token = ++version; message('');
     try {
