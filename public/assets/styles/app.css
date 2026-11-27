@@ -12867,6 +12867,22 @@ table th {
   .center-col > #detailPanel.detail-panel-shell > #detailInner { padding-inline: 10px; }
 }
 
+/* Keep the entity composer and relationship attributes reachable in short workspaces. */
+.kb-split > .editor-panel.column-panel {
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.kb-split > .editor-panel.column-panel::-webkit-scrollbar {
+  width: 6px;
+}
+.kb-split > .editor-panel.column-panel > .wd-section {
+  flex-shrink: 0;
+}
+.kb-split > .editor-panel.column-panel #attrPanel {
+  height: auto;
+}
+
 /* Three-column workspace: use the right taxonomy card as the shared shell. */
 .kb-split > .editor-panel,
 .kb-split > .class-panel,

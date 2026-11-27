@@ -463,8 +463,14 @@
       return;
     }
 
+    // Uploads append to stored media; show the newest additions first.
+    entries.reverse();
     const thumbnails = document.createElement("div");
     thumbnails.className = "detail-image-thumbnails";
+    const sortStatus = document.createElement('span');
+    sortStatus.className = 'detail-image-sort-status';
+    sortStatus.setAttribute('role', 'status');
+    const clearDropHints = () => thumbnails.querySelectorAll('.drop-before,.drop-after').forEach(item => item.classList.remove('drop-before','drop-after'));
     if (entries.length > 1) {
       thumbnails.classList.add("is-draggable");
       let suppressThumbnailClick = false;
@@ -475,6 +481,7 @@
         suppressThumbnailClick = false;
       }, true);
       thumbnails.addEventListener("pointerdown", (event) => {
+        if (options.onReorder && event.target.closest('[draggable="true"]')) return;
         if (event.button !== 0 || !event.isPrimary || event.target.closest(".detail-image-thumbnail-delete")) return;
         const pointerId = event.pointerId;
         const startX = event.clientX;
@@ -541,6 +548,48 @@
       captionHost.append(caption);captions.push(caption);if(index!==0)caption.hidden=true;
       slides.appendChild(slide);
       const cell = document.createElement('div'); cell.className = 'detail-image-thumbnail';
+      if (options.onReorder && options.canDelete?.(entry.url)) {
+        cell.draggable = true;
+        cell.title = '拖拽调整图片顺序';
+        cell.addEventListener('dragstart', event => {
+          thumbnails.dataset.dragIndex = String(index);
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData('text/plain', String(index));
+          cell.style.opacity = '0.5';
+          cell.classList.add('is-sorting');
+          sortStatus.textContent = '拖到图片之间调整顺序';
+        });
+        cell.addEventListener('dragend', () => { cell.style.opacity = ''; cell.classList.remove('is-sorting'); clearDropHints(); delete thumbnails.dataset.dragIndex; if (sortStatus.textContent === '拖到图片之间调整顺序') sortStatus.textContent = ''; });
+        cell.addEventListener('dragover', event => {
+          if (thumbnails.dataset.dragIndex === undefined) return;
+          event.preventDefault(); event.dataTransfer.dropEffect = 'move';
+          clearDropHints();
+          const rect = cell.getBoundingClientRect();
+          cell.classList.add(event.clientX < rect.left + rect.width / 2 ? 'drop-before' : 'drop-after');
+          const bounds = thumbnails.getBoundingClientRect();
+          if (event.clientX < bounds.left + 44) thumbnails.scrollLeft -= 24;
+          else if (event.clientX > bounds.right - 44) thumbnails.scrollLeft += 24;
+        });
+        cell.addEventListener('drop', async event => {
+          const from = Number(thumbnails.dataset.dragIndex);
+          if (thumbnails.dataset.dragIndex === undefined) return;
+          event.preventDefault(); event.stopPropagation();
+          const rect = cell.getBoundingClientRect();
+          let destination = index + (event.clientX >= rect.left + rect.width / 2 ? 1 : 0);
+          if (from < destination) destination--;
+          delete thumbnails.dataset.dragIndex;
+          clearDropHints();
+          if (from === destination) { sortStatus.textContent = ''; return; }
+          const reordered = entries.slice();
+          reordered.splice(destination, 0, reordered.splice(from, 1)[0]);
+          thumbnails.style.pointerEvents = 'none';
+          thumbnails.setAttribute('aria-busy', 'true');
+          sortStatus.textContent = '正在保存顺序…';
+          try { await options.onReorder(reordered.map(item => item.url)); }
+          catch (error) { sortStatus.textContent = '排序保存失败，请重试：' + (error.message || error); }
+          finally { thumbnails.style.pointerEvents = ''; thumbnails.removeAttribute('aria-busy'); }
+        });
+      }
       const button = document.createElement('button'); button.type = 'button';
       button.className = 'detail-image-thumbnail-select'; button.setAttribute('aria-label', '查看图片 ' + (index + 1));
       button.setAttribute('aria-pressed', String(index === 0));
@@ -621,7 +670,7 @@
     }
 
     captionHost.hidden=captions[0]?.hidden!==false;
-    topMedia.append(carousel, captionHost, thumbnails);
+    topMedia.append(carousel, captionHost, thumbnails, sortStatus);
     topMedia.style.display = "";
     requestAnimationFrame(() => updateTransform());
     syncDetailTopMediaStage();
@@ -2783,6 +2832,19 @@
       let imageMetadata=Array.isArray(doc?.image_metadata)?doc.image_metadata:[];
       const hasImageMedia = renderWikiMediaGrid(detailMediaAttrItems, imageEntries, {
         imageMetadata,
+        onReorder: (doc?.can_edit || canEditDefaultApplication()) ? async urls => {
+          const ranked = new Map(urls.map((url, index) => [url, index]));
+          const nextImages = ownedImages.slice().sort((a, b) => {
+            const rank = image => Math.min(...extractImageUrls(image, true).map(url => ranked.get(url) ?? Number.MAX_SAFE_INTEGER));
+            // Display reverses stored order, so persist the inverse drag order.
+            return rank(b) - rank(a);
+          });
+          const updateUrl = appendDetailDb(new URL('/api/kb/nodes/update', location.origin));
+          const response = await fetch(updateUrl, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:String(doc?._id || doc?.id || fullId).replace(/^entity\//,''),images:nextImages})});
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || result.ok === false) throw new Error(result.error || '保存失败');
+          await showNodeDetailInline(routeId || fullId, {preserveSidebarState});
+        } : null,
         onDescribe: async (url,description,title) => {
           const metadata=[...imageMetadata.filter(item=>item.url!==url),{url,title,description}];
           const updateUrl=appendDetailDb(new URL('/api/kb/nodes/update',location.origin));
@@ -2848,10 +2910,17 @@
               const data = await response.json(); if (!data.url) throw new Error('未返回图片地址');
               urls.push(data.url);
             }
-            const response = await fetch(scoped('/api/kb/nodes/update'), {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:String(doc?._id || doc?.id || fullId).replace(/^entity\//,''),images:[...(Array.isArray(doc.images) ? doc.images : normalizeMediaStringList(doc.images)),...urls]})});
+            const response = await fetch(scoped('/api/kb/nodes/update'), {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:String(doc?._id || doc?.id || fullId).replace(/^entity\//,''),images:[...(Array.isArray(doc.images) ? doc.images : normalizeMediaStringList(doc.images)),...urls],image_metadata:[...imageMetadata,...urls.map((url,index)=>({url,title:'',description:''}))]})});
             if (!response.ok) throw new Error(await response.text() || '保存失败');
             const result = await response.json(); if (result?.ok === false) throw new Error(result.error || '保存失败');
-            if (!pasteController.signal.aborted && String(window.kbActiveDetailNodeId || '').replace(/^entity\//,'') === String(doc?._id || doc?.id || fullId).replace(/^entity\//,'')) await showNodeDetailInline(routeId || fullId, {preserveSidebarState});
+            if (!pasteController.signal.aborted && String(window.kbActiveDetailNodeId || '').replace(/^entity\//,'') === String(doc?._id || doc?.id || fullId).replace(/^entity\//,'')) {
+              await showNodeDetailInline(routeId || fullId, {preserveSidebarState});
+              // The newest pasted image is the first slide; reuse its inline editor.
+              if (String(window.kbActiveDetailNodeId || '').replace(/^entity\//,'') === String(doc?._id || doc?.id || fullId).replace(/^entity\//,'')) {
+                document.querySelector('#wikiTopMedia .detail-carousel-slide .detail-image-caption-edit')?.click();
+                document.querySelector('#wikiTopMedia .detail-image-title-input')?.scrollIntoView({block:'nearest',behavior:'smooth'});
+              }
+            }
           } catch (error) { pasteStatus.textContent = '添加失败：' + (error.message || error); }
           finally { uploadingImages = false; }
         }, {capture:true, signal:imageTabPasteController.signal});

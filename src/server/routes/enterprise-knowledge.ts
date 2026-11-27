@@ -11,7 +11,7 @@ import { marked } from 'marked';
 import { enterpriseKnowledgeEnabled } from '../knowledge-mode.ts';
 import {
   EnterpriseKnowledgeStore, ArangoElasticsearchSync, KnowledgeStoreError,
-  arangoNodeResponse, arangoAttributeResponse, canUseArangoKnowledge, cleanKnowledgeId,
+  arangoNodeResponse, arangoAttributeResponse, canUseArangoKnowledge, cleanKnowledgeId, localizedText,
 } from '../enterprise-knowledge.ts';
 import type { KnowledgeUser } from '../knowledge-access.ts';
 import { relationAttributeResponse } from '../relation-order.ts';
@@ -424,12 +424,85 @@ export function createEnterpriseKnowledgeHandler(deps: Dependencies) {
         if (!body || typeof body !== 'object' || Array.isArray(body)) throw new KnowledgeStoreError('请求必须是 JSON 对象');
       }
       const id = cleanKnowledgeId(url.searchParams.get('id') || url.searchParams.get('entityId') || url.searchParams.get('entity_id') || body.id || body.entityId || body.entity_id);
+      if (path === '/api/kb/entity/sync-attributes' && method === 'POST') {
+        const current = loggedIn();
+        const node = await store.get(database, id);
+        if (!node || !canUseArangoKnowledge(node, current, 'edit')) throw new KnowledgeStoreError('知识不存在或无编辑权限', 403);
+        if (!deps.canCreate(current, project)) throw new KnowledgeStoreError('仅应用成员可以同步关联实体', 403);
+        const wikidataId = /^Q[1-9][0-9]*$/.test(id) ? id : String(node.link || '').match(/^https:\/\/www\.wikidata\.org\/wiki\/(Q[1-9][0-9]*)$/)?.[1];
+        if (!wikidataId) return Response.json({ error: '请先通过同步百科添加 Wikidata ID', code: 'WIKIDATA_ID_REQUIRED' }, { status: 400 });
+        return wikidataImportStream(async log => {
+          log(10, '正在获取 Wikidata 属性（过滤外部标识符）');
+          const data = await fetchWikidataEntity(wikidataId);
+          const aligned = new Map<string, string>([[wikidataId, id]]);
+          const targetLabels = new Map<string, string>([[wikidataId, localizedText(node.labels) || data.entity.name]]);
+          for (const attribute of data.entity.attributes) for (const value of attribute.value) {
+            if (value && typeof value === 'object' && value.label_zh) targetLabels.set(value.id, value.label_zh);
+          }
+          const targets = directWikidataTargets(data).filter(target => target !== id);
+          for (const [index, target] of targets.entries()) {
+            const progress = 10 + Math.floor((index + 1) / targets.length * 40);
+            const existingTarget = await store.get(database, target);
+            if (existingTarget) {
+              if (!canUseArangoKnowledge(existingTarget, current, 'read')) throw new KnowledgeStoreError('关联实体不存在或无访问权限', 403);
+              aligned.set(target, cleanKnowledgeId(existingTarget.sqlite_id || existingTarget.id || target));
+              if (!targetLabels.has(target)) targetLabels.set(target, localizedText(existingTarget.labels));
+              log(progress, `关联实体 ${target} 已在库中`);
+              continue;
+            }
+            log(progress, `正在导入关联实体 ${target}`);
+            const related = await fetchWikidataEntity(target);
+            if (!targetLabels.has(target)) targetLabels.set(target, related.entity.name);
+            const names = [related.entity.name, ...data.entity.attributes.flatMap(attribute => attribute.value)
+              .filter(value => value && typeof value === 'object' && value.id === target)
+              .map(value => value.label_zh)].filter(name => name && name !== target).map(name => String(name).trim().toLocaleLowerCase());
+            const candidates = (await store.query(database, `FOR doc IN entity
+              LET names = APPEND(VALUES(NOT_NULL(doc.labels, {}))[*].value, FLATTEN(VALUES(NOT_NULL(doc.aliases, {})))[*].value)
+              FILTER doc.link == @link OR LENGTH(INTERSECTION(@names, (FOR name IN names RETURN LOWER(TRIM(name))))) > 0
+              RETURN doc`, { link: related.entity.link, names })).filter(candidate => canUseArangoKnowledge(candidate, current, 'read'));
+            const linked = candidates.filter(candidate => candidate.link === related.entity.link);
+            const matches = linked.length ? linked : candidates;
+            if (matches.length > 1) throw new KnowledgeStoreError(`关联实体 ${target}（${related.entity.name}）匹配到多个已有实体，请先确认对应关系后重试`, 409);
+            if (matches.length === 1) {
+              const matched = matches[0];
+              aligned.set(target, cleanKnowledgeId(matched.sqlite_id || matched.id));
+              log(progress, `已对齐已有实体 ${related.entity.name}，复用知识库关联`);
+              continue;
+            }
+            // Import this direct target without expanding its own relationships.
+            // Its statement values remain references until explicitly synchronized.
+            const entity = { ...related.entity, visibility: node.visibility || 'private',
+              attributes: related.entity.attributes.filter(attribute => attribute.datatype !== 'wikibase-item') };
+            delete (entity as any).images;
+            delete (entity as any).videos;
+            await importEnterpriseEntities(store, database, Number(project.id), { version: 1, entity }, current,
+              () => deps.getSchema?.(project), { updateTrees: false, updateCategories: false, referenceTrees: false });
+            log(progress, `已导入关联实体 ${target}：${entity.name}`);
+            aligned.set(target, target);
+          }
+          const existing = await store.attributes(database, id);
+          const attributes = data.entity.attributes.filter(attribute => attribute.datatype !== 'external-id');
+          for (const [index, attribute] of attributes.entries()) {
+            const previous = existing.find(item => item.key === attribute.id);
+            await store.saveAttribute(database, { ...(previous ? { id: previous.id } : {}), node_id: id, property: attribute.id,
+              property_name_snapshot: attribute.name, datatype: attribute.datatype,
+              value: attribute.datatype === 'wikibase-item' ? [...new Map(attribute.value.map(value => {
+                const label = targetLabels.get(value.id) || value.label_zh || '未命名实体';
+                const resolved = { ...value, id: aligned.get(value.id) || value.id, label_zh: label, entity_label_zh: label };
+                return [resolved.id, resolved] as const;
+              })).values()] : attribute.value }, current);
+            log(50 + Math.floor((index + 1) / attributes.length * 40), `已同步 ${attribute.name}`);
+          }
+          const sync = await synchronizeWrite();
+          log(100, `已同步 ${attributes.length} 项属性${sync === 'pending' ? '，索引等待同步' : ''}`, { done: true, entityId: id });
+        });
+      }
       if (path === '/api/kb/entity/sync-wikipedia' && method === 'POST') {
         const current = loggedIn();
         const node = await store.get(database, id);
         if (!node || !canUseArangoKnowledge(node, current, 'edit')) throw new KnowledgeStoreError('知识不存在或无编辑权限', 403);
         const wikidataId = /^Q[1-9][0-9]*$/.test(id) ? id : String(node.link || '').match(/^https:\/\/www\.wikidata\.org\/wiki\/(Q[1-9][0-9]*)$/)?.[1];
-        if (!wikidataId) throw new KnowledgeStoreError('此知识没有 Wikidata 实体 ID');
+        if (!wikidataId) return Response.json({ error: '请先为此知识添加 Wikidata ID，再同步 Wiki 百科', code: 'WIKIDATA_ID_REQUIRED' }, { status: 400 });
         if (String(node.wiki_md || '').trim() && body.overwrite !== true) {
           return Response.json({ error: '知识页面已有内容，请确认是否覆盖', code: 'WIKI_OVERWRITE_REQUIRED' }, { status: 409 });
         }

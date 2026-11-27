@@ -184,7 +184,7 @@
     const detailsHidden = playing || (!!image && !imageDetailsVisible);
     refs.main.classList.toggle('is-video-playing', playing);
     refs.main.classList.toggle('is-details-hidden', detailsHidden);
-    refs.caption.hidden = refs.bottom.hidden = embedded ? false : detailsHidden;
+    refs.caption.hidden = refs.bottom.hidden = image ? detailsHidden : embedded ? false : detailsHidden;
     refs.stage.setAttribute('role', video || image ? 'button' : 'group');
     refs.stage.tabIndex = video || image ? 0 : -1;
     refs.stage.setAttribute('aria-label', video ? (playing ? '暂停视频并显示详情' : '播放视频') : image ? (imageDetailsVisible ? '隐藏图片详情' : '显示图片详情') : '知识媒体');
@@ -231,6 +231,23 @@
     imageDetailsVisible = false;
     stopMedia(); refs.stage.replaceChildren(); message('');
     const item = media[mediaIndex];
+    const metadata = item?.kind === 'image'
+      ? list(node.image_metadata).find(entry => entry && typeof entry === 'object' && entry.url === item.url)
+      : null;
+    refs.title.textContent = node.name || node.label || '知识';
+    refs.description.textContent = node.description || node.desc_zh || '';
+    if (!refs.imageCaption) {
+      const caption = document.createElement('div');
+      caption.className = 'home-reel-image-caption';
+      const title = document.createElement('h3'), description = document.createElement('p');
+      caption.append(title, description); refs.main.append(caption);
+      refs.imageCaption = caption; refs.imageTitle = title; refs.imageDescription = description;
+    }
+    refs.imageTitle.textContent = metadata?.title || '';
+    refs.imageDescription.textContent = metadata?.description || '';
+    refs.imageTitle.hidden = !metadata?.title;
+    refs.imageDescription.hidden = !metadata?.description;
+    refs.imageCaption.hidden = item?.kind !== 'image' || !(metadata?.title || metadata?.description);
     refs.counter.textContent = media.length ? `${mediaIndex + 1} / ${media.length}` : '图文知识';
     refs.left.hidden = refs.right.hidden = media.length < 2;
     const showIndicators = !!page && page.mode !== 'relation' && media.length > 1;
@@ -270,7 +287,7 @@
         element.muted = muted; element.defaultMuted = muted; element.autoplay = true; element.playsInline = true; element.loop = true; element.preload = 'metadata';
         element.addEventListener('playing', () => { if (element.parentNode === refs.stage && /点击.*播放|自动播放被浏览器|浏览器暂未允许/.test(refs.status.textContent)) message(''); });
         ['play', 'pause', 'timeupdate', 'loadedmetadata', 'volumechange'].forEach((event) => element.addEventListener(event, updateVideoControls));
-      } else { element.alt = node.name || node.label || '知识图片'; element.draggable = false; }
+      } else { element.alt = metadata?.description || metadata?.title || node.name || node.label || '知识图片'; element.draggable = false; }
       element.addEventListener('error', () => { if (element.parentNode === refs.stage) message('媒体加载失败，可左右切换媒体或上下翻页'); });
       refs.stage.append(element);
       if (item.kind === 'video') void playVideo(element, { deferBlocked: !!departing });
@@ -561,6 +578,7 @@
     refs.up.onclick = () => randomPage(-1); refs.down.onclick = () => randomPage(1);
     refs.play.onclick = refs.centerPlay.onclick = () => { message(''); const video = refs.stage.querySelector('video'); if (video) video.paused ? void playVideo(video) : video.pause(); };
     refs.stage.onclick = () => {
+      if (Date.now() < suppressImageClickUntil) return;
       if (busy || overlayMode) return;
       const image = refs.stage.querySelector('img');
       if (image && !image.dataset.videoBackdrop) imageDetailsVisible = !imageDetailsVisible;
@@ -609,6 +627,51 @@
       const direction = Math.sign(wheelSum); wheelSum = 0; wheelAt = Date.now();
       if (horizontal) moveMedia(direction); else void randomPage(direction);
     }, { passive: false });
+    let imageSwipe = null, suppressImageClickUntil = 0;
+    refs.stage.style.touchAction = 'pan-y';
+    refs.stage.addEventListener('pointerdown', event => {
+      if (event.button !== 0 || !event.isPrimary || busy || overlayMode || media.length < 2 || media[mediaIndex]?.kind !== 'image') return;
+      const image = refs.stage.querySelector('img:not([data-video-backdrop])');
+      if (!image) return;
+      imageSwipe = { id:event.pointerId, x:event.clientX, y:event.clientY, image, dx:0, locked:false, token:version };
+    });
+    refs.stage.addEventListener('pointermove', event => {
+      const swipe = imageSwipe; if (!swipe || swipe.id !== event.pointerId) return;
+      const dx = event.clientX - swipe.x, dy = event.clientY - swipe.y;
+      if (!swipe.locked) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) < 7) return;
+        if (Math.abs(dy) > Math.abs(dx)) { imageSwipe = null; return; }
+        swipe.locked = true; touchStart = null;
+        refs.stage.setPointerCapture(event.pointerId);
+        swipe.image.style.willChange = 'transform';
+        refs.stage.style.cursor = 'grabbing';
+      }
+      event.preventDefault(); swipe.dx = dx;
+      swipe.image.style.transform = `translate3d(${dx}px,0,0)`;
+    });
+    const finishImageSwipe = async event => {
+      const swipe = imageSwipe; if (!swipe || swipe.id !== event.pointerId) return;
+      imageSwipe = null;
+      if (!swipe.locked) return;
+      event.stopPropagation(); touchStart = null; suppressImageClickUntil = Date.now() + 500;
+      if (refs.stage.hasPointerCapture(event.pointerId)) refs.stage.releasePointerCapture(event.pointerId);
+      refs.stage.style.cursor = '';
+      const width = refs.stage.clientWidth;
+      const commit = event.type !== 'pointercancel' && Math.abs(swipe.dx) > Math.min(90, width * .18);
+      const direction = swipe.dx < 0 ? 1 : -1;
+      const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const animation = swipe.image.animate([{transform:`translate3d(${swipe.dx}px,0,0)`},{transform:`translate3d(${commit ? -direction * width : 0}px,0,0)`}],{duration:reduced?0:220,easing:'cubic-bezier(.22,.61,.36,1)',fill:'forwards'});
+      await animation.finished.catch(() => {});
+      if (swipe.token !== version || !swipe.image.isConnected) { animation.cancel(); return; }
+      swipe.image.style.transform = ''; swipe.image.style.willChange = ''; animation.cancel();
+      if (commit) {
+        moveMedia(direction);
+        const next = refs.stage.querySelector('img:not([data-video-backdrop])');
+        next?.animate([{transform:`translate3d(${direction * width}px,0,0)`},{transform:'translate3d(0,0,0)'}],{duration:reduced?0:260,easing:'cubic-bezier(.22,.61,.36,1)'});
+      }
+    };
+    refs.stage.addEventListener('pointerup', finishImageSwipe);
+    refs.stage.addEventListener('pointercancel', finishImageSwipe);
     dialog.addEventListener('pointerdown', (event) => { if (!event.target.closest('button,input,textarea,.home-reel-overlay,[data-journey-sidebar],[data-portrait-content]')) touchStart = { x: event.clientX, y: event.clientY }; });
     dialog.addEventListener('pointerup', (event) => { if (!touchStart) return; const dx = event.clientX - touchStart.x, dy = event.clientY - touchStart.y; touchStart = null; if (Math.max(Math.abs(dx), Math.abs(dy)) < 50) return; if (Math.abs(dx) > Math.abs(dy)) moveMedia(dx < 0 ? 1 : -1); else void randomPage(dy < 0 ? 1 : -1); });
     dialog.addEventListener('pointercancel', () => { touchStart = null; });

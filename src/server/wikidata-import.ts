@@ -32,15 +32,17 @@ export async function fetchWikidataEntity(raw: unknown, mediaOnly = false) {
   const rows = data.results?.bindings || [];
   if (!rows.length && mediaOnly) return { version: 1, entity: { id, name: id, description: '', type: 'Wikidata 实体', link: '', images: [], videos: [], attributes: [] } };
   if (!rows.length) throw new EntityImportError('未找到实体数据');
-  // Resolve only schema labels in one request, keeping relation expansion cheap.
-  const typeIds = [...new Set<string>(rows.filter((row: any) => /\/(P31|P279|P171)$/.test(row.property.value)).map((row: any) => row.value.value.match(/\/(Q[1-9][0-9]*)$/)?.[1]).filter(Boolean))];
+  // Resolve names for every entity-valued statement, in bounded API batches.
+  const typeIds = [...new Set<string>(rows.map((row: any) => row.value.value.match(/\/(Q[1-9][0-9]*)$/)?.[1]).filter(Boolean))];
   if (typeIds.length) {
+    const labels: Record<string, any> = {};
+    for (let offset = 0; offset < typeIds.length; offset += 50) {
     const labelsUrl = new URL('https://www.wikidata.org/w/api.php');
-    for (const [key, value] of Object.entries({ action: 'wbgetentities', ids: typeIds.slice(0, 50).join('|'), props: 'labels', languages: 'zh|zh-hans|zh-hant|en', format: 'json' })) labelsUrl.searchParams.set(key, value);
-    let labels: any = {};
+    for (const [key, value] of Object.entries({ action: 'wbgetentities', ids: typeIds.slice(offset, offset + 50).join('|'), props: 'labels', languages: 'zh|zh-hans|zh-hant|en', format: 'json' })) labelsUrl.searchParams.set(key, value);
     try {
-      labels = (await cachedWikimediaJson(labelsUrl, { ...importProxyOptions(), signal: AbortSignal.timeout(60000), headers: { 'User-Agent': 'KnowledgeGraphImport/1.0' } })).entities || {};
+      Object.assign(labels, (await cachedWikimediaJson(labelsUrl, { ...importProxyOptions(), signal: AbortSignal.timeout(60000), headers: { 'User-Agent': 'KnowledgeGraphImport/1.0' } })).entities || {});
     } catch { /* Label enrichment is optional; retain SPARQL labels during cooldown. */ }
+    }
     for (const row of rows) {
       const target = row.value.value.match(/\/(Q[1-9][0-9]*)$/)?.[1];
       const names = labels[target]?.labels;

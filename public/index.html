@@ -78,7 +78,7 @@
   </script>
   <link rel="stylesheet" href="/assets/styles/app.css?v=20261120-category-hierarchy" />
   <link rel="stylesheet" href="/assets/styles/home-discovery.css?v=20261125-detail-graph" />
-  <link rel="stylesheet" href="/assets/styles/shorts-page.css?v=20261117-creator-avatar-slide" />
+  <link rel="stylesheet" href="/assets/styles/shorts-page.css?v=20261127-image-caption" />
   <link rel="stylesheet" href="/assets/styles/knowledge-card-tags.css?v=20261111-1" />
   <link rel="stylesheet" href="/assets/styles/search-trends.css?v=20261116-search-polish" />
   <link rel="stylesheet" href="/assets/styles/user-profile.css?v=20261111-layout" />
@@ -2584,6 +2584,12 @@
                   </select>
                 </div>
               </div>
+              <div style="display:none;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0">
+                <label for="entityWikidataId">Wikidata ID</label>
+                <input id="entityWikidataId" class="kb-input" placeholder="例如 Q42" aria-label="Wikidata ID" style="width:160px" />
+                <button id="btnSaveWikidataId" type="button" class="btn">保存 ID</button>
+                <span id="wikidataIdStatus" role="status"></span>
+              </div>
               <!-- Combine toolbar and submit button in one row -->
               <div class="social-compose-toolbar-row">
                 <div class="social-compose-toolbar">
@@ -3821,19 +3827,23 @@
             </div>
             <div class="detail-content-layout" style="display: flex; gap: 12px; align-items: flex-start">
               <article id="wikiContent" class="detail-article" style="flex: 1; min-width: 0">
+                <div id="detailContentTabs" class="detail-media-tabs" role="tablist" aria-label="知识内容" style="display:flex;margin-bottom:12px">
+                  <button id="detailKnowledgeTab" type="button" class="detail-media-tab" role="tab" aria-selected="true" aria-controls="detailKnowledgeSection">知识信息</button>
+                  <button id="detailAttributesTab" type="button" class="detail-media-tab" role="tab" aria-selected="false" aria-controls="detailAttrSection" tabindex="-1">属性信息</button>
+                </div>
                 <nav id="wikiToc" style="
                       font-size: 13px;
                       line-height: 1.4;
                       display: none;
                       margin-bottom: 12px;
                     "></nav>
-                <section id="detailAttrSection" class="detail-attr-section" style="display: none;">
+                <section id="detailAttrSection" class="detail-attr-section" role="tabpanel" aria-labelledby="detailAttributesTab" style="display: none;">
                   <div class="detail-attr-title">属性信息</div>
                   <div id="detailAttrList" style="font-size: 13px">
                     <!-- populated by renderAttrList in read-only mode -->
                   </div>
                 </section>
-                <section class="detail-knowledge-section">
+                <section id="detailKnowledgeSection" class="detail-knowledge-section" role="tabpanel" aria-labelledby="detailKnowledgeTab">
                   <div class="detail-attr-title">知识信息</div>
                   <div id="wikiView" style="font-size: 14px; line-height: 1.6">
                     加载详情中…
@@ -14800,6 +14810,27 @@
       }
     }
 
+    document.getElementById('btnSaveWikidataId')?.addEventListener('click', async () => {
+      const input = document.getElementById('entityWikidataId');
+      const status = document.getElementById('wikidataIdStatus');
+      const value = input.value.trim().toUpperCase();
+      if (!/^Q[1-9][0-9]*$/.test(value)) { status.textContent = '请输入有效的 Wikidata ID，例如 Q42'; return; }
+      if (!getCurrentNodeIdForLeftCard()) { status.textContent = '请先保存知识，再添加 Wikidata ID'; return; }
+      const button = document.getElementById('btnSaveWikidataId');
+      button.disabled = true;
+      status.textContent = '正在保存…';
+      try {
+        const link = `https://www.wikidata.org/wiki/${value}`;
+        const result = await saveLinkToCurrentNode(link);
+        if (!result?.ok) { status.textContent = '保存失败，请检查编辑权限后重试'; return; }
+        input.value = value;
+        if (fLink) fLink.value = link;
+        const displayLink = document.getElementById('entityDisplayLink');
+        if (displayLink) { displayLink.href = link; displayLink.style.display = ''; }
+        status.textContent = '已保存，可以同步 Wiki 百科';
+      } finally { button.disabled = false; }
+    });
+
     if (btnEntityLink) {
       btnEntityLink.addEventListener("click", async () => {
         const currentUrl = fLink ? (fLink.value || "").trim() : "";
@@ -15636,6 +15667,8 @@
       fName.value = "";
       fDesc.value = "";
       if (fLink) fLink.value = "";
+      document.getElementById('entityWikidataId').value = '';
+      document.getElementById('wikidataIdStatus').textContent = '';
       if (fVideo) fVideo.value = "";
       if (fPdf) fPdf.value = "";
       uploadedVideoUrl = "";
@@ -15921,6 +15954,8 @@
           ? { ...node.mentions }
           : Object.create(null);
       if (fLink) fLink.value = (node?.link || node?.url || "")?.toString().trim();
+      document.getElementById('entityWikidataId').value = String(node?.link || '').match(/^https:\/\/www\.wikidata\.org\/wiki\/(Q[1-9][0-9]*)$/)?.[1] || (/^Q[1-9][0-9]*$/.test(String(node?.id || '')) ? node.id : '');
+      document.getElementById('wikidataIdStatus').textContent = '';
       if (fLink) fLink.value = (node?.link || node?.url || "")?.toString().trim();
       if (fVideo) fVideo.value = "";
       if (fPdf) fPdf.value = "";

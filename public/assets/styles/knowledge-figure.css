@@ -39,3 +39,11 @@
 #detailPanel #wikiTopMedia .detail-image-caption:has(textarea){text-align:left}
 #detailPanel #wikiTopMedia .detail-image-title-input,
 #detailPanel #wikiTopMedia .detail-image-caption textarea{text-align:left}
+
+#detailPanel .detail-image-thumbnail { position:relative; }
+#detailPanel .detail-image-thumbnail.drop-before::before, #detailPanel .detail-image-thumbnail.drop-after::after { content:''; position:absolute; top:4px; bottom:4px; width:3px; border-radius:3px; background:var(--accent); z-index:5; pointer-events:none; }
+#detailPanel .detail-image-thumbnail.drop-before::before { left:-5px; }
+#detailPanel .detail-image-thumbnail.drop-after::after { right:-5px; }
+#detailPanel .detail-image-thumbnail.is-sorting { cursor:grabbing; }
+#detailPanel .detail-image-sort-status { display:block; text-align:center; font-size:12px; color:var(--muted); margin-top:6px; }
+#detailPanel .detail-image-sort-status:empty { display:none; }
