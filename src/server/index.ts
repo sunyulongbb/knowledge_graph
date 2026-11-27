@@ -1,4 +1,5 @@
 import { createTopicsHandler } from './topics.ts';
+import { withSearchIndexRecovery } from './search-index-recovery.ts';
 import { createKnowledgeRecommendations } from './knowledge-recommendations.ts';
 import { createKnowledgeViews } from './knowledge-views.ts';
 import { apiErrorResponse } from './api-error.ts';
@@ -111,12 +112,17 @@ const recommendations = createKnowledgeRecommendations({
   db: adminDb, store: enterpriseStore, getUser: getKnowledgeUser, getProject: getProjectByIdentifier,
   search: async (req, url, contextUser) => {
     if(!enterpriseSync || !enterpriseStore) return Response.json({error:'Elasticsearch recommendations are not configured'},{status:503});
-    const database=url.searchParams.get('db') || 'default';
+    const project = getProjectByIdentifier(url.searchParams.get('db') || 'default');
+    if (!project) return Response.json({error:'应用不存在'},{status:404});
+    const database=project.name;
+    const definitions = await enterpriseStore.query(database, "RETURN DOCUMENT('knowledge_schema/definitions')");
+    const definedClasses = (definitions[0]?.classes || []).map((row: any) => String(row.id));
+    if (!definedClasses.length) return Response.json({nodes:[],total:0});
     const user=contextUser === undefined ? getKnowledgeUser(req) : contextUser;
     const search=new EnterpriseKnowledgeSearch(enterpriseStore,enterpriseSync.elasticsearch);
-    const result=await search.search(database,user,{esOnly:true,limit:Number(url.searchParams.get('limit')||200),offset:Number(url.searchParams.get('offset')||0),
+    const result=await withSearchIndexRecovery(() => search.search(database,user,{esOnly:true,definedClasses,hasMedia:url.searchParams.get('has_media')==='1',limit:Number(url.searchParams.get('limit')||200),offset:Number(url.searchParams.get('offset')||0),
       order:url.searchParams.get('order'),classIds:url.searchParams.get('class_id')?[url.searchParams.get('class_id')!]:null,
-      ids:url.searchParams.has('ids')?JSON.parse(url.searchParams.get('ids')!):undefined});
+      ids:url.searchParams.has('ids')?JSON.parse(url.searchParams.get('ids')!):undefined}), () => enterpriseSync.flush(database));
     return Response.json({...result,nodes:result.nodes.map(node=>arangoNodeResponse(node,user))});
   },
 });

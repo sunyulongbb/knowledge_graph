@@ -975,18 +975,16 @@ function getProjectByIdentifier(
   const raw = (identifier ?? "").toString().trim();
   if (!raw) return null;
   const byId = /^\d+$/.test(raw)
-    ? queryGetSafe(
+    ? appDb.query(
         "SELECT * FROM projects WHERE id = ? LIMIT 1",
-        Number.parseInt(raw, 10),
-      )
+      ).get(Number.parseInt(raw, 10))
     : null;
   if (byId) return byId;
   return (
-    queryGetSafe("SELECT * FROM projects WHERE name = ? LIMIT 1", raw) ||
-    queryGetSafe(
+    appDb.query("SELECT * FROM projects WHERE name = ? LIMIT 1").get(raw) ||
+    appDb.query(
       "SELECT * FROM projects WHERE lower(title) = lower(?) LIMIT 1",
-      raw,
-    )
+    ).get(raw)
   );
 }
 
@@ -1608,6 +1606,8 @@ function copyDirectoryIntoRootData(sourceDir: string, relativeDir = "") {
   if (!existsSync(sourceDir)) return;
   const entries = readdirSync(sourceDir, { withFileTypes: true });
   for (const entry of entries) {
+    // A legacy journal must never be attached to the active application DB.
+    if (/(?:-wal|-shm|-journal)$/.test(entry.name)) continue;
     const nextRelative = relativeDir
       ? join(relativeDir, entry.name)
       : entry.name;

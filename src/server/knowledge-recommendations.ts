@@ -58,21 +58,15 @@ export function createKnowledgeRecommendations(deps:{
   function candidateRead(key:string,read:()=>Promise<{nodes:Row[];total:number}>) {
     const existing=candidates.get(key);if(existing && now()-existing.created<30000)return existing.value;
     const value=read();candidates.set(key,{created:now(),value});
-    value.catch(()=>{if(candidates.get(key)?.value===value)candidates.delete(key);});
+    // An index being populated can briefly return no candidates. Do not retain
+    // that empty response across subsequent refreshes.
+    value.then(result=>{if(!result.nodes.length && candidates.get(key)?.value===value)candidates.delete(key);},()=>{if(candidates.get(key)?.value===value)candidates.delete(key);});
     if(candidates.size>64)candidates.delete(candidates.keys().next().value!);
     return value;
   }
   async function classified(database:string,nodes:Row[]):Promise<Row[]> {
-    if(!nodes.length)return [];
-    if(!deps.store) return [];
-    const rows=await deps.store.query(database, `LET definitions = DOCUMENT('knowledge_schema/definitions')
-      LET classes = NOT_NULL(definitions.classes, [])[*].id
-      FOR doc IN entity
-        FILTER doc.sqlite_id IN @ids OR doc.id IN @ids
-        FILTER LENGTH(INTERSECTION(NOT_NULL(doc.class_ids, []), classes)) > 0
-        RETURN {id: NOT_NULL(doc.sqlite_id, doc.id)}`, {ids:nodes.map(idOf)});
-    const allowed=new Set(rows.map(idOf));
-    return nodes.filter(node=>allowed.has(idOf(node)));
+    // Candidate and page queries apply classification in ES before pagination.
+    return nodes;
   }
   const has=(table:string)=>!!db.query("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table);
   async function signals(project:{id:number;name:string},user:KnowledgeUser|null,actor:string):Promise<Signal[]>{
@@ -134,7 +128,7 @@ export function createKnowledgeRecommendations(deps:{
       let snapshot=cache.get(key);
       if(!snapshot||now()-snapshot.created>300000){
         let task=pending.get(key);if(!task){task=build();pending.set(key,task);}
-        try{snapshot={...await task,created:now()};cache.set(key,snapshot);}finally{pending.delete(key);}
+        try{snapshot={...await task,created:now()};if(snapshot.ids.length)cache.set(key,snapshot);else cache.delete(key);}finally{pending.delete(key);}
         if(cache.size>64)cache.delete(cache.keys().next().value!);
       }
       const fresh=new URL('/api/kb/discover/search',url.origin);fresh.searchParams.set('db',project.name);fresh.searchParams.set('defined_class_only','1');
